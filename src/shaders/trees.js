@@ -26,7 +26,6 @@ out vec3 vNormal;
 out vec3 vTangent;
 flat out float vSeed;
 flat out float vPart;   // 0 trunk, 1 crown
-out float vViewDist;
 
 uniform float uShadowPass;
 
@@ -92,7 +91,6 @@ void main() {
   vWorld = pos;
   vNormal = nrm;
   vSeed = seed;
-  vViewDist = length(pos - uCamPos.xyz);
   gl_Position = uViewProj * vec4(pos, 1.0);
 }
 `;
@@ -109,10 +107,11 @@ in vec3 vNormal;
 in vec3 vTangent;
 flat in float vSeed;
 flat in float vPart;
-in float vViewDist;
+float vViewDist;
 layout(location = 0) out vec4 fragColour;
 
 void main() {
+  vViewDist = length(vWorld - uCamPos.xyz);
   float s = mod(vSeed, 128.0);
   float isLime = step(128.0, vSeed);
   vec3 albedo;

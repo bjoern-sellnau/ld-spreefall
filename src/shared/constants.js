@@ -25,7 +25,7 @@ export const MAT = {
   GRAVEL: 12,
   METAL: 13,
   MARKING: 14,
-  DIRT: 15,
+  STELE: 15,      // the memorial concrete, deliberately darker than the rest
 };
 
 export const MATERIAL_NAMES = Object.keys(MAT);

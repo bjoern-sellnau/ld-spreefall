@@ -435,6 +435,7 @@ async function main() {
     teleport(x, z) { player.teleport(x, z); state.prev = { x, y: player.y, z }; state.curr = { x, y: player.y, z }; },
     look(yawDeg, pitchDeg) { camera.yaw = yawDeg * DEG; camera.pitch = pitchDeg * DEG; },
     setTime(t) { renderer.timeOfDay = t; el.tod.value = String(t); },
+    debugMode(n) { renderer.debugMode = n | 0; },
     skipToWalk() {
       el.title.classList.add('hidden');
       el.hud.classList.remove('hidden');

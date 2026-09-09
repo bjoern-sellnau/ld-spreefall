@@ -168,3 +168,28 @@ Recorded here as they happen, per the working style.
   east edge is 13.4150 and the playable plane is 3386 m by 1880 m.
 - 2026-09-08: the Victory Column is at 13.3501, west of the box on any reading,
   so it is left out, as the brief allows.
+- 2026-09-09: three defects found by measurement rather than by looking, all
+  recorded here because each was invisible in the code:
+  1. Every wall and every solid was wound against the normals it declared, so
+     with back face culling the whole city would have rendered inside out. Found
+     by the watertight test on the L shaped courtyard fixture, before the
+     renderer existed. There is now a test that checks the winding of every
+     generator against its own normals.
+  2. The view distance was a vertex attribute, so on a triangle the size of
+     Pariser Platz the ground under the player reported ninety metres. That
+     picked the wrong shadow cascade and switched off every ground texture. It
+     is now computed per fragment from the interpolated world position.
+  3. Procedural patterns with no mip chain alias into moire. Distance thresholds
+     do not fix this, because the pixel footprint at a grazing angle has nothing
+     to do with distance. Every ground pattern now widens its own edges to the
+     measured screen space footprint, which is what a mip chain would have done.
+- 2026-09-09: the base ground grid is not drawn where a road, square, park, water
+  body, building or the memorial already covers it, which removes about a quarter
+  of the cells. It is also drawn ninety millimetres low, because the grid
+  interpolates the terrain linearly over 12.5 m and a base plane at the true
+  height pokes through everything laid on top of it.
+- 2026-09-09: at street level in a city this dense, the Fernsehturm is not
+  visible from Pariser Platz: it subtends ten degrees at two kilometres, and any
+  twenty metre building within a hundred and ten metres of the sightline hides
+  it. The fog is tuned as the brief asks, and the shot that shows it is taken
+  from Schlossplatz, where the sightline is real.

@@ -64,7 +64,8 @@ export class Renderer {
     this.progWorld.use();
     const loc = this.progWorld.loc('uPalette');
     if (loc) gl.uniform3fv(loc, pal);
-    this.progWorld.int('uShadow0', 4).int('uShadow1', 5);
+    this.progWorld.int('uShadow0', 4).int('uShadow1', 5).int('uDebugMode', 0);
+    this.debugMode = 0;
     this.progTree.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.shadowFbo = [];
@@ -320,6 +321,7 @@ export class Renderer {
 
     let draws = 0, tris = 0;
     this.progWorld.use();
+    this.progWorld.int('uDebugMode', this.debugMode);
     for (const tile of visible) {
       if (!tile.vao) continue;
       this.progWorld.vec3('uTileOrigin', tile.ox, 0, tile.oz);
@@ -392,7 +394,8 @@ export class Renderer {
       .float('uExposure', this.exposure)
       .float('uBloomAmount', this.q.bloom ? 0.62 : 0)
       .float('uVignette', 0.34)
-      .float('uFxaa', this.q.fxaa ? 1 : 0);
+      .float('uFxaa', this.q.fxaa && !this.debugMode ? 1 : 0)
+      .float('uRaw', this.debugMode ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.sceneFbo.colour);
     gl.activeTexture(gl.TEXTURE1);

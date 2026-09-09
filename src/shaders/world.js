@@ -22,7 +22,6 @@ flat out uint vLevels;
 flat out uint vFlags;
 flat out float vHeight;
 out float vAo;
-out float vViewDist;
 
 void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
@@ -35,7 +34,6 @@ void main() {
   vLevels = aPacked.z;
   vFlags = aPacked.w;
   vHeight = float(aHeight) * ${(1 / HEIGHT_SCALE).toFixed(8)};
-  vViewDist = length(p - uCamPos.xyz);
   gl_Position = uViewProj * vec4(p, 1.0);
 }
 `;
@@ -57,9 +55,16 @@ flat in uint vLevels;
 flat in uint vFlags;
 flat in float vHeight;
 in float vAo;
-in float vViewDist;
+
+// Distance to the eye, per fragment. It used to be a varying, which is wrong the
+// moment a triangle is large: a square the size of Pariser Platz has its corners
+// a hundred metres away, so the interpolated distance under your feet came out
+// as ninety metres and every distance based effect, the shadow cascade choice
+// included, used that. It costs one length() to get it right.
+float vViewDist;
 
 uniform vec3 uPalette[64];
+uniform int uDebugMode;   // 0 off, 1 material, 2 normals, 3 uv, 4 world position
 
 layout(location = 0) out vec4 fragColour;
 
@@ -68,10 +73,27 @@ const uint FLAG_LANDMARK = 2u;
 const uint FLAG_ROOF_SLOPE = 4u;
 const uint FLAG_NO_WINDOWS = 8u;
 
-// Procedural detail has no mip chain, so it has to be faded out by hand or it
-// turns into a shimmering mess in the distance.
-float detailFade(float startD, float endD) {
-  return 1.0 - smoothstep(startD, endD, vViewDist);
+// Procedural detail has no mip chain, so it has to be faded by hand or it turns
+// into moire the moment a pixel covers more than about half a feature. These
+// measure the pixel footprint in metres, in world space for the ground and in
+// facade space for walls, and fade a pattern out as its features go sub pixel.
+// That is what a mip chain would do, and it is a lot cheaper than distance
+// thresholds picked by eye, which are wrong at every grazing angle.
+// The isotropic equivalent pixel footprint on the ground, in metres. The
+// geometric mean rather than the maximum, because a road seen edge on has a
+// footprint a metre long and a centimetre wide, and the maximum would throw
+// away detail that is still perfectly resolved across the road.
+float groundFootprint() {
+  return sqrt(max(fwidth(vWorld.x), 1e-5) * max(fwidth(vWorld.z), 1e-5));
+}
+
+float detailFade(float featureSize) {
+  return 1.0 - smoothstep(featureSize * 0.7, featureSize * 2.6, groundFootprint());
+}
+
+float detailFadeUv(float featureSize) {
+  float px = max(fwidth(vUv.x), fwidth(vUv.y));
+  return 1.0 - smoothstep(featureSize * 0.7, featureSize * 2.6, px);
 }
 
 struct Surface {
@@ -252,25 +274,33 @@ Surface asphalt() {
   s.normal = vNormal;
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
-  float grain = fbm(vWorld.xz * 3.1) * 0.10 + fbm(vWorld.xz * 21.0) * 0.05 * detailFade(20.0, 80.0);
+  float grain = fbm(vWorld.xz * 3.1) * 0.10 + fbm(vWorld.xz * 21.0) * 0.05 * detailFade(0.050);
   vec3 col = vec3(0.088, 0.090, 0.096) + grain * 0.5;
   float across = vUv.x;
   float along = vUv.y;
   float halfW = max(vHeight * 0.5, 2.0);
 
-  // Centre line, dashed, plus solid edge lines just inside the kerb.
-  float centre = 1.0 - smoothstep(0.06, 0.13, abs(across));
-  float dash = step(0.42, fract(along / 9.0));
-  float edge = 1.0 - smoothstep(0.09, 0.17, abs(abs(across) - (halfW - 0.42)));
-  // Lane divisions on anything wide enough to have them.
+  // Markings are widened to the pixel footprint across the road, and the dashes
+  // dissolve into a continuous line once a pixel is longer than a gap. Drawn
+  // any other way, a road seen almost edge on turns into an interference
+  // pattern rather than a road.
+  float wAcross = max(fwidth(across), 0.0005);
+  float wAlong = max(fwidth(along), 0.0005);
+  float centre = 1.0 - smoothstep(0.06, 0.13 + wAcross * 1.5, abs(across));
+  float dashSoft = smoothstep(2.2, 4.5, wAlong);
+  float dash = mix(step(0.42, fract(along / 9.0)), 0.58, dashSoft);
+  float edge = 1.0 - smoothstep(0.09, 0.17 + wAcross * 1.5, abs(abs(across) - (halfW - 0.42)));
   float lanes = 0.0;
   if (halfW > 5.0) {
     float lanePitch = halfW / floor(halfW / 3.1);
     float d = abs(fract(across / lanePitch + 0.5) - 0.5) * lanePitch;
-    lanes = (1.0 - smoothstep(0.06, 0.12, d)) * step(0.5, fract(along / 7.0)) * step(1.2, abs(across));
+    lanes = (1.0 - smoothstep(0.06, 0.12 + wAcross * 1.5, d))
+          * mix(step(0.5, fract(along / 7.0)), 0.5, dashSoft)
+          * step(1.2, abs(across));
   }
   float paint = clamp(max(centre * dash, max(edge, lanes)), 0.0, 1.0);
-  paint *= 1.0 - smoothstep(120.0, 260.0, vViewDist);
+  // Once the marking itself is thinner than a pixel there is nothing to draw.
+  paint *= 1.0 - smoothstep(0.16, 0.55, wAcross);
   float wear = 0.55 + 0.45 * fbm(vWorld.xz * 6.0);
   col = mix(col, vec3(0.74, 0.72, 0.66) * wear, paint * 0.9);
   s.albedo = col;
@@ -283,13 +313,15 @@ Surface cobble() {
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
   // Berlin sett is a granite cube about a hand across, so ten centimetres.
-  vec3 c = cells(vWorld.xz * 9.5);
-  float fade = detailFade(22.0, 90.0);
-  float joint = mix(1.0, smoothstep(0.0, 0.16, c.y), fade);
-  float tone = mix(1.0, 0.62 + 0.30 * c.z, fade);
+  const float stone = 9.5;
+  vec3 c = cells(vWorld.xz * stone);
+  float fp = groundFootprint() * stone;
+  float joint = smoothstep(0.0, max(0.16, fp * 1.3), c.y);
+  float toneFade = 1.0 - smoothstep(0.5, 1.7, fp);
+  float tone = mix(1.0, 0.56 + 0.42 * c.z, toneFade);
   vec3 col = vec3(0.215, 0.210, 0.203) * tone;
-  col = mix(vec3(0.105, 0.105, 0.100), col, joint);
-  vec2 g = vec2(dFdx(c.x), dFdy(c.x)) * 3.0 * fade;
+  col = mix(vec3(0.062, 0.062, 0.058), col, joint);
+  vec2 g = vec2(dFdx(c.x), dFdy(c.x)) * 3.0 * toneFade;
   s.normal = normalize(vNormal + vec3(g.x, 0.0, g.y) * joint);
   s.albedo = col;
   s.roughness = mix(0.55, 0.86, joint);
@@ -300,16 +332,20 @@ Surface pavement() {
   Surface s;
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
-  vec2 p = vWorld.xz / vec2(0.9, 0.9);
+  const float slab = 0.75;
+  vec2 p = vWorld.xz / slab;
   vec2 cell = floor(p);
   vec2 f = fract(p);
   float joint = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
-  float fade = detailFade(30.0, 130.0);
-  float line = mix(1.0, smoothstep(0.0, 0.045, joint), fade);
-  float tone = mix(1.0, 0.86 + 0.14 * hash12(cell), fade);
+  // The joint is widened to the pixel footprint rather than faded out, so it
+  // blurs into a soft band at distance instead of turning into moire.
+  float fp = groundFootprint() / slab;
+  float line = smoothstep(0.0, max(0.035, fp * 1.6), joint);
+  float cellFade = 1.0 - smoothstep(0.55, 1.6, fp);
+  float tone = mix(1.0, 0.80 + 0.22 * hash12(cell), cellFade);
   vec3 col = vec3(0.215, 0.208, 0.196) * tone;
-  col = mix(col * 0.66, col, line);
-  col += fbm(vWorld.xz * 8.0) * 0.03 * fade;
+  col = mix(col * 0.42, col, line);
+  col += (fbm(vWorld.xz * 8.0) - 0.5) * 0.05 * detailFade(0.12);
   s.normal = vNormal;
   s.albedo = col;
   s.roughness = 0.86;
@@ -320,7 +356,7 @@ Surface grass() {
   Surface s;
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
-  float fade = detailFade(40.0, 200.0);
+  float fade = detailFade(0.060);
   float n = fbm(vWorld.xz * 2.3);
   float n2 = mix(0.5, fbm(vWorld.xz * 14.0), fade);
   vec3 a = vec3(0.098, 0.156, 0.068);
@@ -398,7 +434,7 @@ Surface stone(vec3 tint, float rough, float blockScale) {
   vec2 cell = floor(p);
   vec2 f = fract(p);
   float joint = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
-  float fade = detailFade(70.0, 320.0);
+  float fade = detailFadeUv(0.045);
   float line = mix(1.0, smoothstep(0.0, 0.04, joint), fade);
   float tone = mix(1.0, 0.9 + 0.16 * hash12(cell), fade);
   vec3 col = tint * tone;
@@ -427,6 +463,26 @@ Surface concrete() {
   s.normal = vNormal;
   s.albedo = col * (0.72 + 0.28 * vAo);
   s.roughness = 0.88;
+  return s;
+}
+
+// Eisenman's stelae are dark grey precast concrete, near enough charcoal in
+// daylight, with the shutter marks and the pour lines still showing.
+Surface stele() {
+  Surface s;
+  s.metallic = 0.0;
+  s.emissive = vec3(0.0);
+  float fade = detailFadeUv(0.060);
+  float n = (fbm(vUv * 3.0) - 0.5) * 0.16 + (fbm(vUv * 14.0) - 0.5) * 0.09 * fade;
+  vec3 col = vec3(0.108, 0.106, 0.104) * (1.0 + n);
+  // The horizontal joint where each block was cast.
+  float pour = smoothstep(0.0, 0.030, abs(fract(vUv.y / 1.15) - 0.5) * 1.15);
+  col *= mix(0.82, 1.0, mix(1.0, pour, fade));
+  // Weathering runs down the faces.
+  col *= 1.0 - fbm(vec2(vUv.x * 6.0, vUv.y * 0.7)) * 0.12;
+  s.normal = vNormal;
+  s.albedo = col * (0.70 + 0.30 * vAo);
+  s.roughness = 0.92;
   return s;
 }
 
@@ -475,6 +531,7 @@ Surface metalPanel() {
 // ---------------------------------------------------------------------------
 
 void main() {
+  vViewDist = length(vWorld - uCamPos.xyz);
   uint m = vMat;
   Surface s;
   // Anything with storeys and no explicit ban gets a facade cut into it, so a
@@ -494,6 +551,7 @@ void main() {
   else if (m == ${MAT.GRASS}u) s = grass();
   else if (m == ${MAT.WATER}u) s = water();
   else if (m == ${MAT.CONCRETE}u) s = concrete();
+  else if (m == ${MAT.STELE}u) s = stele();
   else if (m == ${MAT.SANDSTONE}u) s = stone(vec3(0.560, 0.500, 0.386), 0.84, 1.35);
   else if (m == ${MAT.COPPER}u) s = copper();
   else if (m == ${MAT.GLASS}u) s = glassPanel();
@@ -501,6 +559,29 @@ void main() {
   else if (m == ${MAT.GRAVEL}u) s = gravel();
   else if (m == ${MAT.METAL}u) s = metalPanel();
   else s = pavement();
+
+  if (uDebugMode != 0) {
+    vec3 d;
+    if (uDebugMode == 1) {
+      float f = float(m);
+      d = vec3(fract(f * 0.2237), fract(f * 0.4013 + 0.33), fract(f * 0.7311 + 0.66));
+      d = mix(d, s.albedo * 3.0, 0.15);
+    } else if (uDebugMode == 2) {
+      d = normalize(s.normal) * 0.5 + 0.5;
+    } else if (uDebugMode == 3) {
+      d = vec3(fract(vUv * 0.5), 0.0);
+    } else if (uDebugMode == 4) {
+      d = vec3(fract(vWorld.xz * 0.5), fract(vWorld.y * 0.5));
+    } else if (uDebugMode == 5) {
+      d = vec3(float(m) / 16.0);
+    } else if (uDebugMode == 6) {
+      d = vec3(detailFade(0.030));
+    } else {
+      d = vec3(clamp(vViewDist / 200.0, 0.0, 1.0));
+    }
+    fragColour = vec4(d, 1.0);
+    return;
+  }
 
   vec3 n = normalize(s.normal);
   if (!gl_FrontFacing) n = -n;

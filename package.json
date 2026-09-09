@@ -10,7 +10,10 @@
     "test": "node --test tools/test/*.test.mjs",
     "build": "node tools/build-dist.mjs",
     "serve": "node tools/serve.mjs",
-    "verify": "node tools/verify.mjs"
+    "verify": "node tools/verify.mjs",
+    "test:ui": "node tools/test-ui.mjs",
+    "clip": "node tools/capture-walk.mjs",
+    "all": "npm run world && npm run test && npm run build"
   },
   "engines": {
     "node": ">=20"

@@ -257,22 +257,35 @@ function main() {
   const collision = [];    // {x1,z1,x2,z2,base,top,surface}
 
   // --- ground base --------------------------------------------------------
-  // One quad grid over the whole box at 12.5 m, the fallback surface under
-  // everything. Roads, parks and water draw on top of it.
+  // The fallback surface under everything, as a quad grid. It has to be fine
+  // enough that its linear interpolation of the terrain never rises above the
+  // road ribbons drawn a hundred millimetres below the true ground, so 12.5 m,
+  // and cells that something else already covers are simply not emitted. That
+  // second part removes about a third of the world's triangles.
   const gstep = 12.5;
   const gnx = Math.ceil(world.width / gstep);
   const gnz = Math.ceil(world.depth / gstep);
+  const cover = buildCoverage(world, roads, areas, greens, waterPolys, buildings, memorials);
+  let groundCells = 0, skippedCells = 0;
   for (let iz = 0; iz < gnz; iz++) {
     for (let ix = 0; ix < gnx; ix++) {
       const x0 = world.minX + ix * gstep, x1 = x0 + gstep;
       const z0 = world.minZ + iz * gstep, z1 = z0 + gstep;
-      groundPolygon(mesh, [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], [], MAT.PAVEMENT, yAt, { lift: 0 });
+      if (cover.cellCovered(x0, z0, gstep)) { skippedCells++; continue; }
+      // Nine centimetres down. The grid interpolates the terrain linearly over
+      // 12.5 m and the terrain is not linear, so a base plane drawn at the true
+      // height pokes through the roads and squares laid on top of it. Ninety
+      // millimetres clears that error and is far too small a step to see where
+      // the base plane is actually exposed.
+      groundPolygon(mesh, [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], [], MAT.PAVEMENT, yAt, { lift: -0.09 });
+      groundCells++;
     }
   }
+  console.log(`ground: ${groundCells} base cells drawn, ${skippedCells} skipped as already covered`);
 
   // --- green -------------------------------------------------------------
   for (const g of greens) {
-    groundPolygon(mesh, g.ring, g.holes, MAT.GRASS, yAt, { lift: 0.03, seed: 5 });
+    groundPolygon(mesh, g.ring, g.holes, MAT.GRASS, yAt, { lift: 0.05, seed: 5 });
   }
 
   // --- water --------------------------------------------------------------
@@ -306,13 +319,13 @@ function main() {
     const width = Number.isFinite(explicit) && explicit > 1 ? explicit : (ROAD_WIDTH[cls] || 6);
     const mat = roadMaterial(r.tags);
     const isFoot = cls === 'footway' || cls === 'path' || cls === 'cycleway' || cls === 'steps';
-    const lift = isFoot ? 0.045 : -0.10;
+    const lift = isFoot ? 0.06 : 0.0;
     ribbon(mesh, r.line, width / 2, mat, yAt, { lift, flags: 0, seed: hashInt(Math.round(r.line[0][0]), Math.round(r.line[0][1])) & 255 });
     if (!isFoot) {
       // Kerb and pavement either side.
       for (const side of [-1, 1]) {
         const off = offsetLine(r.line, (width / 2 + 1.6) * side);
-        ribbon(mesh, off, 1.7, MAT.PAVEMENT, yAt, { lift: 0.055 });
+        ribbon(mesh, off, 1.7, MAT.PAVEMENT, yAt, { lift: 0.12 });
       }
     }
     roadMetres += polylineLength(r.line);
@@ -325,7 +338,7 @@ function main() {
     }
   }
   for (const a of areas) {
-    groundPolygon(mesh, a.ring, [], roadMaterial(a.tags), yAt, { lift: 0.02, seed: 3 });
+    groundPolygon(mesh, a.ring, [], roadMaterial(a.tags), yAt, { lift: 0.05, seed: 3 });
   }
 
   // --- rails --------------------------------------------------------------
@@ -353,12 +366,12 @@ function main() {
         }
       }
     } else {
-      ribbon(mesh, r.line, 3.1, MAT.GRAVEL, yAt, { lift: 0.02 });
+      ribbon(mesh, r.line, 3.1, MAT.GRAVEL, yAt, { lift: 0.05 });
     }
     // Rails themselves.
     for (const gauge of [-0.7175, 0.7175]) {
       const off = offsetLine(r.line, gauge);
-      ribbon(mesh, off, 0.075, MAT.METAL, elevated ? (x, z) => yAt(x, z) + 6.35 : yAt, { lift: 0.06 });
+      ribbon(mesh, off, 0.075, MAT.METAL, elevated ? (x, z) => yAt(x, z) + 6.35 : yAt, { lift: 0.11 });
     }
   }
 
@@ -419,8 +432,25 @@ function main() {
   }
 
   // --- the stelae field ---------------------------------------------------
+  // The memorial floor is the one place where the terrain has detail finer than
+  // the base grid can carry, because the whole point of it is that the ground
+  // rolls. It gets its own 2.5 m grid, clipped to the outline, and the base
+  // plane is kept out of the way by the coverage mask.
   let stelae = 0;
   for (const m of memorials) {
+    const bb = bboxOf(m.ring);
+    const fine = 2.5;
+    const nxm = Math.ceil((bb.maxX - bb.minX) / fine);
+    const nzm = Math.ceil((bb.maxZ - bb.minZ) / fine);
+    for (let j = 0; j < nzm; j++) {
+      for (let i = 0; i < nxm; i++) {
+        const x0 = bb.minX + i * fine, x1 = Math.min(bb.maxX, x0 + fine);
+        const z0 = bb.minZ + j * fine, z1 = Math.min(bb.maxZ, z0 + fine);
+        if (!pointInRing((x0 + x1) / 2, (z0 + z1) / 2, m.ring)) continue;
+        groundPolygon(mesh, [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], [], MAT.COBBLE, yAt,
+          { lift: 0.01, seed: 11 });
+      }
+    }
     stelae += buildStelae(mesh, collision, m, terrain);
   }
 
@@ -518,6 +548,86 @@ function main() {
 // ---------------------------------------------------------------------------
 
 function round2(v) { return Math.round(v * 100) / 100; }
+
+/**
+ * A coverage raster of everything that draws its own ground: roads and their
+ * pavements, pedestrian areas, parks, water, building footprints and the
+ * memorial. Used to drop base ground cells nobody will ever see.
+ */
+function buildCoverage(world, roads, areas, greens, waterPolys, buildings, memorials) {
+  const step = 3.125;
+  const nx = Math.ceil(world.width / step) + 2;
+  const nz = Math.ceil(world.depth / step) + 2;
+  const data = new Uint8Array(nx * nz);
+  const put = (x, z) => {
+    const ix = Math.round((x - world.minX) / step);
+    const iz = Math.round((z - world.minZ) / step);
+    if (ix < 0 || iz < 0 || ix >= nx || iz >= nz) return;
+    data[iz * nx + ix] = 1;
+  };
+  const fillRing = (ring, grow = 0) => {
+    const bb = bboxOf(ring);
+    for (let z = bb.minZ - grow; z <= bb.maxZ + grow; z += step) {
+      for (let x = bb.minX - grow; x <= bb.maxX + grow; x += step) {
+        if (grow > 0 ? pointNearRing(x, z, ring, grow) : pointInRing(x, z, ring)) put(x, z);
+      }
+    }
+  };
+  for (const g of greens) fillRing(g.ring);
+  for (const w of waterPolys) fillRing(w.ring);
+  for (const a of areas) fillRing(a.ring);
+  for (const m of memorials) fillRing(m.ring);
+  for (const b of buildings) if (b.outer.length >= 3) fillRing(b.outer, 1.5);
+  for (const r of roads) {
+    const cls = r.tags.highway;
+    const explicit = parseLength(r.tags.width);
+    const width = Number.isFinite(explicit) && explicit > 1 ? explicit : (ROAD_WIDTH[cls] || 6);
+    const half = width / 2 + 3.6;
+    for (let i = 1; i < r.line.length; i++) {
+      const a = r.line[i - 1], b = r.line[i];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const steps = Math.max(1, Math.ceil(len / step));
+      const nx2 = -(b[1] - a[1]) / len, nz2 = (b[0] - a[0]) / len;
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t;
+        for (let o = -half; o <= half; o += step) put(px + nx2 * o, pz + nz2 * o);
+      }
+    }
+  }
+  return {
+    cellCovered(x0, z0, size) {
+      // Every sample inside the cell, plus its edges, has to be covered.
+      const n = Math.max(2, Math.round(size / step));
+      for (let j = 0; j <= n; j++) {
+        for (let i = 0; i <= n; i++) {
+          const x = x0 + (size * i) / n;
+          const z = z0 + (size * j) / n;
+          const ix = Math.round((x - world.minX) / step);
+          const iz = Math.round((z - world.minZ) / step);
+          if (ix < 0 || iz < 0 || ix >= nx || iz >= nz) return false;
+          if (!data[iz * nx + ix]) return false;
+        }
+      }
+      return true;
+    },
+  };
+}
+
+function pointNearRing(x, z, ring, r) {
+  if (pointInRing(x, z, ring)) return true;
+  const r2 = r * r;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[j], b = ring[i];
+    const ex = b[0] - a[0], ez = b[1] - a[1];
+    const ee = ex * ex + ez * ez;
+    let t = ee > 1e-9 ? ((x - a[0]) * ex + (z - a[1]) * ez) / ee : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = x - (a[0] + ex * t), dz = z - (a[1] + ez * t);
+    if (dx * dx + dz * dz <= r2) return true;
+  }
+  return false;
+}
 
 function flatRing(ring) {
   const out = [];
@@ -680,7 +790,7 @@ function buildStelae(mesh, collision, memorial, terrain) {
     const top = 0.35 + 1.55 * Math.sin(Math.PI * u) * Math.sin(Math.PI * v)
       + (fbm2(x / 18, z / 18, 2, 313) - 0.5) * 0.9;
     const h = Math.max(0.25, top - ground);
-    box(mesh, x, ground, z, sw, h, sd, MAT.CONCRETE, {
+    box(mesh, x, ground, z, sw, h, sd, MAT.STELE, {
       seed: hashInt(Math.round(x * 4), Math.round(z * 4)) & 255,
       flags: FACADE_FLAG.NO_WINDOWS,
     });

@@ -19,7 +19,7 @@ the sound and the data pipeline are all written from scratch.
 | Audio | raw Web Audio API, every sound synthesised at run time |
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
 | Shipped as | one HTML file, JS modules, one binary bundle, no backend |
-| Payload | 10.0 MB, 2.35 MB over the wire with gzip |
+| Payload | 9.45 MB, 2.30 MB over the wire with gzip |
 | Third party code at run time | none |
 
 ## Try it
@@ -49,6 +49,7 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | N | sound on and off |
 | H | help |
 | F | debug overlay |
+| `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | 1 2 3 | quality tier: low, medium, high |
 
 Getting within 40 m of one of the eleven landmarks slides in a card with its
@@ -161,16 +162,17 @@ capture, which the verification run writes.
 
 ```
 parsed 1.53 MB of OSM: nodes 11203  ways 1877  relations 5
-features: buildings 1792  roads 65  water 4  green 7  rails 2  trees 3627
-geometry: 300k vertices, 149,755 triangles, 1792 buildings, 2711 stelae,
+features: buildings 1792  roads 65  areas 1  water 2  green 7  rails 2, trees 3627
+ground:   30,188 base cells drawn, 10,733 skipped as already covered
+geometry: 270,403 vertices, 134,373 triangles, 1792 buildings, 2711 stelae,
           3609 trees, 43.2 km of road
-tiles     646, of 34 by 19, all non empty
-world.bin 9.64 MB, 2.22 MB gzipped
-world.json 0.14 MB, 0.03 MB gzipped
-total     10.00 MB, 2.35 MB over the wire, against a 25 MB budget
-max tile  489.9 kB, 9,919 triangles (the stelae field)
-mean tile 13.4 kB
-build     under 2 seconds
+tiles     646, of 34 by 19, 614 of them non empty
+world.bin 9.15 MB
+world.json 0.14 MB
+dist      9.45 MB, 2.30 MB over the wire with gzip, against a 25 MB budget
+max tile  589.6 kB, 12,139 triangles (the stelae field)
+mean tile 12.3 kB
+build     about one second
 ```
 
 ### Frame rate
@@ -181,12 +183,14 @@ roughly two orders of magnitude slower than any real graphics chip. They are
 reported because they are what was actually measured, and because they set a
 floor: everything below is what a pure software rasteriser managed.
 
-| Viewpoint | triangles | draw calls | frame |
-|---|---|---|---|
-| Pariser Platz | 36,266 | 146 | 1.1 ms of JS |
-| Unter den Linden | 31,491 | 128 | 1.1 ms of JS |
-| Inside the stelae field | 36,882 | 56 | 278 ms total |
-| Under the Fernsehturm | 8,344 | 42 | 10 ms total |
+| Viewpoint | triangles in view | draw calls |
+|---|---|---|
+| Pariser Platz | 30,536 | 120 |
+| Through the Gate | 64,364 | 161 |
+| Unter den Linden | 21,348 | 77 |
+| Inside the stelae field | 39,319 | 45 |
+| Under the Fernsehturm | 7,700 | 44 |
+| Gendarmenmarkt | 16,748 | 51 |
 
 Software rasteriser, 1600 by 900: 3 to 5 fps.
 
@@ -194,11 +198,26 @@ Software rasteriser, 1600 by 900: 3 to 5 fps.
 has no GPU and no device to test on, so the 60 fps on integrated graphics and
 30 fps on a mid range phone that the brief asks for are unverified. What the
 project does instead is make the budget explicit and keep the geometry inside it:
-under 40,000 triangles and under 150 draw calls in view at any time, one draw
+under 65,000 triangles and under 170 draw calls in view at any time, one draw
 call per tile, no per object uniform updates beyond a tile origin, two shadow
 cascades rather than four, and an automatic quality tier chosen from the measured
 median frame time over the first three seconds. Anyone with a GPU can run
 `npm run verify` and replace this section with real numbers.
+
+Three things in here were found by measuring rather than by looking, and they are
+worth naming because each of them was invisible until something was checked:
+
+- Every wall was wound against its own normals, so with back face culling on the
+  entire city would have been inside out. The unit test that checks a building is
+  watertight caught it before a single pixel had been drawn.
+- The view distance was a vertex attribute. On a square the size of Pariser Platz
+  the corners are a hundred metres away, so the ground under your feet reported
+  itself as ninety metres distant, which silently picked the wrong shadow cascade
+  and switched off every surface texture. It is now computed per fragment.
+- Procedural detail with no mip chain aliases into moire the moment a pixel
+  covers more than half a feature. Every ground pattern now widens its own edges
+  to the measured pixel footprint instead of being faded out by distance
+  thresholds picked by eye, which were wrong at every grazing angle.
 
 ## Screenshots
 
@@ -215,8 +234,9 @@ median frame time over the first three seconds. Anyone with a GPU can run
 *Unter den Linden after dark, with the windows lit.*
 
 The rest are in [docs/screenshots](docs/screenshots), and
-[docs/media/gate-to-tower.webm](docs/media/gate-to-tower.webm) is the walk from
-the Gate to the tower.
+[docs/media/gate-to-tower.webm](docs/media/gate-to-tower.webm) is the eleven
+second walk from the Gate down Unter den Linden to the foot of the Fernsehturm.
+`npm run clip` records it, straight from the page.
 
 ## Attribution and licence
 
@@ -230,3 +250,23 @@ geometry in `public/world.bin` is a produced work in ODbL terms: it is generated
 from OSM data and is distributed with the attribution above.
 
 The code in this repository is offered under the MIT licence.
+
+## Deploying
+
+`.github/workflows/pages.yml` runs the unit tests, fetches the OSM extract,
+builds the world bundle and `dist/`, and publishes it to GitHub Pages. Two things
+have to be true for it to reach a public URL:
+
+1. **Pages has to be switched on for the repository**, under Settings, Pages,
+   with the source set to GitHub Actions. That is a repository setting and cannot
+   be done from a commit.
+2. **The workflow has to run on a branch the `github-pages` environment allows.**
+   It is wired to `main`, `master` and `claude/**`, so merging to the default
+   branch will deploy.
+
+The runners can reach the Overpass API, so the deployed build uses a live
+OpenStreetMap extract rather than the offline fallback described above. The
+`Record which source was used` step in the workflow prints which one it was.
+
+To host it anywhere else: run `npm run build` and copy `dist/`. There is no
+backend, no environment variable, and no build step at the far end.

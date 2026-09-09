@@ -49,6 +49,7 @@ uniform float uExposure;
 uniform float uBloomAmount;
 uniform float uVignette;
 uniform float uFxaa;
+uniform float uRaw;      // 1 while a debug view is up, so nothing is graded
 layout(location = 0) out vec4 fragColour;
 
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -80,6 +81,7 @@ vec3 fxaa(sampler2D tex, vec2 uv, vec2 texel) {
 void main() {
   vec3 scene = uFxaa > 0.5 ? fxaa(uScene, vUv, uTexel) : texture(uScene, vUv).rgb;
   vec3 bloom = texture(uBloom, vUv).rgb;
+  if (uRaw > 0.5) { fragColour = vec4(scene, 1.0); return; }
   vec3 c = scene + bloom * uBloomAmount;
   c *= uExposure;
   c = acesTonemap(c);
