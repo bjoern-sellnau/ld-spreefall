@@ -19,7 +19,7 @@ the sound and the data pipeline are all written from scratch.
 | Audio | raw Web Audio API, every sound synthesised at run time |
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
 | Shipped as | one HTML file, JS modules, one binary bundle, no backend |
-| Payload | 9.45 MB, 2.30 MB over the wire with gzip |
+| Payload | 9.35 MB, 2.26 MB over the wire with gzip |
 | Third party code at run time | none |
 
 ## Try it
@@ -31,7 +31,10 @@ npm run world        # build public/world.bin and public/world.json
 npm run serve        # http://localhost:8080/
 ```
 
-`npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
+`npm run test` runs the pipeline unit tests, `npm run verify` takes the fixed
+screenshots in a headless browser and fails on any console error, `npm run
+test:ui` drives the whole game layer through a real browser, and `npm run clip`
+records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
 Cloudflare Pages, or any static host. There is nothing to run on the server.
 
 ## Controls
@@ -91,6 +94,9 @@ downloaded textures and no downloaded models anywhere in this project:
 - Where the map gives a `building:colour`, that colour is used. Where it does
   not, a colour is picked from a Berlin palette of ochre, cream, grey, sandstone
   and red brick.
+- Landmarks carry a clear zone, so the generated blocks cannot wall in the
+  things people came to look at. Without one the Reichstag ends up behind a row
+  of flats, which is exactly what happened the first time.
 
 **The fallback, and why it exists.** `tools/fetch-osm.mjs` is a complete Overpass
 client with retry and backoff, and it is what runs when a network is available.
@@ -161,17 +167,16 @@ capture, which the verification run writes.
 ### The build
 
 ```
-parsed 1.53 MB of OSM: nodes 11203  ways 1877  relations 5
-features: buildings 1792  roads 65  areas 1  water 2  green 7  rails 2, trees 3627
-ground:   30,188 base cells drawn, 10,733 skipped as already covered
-geometry: 270,403 vertices, 134,373 triangles, 1792 buildings, 2711 stelae,
-          3609 trees, 43.2 km of road
-tiles     646, of 34 by 19, 614 of them non empty
-world.bin 9.15 MB
+parsed 1.47 MB of OSM: nodes 10848  ways 1759  relations 5
+features: buildings 1672  roads 67  areas 1  water 2  green 7  rails 2, trees 3746
+geometry: 266,195 vertices, 132,397 triangles, 1672 buildings, 2711 stelae,
+          3728 trees, 44.3 km of road
+tiles     646, of 34 by 19, 613 of them non empty
+world.bin 9.05 MB
 world.json 0.14 MB
-dist      9.45 MB, 2.30 MB over the wire with gzip, against a 25 MB budget
-max tile  589.6 kB, 12,139 triangles (the stelae field)
-mean tile 12.3 kB
+dist      9.35 MB, 2.26 MB over the wire with gzip, against a 25 MB budget
+max tile  589.5 kB, 12,141 triangles (the stelae field)
+mean tile 12.1 kB
 build     about one second
 ```
 
@@ -185,12 +190,13 @@ floor: everything below is what a pure software rasteriser managed.
 
 | Viewpoint | triangles in view | draw calls |
 |---|---|---|
-| Pariser Platz | 30,536 | 120 |
-| Through the Gate | 64,364 | 161 |
-| Unter den Linden | 21,348 | 77 |
-| Inside the stelae field | 39,319 | 45 |
-| Under the Fernsehturm | 7,700 | 44 |
-| Gendarmenmarkt | 16,748 | 51 |
+| Pariser Platz | 31,247 | 124 |
+| Through the Gate | 64,588 | 161 |
+| Unter den Linden | 21,296 | 78 |
+| Inside the stelae field | 39,062 | 45 |
+| The Reichstag across the lawn | 5,629 | 42 |
+| Under the Fernsehturm | 7,256 | 41 |
+| Gendarmenmarkt | 16,633 | 52 |
 
 Software rasteriser, 1600 by 900: 3 to 5 fps.
 

@@ -287,6 +287,7 @@ export function buildSyntheticOsm() {
     const rot = (b.rot || 0) * Math.PI / 180;
     const cosA = Math.cos(rot), sinA = Math.sin(rot);
     const hw = b.w / 2, hd = b.d / 2;
+    const clear = b.clear !== undefined ? b.clear : 6;
     const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([u, v]) => [
       cx + u * cosA - v * sinA,
       cz + u * sinA + v * cosA,
@@ -314,12 +315,12 @@ export function buildSyntheticOsm() {
           [{ type: 'way', ref: outerWay, role: 'outer' }, { type: 'way', ref: innerWay, role: 'inner' }],
           { type: 'multipolygon', ...tags },
         );
-        mask.stampRect(cx, cz, b.w + 6, b.d + 6, cosA, sinA, 4);
+        mask.stampRect(cx, cz, b.w + clear * 2, b.d + clear * 2, cosA, sinA, 4);
         continue;
       }
     }
     doc.ring(lonlat, tags);
-    mask.stampRect(cx, cz, b.w + 6, b.d + 6, cosA, sinA, 4);
+    mask.stampRect(cx, cz, b.w + clear * 2, b.d + clear * 2, cosA, sinA, 4);
   }
 
   // Trees. Four rows of limes down Unter den Linden, plus the Tiergarten and
