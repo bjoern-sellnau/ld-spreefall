@@ -47,7 +47,14 @@ export class Minimap {
     const ctx = this.ctx;
     const W = this.canvas.width, H = this.canvas.height;
     const cx = W / 2, cy = H / 2;
-    const scale = (this.big ? 0.10 : 0.16) * this.dpr;
+    const wm = this.world;
+    // Enlarged, the map shows the whole playable box, north up, fitted to the
+    // canvas. Small, it is a heading up window around the player.
+    const scale = this.big
+      ? Math.min(W / (wm.maxX - wm.minX), H / (wm.maxZ - wm.minZ)) * 0.94
+      : 0.16 * this.dpr;
+    const originX = this.big ? (wm.minX + wm.maxX) / 2 : px;
+    const originZ = this.big ? (wm.minZ + wm.maxZ) / 2 : pz;
     const reach = Math.hypot(W, H) / 2 / scale;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -65,7 +72,7 @@ export class Minimap {
     // North up on the big map, heading up on the small one.
     if (!this.big) ctx.rotate(yaw);
     ctx.scale(scale, scale);
-    ctx.translate(-px, -pz);
+    ctx.translate(-originX, -originZ);
 
     const m = this.world.manifest;
 
@@ -97,7 +104,7 @@ export class Minimap {
     for (const r of m.roadLines) {
       const pts = r.pts;
       // Cheap reject: skip anything whose first point is far away.
-      if (Math.abs(pts[0] - px) > reach + 400 && Math.abs(pts[1] - pz) > reach + 400) continue;
+      if (Math.abs(pts[0] - originX) > reach + 400 && Math.abs(pts[1] - originZ) > reach + 400) continue;
       const style = CLASS_STYLE[r.cls] || CLASS_STYLE.residential;
       ctx.strokeStyle = style[0];
       ctx.lineWidth = style[1] / scale * this.dpr * 0.55;
@@ -112,7 +119,7 @@ export class Minimap {
       const seen = found.has(l.key);
       ctx.fillStyle = seen ? '#e2c98d' : 'rgba(226,201,141,0.32)';
       ctx.beginPath();
-      ctx.arc(l.x, l.z, 4.5 / scale * this.dpr * 0.5, 0, Math.PI * 2);
+      ctx.arc(l.x, l.z, (this.big ? 3.6 : 4.5) / scale * this.dpr * 0.5, 0, Math.PI * 2);
       ctx.fill();
       if (this.big) {
         ctx.save();
@@ -120,16 +127,24 @@ export class Minimap {
         ctx.scale(1 / scale, 1 / scale);
         ctx.fillStyle = seen ? '#e2c98d' : 'rgba(200,195,185,0.55)';
         ctx.font = `${11 * this.dpr}px ui-sans-serif, system-ui, sans-serif`;
-        ctx.fillText(l.name, 8 * this.dpr, 4 * this.dpr);
+        ctx.strokeStyle = 'rgba(6,7,9,0.85)';
+        ctx.lineWidth = 3 * this.dpr;
+        ctx.strokeText(l.name, 7 * this.dpr, 4 * this.dpr);
+        ctx.fillText(l.name, 7 * this.dpr, 4 * this.dpr);
         ctx.restore();
       }
     }
     ctx.restore();
 
-    // The player, always at the centre, always pointing up on the small map.
+    // The player: at the centre on the small map, at their real position on the
+    // enlarged one.
     ctx.save();
-    ctx.translate(cx, cy);
-    if (this.big) ctx.rotate(-yaw);
+    if (this.big) {
+      ctx.translate(cx + (px - originX) * scale, cy + (pz - originZ) * scale);
+      ctx.rotate(-yaw);
+    } else {
+      ctx.translate(cx, cy);
+    }
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = 1.2 * this.dpr;

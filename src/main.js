@@ -136,7 +136,11 @@ async function main() {
 
   // --- view state ----------------------------------------------------------
   const state = {
-    mode: deepLink ? 'title' : 'title',   // title, intro, landing, walk
+    // title, intro, landing, walk. A link that already carries a view skips the
+    // drone shot and holds that exact view behind the title card, otherwise the
+    // intro camera would throw away the heading the link asked for.
+    mode: 'title',
+    deepLink,
     walking: false,
     time: 0,
     prev: { x: player.x, y: player.y, z: player.z },
@@ -194,7 +198,7 @@ async function main() {
       state.walking = true;
     } else {
       state.mode = 'intro';
-      state.dronePose = intro.sample(0);
+      state.dronePose = intro.sample(performance.now() / 1000);
     }
     if (!isTouch) input.requestLock();
   }
@@ -293,25 +297,10 @@ async function main() {
     state.time += dt;
     input.poll();
 
-    if (state.mode === 'intro') {
-      state.dronePose = intro.sample(dt);
-      if (intro.t > 13.5) skipIntro();
-      return;
-    }
+    if (state.mode === 'intro' || state.mode === 'landing') return;
 
     const [lx, ly] = input.takeLook();
     if (state.mode === 'walk' && !photo.active) camera.rotate(lx, ly);
-
-    if (state.mode === 'landing') {
-      const to = {
-        x: player.x, y: player.y + PLAYER.eye, z: player.z,
-        yaw: camera.yaw, pitch: camera.pitch,
-      };
-      const p = intro.land(dt, state.landFrom, to);
-      state.dronePose = p;
-      if (p.finished) { state.mode = 'walk'; state.walking = true; }
-      return;
-    }
 
     if (state.mode !== 'walk') return;
 
@@ -335,7 +324,7 @@ async function main() {
     audio.update(dt, player, camera);
 
     urlTimer += dt;
-    if (urlTimer > 1.5) {
+    if (urlTimer > 0.6) {
       urlTimer = 0;
       writeState({
         x: player.x, z: player.z, yaw: camera.yaw, pitch: camera.pitch,
@@ -347,12 +336,35 @@ async function main() {
   function render(alpha, elapsed) {
     const w = el.canvas.width, h = el.canvas.height;
 
-    if (state.mode === 'title' || state.mode === 'intro' || state.mode === 'landing') {
-      const p = state.dronePose || intro.sample(0);
+    // The drone shot and the landing blend run off wall clock time, not off the
+    // fixed simulation step. On a slow machine the simulation falls behind real
+    // time, and a cinematic that plays in slow motion because the GPU is busy is
+    // just a bug.
+    const wall = performance.now() / 1000;
+    if (state.mode === 'intro') {
+      state.dronePose = intro.sample(wall);
+      if (intro.t > 13.5) skipIntro();
+    } else if (state.mode === 'landing') {
+      const to = {
+        x: player.x, y: player.y + PLAYER.eye, z: player.z,
+        yaw: camera.yaw, pitch: camera.pitch,
+      };
+      const p = intro.land(wall, state.landFrom, to);
+      state.dronePose = p;
+      if (p.finished) { state.mode = 'walk'; state.walking = true; }
+    }
+
+    if (state.mode === 'title' && state.deepLink) {
+      camera.position[0] = player.x;
+      camera.position[1] = player.y + PLAYER.eye;
+      camera.position[2] = player.z;
+    } else if (state.mode === 'title' || state.mode === 'intro' || state.mode === 'landing') {
+      const p = state.dronePose || intro.sample(performance.now() / 1000);
       camera.position[0] = p.x;
       camera.position[1] = p.y;
       camera.position[2] = p.z;
-      if (state.mode !== 'walk') { camera.yaw = p.yaw; camera.pitch = p.pitch; }
+      camera.yaw = p.yaw;
+      camera.pitch = p.pitch;
     } else {
       camera.position[0] = state.prev.x + (state.curr.x - state.prev.x) * alpha;
       camera.position[1] = state.prev.y + (state.curr.y - state.prev.y) * alpha + PLAYER.eye;

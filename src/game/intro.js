@@ -12,11 +12,20 @@ export class Intro {
     this.done = false;
     this.landing = false;
     this.landT = 0;
+    this.startedAt = 0;
+    this.landStartedAt = 0;
   }
 
-  /** @returns {{x,y,z,yaw,pitch}} */
-  sample(dt) {
-    this.t += dt;
+  /**
+   * The camera move is timed off the wall clock rather than off the frame
+   * delta. Frame deltas are clamped so that a stall cannot blow up the physics,
+   * and a cinematic that stretches to six seconds because the machine is slow
+   * looks broken.
+   * @returns {{x,y,z,yaw,pitch}}
+   */
+  sample(nowSeconds) {
+    if (!this.startedAt) this.startedAt = nowSeconds;
+    this.t = nowSeconds - this.startedAt;
     const t = this.t;
     // A 70 m radius arc, slowly descending from 130 m to 62 m, swinging round
     // to end up looking west at the Gate.
@@ -33,9 +42,10 @@ export class Intro {
     return { x, y, z, yaw, pitch };
   }
 
-  /** Blend from the drone pose to the player pose over 1.6 seconds. */
-  land(dt, from, to) {
-    this.landT += dt;
+  /** Blend from the drone pose to the player pose over 1.7 seconds. */
+  land(nowSeconds, from, to) {
+    if (!this.landStartedAt) this.landStartedAt = nowSeconds;
+    this.landT = nowSeconds - this.landStartedAt;
     const k = smoothstep(0, 1, clamp(this.landT / 1.7, 0, 1));
     const lerpAngle = (a, b, f) => {
       let d = b - a;

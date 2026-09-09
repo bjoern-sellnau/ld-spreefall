@@ -39,13 +39,17 @@ export class Loop {
     if (elapsed > this.maxFrame) elapsed = this.maxFrame;
 
     this.accumulator += elapsed;
+    // The cap has to cover a whole clamped frame, otherwise a slow machine runs
+    // the simulation in slow motion instead of just at a lower frame rate:
+    // maxFrame seconds of simulation at dt each.
+    const maxSteps = Math.ceil(this.maxFrame / this.dt) + 1;
     let steps = 0;
-    while (this.accumulator >= this.dt && steps < 8) {
+    while (this.accumulator >= this.dt && steps < maxSteps) {
       this.onFixed(this.dt);
       this.accumulator -= this.dt;
       steps++;
     }
-    if (steps === 8) this.accumulator = 0;   // give up rather than spiral
+    if (steps === maxSteps) this.accumulator = 0;   // give up rather than spiral
 
     const alpha = this.accumulator / this.dt;
     const t0 = performance.now();
