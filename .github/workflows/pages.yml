@@ -29,9 +29,12 @@ jobs:
         run: node --test tools/test/*.test.mjs
       - name: Fetch the OSM extract
         # GitHub runners can reach Overpass, so this is the real thing rather
-        # than the offline fallback. A live extract for the box is tens of
-        # megabytes of XML, hence the larger heap.
-        run: node --max-old-space-size=6144 tools/fetch-osm.mjs
+        # than the offline fallback. --force ignores the dataset committed to the
+        # repository, which exists only so the project builds without a network.
+        # A live extract for this box is tens of megabytes of XML, hence the
+        # larger heap. If Overpass is down the fetcher falls back on its own and
+        # the next step prints which source was used.
+        run: node --max-old-space-size=6144 tools/fetch-osm.mjs --force
       - name: Build the world bundle
         run: node --max-old-space-size=6144 tools/build-world.mjs
       - name: Record which source was used

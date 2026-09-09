@@ -259,7 +259,10 @@ have to be true for it to reach a public URL:
 
 1. **Pages has to be switched on for the repository**, under Settings, Pages,
    with the source set to GitHub Actions. That is a repository setting and cannot
-   be done from a commit.
+   be done from a commit. Until it is, `actions/configure-pages` fails with
+   "Get Pages site failed" and the deploy job is skipped. The first run of this
+   workflow did exactly that: the tests, the fetch, the world build and the dist
+   build all passed in eleven seconds, and only the Pages step failed.
 2. **The workflow has to run on a branch the `github-pages` environment allows.**
    It is wired to `main`, `master` and `claude/**`, so merging to the default
    branch will deploy.

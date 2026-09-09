@@ -22,8 +22,8 @@ export const VIEWPOINTS = [
     caption: 'The lime avenue on Unter den Linden' },
   { name: '04-memorial', x: 45, z: 260, yaw: 20, pitch: -4, tod: 13.0,
     caption: 'Inside the field of 2711 stelae' },
-  { name: '05-reichstag', x: -100, z: -240, yaw: 20, pitch: 6, tod: 6.8,
-    caption: 'The Reichstag from Scheidemannstrasse at sunrise' },
+  { name: '05-reichstag', x: -104, z: -118, yaw: 0, pitch: 15, tod: 7.4,
+    caption: 'The Reichstag across the Platz der Republik, early morning' },
   { name: '06-museum-island', x: 1395, z: -195, yaw: -46, pitch: 17, tod: 18.4,
     caption: 'The Berlin Cathedral over the Lustgarten' },
   { name: '07-tv-tower', x: 1960, z: -430, yaw: -52, pitch: 30, tod: 19.0,
@@ -36,10 +36,10 @@ export const VIEWPOINTS = [
     caption: 'Unter den Linden after dark, with the windows lit' },
   { name: '10-gendarmenmarkt', x: 1040, z: 300, yaw: 0, pitch: 6, tod: 11.2,
     caption: 'Gendarmenmarkt between the two cathedrals' },
-  { name: '11-potsdamer-platz', x: -95, z: 745, yaw: -60, pitch: 12, tod: 15.4,
-    caption: 'Potsdamer Platz and the towers' },
-  { name: '12-spree', x: 830, z: -640, yaw: -90, pitch: 0, tod: 7.6,
-    caption: 'The Spree by the Reichstagufer' },
+  { name: '11-potsdamer-platz', x: -40, z: 700, yaw: 111, pitch: 17, tod: 15.4,
+    caption: 'Potsdamer Platz, with the Kollhoff tower and the Sony Center' },
+  { name: '12-spree', x: 830, z: -522, yaw: 0, pitch: -3, tod: 7.6,
+    caption: 'The Spree, looking north across the water' },
 ];
 
 async function run() {
