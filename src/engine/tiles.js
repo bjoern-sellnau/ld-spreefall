@@ -22,8 +22,26 @@ export class TileManager {
     this.maxResident = opts.maxResident || 520;
     this.uploadsPerFrame = opts.uploadsPerFrame || 6;
     this.visible = [];
-    this.stats = { resident: 0, visible: 0, uploads: 0, triangles: 0, bytes: 0 };
+    this.stats = { resident: 0, visible: 0, uploads: 0, triangles: 0, bytes: 0, skyline: 0 };
     this._queue = [];
+
+    // Tiles carrying something tall enough to be part of the skyline stay
+    // resident wherever the player is. Without this the Fernsehturm, which is
+    // two kilometres from the Gate, simply is not there when you look east, and
+    // that view is the whole point of the fog. There are only a couple of dozen
+    // of them and they cost about twelve thousand triangles in total.
+    this.skyline = [];
+    for (let i = 0; i < world.tiles.length; i++) {
+      const rec = world.tiles[i];
+      if (rec.tris > 0 && rec.max[1] > 40) this.skyline.push(i);
+    }
+    this.stats.skyline = this.skyline.length;
+    this.skylineSet = new Set(this.skyline);
+  }
+
+  /** Upload the skyline tiles once, before the first frame. */
+  primeSkyline() {
+    for (const index of this.skyline) if (!this.resident.has(index)) this.upload(index);
   }
 
   setQuality(tier) {
@@ -157,6 +175,7 @@ export class TileManager {
     // Evict.
     if (this.resident.size > this.maxResident || uploads === 0) {
       for (const [index, tile] of this.resident) {
+        if (this.skylineSet.has(index)) continue;
         const cx = tile.ox + ts * 0.5, cz = tile.oz + ts * 0.5;
         if (Math.hypot(cx - px, cz - pz) > this.evictRadius) this.evict(index);
       }

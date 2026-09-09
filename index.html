@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<title>SPREE|FALL, a walkable Berlin</title>
+<meta name="description" content="Central Berlin rebuilt from OpenStreetMap data and rendered in raw WebGL2. Walk from the Brandenburg Gate to the Fernsehturm in your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0d10'/%3E%3Crect x='6' y='12' width='3' height='14' fill='%23d8c9a8'/%3E%3Crect x='11' y='12' width='3' height='14' fill='%23d8c9a8'/%3E%3Crect x='16' y='12' width='3' height='14' fill='%23d8c9a8'/%3E%3Crect x='21' y='12' width='3' height='14' fill='%23d8c9a8'/%3E%3Crect x='4' y='8' width='22' height='4' fill='%23d8c9a8'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="src/ui/style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="loading" class="overlay">
+  <div class="loadbox">
+    <div class="wordmark">SPREE<span>|</span>FALL</div>
+    <div class="tagline">Central Berlin, rebuilt from OpenStreetMap</div>
+    <div class="bar"><i id="loadbar"></i></div>
+    <div class="loadnote" id="loadnote">loading the city</div>
+  </div>
+</div>
+
+<div id="title" class="overlay hidden">
+  <div class="titlebox">
+    <div class="wordmark big">SPREE<span>|</span>FALL</div>
+    <p class="blurb">Every building, street, tree and bend of the river here comes from
+    OpenStreetMap. The renderer, the physics and the sound are written from scratch
+    in WebGL2 and the Web Audio API, with no game engine and no 3D library.</p>
+    <button id="playbtn" class="play">Press to walk</button>
+    <p class="hint" id="controlhint">
+      <b>W A S D</b> or arrows to walk &nbsp; <b>Shift</b> to run &nbsp; <b>Space</b> to jump
+      &nbsp; <b>Mouse</b> to look &nbsp; <b>P</b> photo mode &nbsp; <b>M</b> map &nbsp; <b>H</b> help
+    </p>
+  </div>
+</div>
+
+<div id="hud" class="hidden">
+  <div id="crosshair"></div>
+  <canvas id="minimap" width="196" height="196"></canvas>
+  <div id="compass"><span id="compasslabel">N</span></div>
+  <div id="cardhost"></div>
+  <div id="toast"></div>
+  <div id="progress">
+    <span id="found">0</span> of <span id="total">11</span> landmarks
+  </div>
+  <div id="debug" class="hidden"></div>
+  <div id="touchui" class="hidden">
+    <div id="stick"><i id="stickknob"></i></div>
+    <button id="btnjump" class="tbtn">jump</button>
+    <button id="btnrun" class="tbtn">run</button>
+  </div>
+  <div id="controls">
+    <button id="btnmap" title="Map (M)">map</button>
+    <button id="btnphoto" title="Photo mode (P)">photo</button>
+    <button id="btnsound" title="Sound (N)">sound off</button>
+    <button id="btnhelp" title="Help (H)">help</button>
+  </div>
+</div>
+
+<div id="photo" class="hidden">
+  <div class="photobar">
+    <label>time of day <input id="tod" type="range" min="0" max="24" step="0.02" value="17.4"></label>
+    <span id="todlabel">17:24</span>
+    <label>day of year <input id="doy" type="range" min="1" max="365" step="1" value="166"></label>
+    <span id="doylabel">15 June</span>
+    <button id="shoot">save PNG</button>
+    <button id="copylink">copy link</button>
+    <button id="photoclose">back</button>
+  </div>
+</div>
+
+<div id="helppanel" class="panel hidden">
+  <h2>How to walk around</h2>
+  <table>
+    <tr><td>W A S D, arrows</td><td>walk</td></tr>
+    <tr><td>Shift</td><td>run</td></tr>
+    <tr><td>Space</td><td>jump onto kerbs and low walls</td></tr>
+    <tr><td>Mouse, or drag on the right of the screen</td><td>look</td></tr>
+    <tr><td>P</td><td>photo mode, hides the interface and unlocks the clock</td></tr>
+    <tr><td>M</td><td>enlarge the map</td></tr>
+    <tr><td>N</td><td>sound on and off</td></tr>
+    <tr><td>F</td><td>debug overlay</td></tr>
+    <tr><td>1 2 3</td><td>quality: low, medium, high</td></tr>
+    <tr><td>Esc</td><td>release the mouse</td></tr>
+  </table>
+  <p>A gamepad works too: left stick walks, right stick looks, A jumps, L3 or the
+  left trigger runs.</p>
+  <button id="helpclose">close</button>
+</div>
+
+<div id="completion" class="overlay hidden">
+  <div class="titlebox">
+    <div class="wordmark">All eleven found</div>
+    <p class="blurb" id="completiontext"></p>
+    <button id="completionclose">keep walking</button>
+  </div>
+</div>
+
+<footer id="attribution">
+  Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+  contributors, licensed under the <a href="https://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener">ODbL</a>.
+  <span id="datasource"></span>
+</footer>
+
+<noscript><p style="color:#eee;padding:2rem;font:16px system-ui">SPREE|FALL needs JavaScript and WebGL2.</p></noscript>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

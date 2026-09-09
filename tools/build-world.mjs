@@ -365,7 +365,7 @@ function main() {
   // --- buildings ----------------------------------------------------------
   let buildingCount = 0;
   const landmarkIndex = [];
-  const facadeColours = [];
+  const palette = new Palette(BERLIN_PALETTE);
   for (const b of buildings) {
     const ring = b.outer;
     if (ring.length < 3) continue;
@@ -396,12 +396,10 @@ function main() {
     const colour = parseColour(tags['building:colour'] || tags.colour);
     const matTag = MATERIAL_BY_TAG[(tags['building:material'] || '').toLowerCase()];
     const wallMat = matTag !== undefined ? matTag : MAT.FACADE;
-    let colourIdx = 255;
-    if (colour) {
-      colourIdx = facadeColours.length;
-      facadeColours.push(colour);
-      if (colourIdx > 250) colourIdx = 255;
-    }
+    // The low six bits of the seed index the facade palette, the top two carry
+    // the per building variation the window shader uses.
+    const colourIdx = colour ? palette.indexOf(colour) : palette.pick(seed);
+    const packedSeed = (colourIdx & 63) | ((seed & 3) << 6);
     const roofShape = (tags['roof:shape'] || 'flat').toLowerCase();
     const roofHeight = parseLength(tags['roof:height']);
     extrudeBuilding(mesh, { outer: ring, holes: b.holes }, {
@@ -410,7 +408,7 @@ function main() {
       roofShape,
       roofHeight: Number.isFinite(roofHeight) ? roofHeight : (roofShape === 'flat' ? 0 : 4.5),
       wallMat, roofMat: MAT.ROOF,
-      seed: colourIdx === 255 ? seed : colourIdx,
+      seed: packedSeed,
       levels,
       landmark: false,
       noWindows: wallMat === MAT.CONCRETE,
@@ -476,10 +474,12 @@ function main() {
     collisionGrid: COLLISION_GRID,
     waterLevel,
     materials: MATERIAL_NAMES,
-    facadeColours: facadeColours.map((c) => c.map((v) => Math.round(v * 255))),
+    facadePalette: palette.list.map((c) => c.map((v) => Math.round(v * 255))),
     landmarks: buildLandmarkCards(attractions, landmarkIndex),
     stations: stations.map((s) => ({ name: s.tags.name || '', x: round2(s.p[0]), z: round2(s.p[1]), kind: s.tags.railway })),
     roadLines,
+    waterOutlines: waterPolys.map((w) => flatRing(simplify(w.ring, 2.5))),
+    greenOutlines: greens.map((g) => flatRing(simplify(g.ring, 3.0))),
     surfaceGrid: {
       step: surfaceGrid.step, nx: surfaceGrid.nx, nz: surfaceGrid.nz,
       offset: bundle.surfaceOffset, length: surfaceGrid.data.length,
@@ -518,6 +518,46 @@ function main() {
 // ---------------------------------------------------------------------------
 
 function round2(v) { return Math.round(v * 100) / 100; }
+
+function flatRing(ring) {
+  const out = [];
+  for (const p of ring) { out.push(Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10); }
+  return out;
+}
+
+/**
+ * A 64 entry facade palette. Exact colours are deduplicated, anything past the
+ * cap snaps to the nearest entry, so a building:colour from OSM always shows up
+ * as itself or as the closest thing the palette has.
+ */
+class Palette {
+  constructor(seedColours) {
+    this.list = [];
+    this.byKey = new Map();
+    for (const c of seedColours) this.indexOf(c);
+  }
+  key(c) {
+    return `${Math.round(c[0] * 31)}_${Math.round(c[1] * 31)}_${Math.round(c[2] * 31)}`;
+  }
+  indexOf(c) {
+    const k = this.key(c);
+    const hit = this.byKey.get(k);
+    if (hit !== undefined) return hit;
+    if (this.list.length < 64) {
+      this.list.push(c);
+      this.byKey.set(k, this.list.length - 1);
+      return this.list.length - 1;
+    }
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < this.list.length; i++) {
+      const d = (this.list[i][0] - c[0]) ** 2 + (this.list[i][1] - c[1]) ** 2 + (this.list[i][2] - c[2]) ** 2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    this.byKey.set(k, best);
+    return best;
+  }
+  pick(seed) { return seed % Math.max(1, this.list.length); }
+}
 
 function bboxOf(ring) {
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;

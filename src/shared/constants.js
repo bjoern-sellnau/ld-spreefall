@@ -50,7 +50,7 @@ export const FACADE_FLAG = {
 export const SPAWN = {
   lat: 52.51625,
   lon: 13.37940,
-  yaw: -Math.PI / 2,     // facing west, towards the Gate
+  yaw: Math.PI / 2,      // facing west, towards the Gate
   eyeHeight: 1.7,
 };
 

@@ -325,9 +325,14 @@ export function buildSyntheticOsm() {
   // Trees. Four rows of limes down Unter den Linden, plus the Tiergarten and
   // street rows elsewhere.
   let treeCount = 0;
+  // Four rows of limes down the central promenade. They start about seventy
+  // metres east of Pariser Platz, as they do in life, which is also what keeps
+  // the view of the Fernsehturm open from the Gate.
   const lindenSpine = toWorld(STREETS.find((s) => s.name === 'Unter den Linden').pts);
-  for (const off of [-13, -5.5, 5.5, 13]) {
-    for (const p of sampleAlong(offsetLine(lindenSpine, off), 9.5)) {
+  for (const off of [-14, -6.5, 6.5, 14]) {
+    const row = offsetLine(lindenSpine, off);
+    for (const p of sampleAlong(row, 12.5)) {
+      if (p[0] < 268) continue;
       const [lon, lat] = worldToLonLat(p);
       doc.node(lat, lon, { natural: 'tree', species: 'Tilia', 'spreefall:row': 'linden' });
       treeCount++;
