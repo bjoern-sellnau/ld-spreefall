@@ -6,11 +6,13 @@ import { createProgram } from '../engine/gl.js';
 import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
-  SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS,
+  SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS,
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
 const MAX_SPARKS = 256;
+const MAX_PROPS = 32;
+const MAX_SOLDIERS = 24;
 
 // --- mesh building ---------------------------------------------------------
 
@@ -178,6 +180,149 @@ export function buildWeaponMesh() {
   return m;
 }
 
+/**
+ * The rest of what you can carry. Same parts palette as the rifle: 0 receiver,
+ * 1 barrel steel, 2 polymer, 3 sight, 4 the flash cone the shader hides between
+ * shots. Everything is measured in metres from the eye, muzzle towards -z.
+ */
+export function buildShotgunMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.170, 0.056, 0.080, 0.150, 2);      // stock
+  m.box(0, -0.028, -0.250, 0.050, 0.092, 0.075, 2);      // wrist
+  m.box(0, 0.004, -0.360, 0.062, 0.086, 0.200, 0);       // receiver
+  m.cylinder(0, 0.020, -0.470, 0.019, 0.019, -0.330, 10, 1, 'z');   // barrel
+  m.cylinder(0, -0.014, -0.470, 0.016, 0.016, -0.300, 10, 1, 'z');  // tube magazine
+  m.box(0, -0.008, -0.560, 0.046, 0.044, 0.130, 2);      // pump
+  m.box(0, -0.092, -0.300, 0.044, 0.110, 0.060, 2);      // grip
+  m.box(0, 0.040, -0.372, 0.010, 0.014, 0.010, 3);       // bead
+  m.cylinder(0, 0.020, -0.802, 0.006, 0.090, -0.200, 10, 4, 'z');
+  return m;
+}
+
+export function buildRpgMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0.000, -0.520, 0.048, 0.048, -0.760, 14, 0, 'z');   // tube
+  m.cylinder(0, 0.000, -0.180, 0.060, 0.060, -0.110, 14, 0, 'z');   // blast cone
+  m.box(0, -0.080, -0.430, 0.040, 0.110, 0.062, 2);      // grip
+  m.box(0, -0.052, -0.620, 0.036, 0.070, 0.055, 2);      // forward grip
+  m.box(0, 0.062, -0.520, 0.028, 0.034, 0.240, 3);       // sight rail
+  // The warhead, sticking out of the front where you can see it.
+  m.cylinder(0, 0.000, -0.900, 0.052, 0.052, -0.120, 12, 1, 'z');
+  m.cylinder(0, 0.000, -1.020, 0.052, 0.006, -0.130, 12, 1, 'z');   // the nose
+  m.cylinder(0, 0.000, -0.902, 0.006, 0.130, -0.260, 10, 4, 'z');
+  return m;
+}
+
+export function buildGrenadeMesh() {
+  const m = new MeshBuild();
+  // A fist, near enough: the body in your hand with the lever along it.
+  m.cylinder(0, -0.010, -0.300, 0.048, 0.048, -0.110, 12, 2, 'z');
+  m.cylinder(0, -0.010, -0.410, 0.030, 0.030, -0.030, 10, 0, 'z');
+  m.box(0.040, -0.010, -0.345, 0.014, 0.070, 0.090, 0);
+  m.box(0.052, 0.020, -0.410, 0.030, 0.006, 0.030, 3);   // the ring
+  return m;
+}
+
+export function buildC4Mesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.330, 0.150, 0.075, 0.110, 2);      // the brick
+  m.box(0, 0.024, -0.330, 0.090, 0.014, 0.060, 0);       // the taped detonator
+  m.box(0.030, 0.034, -0.330, 0.012, 0.010, 0.012, 3);   // the light
+  m.box(-0.086, -0.020, -0.300, 0.026, 0.060, 0.050, 0); // the trigger in your hand
+  return m;
+}
+
+export function buildBananaMesh() {
+  const m = new MeshBuild();
+  // Eight segments swept along an arc, which is all a banana is.
+  const R = 0.135;
+  for (let i = 0; i < 8; i++) {
+    const t = (i / 7) - 0.5;
+    const a = t * 1.5;
+    const x = Math.sin(a) * R * 0.5;
+    const z = -0.330 - Math.cos(a) * R * 0.45;
+    const y = -0.020 + Math.cos(a * 1.6) * 0.020 - 0.02;
+    const r = 0.030 * (1 - Math.abs(t) * 1.3);
+    if (r > 0.004) m.box(x, y, z, r * 2, r * 2, 0.040, 3);
+  }
+  m.box(Math.sin(-0.75) * R * 0.5, -0.048, -0.330 - Math.cos(-0.75) * R * 0.45, 0.014, 0.014, 0.030, 2);
+  return m;
+}
+
+/**
+ * The things you throw, as they look in the world rather than in your hands.
+ * All four share one mesh so they can be drawn in a single instanced call; the
+ * shader picks which part of it to show by the part ids, and each projectile
+ * carries a kind that scales the others to nothing.
+ */
+export function buildProjectileMesh(kind) {
+  const m = new MeshBuild();
+  if (kind === 'rocket') {
+    m.cylinder(0, 0, 0, 0.09, 0.09, 0.46, 10, 8, 'z');
+    m.cylinder(0, 0, 0.23, 0.09, 0.02, 0.16, 10, 8, 'z');
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.12, Math.sin(a) * 0.12, -0.20, 0.10, 0.02, 0.12, 8, a);
+    }
+  } else if (kind === 'grenade') {
+    m.icosphere(0, 0, 0, 0.085, 10, 6, 8);
+    m.cylinder(0, 0.085, 0, 0.032, 0.032, 0.05, 8, 7, 'y');
+  } else if (kind === 'c4') {
+    m.box(0, 0, 0, 0.22, 0.09, 0.15, 9);
+    m.box(0, 0.052, 0, 0.10, 0.02, 0.07, 7);
+  } else {
+    // The banana, which is the same arc as the one in your hand, lying down.
+    const R = 0.16;
+    for (let i = 0; i < 7; i++) {
+      const t = (i / 6) - 0.5;
+      const a = t * 1.6;
+      const x = Math.sin(a) * R * 0.6;
+      const z = Math.cos(a) * R * 0.4;
+      const r = 0.036 * (1 - Math.abs(t) * 1.25);
+      if (r > 0.006) m.box(x, 0.02, z, r * 2, r * 2, 0.05, 10);
+    }
+  }
+  return m;
+}
+
+/**
+ * A soldier. Built standing at the origin with their feet on the ground and
+ * facing -z, the same way the weapon points, so one yaw puts them anywhere.
+ * Parts: 4 cloth, 5 helmet, 6 webbing, 7 the rifle.
+ *
+ * The limbs are separate boxes placed where a walk cycle can swing them in the
+ * vertex shader, which is why the arms and legs are their own parts rather than
+ * one silhouette.
+ */
+export function buildSoldierMesh() {
+  const m = new MeshBuild();
+  // Legs. Part ids carry the walk phase: 40 and 41 are the two legs, 42 and 43
+  // the two arms, and the shader reads the fractional part.
+  m.box(-0.11, 0.42, 0, 0.19, 0.84, 0.22, 4);       // left leg
+  m.box(0.11, 0.42, 0, 0.19, 0.84, 0.22, 4);        // right leg
+  m.box(-0.11, 0.05, -0.04, 0.20, 0.10, 0.30, 6);   // left boot
+  m.box(0.11, 0.05, -0.04, 0.20, 0.10, 0.30, 6);    // right boot
+
+  // Torso, with the webbing over it.
+  m.box(0, 1.14, 0, 0.46, 0.62, 0.27, 4);
+  m.box(0, 1.16, -0.005, 0.40, 0.44, 0.30, 6);      // vest
+  m.box(0, 0.84, 0, 0.44, 0.12, 0.26, 6);           // belt
+
+  // Arms, held towards the weapon.
+  m.box(-0.30, 1.16, -0.05, 0.16, 0.54, 0.18, 4);
+  m.box(0.30, 1.16, -0.05, 0.16, 0.54, 0.18, 4);
+
+  // Head and helmet.
+  m.box(0, 1.52, 0, 0.21, 0.24, 0.23, 6);           // neck and face, in shadow
+  m.box(0, 1.66, 0, 0.29, 0.16, 0.31, 5);           // helmet
+  m.box(0, 1.60, -0.14, 0.24, 0.07, 0.05, 5);       // visor
+
+  // The rifle, carried across the body.
+  m.box(0.18, 1.14, -0.30, 0.06, 0.09, 0.52, 7);
+  m.box(0.18, 1.08, -0.16, 0.05, 0.14, 0.10, 7);
+  return m;
+}
+
 // --- renderer --------------------------------------------------------------
 
 export class Actors {
@@ -195,9 +340,31 @@ export class Actors {
     // sampler2DShadow from a unit holding an ordinary texture, and every draw
     // fails with INVALID_OPERATION and renders nothing at all.
     this.progDrone.use().int('uShadow0', 4).int('uShadow1', 5);
+    this.progSoldier = createProgram(gl, SOLDIER_VS, DRONE_FS, 'soldier');
+    this.progSoldier.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
-    this.weapon = this._uploadMesh(buildWeaponMesh(), 0, 0);
+    this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 2);
+    // Every viewmodel is uploaded once. They are a few hundred triangles each,
+    // so carrying all six costs less than switching would.
+    this.weapons = {
+      m16: this._uploadMesh(buildWeaponMesh(), 0, 0),
+      shotgun: this._uploadMesh(buildShotgunMesh(), 0, 0),
+      rpg: this._uploadMesh(buildRpgMesh(), 0, 0),
+      grenade: this._uploadMesh(buildGrenadeMesh(), 0, 0),
+      c4: this._uploadMesh(buildC4Mesh(), 0, 0),
+      banana: this._uploadMesh(buildBananaMesh(), 0, 0),
+    };
+    this.weapon = this.weapons.m16;
+
+    // The things in flight. One instanced mesh per kind, because a rocket and
+    // a banana have nothing in common but the shader.
+    this.props = {
+      rocket: this._uploadMesh(buildProjectileMesh('rocket'), MAX_PROPS, 2),
+      grenade: this._uploadMesh(buildProjectileMesh('grenade'), MAX_PROPS, 2),
+      c4: this._uploadMesh(buildProjectileMesh('c4'), MAX_PROPS, 2),
+      banana: this._uploadMesh(buildProjectileMesh('banana'), MAX_PROPS, 2),
+    };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
     this.sparkData = new Float32Array(MAX_SPARKS * 12);
@@ -289,6 +456,81 @@ export class Actors {
     }
   }
 
+  /** Sorts what is in the air into its per kind instance buffers. */
+  updateProjectiles(list) {
+    const gl = this.gl;
+    const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0 };
+    for (const b of list) {
+      const mesh = this.props[b.kind];
+      if (!mesh || counts[b.kind] >= MAX_PROPS) continue;
+      const o = counts[b.kind] * 8;
+      const d = mesh.instData;
+      // A rocket points where it is going; everything else tumbles.
+      const flying = b.kind === 'rocket';
+      const yaw = flying ? Math.atan2(-b.vx, -b.vz) : b.spin * 0.7;
+      const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, b.vy
+        / (Math.hypot(b.vx, b.vy, b.vz) || 1)))) : b.spin;
+      d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z; d[o + 3] = yaw;
+      d[o + 4] = pitch; d[o + 5] = flying ? 0 : b.spin * 0.5; d[o + 6] = 0; d[o + 7] = 0;
+      counts[b.kind]++;
+    }
+    for (const kind in this.props) {
+      const mesh = this.props[kind];
+      mesh.instanceCount = counts[kind];
+      if (counts[kind] > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.instData, 0, counts[kind] * 8);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
+    }
+  }
+
+  updateSoldiers(list) {
+    const gl = this.gl;
+    const data = this.soldier.instData;
+    let n = 0;
+    for (const s of list) {
+      if (!s.alive || n >= MAX_SOLDIERS) continue;
+      const o = n * 8;
+      data[o] = s.x; data[o + 1] = s.y; data[o + 2] = s.z; data[o + 3] = s.yaw;
+      // x carries the fall, which is both death and a banana, y the walk phase.
+      data[o + 4] = s.lean; data[o + 5] = 0; data[o + 6] = s.hitFlash; data[o + 7] = s.walk;
+      n++;
+    }
+    this.soldier.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.soldier.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  drawSoldiers() {
+    if (!this.soldier.instanceCount) return 0;
+    const gl = this.gl;
+    this.progSoldier.use();
+    gl.bindVertexArray(this.soldier.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, this.soldier.count, this.soldier.indexType, 0,
+      this.soldier.instanceCount);
+    gl.bindVertexArray(null);
+    return 1;
+  }
+
+  drawProjectiles() {
+    const gl = this.gl;
+    let draws = 0;
+    this.progDrone.use();
+    for (const kind in this.props) {
+      const mesh = this.props[kind];
+      if (!mesh.instanceCount) continue;
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
+    gl.bindVertexArray(null);
+    return draws;
+  }
+
   drawDrones() {
     if (!this.drone.instanceCount) return 0;
     const gl = this.gl;
@@ -354,6 +596,7 @@ export class Actors {
    */
   drawViewmodel(aspect, pose, muzzle) {
     const gl = this.gl;
+    const mesh = (pose.weapon && this.weapons[pose.weapon]) || this.weapons.m16;
     gl.clear(gl.DEPTH_BUFFER_BIT);
     mat4.perspective(this.viewProj, 55 * Math.PI / 180, aspect, 0.004, 6);
 
@@ -373,15 +616,16 @@ export class Actors {
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
-    gl.bindVertexArray(this.weapon.vao);
-    gl.drawElements(gl.TRIANGLES, this.weapon.count, this.weapon.indexType, 0);
+    gl.bindVertexArray(mesh.vao);
+    gl.drawElements(gl.TRIANGLES, mesh.count, mesh.indexType, 0);
     gl.bindVertexArray(null);
     return 1;
   }
 
   dispose() {
     const gl = this.gl;
-    for (const mesh of [this.drone, this.weapon]) {
+    for (const mesh of [this.drone, this.soldier, ...Object.values(this.weapons),
+      ...Object.values(this.props)]) {
       gl.deleteVertexArray(mesh.vao);
       gl.deleteBuffer(mesh.vbo);
       gl.deleteBuffer(mesh.ibo);

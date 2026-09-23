@@ -55,13 +55,16 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | M | enlarge the map |
 | N | sound on and off |
 | H | help |
+| 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |
+| Q | back to the weapon you had before |
+| T | blow the C4 you have put down |
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight |
 | R | reload |
 | G | holster the weapon, for walking and for photographs |
 | F | debug overlay |
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
-| 1 2 3 | quality tier: low, medium, high |
+| F1 F2 F3 | quality tier: low, medium, high |
 
 Getting within 40 m of one of the eleven landmarks slides in a card with its
 name and a sentence of history. Find all eleven and you get a completion screen
@@ -91,14 +94,28 @@ What is under the hood:
   marches the ground height field, at about 4.3 microseconds a ray. The world is
   tested first and the drones only within that distance, so cover is not a
   special case, it is the same geometry you are standing on.
-- The rifle holds 30 rounds, reloads in 1.55 s, fires every 105 ms for 38 damage,
-  and carries out to 320 m. Spread grows with every shot and recovers when you
-  stop; aiming tightens it and narrows the field of view together. The core of a
-  drone is worth 2.2 times a hit on the hull.
+- Six things to carry, on the number row or the mouse wheel: an M16, a pump
+  shotgun that throws eleven pellets, a rocket launcher, grenades, C4 you place
+  and blow with T, and a banana. Each one is a row in `src/game/arsenal.js`,
+  because every difference between a rifle and a shotgun that the game cares
+  about is a number.
+- Recoil kicks and comes back. The view carries the climb as an offset and gets
+  it back as the spring settles, keeping only the small share each weapon is
+  allowed to keep, so a burst walks instead of stranding your aim in the sky. A
+  full magazine of the M16 peaks about five degrees up and leaves two behind.
+- Grenades, rockets, C4 and bananas are real objects with gravity that bounce
+  off the actual walls of actual buildings, because they collide against the
+  same raycast the bullets use. A blast damages everything inside its radius
+  that it can see, including you. C4 sticks where it lands and waits.
 - Drones patrol, pursue, attack and evade. They steer with four horizontal probes
   and a ground clearance term, so they do not fly into walls, and they re-test
   line of sight every 0.22 s rather than every frame, on a rota, so the cost is
   spread across frames instead of spiking whenever the sky fills up.
+- Soldiers walk the same streets. They advance, take an angle on you, fire in
+  bursts and lose you when you break line of sight, testing that line of sight
+  from their eyes to yours through the real geometry. They will not walk into
+  the weapons free zone. And they slip on a banana, which lays them out for
+  three and a half seconds.
 - Holding ground raises the threat tier, which raises how many of them are in the
   air at once, from six to fourteen. Integrity regenerates after a pause, and
   going down clears the sky, drops the threat by a tier and puts you back on

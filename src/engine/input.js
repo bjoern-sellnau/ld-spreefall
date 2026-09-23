@@ -33,7 +33,8 @@ export class Input {
       if (e.repeat) { e.preventDefault(); return; }
       this.keys.add(e.code);
       if (this.onKeyPress) this.onKeyPress(e.code, e);
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab',
+        'F1', 'F2', 'F3'].includes(e.code)) e.preventDefault();
       if (e.code === 'Space') this.jumpQueued = true;
     });
     doc.addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -53,6 +54,14 @@ export class Input {
       if (e.button === 2) this.secondary = false;
     });
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // The wheel cycles what you are holding. It only counts while the pointer
+    // is locked, so scrolling the page before you start does not rummage
+    // through your pockets.
+    this.canvas.addEventListener('wheel', (e) => {
+      if (!this.pointerLocked) return;
+      e.preventDefault();
+      if (this.onWheel) this.onWheel(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });
     window.addEventListener('blur', () => { this.fire = false; this.secondary = false; });
 
     doc.addEventListener('mousemove', (e) => {

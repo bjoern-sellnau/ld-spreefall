@@ -81,6 +81,57 @@ export class Effects {
   }
 
   /** A drone coming apart. */
+  /**
+   * A blast that reads at its real size: one bright core, a ring of fire
+   * thrown outward to the radius that actually does the damage, and smoke that
+   * hangs. The radius matters, because a player needs to learn how far a
+   * grenade reaches by watching one go off.
+   */
+  blast(x, y, z, radius) {
+    this.flash(x, y, z, radius * 0.9, 1.0, 0.62, 0.26, 0.26);
+    this.flash(x, y, z, radius * 0.45, 1.0, 0.92, 0.7, 0.14);
+    const n = Math.min(60, 18 + Math.round(radius * 3));
+    for (let i = 0; i < n; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      // Fire leaves the centre in every direction at a speed that puts it at
+      // the edge of the blast about when it fades.
+      const a = Math.random() * Math.PI * 2;
+      const b = Math.acos(2 * Math.random() - 1);
+      const speed = radius * (0.9 + Math.random() * 1.4);
+      s.ax = x; s.ay = y; s.az = z;
+      s.vx = Math.sin(b) * Math.cos(a) * speed;
+      s.vy = Math.cos(b) * speed * 0.7 + 2.5;
+      s.vz = Math.sin(b) * Math.sin(a) * speed;
+      s.gravity = 9;
+      s.maxLife = 0.35 + Math.random() * 0.8;
+      s.life = s.maxLife;
+      s.r = 1.0; s.g = 0.35 + Math.random() * 0.4; s.b = 0.12;
+      s.size = 0.08 + Math.random() * 0.16;
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    // Smoke, slower and colder, left behind where it went off.
+    for (let i = 0; i < 10; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      s.ax = x + (Math.random() - 0.5) * radius * 0.5;
+      s.ay = y + Math.random() * radius * 0.4;
+      s.az = z + (Math.random() - 0.5) * radius * 0.5;
+      s.vx = (Math.random() - 0.5) * 1.6;
+      s.vy = 1.2 + Math.random() * 1.4;
+      s.vz = (Math.random() - 0.5) * 1.6;
+      s.gravity = -0.6;
+      s.maxLife = 1.2 + Math.random() * 1.1;
+      s.life = s.maxLife;
+      s.r = 0.28; s.g = 0.26; s.b = 0.24;
+      s.size = 0.3 + Math.random() * 0.5;
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    this.shake = Math.min(1.4, this.shake + 0.4);
+  }
+
   explode(x, y, z) {
     this.flash(x, y, z, 2.4, 1.0, 0.55, 0.2, 0.22);
     this.flash(x, y, z, 1.1, 1.0, 0.86, 0.6, 0.12);

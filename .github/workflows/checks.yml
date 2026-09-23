@@ -77,6 +77,8 @@ jobs:
         run: node tools/verify.mjs
       - name: Fight drones in it
         run: node tools/test-combat.mjs
+      - name: Fight soldiers in it, with everything you can carry
+        run: node tools/test-arsenal.mjs
       - name: Drive the interface
         run: node tools/test-ui.mjs
       - name: Keep the screenshots

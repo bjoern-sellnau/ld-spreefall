@@ -33,8 +33,10 @@ mat3 rotZ(float a) {
 
 void main() {
   vec3 p = aPos;
-  // Rotor discs spin about their own centre before the body transform.
-  if (aInfo.x > 2.5) {
+  // Rotor discs spin about their own centre before the body transform. Only
+  // part three does: the same shader draws soldiers and the things you throw,
+  // and none of those have rotors.
+  if (aInfo.x > 2.5 && aInfo.x < 3.5) {
     vec3 hub = vec3(sign(p.x) * 0.62, p.y, sign(p.z) * 0.62);
     p = hub + rotY(iState.w * (sign(p.x) * sign(p.z) > 0.0 ? 1.0 : -1.0)) * (p - hub);
   }
@@ -84,11 +86,52 @@ void main() {
     // Arms.
     albedo = vec3(0.085, 0.090, 0.100);
     rough = 0.38;
-  } else {
+  } else if (vPart < 3.5) {
     // Rotor discs: a thin blurred ring rather than modelled blades.
     albedo = vec3(0.13, 0.14, 0.16);
     rough = 0.7;
     metal = 0.2;
+  } else if (vPart < 4.5) {
+    // Soldier cloth. Field grey, matte, with a little variation so a squad
+    // does not look like one object drawn six times.
+    float v = hash11(floor(vWorld.x * 0.7) + floor(vWorld.z * 0.7) * 31.0);
+    albedo = vec3(0.085, 0.092, 0.078) * (0.85 + 0.3 * v);
+    rough = 0.92;
+    metal = 0.02;
+  } else if (vPart < 5.5) {
+    // Helmet and visor.
+    albedo = vec3(0.035, 0.038, 0.040);
+    rough = 0.35;
+    metal = 0.3;
+    // The visor catches the sun, which is what picks them out of a street.
+    emissive = vec3(0.9, 0.22, 0.12) * 0.7;
+  } else if (vPart < 6.5) {
+    // Webbing, boots, pouches.
+    albedo = vec3(0.045, 0.043, 0.038);
+    rough = 0.95;
+    metal = 0.05;
+  } else if (vPart < 7.5) {
+    // The rifle they carry.
+    albedo = vec3(0.05, 0.052, 0.058);
+    rough = 0.4;
+    metal = 0.7;
+  } else if (vPart < 8.5) {
+    // Ordnance steel: rocket bodies, grenade shells.
+    albedo = vec3(0.07, 0.078, 0.062);
+    rough = 0.5;
+    metal = 0.6;
+  } else if (vPart < 9.5) {
+    // Plastic explosive, with the detonator light blinking on top of it.
+    albedo = vec3(0.68, 0.66, 0.60);
+    rough = 0.85;
+    metal = 0.02;
+    float blink = step(0.5, fract(uCamPos.w * 1.6));
+    emissive = vec3(1.0, 0.1, 0.06) * 3.0 * blink;
+  } else {
+    // A banana.
+    albedo = vec3(0.86, 0.72, 0.13);
+    rough = 0.6;
+    metal = 0.05;
   }
 
   vec3 L = uSunDir.xyz;
@@ -113,6 +156,76 @@ void main() {
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
                     uSkyHorizon.rgb, uSkyZenith.rgb, uFog, uSkyZenith.w);
   fragColour = vec4(colour, 1.0);
+}
+`;
+
+// Soldiers share the drone's fragment shader and its instance layout, and
+// differ only in what the vertex stage does with the transform: a walk cycle
+// that swings the limbs, and a fall that lays the whole body down. The limbs
+// know which they are from their own position rather than from an extra
+// attribute, which keeps the vertex format the same as everything else here.
+export const SOLDIER_VS = `${VERSION}
+precision highp float;
+${CAMERA_BLOCK}
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aInfo;     // x part id
+layout(location = 5) in vec4 iPosYaw;   // xyz feet position, w yaw
+layout(location = 6) in vec4 iState;    // x fall, y unused, z hit flash, w walk phase
+
+out vec3 vWorld;
+out vec3 vNormal;
+flat out float vPart;
+flat out float vFlash;
+out float vViewDist;
+
+mat3 rotY(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
+}
+mat3 rotX(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+}
+
+void main() {
+  vec3 p = aPos;
+  vec3 n = aNormal;
+  float walk = iState.w;
+
+  // Legs swing about the hip, arms about the shoulder, in opposition. Anything
+  // above the belt and inboard of the shoulders is the trunk and stays put.
+  float swing = sin(walk) * 0.5;
+  if (p.y < 0.86) {
+    // A leg. Which one decides the phase.
+    float side = p.x < 0.0 ? 1.0 : -1.0;
+    vec3 hip = vec3(p.x, 0.86, 0.0);
+    mat3 r = rotX(swing * side);
+    p = hip + r * (p - hip);
+    n = r * n;
+  } else if (abs(p.x) > 0.22 && p.y > 0.86 && p.y < 1.5) {
+    // An arm, swinging the other way to the leg on the same side.
+    float side = p.x < 0.0 ? -1.0 : 1.0;
+    vec3 shoulder = vec3(p.x, 1.42, 0.0);
+    mat3 r = rotX(swing * side * 0.6);
+    p = shoulder + r * (p - shoulder);
+    n = r * n;
+  }
+
+  // The fall: rotate the whole body about the feet. This is death, and it is
+  // also what a banana does to you.
+  mat3 fall = rotX(-iState.x);
+  p = fall * p;
+  n = fall * n;
+
+  mat3 body = rotY(-iPosYaw.w);
+  vec3 world = body * p + iPosYaw.xyz;
+  vWorld = world;
+  vNormal = normalize(body * n);
+  vPart = aInfo.x;
+  vFlash = iState.z;
+  vViewDist = length(world - uCamPos.xyz);
+  gl_Position = uViewProj * vec4(world, 1.0);
 }
 `;
 

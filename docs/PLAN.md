@@ -176,10 +176,28 @@ interface, and `tools/test-combat.mjs` checks each part of it in a browser.
   keeping them out of walls and off the pavement. Line of sight is re-tested on a
   staggered 0.22 s rota, so the cost is spread across frames rather than spiking
   with the size of the flock.
-- `weapon.js`: 30 round magazine, 1.55 s reload, 105 ms between shots, 38 damage,
-  320 m range. Spread grows per shot and recovers; aiming narrows it and the
-  field of view together. A shot raycasts the world first and only then the
-  drones within that distance, so cover is real: the Gate stops the bullet.
+- `arsenal.js`: the table of what you can carry, six rows of numbers. An M16, a
+  shotgun that throws eleven pellets, a rocket launcher, grenades, C4 and a
+  banana. Every difference the game cares about between a rifle and a shotgun is
+  a number in that table.
+- `weapon.js`: the one piece of code that fires all of them. A traced shot
+  raycasts the world first and only then the drones and soldiers within that
+  distance, so cover is real: the Gate stops the bullet. Recoil is an offset
+  rather than an increment, which is the bug this replaced: the first version
+  added the kick into the camera pitch every frame and sprang its own variable
+  back to zero, so the view climbed and stayed climbed. Now the view carries the
+  offset while it lasts and gets it back as it decays, minus the small share
+  each weapon keeps, which is what makes a burst walk.
+- `projectiles.js`: everything that leaves your hand under its own steam. They
+  integrate, and they collide against the same raycast the bullets use, so a
+  grenade bounces off a real wall and rolls down a real kerb. Rockets go off on
+  contact, grenades on a fuse, C4 when you press the trigger, and the banana
+  never: it lies there until somebody walks onto it.
+- `soldiers.js`: the enemy that walks. Patrol, advance, fight, slipped and
+  dying. They test line of sight from their eyes to yours on the same staggered
+  rota as the drones, strafe rather than stand still, fire in bursts with an
+  accuracy that falls off with distance, and stay out of the weapons free zone.
+  Hostile militia in a scenario: no insignia, no nation, no faces.
 - `combat.js`: integrity with delayed regeneration, score, a threat tier that
   raises the drone budget as you hold ground, and the sanctuary list.
 - `effects.js`: a pool of 256 sparks for tracers, impacts and the explosion, plus

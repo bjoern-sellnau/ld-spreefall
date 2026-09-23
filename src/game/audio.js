@@ -220,9 +220,24 @@ export class Audio {
   // --- combat -------------------------------------------------------------
 
   /** The rifle. A short noise crack over a body thump, then a tail. */
-  gunshot() {
+  // One synth, four voices. A rifle cracks, a shotgun thumps and hisses, a
+  // launcher is mostly the rush of its own exhaust, and throwing something is
+  // just cloth and air.
+  static SHOT = {
+    rifle: { crackHz: 2600, sweepHz: 700, crackGain: 0.42, tail: 0.30,
+      bodyHz: 190, bodyEnd: 48, bodyGain: 0.26, bodyTail: 0.16, hp: 900 },
+    shotgun: { crackHz: 1500, sweepHz: 320, crackGain: 0.52, tail: 0.46,
+      bodyHz: 140, bodyEnd: 34, bodyGain: 0.38, bodyTail: 0.26, hp: 420 },
+    rpg: { crackHz: 900, sweepHz: 220, crackGain: 0.5, tail: 0.85,
+      bodyHz: 110, bodyEnd: 28, bodyGain: 0.34, bodyTail: 0.5, hp: 220 },
+    throw: { crackHz: 3200, sweepHz: 1400, crackGain: 0.12, tail: 0.14,
+      bodyHz: 260, bodyEnd: 120, bodyGain: 0.05, bodyTail: 0.08, hp: 1400 },
+  };
+
+  gunshot(kind = 'rifle') {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;
+    const v = Audio.SHOT[kind] || Audio.SHOT.rifle;
     const t = ctx.currentTime;
 
     // Crack: filtered noise with a very fast decay.
@@ -231,33 +246,33 @@ export class Audio {
     src.loop = true;
     const hp = ctx.createBiquadFilter();
     hp.type = 'highpass';
-    hp.frequency.value = 900;
+    hp.frequency.value = v.hp;
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.setValueAtTime(2600, t);
-    bp.frequency.exponentialRampToValueAtTime(700, t + 0.09);
+    bp.frequency.setValueAtTime(v.crackHz, t);
+    bp.frequency.exponentialRampToValueAtTime(v.sweepHz, t + 0.09);
     bp.Q.value = 0.8;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.42, t + 0.003);
-    g.gain.exponentialRampToValueAtTime(0.02, t + 0.07);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.30);
+    g.gain.exponentialRampToValueAtTime(v.crackGain, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(v.crackGain * 0.05, t + 0.07);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + v.tail);
     src.connect(hp).connect(bp).connect(g).connect(this.master);
-    src.start(t, Math.random() * 3, 0.36);
-    src.stop(t + 0.36);
+    src.start(t, Math.random() * 3, v.tail + 0.06);
+    src.stop(t + v.tail + 0.06);
 
     // Body: a low sine drop, which is what gives it weight on small speakers.
     const o = ctx.createOscillator();
     o.type = 'sine';
-    o.frequency.setValueAtTime(190, t);
-    o.frequency.exponentialRampToValueAtTime(48, t + 0.10);
+    o.frequency.setValueAtTime(v.bodyHz, t);
+    o.frequency.exponentialRampToValueAtTime(v.bodyEnd, t + 0.10);
     const og = ctx.createGain();
     og.gain.setValueAtTime(0.0001, t);
-    og.gain.exponentialRampToValueAtTime(0.26, t + 0.004);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    og.gain.exponentialRampToValueAtTime(v.bodyGain, t + 0.004);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + v.bodyTail);
     o.connect(og).connect(this.master);
     o.start(t);
-    o.stop(t + 0.18);
+    o.stop(t + v.bodyTail + 0.02);
   }
 
   dryFire() {
@@ -278,6 +293,68 @@ export class Audio {
     src.connect(f).connect(g).connect(this.master);
     src.start(t, Math.random() * 3, 0.07);
     src.stop(t + 0.07);
+  }
+
+  /**
+   * A blast: a crack of noise on top, a body that drops an octave and a half,
+   * and a tail long enough to bounce off the buildings that are not modelled
+   * as reflectors. Cheap, and it reads as a long way away from a rifle.
+   */
+  explosion() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2600, t);
+    lp.frequency.exponentialRampToValueAtTime(220, t + 0.9);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.62, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.10, t + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    src.connect(lp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3, 1.6);
+    src.stop(t + 1.6);
+
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(115, t);
+    o.frequency.exponentialRampToValueAtTime(26, t + 0.55);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.5, t + 0.008);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    o.connect(og).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.85);
+  }
+
+  /** Two quick clicks: one weapon down, the next one up. */
+  swap() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    for (const [at, hz, level] of [[0, 2100, 0.075], [0.085, 3000, 0.095]]) {
+      const src = ctx.createBufferSource();
+      src.buffer = this._noiseBuffer;
+      src.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = hz;
+      f.Q.value = 6;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(level, t + at + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.055);
+      src.connect(f).connect(g).connect(this.master);
+      src.start(t + at, Math.random() * 3, 0.07);
+      src.stop(t + at + 0.07);
+    }
   }
 
   /** Magazine out, magazine in, bolt. Three clicks spaced over the reload. */

@@ -358,6 +358,13 @@ export class Renderer {
       gl.enable(gl.CULL_FACE);
       draws += this.actors.drawDrones();
       tris += this.actors.drone.instanceCount * (this.actors.drone.count / 3);
+      draws += this.actors.drawSoldiers();
+      tris += this.actors.soldier.instanceCount * (this.actors.soldier.count / 3);
+      draws += this.actors.drawProjectiles();
+      for (const kind in this.actors.props) {
+        const mesh = this.actors.props[kind];
+        tris += mesh.instanceCount * (mesh.count / 3);
+      }
     }
 
     // Sky last, depth equal to the far plane, so it only fills what is left.
@@ -377,7 +384,7 @@ export class Renderer {
     if (this.viewmodel) {
       draws += this.actors.drawViewmodel(
         this.width / Math.max(1, this.height), this.viewmodel, this.viewmodel.muzzle);
-      tris += this.actors.weapon.count / 3;
+      tris += ((this.actors.weapons[this.viewmodel.weapon] || this.actors.weapons.m16).count) / 3;
     }
 
     gl.bindVertexArray(null);

@@ -237,6 +237,15 @@ html, body {
   letter-spacing: 0.02em;
   position: relative;
 }
+#combat .ammo #weaponname {
+  display: block;
+  font: 600 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 5px;
+}
+#combat.explosive .ammo #weaponname { color: var(--accent); }
 #combat .ammo .sep { color: rgba(255, 255, 255, 0.28); margin: 0 4px; }
 #combat .ammo #reservenum { font-size: 15px; color: var(--dim); }
 #combat.empty .ammo #ammonum { color: #e2705a; }

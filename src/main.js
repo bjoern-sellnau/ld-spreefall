@@ -16,9 +16,11 @@ import { Intro } from './game/intro.js';
 import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
-import { Weapon, SPEC as WEAPON } from './game/weapon.js';
+import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
 import { Combat, COMBAT } from './game/combat.js';
 import { Effects } from './game/effects.js';
+import { Projectiles } from './game/projectiles.js';
+import { Soldiers } from './game/soldiers.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,6 +36,7 @@ const el = {
   crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
   combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
   ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
+  weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
   sanctuary: $('sanctuary'), killfeed: $('killfeed'),
   down: $('down'), downText: $('downtext'), downBtn: $('downbtn'),
@@ -129,8 +132,15 @@ async function main() {
   // --- the shooter --------------------------------------------------------
   const combat = new Combat(m);
   const drones = new Drones(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const weapon = new Weapon(world, drones);
+  // Filled in by the soldier layer below, and referenced by the blast handler
+  // before it exists, which is why it is a binding rather than a constant.
+  let soldiers = null;   // built below, once combat exists to ask about zones
+  const projectiles = new Projectiles(world, (x, y, z, splash, body) => explode(x, y, z, splash, body));
+  const weapon = new Weapon(world, drones, { projectiles });
   const effects = new Effects();
+  soldiers = new Soldiers(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  soldiers.hazards = () => projectiles.hazards();
+  weapon.soldiers = soldiers;
 
   // --- spawn ---------------------------------------------------------------
   const [sx, sz] = project(m, SPAWN.lon, SPAWN.lat);
@@ -176,6 +186,7 @@ async function main() {
     holstered: false,
     muzzle: 0,
     sway: { x: 0, y: 0 },
+    recoilApplied: { pitch: 0, yaw: 0 },
     bob: 0,
     inSanctuary: false,
     autoQualityDone: false,
@@ -229,37 +240,117 @@ async function main() {
     el.hitmarker.classList.add('on');
   }
 
-  weapon.onFire = (shot) => {
-    audio.gunshot();
-    // The tracer leaves the muzzle, not the eye, so it agrees with the weapon
-    // you can see in your hands. Hip fire holds the barrel down and right; the
-    // aim blend brings it back onto the centre line.
+  /** Where the muzzle is in the world, for tracers and for the flash. */
+  function muzzlePoint(from) {
+    // Hip fire holds the barrel down and right; the aim blend brings it back
+    // onto the centre line, so the tracer agrees with what you can see.
     const off = 1 - weapon.aimBlend;
-    const mx = shot.from.x + camera.right[0] * 0.09 * off + camera.up[0] * (-0.13 - 0.03 * off)
-      + camera.forward[0] * 0.55;
-    const my = shot.from.y + camera.right[1] * 0.09 * off + camera.up[1] * (-0.13 - 0.03 * off)
-      + camera.forward[1] * 0.55;
-    const mz = shot.from.z + camera.right[2] * 0.09 * off + camera.up[2] * (-0.13 - 0.03 * off)
-      + camera.forward[2] * 0.55;
-    effects.tracer(mx, my, mz, shot.end.x, shot.end.y, shot.end.z, true);
-    effects.impact(shot.end.x, shot.end.y, shot.end.z,
-      shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
-    effects.shake = Math.min(1, effects.shake + 0.07);
-    state.muzzle = 1;
-    if (shot.drone) {
+    return {
+      x: from.x + camera.right[0] * 0.09 * off + camera.up[0] * (-0.13 - 0.03 * off)
+        + camera.forward[0] * 0.55,
+      y: from.y + camera.right[1] * 0.09 * off + camera.up[1] * (-0.13 - 0.03 * off)
+        + camera.forward[1] * 0.55,
+      z: from.z + camera.right[2] * 0.09 * off + camera.up[2] * (-0.13 - 0.03 * off)
+        + camera.forward[2] * 0.55,
+    };
+  }
+
+  weapon.onFire = (shot) => {
+    const spec = weapon.spec;
+    // A shotgun reports every pellet. One bang, one flash, one kick, but a
+    // tracer and an impact each, because that spray is the whole weapon.
+    const first = !shot.pellet;
+    if (first) {
+      audio.gunshot(spec.sound);
+      effects.shake = Math.min(1, effects.shake + (spec.kind === 'hitscan' ? 0.07 : 0.16));
+      state.muzzle = 1;
+    }
+    const m = muzzlePoint(shot.from);
+    if (shot.end) {
+      effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
+      effects.impact(shot.end.x, shot.end.y, shot.end.z,
+        shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
+    }
+    if (shot.drone || shot.soldier) {
       audio.hitMarker(shot.core);
       showHitmarker(shot.killed ? 'kill' : (shot.core ? 'core' : ''));
-      if (shot.killed) {
-        const dist = Math.hypot(shot.drone.x - player.x, shot.drone.z - player.z);
-        combat.creditKill(shot.core, dist);
-        effects.explode(shot.drone.x, shot.drone.y, shot.drone.z);
-        audio.droneDown();
-        feed(`<b>drone down</b> ${Math.round(dist)} m${shot.core ? ' <i>core</i>' : ''}`);
-      }
+      if (shot.killed) creditTarget(shot.drone || shot.soldier, shot.core, !!shot.drone);
     }
   };
+
+  /**
+   * A blast, wherever it came from. Everything inside the radius takes damage
+   * that falls off with distance, and that includes you: standing next to your
+   * own rocket is a choice with consequences.
+   */
+  function explode(x, y, z, splash, body) {
+    audio.explosion();
+    effects.explode(x, y, z);
+    effects.blast(x, y, z, splash.radius);
+    const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
+    effects.shake = Math.min(1.4, effects.shake
+      + Math.max(0, 1 - dist / (splash.radius * 3)) * 0.9);
+
+    let killed = 0;
+    for (const d of [...drones.active]) {
+      const r = Math.hypot(d.x - x, d.y - y, d.z - z);
+      if (r > splash.radius) continue;
+      // Line of sight, so a wall between the grenade and the target is a wall.
+      if (!world.lineOfSight(x, y, z, d.x, d.y, d.z)) continue;
+      const dmg = splash.damage * (1 - r / splash.radius);
+      if (drones.damage(d, dmg)) { creditTarget(d, false, true); killed++; }
+    }
+    if (soldiers) {
+      for (const sd of [...soldiers.active]) {
+        const r = Math.hypot(sd.x - x, sd.y + 0.9 - y, sd.z - z);
+        if (r > splash.radius) continue;
+        if (!world.lineOfSight(x, y, z, sd.x, sd.y + 0.9, sd.z)) continue;
+        const dmg = splash.damage * (1 - r / splash.radius);
+        if (soldiers.damage(sd, dmg, { x: 0, y: 0, z: 0 })) {
+          creditTarget(sd, false, false); killed++;
+        }
+      }
+    }
+    if (dist < splash.radius
+      && world.lineOfSight(x, y, z, player.x, player.y + PLAYER.eye, player.z)) {
+      combat.hurt(splash.damage * 0.55 * (1 - dist / splash.radius), x, z, player.x, player.z);
+    }
+    if (killed > 1) toast(`${killed} at once`);
+    return killed;
+  }
+
+  /** One kill, however it was made: by a bullet, a blast or a fall. */
+  function creditTarget(target, core, isDrone) {
+    const dist = Math.hypot(target.x - player.x, target.z - player.z);
+    combat.creditKill(core, dist);
+    effects.explode(target.x, target.y, target.z);
+    audio.droneDown();
+    feed(`<b>${isDrone ? 'drone' : 'soldier'} down</b> ${Math.round(dist)} m`
+      + `${core ? ' <i>core</i>' : ''}`);
+  }
   weapon.onDryFire = () => audio.dryFire();
-  weapon.onReloadStart = () => audio.reload(WEAPON.reloadTime);
+  weapon.onReloadStart = (seconds) => audio.reload(seconds);
+  weapon.onSwap = (id, spec) => {
+    audio.swap();
+    toast(spec.name);
+    el.weaponname.textContent = spec.short;
+    el.combat.classList.toggle('explosive', spec.kind !== 'hitscan');
+  };
+  input.onWheel = (dir) => { if (!state.holstered) weapon.cycle(dir); };
+  // Q goes back to whatever you were holding before, which is the swap you
+  // actually want in a fight.
+  weapon.onSwapFrom = (from) => { state.lastWeapon = from; };
+
+  soldiers.onShot = (s, damage) => {
+    audio.gunshot('rifle');
+    effects.tracer(s.x, s.y + 1.45, s.z,
+      camera.position[0], camera.position[1], camera.position[2], false);
+    if (damage > 0 && combat.health > 0) combat.hurt(damage, s.x, s.z, player.x, player.z);
+  };
+  soldiers.onSlip = (s) => {
+    toast('down he goes');
+    feed('<b>slipped</b> on a banana');
+  };
 
   drones.onShot = (d, damage) => {
     if (combat.health <= 0) return;
@@ -294,6 +385,7 @@ async function main() {
 
   combat.onTier = (tier) => {
     drones.setTier(tier);
+    soldiers.setTier(tier);
     feed(`<b>threat level ${tier + 1}</b>`);
     toast(`threat level ${tier + 1}`);
   };
@@ -303,6 +395,8 @@ async function main() {
     combat.revive();
     weapon.reset();
     drones.reset();
+    soldiers.reset();
+    projectiles.clear();
     drones.setTier(Math.max(0, combat.tier - 1));
     effects.clear();
     if (!isTouch) input.requestLock();
@@ -408,12 +502,41 @@ async function main() {
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
       case 'KeyF': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
-      case 'Digit1': setQuality('low'); break;
-      case 'Digit2': setQuality('medium'); break;
-      case 'Digit3': setQuality('high'); break;
+      case 'KeyQ': weapon.select(state.lastWeapon || 'm16'); break;
+      case 'KeyT': {
+        const n = weapon.detonate();
+        if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
+        break;
+      }
+      case 'Digit1': case 'Digit2': case 'Digit3':
+      case 'Digit4': case 'Digit5': case 'Digit6':
+        weapon.selectSlot(Number(code.slice(5)));
+        break;
+      // The number row carries the weapons now, so the quality tiers moved to
+      // the function keys.
+      case 'F1': setQuality('low'); break;
+      case 'F2': setQuality('medium'); break;
+      case 'F3': setQuality('high'); break;
       default: break;
     }
   };
+
+  /**
+   * Recoil composes with looking around here, in one place. It is carried as an
+   * offset: whatever the last frame added is taken back before this frame's is
+   * applied, so when the spring settles the view is exactly where you were
+   * pointing it. Only the small permanent share each weapon keeps stays behind,
+   * which is what makes a burst walk without stranding your aim in the sky the
+   * way the first version did.
+   */
+  function applyRecoil() {
+    camera.pitch = clamp(
+      camera.pitch - state.recoilApplied.pitch + weapon.recoilPitch + weapon.takeClimb(),
+      -1.55, 1.55);
+    camera.yaw += weapon.recoilYaw - state.recoilApplied.yaw;
+    state.recoilApplied.pitch = weapon.recoilPitch;
+    state.recoilApplied.yaw = weapon.recoilYaw;
+  }
 
   function setQuality(name) {
     renderer.setQuality(name);
@@ -480,14 +603,19 @@ async function main() {
     };
     const wantFire = input.fire && !photo.active && combat.health > 0;
     weapon.update(dt, wantFire, eye, dir);
-    // The recoil kick is applied to the camera here rather than inside the
-    // weapon, so that looking around and recoil compose in one place.
-    camera.pitch = clamp(camera.pitch + weapon.recoilPitch * dt * 60, -1.55, 1.55);
-    camera.yaw += weapon.recoilYaw * dt * 60;
-    weapon.recoilPitch *= Math.max(0, 1 - 12 * dt);
+    // Recoil composes with looking around here, in one place. It is carried as
+    // an offset: whatever the last frame added is taken back before this
+    // frame's is applied, so when the spring settles the view is exactly where
+    // you were pointing it. Only the small permanent share each weapon keeps
+    // stays behind, which is what makes a burst walk without stranding your aim
+    // in the sky the way the first version did.
+    applyRecoil();
 
     combat.update(dt);
+    projectiles.update(dt);
     drones.update(dt, eye, state.time);
+    soldiers.update(dt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
+      alive: combat.health > 0 }, state.time);
 
     audio.update(dt, player, camera);
     let nearest = null;
@@ -609,13 +737,18 @@ async function main() {
         yaw: mix(VM_HIP.yaw, VM_AIM.yaw) - state.sway.x * 0.8,
         roll: mix(VM_HIP.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
         muzzle: state.muzzle * (1 - hol),
+        weapon: weapon.id,
       };
       renderer.actors.updateDrones(drones.active);
+      renderer.actors.updateSoldiers(soldiers.active);
+      renderer.actors.updateProjectiles(projectiles.active);
       renderer.actors.updateSparks(effects.list);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
       renderer.actors.updateDrones(state.mode === 'walk' ? drones.active : []);
+      renderer.actors.updateSoldiers(state.mode === 'walk' ? soldiers.active : []);
+      renderer.actors.updateProjectiles(state.mode === 'walk' ? projectiles.active : []);
       renderer.actors.updateSparks(state.mode === 'walk' ? effects.list : []);
       renderer.drawActors = state.mode === 'walk';
     }
@@ -638,15 +771,15 @@ async function main() {
       el.combat.classList.toggle('empty', weapon.ammo === 0);
       el.reloadhint.classList.toggle('hidden', weapon.state !== 2);
       el.tiernum.textContent = String(combat.tier + 1);
-      el.contactnum.textContent = String(drones.engaged);
+      el.contactnum.textContent = String(drones.engaged + soldiers.engaged);
       el.scorenum.textContent = combat.score.toLocaleString();
       // The crosshair opens with the spread cone.
-      const px = Math.round(6 + (weapon.spread / WEAPON.spreadMax) * 30);
+      const px = Math.round(6 + (weapon.spread / weapon.spec.spreadMax) * 30);
       el.crosshair.style.setProperty('--gap', `${px}px`);
       el.crosshair.classList.toggle('aiming', weapon.aimBlend > 0.6);
       el.crosshair.classList.toggle('holstered', weapon.holstered);
       // Aiming narrows the field of view, which is most of what aiming is.
-      camera.fov = 68 * DEG + (WEAPON.aimFov - 68 * DEG) * weapon.aimBlend;
+      camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;
       if (state.inSanctuary !== state.sanctuaryShown) {
         state.sanctuaryShown = state.inSanctuary;
         if (state.inSanctuary) {
@@ -712,7 +845,16 @@ async function main() {
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
-    combat, drones, weapon, effects,
+    combat, drones, weapon, effects, projectiles,
+    get soldiers() { return soldiers; },
+    spawnSoldier(dx, dz) {
+      const s = soldiers.free();
+      if (!s) return null;
+      const x = player.x + dx, z = player.z + dz;
+      s.spawn(x, world.groundHeight(x, z), z, combat.tier);
+      soldiers.active.push(s);
+      return s;
+    },
     spawnDrone(dx, dy, dz) {
       const d = drones.free();
       if (!d) return null;
@@ -732,6 +874,9 @@ async function main() {
     debugMode(n) { renderer.debugMode = n | 0; },
     setQuality(name) { setQuality(name); },
     viewmodelPose: { hip: VM_HIP, aim: VM_AIM },
+    applyRecoil() { applyRecoil(); },
+    loadout: LOADOUT,
+    weapons: WEAPONS,
     skipToWalk() {
       el.title.classList.add('hidden');
       el.hud.classList.remove('hidden');
