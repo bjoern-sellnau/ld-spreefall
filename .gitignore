@@ -1,7 +1,5 @@
 node_modules/
 .scratch/
 dist/
-public/world.bin
-public/world.json
 docs/screenshots/*.tmp.png
 .DS_Store

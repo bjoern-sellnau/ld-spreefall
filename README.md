@@ -259,23 +259,40 @@ The code in this repository is offered under the MIT licence.
 
 ## Deploying
 
-`.github/workflows/pages.yml` runs the unit tests, fetches the OSM extract,
-builds the world bundle and `dist/`, and publishes it to GitHub Pages. Two things
-have to be true for it to reach a public URL:
+The live site is at <https://bjoern-sellnau.github.io/ld-spreefall/>.
 
-1. **Pages has to be switched on for the repository**, under Settings, Pages,
-   with the source set to GitHub Actions. That is a repository setting and cannot
-   be done from a commit. Until it is, `actions/configure-pages` fails with
-   "Get Pages site failed" and the deploy job is skipped. The first run of this
-   workflow did exactly that: the tests, the fetch, the world build and the dist
-   build all passed in eleven seconds, and only the Pages step failed.
+There are two ways this repository can reach that URL, and which one is in use
+is a repository setting under Settings, Pages.
+
+**Deploy from a branch**, which is what is switched on now. GitHub serves the
+branch contents as they are, so the built world bundle has to be in the
+repository: `public/world.bin` and `public/world.json` are committed for exactly
+that reason, along with a `.nojekyll` so the build is a plain copy. They are
+build output, so after changing anything in `tools/` run `npm run world` and
+commit the result, or the site will still be serving the old city. This path
+serves whatever dataset was used to build those two files, which here is the
+offline fallback described above.
+
+**GitHub Actions**, which is the better of the two. Set the Pages source to
+GitHub Actions and `.github/workflows/pages.yml` takes over: it runs the unit
+tests, fetches a live OpenStreetMap extract, builds the world and `dist/`, and
+publishes that. The runners can reach Overpass, so the deployed city is real
+map data rather than the fallback. On the last run the Overpass fetch took three
+minutes and twenty six seconds and everything downstream of it passed, so the
+only thing that path needs is the setting.
+
+For the Actions path, two things have to be true:
+
+1. **The Pages source has to be GitHub Actions**, not a branch. While it is set
+   to a branch, `actions/configure-pages` fails with "Get Pages site failed" and
+   the deploy job is skipped, which is what every run of this workflow has done
+   so far. Everything before that step passes.
 2. **The workflow has to run on a branch the `github-pages` environment allows.**
    It is wired to `main`, `master` and `claude/**`, so merging to the default
    branch will deploy.
 
-The runners can reach the Overpass API, so the deployed build uses a live
-OpenStreetMap extract rather than the offline fallback described above. The
-`Record which source was used` step in the workflow prints which one it was.
+The `Record which source was used` step in the workflow prints which dataset the
+build actually used.
 
 To host it anywhere else: run `npm run build` and copy `dist/`. There is no
 backend, no environment variable, and no build step at the far end.
