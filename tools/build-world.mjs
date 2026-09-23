@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseOsmXml, counts } from './osm-xml.mjs';
+import { annotate } from './annotate.mjs';
 import { project, BBOX, worldBounds, ORIGIN } from './geo.mjs';
 import { Mesh } from './mesh.mjs';
 import { Terrain } from './terrain.mjs';
@@ -134,6 +135,11 @@ function main() {
   const osm = parseOsmXml(src);
   const c = counts(osm);
   console.log(`parsed ${(src.length / 1e6).toFixed(2)} MB: nodes ${c.nodes}  ways ${c.ways}  relations ${c.relations}`);
+
+  // Attach the surveyed facts before anything is classified, so a build from
+  // the live extract carries the same landmarks, cards and stelae field as one
+  // from the offline fallback.
+  annotate(osm, { log: (line) => console.log(line) });
 
   const world = worldBounds();
   const pos = new Map();
