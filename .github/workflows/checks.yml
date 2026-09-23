@@ -23,6 +23,12 @@ on:
 permissions:
   contents: read
 
+# A push while this is running makes the run before it stale, and two of them
+# competing for the same extract is what slows both down.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   browser:
     runs-on: ubuntu-latest
@@ -34,8 +40,27 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: The day, so the extract is fetched once a day and no more
+        run: echo "OSM_DAY=$(date -u +%F)" >> "$GITHUB_ENV"
+      - name: Cache the OSM extract
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: osm-${{ env.OSM_DAY }}
       - name: Fetch the OSM extract
-        run: node --max-old-space-size=6144 tools/fetch-osm.mjs --force
+        # Shared with the deploy workflow through the cache: the first run of
+        # the day fetches, the rest read what it left. Asking Overpass for the
+        # same twenty three megabytes twice on every push is what once left this
+        # step sitting for ten minutes. The repository carries a synthetic
+        # extract for the offline case, so the check is on where the file came
+        # from, not on whether it is there.
+        run: |
+          if grep -q overpass data/raw/source.json 2>/dev/null; then
+            echo "the cache already holds today's live extract"
+            cat data/raw/source.json
+          else
+            node --max-old-space-size=6144 tools/fetch-osm.mjs --force
+          fi
       - name: Build the world bundle
         run: node --max-old-space-size=6144 tools/build-world.mjs
       - name: Serve

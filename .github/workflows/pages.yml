@@ -27,14 +27,34 @@ jobs:
           node-version: 22
       - name: Unit tests
         run: node --test tools/test/*.test.mjs
+      - name: The day, so the extract is fetched once a day and no more
+        run: echo "OSM_DAY=$(date -u +%F)" >> "$GITHUB_ENV"
+      - name: Cache the OSM extract
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: osm-${{ env.OSM_DAY }}
       - name: Fetch the OSM extract
         # GitHub runners can reach Overpass, so this is the real thing rather
-        # than the offline fallback. --force ignores the dataset committed to the
-        # repository, which exists only so the project builds without a network.
-        # A live extract for this box is tens of megabytes of XML, hence the
-        # larger heap. If Overpass is down the fetcher falls back on its own and
-        # the next step prints which source was used.
-        run: node --max-old-space-size=6144 tools/fetch-osm.mjs --force
+        # than the offline fallback, and --force ignores the dataset committed
+        # to the repository, which exists only so the project builds without a
+        # network. A live extract for this box is tens of megabytes of XML,
+        # hence the larger heap. If Overpass is down the fetcher falls back on
+        # its own and the next step prints which source was used.
+        #
+        # Two workflows run on every push and both want the same extract, which
+        # is rude to a free service that answers in ten seconds when it is not
+        # being asked twice at once. The cache key rolls at midnight UTC, so the
+        # first run of the day fetches and the rest read what it left. The
+        # repository carries a synthetic extract for the offline case, so the
+        # check is on where the file came from, not on whether it is there.
+        run: |
+          if grep -q overpass data/raw/source.json 2>/dev/null; then
+            echo "the cache already holds today's live extract"
+            cat data/raw/source.json
+          else
+            node --max-old-space-size=6144 tools/fetch-osm.mjs --force
+          fi
       - name: Build the world bundle
         run: node --max-old-space-size=6144 tools/build-world.mjs
       - name: Record which source was used

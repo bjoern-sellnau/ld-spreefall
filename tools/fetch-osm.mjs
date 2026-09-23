@@ -60,9 +60,10 @@ out body;`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function tryMirror(url, query, attempt) {
+async function tryMirror(url, query, attempt, until = Infinity) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 240000);
+  const budget = Math.max(5000, Math.min(240000, until - Date.now()));
+  const timer = setTimeout(() => controller.abort(), budget);
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -82,13 +83,24 @@ async function tryMirror(url, query, attempt) {
   }
 }
 
-export async function fetchOverpass(query, { attempts = 4 } = {}) {
+/**
+ * Four attempts across every mirror, but under one wall clock deadline. A
+ * single query can hold a connection open for four minutes, and four attempts
+ * across three mirrors is most of an hour, which is longer than the build that
+ * is waiting for it. When the deadline passes the caller falls back, which is
+ * a worse city but a finished one.
+ */
+export async function fetchOverpass(query, { attempts = 4, deadlineMs = 600000 } = {}) {
+  const until = Date.now() + deadlineMs;
   let lastErr = null;
   for (let attempt = 0; attempt < attempts; attempt++) {
     for (const url of MIRRORS) {
+      if (Date.now() > until) {
+        throw lastErr || new Error(`overpass did not answer within ${Math.round(deadlineMs / 1000)} s`);
+      }
       try {
         process.stdout.write(`  try ${url} (attempt ${attempt + 1})\n`);
-        const text = await tryMirror(url, query, attempt);
+        const text = await tryMirror(url, query, attempt, until);
         return { text, source: url };
       } catch (err) {
         lastErr = err;
@@ -96,6 +108,7 @@ export async function fetchOverpass(query, { attempts = 4 } = {}) {
       }
     }
     const wait = Math.round(2000 * Math.pow(2, attempt) * (0.7 + Math.random() * 0.6));
+    if (Date.now() + wait > until) break;
     process.stdout.write(`  all mirrors failed, backing off ${wait} ms\n`);
     await sleep(wait);
   }
