@@ -137,6 +137,56 @@ Audio graph built on the first gesture: ambience beds crossfaded by proximity to
 roads, water, park and stations, plus footsteps whose sample is picked from the
 surface id under the player.
 
+## 5.1 The shooter, src/game/
+
+SPREE|FALL is an open world shooter, so the city is the level and there are no
+arenas, no waves and no scripted encounters. What follows is the whole loop.
+
+**Targets are drones, not people.** This is a reconstruction of a real place,
+with the Reichstag, the Cathedral and the Memorial to the Murdered Jews of
+Europe standing where they really stand. Putting human targets in it would be
+grotesque, and it would be a worse demo besides: quadrotors fly, which exercises
+real three dimensional tracking, flight AI and line of sight through actual
+buildings rather than a corridor. The pool is 48, of which the threat tier keeps
+between six and fourteen in the air; a hull is 0.85 m across with a 0.34 m core
+that is worth 2.2 times the damage.
+
+**The memorial is a weapons free zone.** Inside 135 m of Peter Eisenman's field
+the weapon holsters itself, it will not fire, and the reason is written on the
+screen. No drone spawns in the circle, any drone that drifts into it turns and
+accelerates back out, and while you stand there none of them can see you, so
+nothing follows you in. The rule lives in `combat.js` rather than in the
+interface, and `tools/test-combat.mjs` checks each part of it in a browser.
+
+- `world.js` `raycast(ox,oy,oz, dx,dy,dz, maxDist)`: a 2D DDA over the 100 m tile
+  grid, testing the collision segments of each tile as vertical quads, then
+  marching the ground height field with an eight step bisection. Measured at
+  4.3 microseconds a ray, which is what makes hitscan and per drone line of sight
+  affordable at 60 Hz. `lineOfSight(a, b)` is the same call with no hit.
+- `drones.js`: a fixed pool with states patrol, pursue, attack, evade and dying.
+  Steering is boids like, with four horizontal probes and a ground clearance term
+  keeping them out of walls and off the pavement. Line of sight is re-tested on a
+  staggered 0.22 s rota, so the cost is spread across frames rather than spiking
+  with the size of the flock.
+- `weapon.js`: 30 round magazine, 1.55 s reload, 105 ms between shots, 38 damage,
+  320 m range. Spread grows per shot and recovers; aiming narrows it and the
+  field of view together. A shot raycasts the world first and only then the
+  drones within that distance, so cover is real: the Gate stops the bullet.
+- `combat.js`: integrity with delayed regeneration, score, a threat tier that
+  raises the drone budget as you hold ground, and the sanctuary list.
+- `effects.js`: a pool of 256 sparks for tracers, impacts and the explosion, plus
+  the shake, which is applied to the eye and never to the aim. The muzzle flash
+  is not in the pool: it is a cone on the weapon mesh that the shader retracts
+  towards the barrel as the flash decays.
+
+Rendering: drones are one instanced draw with generated geometry and their own
+shadow pass. The weapon viewmodel is drawn last, in its own 55 degree projection
+against a cleared depth buffer, so it can never poke through a wall. Hip fire
+holds it low and right; aiming brings the front post onto the centre line.
+Sound is synthesised like everything else: a noise burst through a swept bandpass
+for the shot, one rotor bed whose level and pitch track the nearest drone rather
+than one voice per drone, and two different hit confirms for hull and core.
+
 ## 6. Milestones
 
 1. Pipeline prints stats and the unit test on the L shaped courtyard passes.
@@ -144,6 +194,8 @@ surface id under the player.
 3. It looks like Berlin at golden hour from Pariser Platz.
 4. The game layer is complete and a screenshot is worth sharing.
 5. `dist/` deploys to GitHub Pages with no console errors.
+6. The shooter: a drone dies to a burst in a real browser, the Gate stops a shot
+   fired at one behind it, and the memorial stays a weapons free zone.
 
 ## 7. Deviations from the original brief
 
@@ -193,3 +245,12 @@ Recorded here as they happen, per the working style.
   twenty metre building within a hundred and ten metres of the sightline hides
   it. The fog is tuned as the brief asks, and the shot that shows it is taken
   from Schlossplatz, where the sightline is real.
+
+- 2026-09-23: the brief calls for an open world shooter and this is a
+  reconstruction of real streets, so two content decisions are recorded rather
+  than left implicit. The targets are drones, because human targets at the
+  Reichstag or on Pariser Platz would be indefensible and because flying targets
+  are the harder and more interesting engineering. And the Memorial to the
+  Murdered Jews of Europe is a weapons free zone: the weapon holsters itself
+  inside it and the drones will not enter. Both are enforced in the game layer
+  and covered by `tools/test-combat.mjs`.

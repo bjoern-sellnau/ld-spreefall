@@ -128,14 +128,183 @@ html, body {
 
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
 
+/* Four ticks that open with the spread cone, plus a centre dot. */
 #crosshair {
   position: absolute;
   left: 50%; top: 50%;
-  width: 3px; height: 3px;
-  margin: -1.5px 0 0 -1.5px;
+  width: 0; height: 0;
+  --gap: 7px;
+}
+#crosshair::after {
+  content: "";
+  position: absolute;
+  left: -1px; top: -1px;
+  width: 2px; height: 2px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.62);
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+#crosshair i {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+#crosshair i:nth-child(1), #crosshair i:nth-child(2) {
+  width: 1.5px; height: 6px; left: -0.75px;
+}
+#crosshair i:nth-child(1) { top: calc(-1 * var(--gap) - 6px); }
+#crosshair i:nth-child(2) { top: var(--gap); }
+#crosshair i:nth-child(3), #crosshair i:nth-child(4) {
+  height: 1.5px; width: 6px; top: -0.75px;
+}
+#crosshair i:nth-child(3) { left: calc(-1 * var(--gap) - 6px); }
+#crosshair i:nth-child(4) { left: var(--gap); }
+#crosshair.aiming i { opacity: 0; }
+#crosshair.holstered i, #crosshair.holstered::after { opacity: 0.18; }
+
+/* The X that confirms a shot connected. */
+#hitmarker {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
+  opacity: 0;
+  background:
+    linear-gradient(45deg, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%),
+    linear-gradient(-45deg, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%);
+  -webkit-mask: radial-gradient(circle, transparent 3px, #000 3px);
+  mask: radial-gradient(circle, transparent 3px, #000 3px);
+  color: rgba(255, 255, 255, 0.95);
+}
+#hitmarker.on { animation: hitpop 0.24s ease-out forwards; }
+#hitmarker.core { color: #ffd07a; }
+#hitmarker.kill { color: #ff8a5c; }
+@keyframes hitpop {
+  0% { opacity: 1; transform: scale(0.62); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+/* Red vignette when you are hit, leaning towards whatever hit you. */
+#damage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  background: radial-gradient(120% 90% at var(--dx, 50%) var(--dy, 50%),
+              rgba(190, 30, 24, 0) 38%, rgba(160, 18, 14, 0.62) 100%);
+}
+#damage.on { opacity: 1; transition: opacity 0.08s ease; }
+
+#combat {
+  position: absolute;
+  left: 22px; bottom: 34px;
+  display: flex;
+  align-items: flex-end;
+  gap: 26px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+#combat .vitals { width: 188px; }
+#combat .label {
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 5px;
+}
+#combat .hbar {
+  height: 5px;
+  background: rgba(255, 255, 255, 0.13);
+  border-radius: 1px;
+  overflow: hidden;
+}
+#combat .hbar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #7fd1a0, #cfe8b0);
+  transition: width 0.18s ease, background 0.3s ease;
+}
+#combat.hurt .hbar i { background: linear-gradient(90deg, #d4553f, #e8a06a); }
+#combat .num {
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--dim);
+  margin-top: 5px;
+}
+#combat .ammo {
+  font: 600 28px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  position: relative;
+}
+#combat .ammo .sep { color: rgba(255, 255, 255, 0.28); margin: 0 4px; }
+#combat .ammo #reservenum { font-size: 15px; color: var(--dim); }
+#combat.empty .ammo #ammonum { color: #e2705a; }
+#combat .ammo b {
+  position: absolute;
+  left: 0; top: -15px;
+  font: 600 9.5px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+#threat {
+  position: absolute;
+  right: 18px; bottom: 34px;
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+#threat span[id] { color: var(--accent); font-weight: 600; }
+#threat .tsep { margin-left: 14px; }
+
+#sanctuary {
+  position: absolute;
+  left: 50%; top: 22%;
+  transform: translateX(-50%);
+  max-width: min(460px, 82vw);
+  padding: 12px 20px;
+  text-align: center;
+  background: rgba(10, 12, 15, 0.7);
+  border: 1px solid var(--edge);
+  font-size: 12px;
+  line-height: 1.6;
+  color: #d6d1c6;
+  backdrop-filter: blur(3px);
+}
+#sanctuary b {
+  display: block;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+#killfeed {
+  position: absolute;
+  right: 18px; top: 240px;
+  width: 210px;
+  text-align: right;
+}
+#killfeed div {
+  font: 11px/1.5 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #cfcabf;
+  text-shadow: 0 1px 4px #000;
+  opacity: 0;
+  animation: feedin 3.4s ease forwards;
+}
+#killfeed div b { color: var(--accent); }
+#killfeed div i { color: #e2705a; font-style: normal; }
+@keyframes feedin {
+  0% { opacity: 0; transform: translateX(10px); }
+  8% { opacity: 1; transform: translateX(0); }
+  78% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 #minimap {
@@ -360,6 +529,12 @@ html, body {
 #attribution a { color: rgba(226, 201, 141, 0.85); }
 
 @media (max-width: 720px) {
+  #combat { left: 12px; bottom: 74px; gap: 14px; }
+  #combat .vitals { width: 118px; }
+  #combat .ammo { font-size: 21px; }
+  #threat { right: 12px; bottom: 74px; font-size: 9.5px; letter-spacing: 0.08em; }
+  #threat .tsep { margin-left: 8px; }
+  #killfeed { top: 172px; width: 150px; }
   #minimap { width: 116px; height: 116px; }
   #compass { width: 116px; }
   #progress { top: 142px; width: 116px; font-size: 10px; }

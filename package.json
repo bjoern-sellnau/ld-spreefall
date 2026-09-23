@@ -12,6 +12,7 @@
     "serve": "node tools/serve.mjs",
     "verify": "node tools/verify.mjs",
     "test:ui": "node tools/test-ui.mjs",
+    "test:combat": "node tools/test-combat.mjs",
     "clip": "node tools/capture-walk.mjs",
     "all": "npm run world && npm run test && npm run build"
   },

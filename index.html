@@ -44,7 +44,27 @@
 </div>
 
 <div id="hud" class="hidden">
-  <div id="crosshair"></div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="hitmarker"></div>
+  <div id="damage"></div>
+  <div id="combat">
+    <div class="vitals">
+      <div class="label">integrity</div>
+      <div class="hbar"><i id="healthbar"></i></div>
+      <div class="num" id="healthnum">100</div>
+    </div>
+    <div class="ammo">
+      <span id="ammonum">30</span><span class="sep">/</span><span id="reservenum">240</span>
+      <b id="reloadhint" class="hidden">reloading</b>
+    </div>
+  </div>
+  <div id="threat">
+    <span class="tlabel">threat</span> <span id="tiernum">1</span>
+    <span class="tsep">contacts</span> <span id="contactnum">0</span>
+    <span class="tsep">score</span> <span id="scorenum">0</span>
+  </div>
+  <div id="sanctuary" class="hidden"></div>
+  <div id="killfeed"></div>
   <canvas id="minimap" width="196" height="196"></canvas>
   <div id="compass"><span id="compasslabel">N</span></div>
   <div id="cardhost"></div>
@@ -90,11 +110,23 @@
     <tr><td>N</td><td>sound on and off</td></tr>
     <tr><td>F</td><td>debug overlay</td></tr>
     <tr><td>1 2 3</td><td>quality: low, medium, high</td></tr>
+    <tr><td>Left mouse</td><td>fire</td></tr>
+    <tr><td>Right mouse</td><td>aim down the sight</td></tr>
+    <tr><td>R</td><td>reload</td></tr>
+    <tr><td>G</td><td>holster the weapon, for walking and for photographs</td></tr>
     <tr><td>Esc</td><td>release the mouse</td></tr>
   </table>
-  <p>A gamepad works too: left stick walks, right stick looks, A jumps, L3 or the
-  left trigger runs.</p>
+  <p>A gamepad works too: left stick walks, right stick looks, A jumps, L3 runs,
+  the right trigger fires and the left trigger brings up the sight.</p>
   <button id="helpclose">close</button>
+</div>
+
+<div id="down" class="overlay hidden">
+  <div class="titlebox">
+    <div class="wordmark">Systems down</div>
+    <p class="blurb" id="downtext"></p>
+    <button id="downbtn" class="play">Back on your feet</button>
+  </div>
 </div>
 
 <div id="completion" class="overlay hidden">

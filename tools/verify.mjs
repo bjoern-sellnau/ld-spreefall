@@ -82,7 +82,15 @@ async function run() {
   console.log(`renderer: ${info.renderer}`);
   console.log(`world: ${JSON.stringify(info.totals)}`);
 
-  await page.evaluate(() => window.spreefall.skipToWalk());
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.skipToWalk();
+    // These are reference shots of the city, compared across builds, so the
+    // weapon goes away and no drone wanders into frame to make two runs differ.
+    s.state.holstered = true;
+    s.drones.enabled = false;
+    s.drones.reset();
+  });
   await page.waitForTimeout(1200);
 
   const results = [];

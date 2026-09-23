@@ -15,6 +15,10 @@ import { Audio } from './game/audio.js';
 import { Intro } from './game/intro.js';
 import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
+import { Drones, DRONE_STATE } from './game/drones.js';
+import { Weapon, SPEC as WEAPON } from './game/weapon.js';
+import { Combat, COMBAT } from './game/combat.js';
+import { Effects } from './game/effects.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,12 +31,27 @@ const el = {
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
+  crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
+  combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
+  ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
+  tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
+  sanctuary: $('sanctuary'), killfeed: $('killfeed'),
+  down: $('down'), downText: $('downtext'), downBtn: $('downbtn'),
   touchui: $('touchui'), stick: $('stick'), knob: $('stickknob'),
   btnJump: $('btnjump'), btnRun: $('btnrun'), source: $('datasource'),
   attribution: $('attribution'), controlhint: $('controlhint'),
 };
 
 const DEG = Math.PI / 180;
+
+// Where the weapon sits relative to the eye, in metres and radians. Hip fire
+// holds it down and to the right, far enough forward that the receiver is not
+// pressed into your face. Aiming slides the sight onto the centre line, which
+// is what the narrowed field of view is actually for: the post at local y
+// 0.088 has to come down to zero, so the aim pose carries that offset.
+const VM_HIP = { x: 0.225, y: -0.150, z: -0.460, pitch: -0.015, yaw: 0.135, roll: 0.050 };
+const VM_AIM = { x: 0.000, y: -0.089, z: -0.330, pitch: 0.000, yaw: 0.000, roll: 0.000 };
+
 const isTouch = matchMedia('(hover: none) and (pointer: coarse)').matches;
 
 function fatal(message, detail) {
@@ -107,6 +126,12 @@ async function main() {
   const audio = new Audio(world);
   const photo = new PhotoMode(el.canvas, el.hud, el.photo, el.attribution);
 
+  // --- the shooter --------------------------------------------------------
+  const combat = new Combat(m);
+  const drones = new Drones(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const weapon = new Weapon(world, drones);
+  const effects = new Effects();
+
   // --- spawn ---------------------------------------------------------------
   const [sx, sz] = project(m, SPAWN.lon, SPAWN.lat);
   let spawn = { x: sx, z: sz, yaw: SPAWN.yaw, pitch: -0.04, tod: 17.4, doy: 166 };
@@ -148,6 +173,11 @@ async function main() {
     dronePose: null,
     landFrom: null,
     debug: false,
+    holstered: false,
+    muzzle: 0,
+    sway: { x: 0, y: 0 },
+    bob: 0,
+    inSanctuary: false,
     autoQualityDone: false,
     frameSamples: [],
     lastGround: true,
@@ -182,6 +212,108 @@ async function main() {
   el.btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); input.jumpQueued = true; });
   el.btnRun.addEventListener('touchstart', (e) => { e.preventDefault(); input.run = !input.run; el.btnRun.textContent = input.run ? 'walk' : 'run'; });
 
+  // --- combat glue --------------------------------------------------------
+
+  function feed(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    el.killfeed.appendChild(d);
+    setTimeout(() => d.remove(), 3600);
+    while (el.killfeed.childElementCount > 5) el.killfeed.firstChild.remove();
+  }
+
+  function showHitmarker(kind) {
+    el.hitmarker.className = kind;
+    // Restart the animation by forcing a reflow.
+    void el.hitmarker.offsetWidth;
+    el.hitmarker.classList.add('on');
+  }
+
+  weapon.onFire = (shot) => {
+    audio.gunshot();
+    // The tracer leaves the muzzle, not the eye, so it agrees with the weapon
+    // you can see in your hands. Hip fire holds the barrel down and right; the
+    // aim blend brings it back onto the centre line.
+    const off = 1 - weapon.aimBlend;
+    const mx = shot.from.x + camera.right[0] * 0.09 * off + camera.up[0] * (-0.13 - 0.03 * off)
+      + camera.forward[0] * 0.55;
+    const my = shot.from.y + camera.right[1] * 0.09 * off + camera.up[1] * (-0.13 - 0.03 * off)
+      + camera.forward[1] * 0.55;
+    const mz = shot.from.z + camera.right[2] * 0.09 * off + camera.up[2] * (-0.13 - 0.03 * off)
+      + camera.forward[2] * 0.55;
+    effects.tracer(mx, my, mz, shot.end.x, shot.end.y, shot.end.z, true);
+    effects.impact(shot.end.x, shot.end.y, shot.end.z,
+      shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
+    effects.shake = Math.min(1, effects.shake + 0.07);
+    state.muzzle = 1;
+    if (shot.drone) {
+      audio.hitMarker(shot.core);
+      showHitmarker(shot.killed ? 'kill' : (shot.core ? 'core' : ''));
+      if (shot.killed) {
+        const dist = Math.hypot(shot.drone.x - player.x, shot.drone.z - player.z);
+        combat.creditKill(shot.core, dist);
+        effects.explode(shot.drone.x, shot.drone.y, shot.drone.z);
+        audio.droneDown();
+        feed(`<b>drone down</b> ${Math.round(dist)} m${shot.core ? ' <i>core</i>' : ''}`);
+      }
+    }
+  };
+  weapon.onDryFire = () => audio.dryFire();
+  weapon.onReloadStart = () => audio.reload(WEAPON.reloadTime);
+
+  drones.onShot = (d, damage) => {
+    if (combat.health <= 0) return;
+    effects.tracer(d.x, d.y - 0.2, d.z, camera.position[0], camera.position[1], camera.position[2], false);
+    combat.hurt(damage, d.x, d.z, player.x, player.z);
+  };
+
+  combat.onHurt = () => {
+    audio.playerHurt();
+    effects.shake = Math.min(1, effects.shake + 0.3);
+    const dir = combat.damageDir;
+    // Put the red vignette on the side the shot came from.
+    const basis = new Float32Array(4);
+    camera.walkBasis(basis);
+    const right = dir.x * basis[2] + dir.z * basis[3];
+    const fwd = dir.x * basis[0] + dir.z * basis[1];
+    el.damage.style.setProperty('--dx', `${50 + right * 46}%`);
+    el.damage.style.setProperty('--dy', `${50 - fwd * 30}%`);
+    el.damage.classList.add('on');
+    clearTimeout(combat._dmgTimer);
+    combat._dmgTimer = setTimeout(() => el.damage.classList.remove('on'), 140);
+  };
+
+  combat.onDown = () => {
+    input.exitLock();
+    el.downText.textContent =
+      `You held out for ${formatClock(combat.elapsed)} at threat level ${combat.tier + 1}, `
+      + `took down ${combat.kills} drone${combat.kills === 1 ? '' : 's'} `
+      + `and scored ${combat.score.toLocaleString()}. Nothing here is permanent.`;
+    el.down.classList.remove('hidden');
+  };
+
+  combat.onTier = (tier) => {
+    drones.setTier(tier);
+    feed(`<b>threat level ${tier + 1}</b>`);
+    toast(`threat level ${tier + 1}`);
+  };
+
+  el.downBtn.addEventListener('click', () => {
+    el.down.classList.add('hidden');
+    combat.revive();
+    weapon.reset();
+    drones.reset();
+    drones.setTier(Math.max(0, combat.tier - 1));
+    effects.clear();
+    if (!isTouch) input.requestLock();
+  });
+
+  function formatClock(seconds) {
+    const mm = Math.floor(seconds / 60);
+    const ss = Math.floor(seconds % 60);
+    return `${mm}:${String(ss).padStart(2, '0')}`;
+  }
+
   input.onLockChange = (locked) => {
     el.canvas.classList.toggle('locked', locked);
     if (!locked && state.mode === 'walk' && !photo.active) toast('click to look around again');
@@ -191,6 +323,10 @@ async function main() {
     el.title.classList.add('hidden');
     el.hud.classList.remove('hidden');
     landmarks.reset();
+    combat.reset();
+    drones.reset();
+    weapon.reset();
+    effects.clear();
     audio.start();
     el.btnSound.textContent = 'sound on';
     if (deepLink) {
@@ -266,6 +402,11 @@ async function main() {
         el.btnSound.textContent = on ? 'sound on' : 'sound off';
         break;
       }
+      case 'KeyR': weapon.startReload(); break;
+      case 'KeyG':
+        state.holstered = !state.holstered;
+        toast(state.holstered ? 'weapon holstered' : 'weapon ready');
+        break;
       case 'KeyF': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'Digit1': setQuality('low'); break;
       case 'Digit2': setQuality('medium'); break;
@@ -321,7 +462,41 @@ async function main() {
     state.curr.x = player.x; state.curr.y = player.y; state.curr.z = player.z;
 
     landmarks.update(player.x, player.z, dt, player.distanceWalked);
+
+    // --- combat ---
+    const eye = {
+      x: player.x,
+      y: player.y + PLAYER.eye,
+      z: player.z,
+      alive: combat.health > 0,
+    };
+    state.inSanctuary = combat.isSanctuary(eye.x, eye.y, eye.z);
+    const holstered = state.holstered || photo.active || state.inSanctuary || combat.health <= 0;
+    weapon.setHolstered(holstered);
+    weapon.aiming = input.secondary && !holstered;
+
+    const dir = {
+      x: camera.forward[0], y: camera.forward[1], z: camera.forward[2],
+    };
+    const wantFire = input.fire && !photo.active && combat.health > 0;
+    weapon.update(dt, wantFire, eye, dir);
+    // The recoil kick is applied to the camera here rather than inside the
+    // weapon, so that looking around and recoil compose in one place.
+    camera.pitch = clamp(camera.pitch + weapon.recoilPitch * dt * 60, -1.55, 1.55);
+    camera.yaw += weapon.recoilYaw * dt * 60;
+    weapon.recoilPitch *= Math.max(0, 1 - 12 * dt);
+
+    combat.update(dt);
+    drones.update(dt, eye, state.time);
+
     audio.update(dt, player, camera);
+    let nearest = null;
+    for (const d of drones.active) {
+      if (d.state === DRONE_STATE.DYING) continue;
+      const dd = Math.hypot(d.x - eye.x, d.y - eye.y, d.z - eye.z);
+      if (nearest === null || dd < nearest) nearest = dd;
+    }
+    audio.setDroneField(nearest, drones.engaged);
 
     urlTimer += dt;
     if (urlTimer > 0.6) {
@@ -377,12 +552,113 @@ async function main() {
       }
     }
 
+    // Screen shake from firing and from explosions, applied to the eye rather
+    // than to the aim, so it never moves where your shots go.
+    effects.update(elapsed);
+    // The muzzle flash fades over about seventy milliseconds, but the decay is
+    // capped per frame so that a long frame cannot swallow it whole: a flash
+    // that never renders at all is worse than one that lingers on a hitch.
+    state.muzzle = Math.max(0, state.muzzle - Math.min(elapsed, 1 / 45) * 14);
+    if (effects.shake > 0.001) {
+      const k = effects.shake * effects.shake * 0.09;
+      const t = state.time * 47;
+      camera.position[0] += Math.sin(t * 1.7) * k;
+      camera.position[1] += Math.sin(t * 2.3 + 1.1) * k;
+      camera.position[2] += Math.sin(t * 1.3 + 2.7) * k;
+    }
+
     camera.update(w / Math.max(1, h));
+
+    // --- the weapon in your hands ---
+    if (state.mode === 'walk' && !photo.active) {
+      const speed = Math.hypot(player.vx || 0, player.vz || 0);
+      state.bob += elapsed * (speed > 4 ? 11.5 : 7.4) * Math.min(1, speed / 2.6);
+      // Sway lags the look, which is what makes a viewmodel feel like a weight.
+      // Yaw wraps at pi, so the shortest way round is the one that counts, or
+      // turning past south would fling the weapon across the screen.
+      const lookX = camera.yaw, lookY = camera.pitch;
+      let dYaw = lookX - (state.lastYaw ?? lookX);
+      if (dYaw > Math.PI) dYaw -= Math.PI * 2;
+      if (dYaw < -Math.PI) dYaw += Math.PI * 2;
+      state.sway.x += dYaw;
+      state.sway.y += lookY - (state.lastPitch ?? lookY);
+      state.lastYaw = lookX;
+      state.lastPitch = lookY;
+      state.sway.x *= Math.max(0, 1 - 7 * elapsed);
+      state.sway.y *= Math.max(0, 1 - 7 * elapsed);
+
+      const aim = weapon.aimBlend;
+      const hol = weapon.holsterBlend;
+      const bobX = Math.sin(state.bob) * 0.009 * (1 - aim) * Math.min(1, speed / 2.6);
+      const bobY = Math.abs(Math.cos(state.bob)) * -0.007 * (1 - aim) * Math.min(1, speed / 2.6);
+      const kick = weapon.kick;
+      // Hip fire holds the weapon down and to the right. Aiming brings the
+      // sight onto the centre line, which is what the narrowed field of view
+      // is actually for.
+      const mix = (a, b) => a + (b - a) * aim;
+      // A weight left behind by the turn keeps its own orientation, so in view
+      // space it rotates against the look: the translation follows the sway and
+      // the rotation opposes it. Recoil lifts the muzzle and pushes the weapon
+      // back towards the eye. Holstering drops it and turns the muzzle down and
+      // away, so it leaves the frame at the bottom rather than across it.
+      renderer.viewmodel = {
+        x: mix(VM_HIP.x, VM_AIM.x) + bobX + state.sway.x * 0.30,
+        y: mix(VM_HIP.y, VM_AIM.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
+        z: mix(VM_HIP.z, VM_AIM.z) + kick * 0.030,
+        pitch: mix(VM_HIP.pitch, VM_AIM.pitch) + kick * 0.075 - state.sway.y * 0.5 - hol * 0.95,
+        yaw: mix(VM_HIP.yaw, VM_AIM.yaw) - state.sway.x * 0.8,
+        roll: mix(VM_HIP.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
+        muzzle: state.muzzle * (1 - hol),
+      };
+      renderer.actors.updateDrones(drones.active);
+      renderer.actors.updateSparks(effects.list);
+      renderer.drawActors = true;
+    } else {
+      renderer.viewmodel = null;
+      renderer.actors.updateDrones(state.mode === 'walk' ? drones.active : []);
+      renderer.actors.updateSparks(state.mode === 'walk' ? effects.list : []);
+      renderer.drawActors = state.mode === 'walk';
+    }
+
     tiles.updateResidency(camera.position[0], camera.position[2], loop.frame);
     renderer.render(camera, state.time, w, h);
 
     if (photo.pendingShot) {
       photo.capture(`${timeLabel(renderer.timeOfDay)}, ${dayLabel(renderer.dayOfYear)}`);
+    }
+
+    if (state.mode === 'walk' && !photo.active) {
+      // Combat interface.
+      const hp = Math.round(combat.health);
+      el.healthbar.style.width = `${Math.max(0, combat.health)}%`;
+      el.healthnum.textContent = String(hp);
+      el.combat.classList.toggle('hurt', combat.health < 45);
+      el.ammonum.textContent = String(weapon.ammo);
+      el.reservenum.textContent = String(weapon.reserve);
+      el.combat.classList.toggle('empty', weapon.ammo === 0);
+      el.reloadhint.classList.toggle('hidden', weapon.state !== 2);
+      el.tiernum.textContent = String(combat.tier + 1);
+      el.contactnum.textContent = String(drones.engaged);
+      el.scorenum.textContent = combat.score.toLocaleString();
+      // The crosshair opens with the spread cone.
+      const px = Math.round(6 + (weapon.spread / WEAPON.spreadMax) * 30);
+      el.crosshair.style.setProperty('--gap', `${px}px`);
+      el.crosshair.classList.toggle('aiming', weapon.aimBlend > 0.6);
+      el.crosshair.classList.toggle('holstered', weapon.holstered);
+      // Aiming narrows the field of view, which is most of what aiming is.
+      camera.fov = 68 * DEG + (WEAPON.aimFov - 68 * DEG) * weapon.aimBlend;
+      if (state.inSanctuary !== state.sanctuaryShown) {
+        state.sanctuaryShown = state.inSanctuary;
+        if (state.inSanctuary) {
+          const name = combat.sanctuaryName(player.x, player.z) || 'This place';
+          el.sanctuary.innerHTML =
+            `<b>weapons free zone</b>${name} is a memorial. `
+            + 'The weapon holsters itself here and nothing will follow you in.';
+          el.sanctuary.classList.remove('hidden');
+        } else {
+          el.sanctuary.classList.add('hidden');
+        }
+      }
     }
 
     if (state.mode === 'walk' || state.mode === 'landing') {
@@ -419,7 +695,11 @@ async function main() {
         + `pos        ${camera.position[0].toFixed(1)}, ${camera.position[1].toFixed(1)}, ${camera.position[2].toFixed(1)}\n`
         + `ground     ${player.groundY.toFixed(2)}  surface ${['asphalt', 'cobble', 'grass', 'water', 'gravel', 'stone'][player.surface]}\n`
         + `sun alt    ${(renderer.sunAltitude * 180 / Math.PI).toFixed(1)} deg, night ${renderer.night.toFixed(2)}\n`
-        + `walked     ${(player.distanceWalked / 1000).toFixed(3)} km`;
+        + `walked     ${(player.distanceWalked / 1000).toFixed(3)} km\n`
+        + `drones     ${drones.count} live, ${drones.engaged} engaged, tier ${combat.tier + 1}\n`
+        + `weapon     ${weapon.ammo}/${weapon.reserve}  spread ${(weapon.spread * 1000).toFixed(1)} mrad  `
+        + `accuracy ${(weapon.accuracy * 100).toFixed(0)}%\n`
+        + `health     ${combat.health.toFixed(0)}  score ${combat.score}  kills ${combat.kills}`;
     }
   }
 
@@ -431,11 +711,26 @@ async function main() {
 
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
-    world, renderer, tiles, camera, player, loop, state, landmarks, audio,
+    world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
+    combat, drones, weapon, effects,
+    spawnDrone(dx, dy, dz) {
+      const d = drones.free();
+      if (!d) return null;
+      d.spawn(player.x + dx, player.y + PLAYER.eye + dy, player.z + dz, combat.tier);
+      drones.active.push(d);
+      return d;
+    },
+    shoot() {
+      weapon.fire(
+        { x: player.x, y: player.y + PLAYER.eye, z: player.z },
+        { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] },
+      );
+    },
     teleport(x, z) { player.teleport(x, z); state.prev = { x, y: player.y, z }; state.curr = { x, y: player.y, z }; },
     look(yawDeg, pitchDeg) { camera.yaw = yawDeg * DEG; camera.pitch = pitchDeg * DEG; },
     setTime(t) { renderer.timeOfDay = t; el.tod.value = String(t); },
     debugMode(n) { renderer.debugMode = n | 0; },
+    viewmodelPose: { hip: VM_HIP, aim: VM_AIM },
     skipToWalk() {
       el.title.classList.add('hidden');
       el.hud.classList.remove('hidden');

@@ -1,10 +1,12 @@
 # SPREE|FALL
 
-A walkable, first person reconstruction of central Berlin that runs from a single
-link in a browser. You spawn on Pariser Platz facing the Brandenburg Gate, and
-you can walk east down Unter den Linden to Museum Island and the Fernsehturm,
-south to the Holocaust Memorial and Potsdamer Platz, and north to the Reichstag
-and the Spree.
+An open world first person shooter set in a real reconstruction of central
+Berlin, running from a single link in a browser. You spawn on Pariser Platz
+facing the Brandenburg Gate, and you can walk east down Unter den Linden to
+Museum Island and the Fernsehturm, south to the Holocaust Memorial and Potsdamer
+Platz, and north to the Reichstag and the Spree. Reconnaissance drones hunt the
+same streets, and every shot is traced through the real geometry of the city, so
+a column of the Gate stops a bullet exactly where the column stands.
 
 Every building, street, path, tree, river and rail line is generated from
 OpenStreetMap data by a pipeline in this repository. The renderer, the physics,
@@ -16,10 +18,11 @@ the sound and the data pipeline are all written from scratch.
 |---|---|
 | Rendering | raw WebGL2, own shaders, own matrix maths, own scene graph |
 | Physics | own capsule character controller against a 2D segment world |
+| Combat | own hitscan raycasting against the same world, own flight AI |
 | Audio | raw Web Audio API, every sound synthesised at run time |
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
 | Shipped as | one HTML file, JS modules, one binary bundle, no backend |
-| Payload | 9.35 MB, 2.26 MB over the wire with gzip |
+| Payload | 9.42 MB, 2.28 MB over the wire with gzip |
 | Third party code at run time | none |
 
 ## Try it
@@ -33,8 +36,9 @@ npm run serve        # http://localhost:8080/
 
 `npm run test` runs the pipeline unit tests, `npm run verify` takes the fixed
 screenshots in a headless browser and fails on any console error, `npm run
-test:ui` drives the whole game layer through a real browser, and `npm run clip`
-records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
+test:ui` drives the whole game layer through a real browser, `npm run
+test:combat` fights drones in one and checks the damage, the cover and the
+weapons free zone, and `npm run clip` records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
 Cloudflare Pages, or any static host. There is nothing to run on the server.
 
 ## Controls
@@ -46,11 +50,15 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | Space | jump onto kerbs and low walls |
 | Mouse | look, with pointer lock |
 | Touch | drag left to walk, drag right to look |
-| Gamepad | left stick walks, right stick looks, A jumps, L3 or LT runs |
+| Gamepad | left stick walks, right stick looks, A jumps, L3 runs |
 | P | photo mode: hides the interface, unlocks the clock, saves a PNG |
 | M | enlarge the map |
 | N | sound on and off |
 | H | help |
+| Left mouse, or RT on a pad | fire |
+| Right mouse, or LT on a pad | aim down the sight |
+| R | reload |
+| G | holster the weapon, for walking and for photographs |
 | F | debug overlay |
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | 1 2 3 | quality tier: low, medium, high |
@@ -60,6 +68,44 @@ name and a sentence of history. Find all eleven and you get a completion screen
 with the time taken and the distance walked. The URL always carries your
 position, heading and time of day, so a link opens exactly the view you were
 looking at.
+
+## The shooter
+
+**The targets are drones, not people.** This is a reconstruction of a real city,
+with the Reichstag, the Cathedral and the Memorial to the Murdered Jews of Europe
+standing where they really stand. Human targets in it would be grotesque. Flying
+ones are also the more interesting problem: a quadrotor moves in three dimensions,
+has to find its way around buildings it can see, and has to lose you when you
+break line of sight.
+
+**The memorial is a weapons free zone.** Within 135 m of Peter Eisenman's field
+the weapon holsters itself, it will not fire, and the screen says why. No drone
+spawns inside the circle, one that drifts in turns and accelerates back out, and
+while you are in there none of them can see you. It is enforced in the game code
+rather than in the interface, and the combat test checks each part of it.
+
+What is under the hood:
+
+- Shots are hitscan through the real world. `World.raycast` walks a DDA across
+  the 100 m tile grid, tests the collision segments as vertical quads and then
+  marches the ground height field, at about 4.3 microseconds a ray. The world is
+  tested first and the drones only within that distance, so cover is not a
+  special case, it is the same geometry you are standing on.
+- The rifle holds 30 rounds, reloads in 1.55 s, fires every 105 ms for 38 damage,
+  and carries out to 320 m. Spread grows with every shot and recovers when you
+  stop; aiming tightens it and narrows the field of view together. The core of a
+  drone is worth 2.2 times a hit on the hull.
+- Drones patrol, pursue, attack and evade. They steer with four horizontal probes
+  and a ground clearance term, so they do not fly into walls, and they re-test
+  line of sight every 0.22 s rather than every frame, on a rota, so the cost is
+  spread across frames instead of spiking whenever the sky fills up.
+- Holding ground raises the threat tier, which raises how many of them are in the
+  air at once, from six to fourteen. Integrity regenerates after a pause, and
+  going down clears the sky, drops the threat by a tier and puts you back on
+  your feet where you fell.
+- Every sound is synthesised: a noise burst through a swept bandpass for the shot,
+  a rotor bed whose level and pitch follow the nearest drone, and two different
+  confirms for a hull hit and a core hit.
 
 ## What is real and what is generated
 
@@ -125,12 +171,15 @@ tools/
   build-dist.mjs     produces dist/
   verify.mjs         headless screenshots and console error check
   test-ui.mjs        headless test of the game layer
+  test-combat.mjs    headless test of the shooter, in a real browser
 src/
   shared/            constants the pipeline and the runtime both import
-  engine/            maths, GL plumbing, tile streaming, controller, input, loop
-  render/            renderer, sun position
+  engine/            maths, GL plumbing, tile streaming, controller, input, loop,
+                     and the world raycast the shooting is built on
+  render/            renderer, sun position, drones, sparks and the viewmodel
   shaders/           all GLSL, as JS template strings
-  game/              landmarks, minimap, audio, photo mode, intro, URL state
+  game/              landmarks, minimap, audio, photo mode, intro, URL state,
+                     and the shooter: drones, weapon, combat rules, effects
 ```
 
 ### The data format
@@ -174,7 +223,7 @@ geometry: 266,195 vertices, 132,397 triangles, 1672 buildings, 2711 stelae,
 tiles     646, of 34 by 19, 613 of them non empty
 world.bin 9.05 MB
 world.json 0.14 MB
-dist      9.35 MB, 2.26 MB over the wire with gzip, against a 25 MB budget
+dist      9.42 MB, 2.28 MB over the wire with gzip, against a 25 MB budget
 max tile  589.5 kB, 12,141 triangles (the stelae field)
 mean tile 12.1 kB
 build     about one second
@@ -190,13 +239,13 @@ floor: everything below is what a pure software rasteriser managed.
 
 | Viewpoint | triangles in view | draw calls |
 |---|---|---|
-| Pariser Platz | 31,247 | 124 |
-| Through the Gate | 64,588 | 161 |
-| Unter den Linden | 21,296 | 78 |
-| Inside the stelae field | 39,062 | 45 |
-| The Reichstag across the lawn | 5,629 | 42 |
-| Under the Fernsehturm | 7,256 | 41 |
-| Gendarmenmarkt | 16,633 | 52 |
+| Pariser Platz | 31,459 | 125 |
+| Through the Gate | 64,800 | 162 |
+| Unter den Linden | 21,508 | 79 |
+| Inside the stelae field | 39,274 | 46 |
+| The Reichstag across the lawn | 5,841 | 43 |
+| Under the Fernsehturm | 7,468 | 42 |
+| Gendarmenmarkt | 16,845 | 53 |
 
 Software rasteriser, 1600 by 900: 3 to 5 fps.
 
@@ -207,7 +256,10 @@ project does instead is make the budget explicit and keep the geometry inside it
 under 65,000 triangles and under 170 draw calls in view at any time, one draw
 call per tile, no per object uniform updates beyond a tile origin, two shadow
 cascades rather than four, and an automatic quality tier chosen from the measured
-median frame time over the first three seconds. Anyone with a GPU can run
+median frame time over the first three seconds. The shooter adds four draws to
+that, whatever is happening: one instanced call for every drone in the air and
+one more for their shadows, one for every spark in the world, and one for the
+weapon in your hands. Anyone with a GPU can run
 `npm run verify` and replace this section with real numbers.
 
 Three things in here were found by measuring rather than by looking, and they are
@@ -238,6 +290,12 @@ worth naming because each of them was invisible until something was checked:
 
 ![Unter den Linden at night](docs/screenshots/09-night.png)
 *Unter den Linden after dark, with the windows lit.*
+
+![Contact over Pariser Platz](docs/screenshots/combat-01-contact.png)
+*Four drones over Pariser Platz, with the Gate behind them.*
+
+![The weapons free zone](docs/screenshots/combat-04-sanctuary.png)
+*Inside the memorial the weapon is holstered and the screen says why.*
 
 The rest are in [docs/screenshots](docs/screenshots), and
 [docs/media/gate-to-tower.webm](docs/media/gate-to-tower.webm) is the eleven

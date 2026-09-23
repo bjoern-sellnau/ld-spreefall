@@ -18,6 +18,8 @@ export class Input {
     this.gamepadIndex = null;
     this.onKeyPress = null;   // fn(code) for one shot bindings
     this.enabled = true;
+    this.fire = false;        // primary held
+    this.secondary = false;   // aim held
 
     this._touchLook = null;
     this._touchStick = null;
@@ -41,6 +43,18 @@ export class Input {
       this.pointerLocked = doc.pointerLockElement === this.canvas;
       if (this.onLockChange) this.onLockChange(this.pointerLocked);
     });
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (!this.enabled) return;
+      if (e.button === 0) this.fire = true;
+      if (e.button === 2) { this.secondary = true; e.preventDefault(); }
+    });
+    doc.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.fire = false;
+      if (e.button === 2) this.secondary = false;
+    });
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    window.addEventListener('blur', () => { this.fire = false; this.secondary = false; });
+
     doc.addEventListener('mousemove', (e) => {
       if (!this.pointerLocked || !this.enabled) return;
       this.lookX += e.movementX * this.sensitivity;
@@ -135,9 +149,16 @@ export class Input {
         if (lx || ly) { kx += lx; kz -= ly; }
         this.lookX += rx * 0.045;
         this.lookY += ry * 0.045;
+        // L3 runs. The left trigger used to as well, but it aims now, and a
+        // pad that sprints every time you bring the sight up is unusable.
         if (gp.buttons[10] && gp.buttons[10].pressed) run = true;
-        if (gp.buttons[6] && gp.buttons[6].value > 0.5) run = true;
         if (gp.buttons[0] && gp.buttons[0].pressed) this.jumpQueued = true;
+        if (gp.buttons[7] && gp.buttons[7].value > 0.4) this.fire = true;
+        else if (this._padFire) this.fire = false;
+        this._padFire = !!(gp.buttons[7] && gp.buttons[7].value > 0.4);
+        const aimBtn = !!(gp.buttons[6] && gp.buttons[6].value > 0.4);
+        if (aimBtn) this.secondary = true; else if (this._padAim) this.secondary = false;
+        this._padAim = aimBtn;
       }
     }
 

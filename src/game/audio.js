@@ -217,6 +217,195 @@ export class Audio {
 
   land(surface) { this._footstep(surface, 1.1); }
 
+  // --- combat -------------------------------------------------------------
+
+  /** The rifle. A short noise crack over a body thump, then a tail. */
+  gunshot() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+
+    // Crack: filtered noise with a very fast decay.
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 900;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(2600, t);
+    bp.frequency.exponentialRampToValueAtTime(700, t + 0.09);
+    bp.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.42, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.02, t + 0.07);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.30);
+    src.connect(hp).connect(bp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3, 0.36);
+    src.stop(t + 0.36);
+
+    // Body: a low sine drop, which is what gives it weight on small speakers.
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(190, t);
+    o.frequency.exponentialRampToValueAtTime(48, t + 0.10);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.26, t + 0.004);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(og).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.18);
+  }
+
+  dryFire() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 3200;
+    f.Q.value = 5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.10, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3, 0.07);
+    src.stop(t + 0.07);
+  }
+
+  /** Magazine out, magazine in, bolt. Three clicks spaced over the reload. */
+  reload(duration) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const base = ctx.currentTime;
+    const clicks = [[0.05, 2100, 0.07], [duration * 0.55, 1500, 0.09], [duration * 0.86, 2800, 0.06]];
+    for (const [at, freq, gain] of clicks) {
+      const t = base + at;
+      const src = ctx.createBufferSource();
+      src.buffer = this._noiseBuffer;
+      src.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = freq;
+      f.Q.value = 3.2;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+      src.connect(f).connect(g).connect(this.master);
+      src.start(t, Math.random() * 3, 0.09);
+      src.stop(t + 0.09);
+    }
+  }
+
+  /** The confirmation tick when a shot connects. Pitched up for a core hit. */
+  hitMarker(core) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(core ? 1750 : 1150, t);
+    o.frequency.exponentialRampToValueAtTime(core ? 2400 : 1500, t + 0.04);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(core ? 0.07 : 0.045, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.08);
+  }
+
+  droneDown() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(1800, t);
+    f.frequency.exponentialRampToValueAtTime(180, t + 0.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.20, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3, 0.65);
+    src.stop(t + 0.65);
+  }
+
+  /** Taking a hit: a dull thud plus a short tinnitus ring. */
+  playerHurt() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.22);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.32);
+
+    const ring = ctx.createOscillator();
+    ring.type = 'sine';
+    ring.frequency.value = 3100;
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t);
+    rg.gain.exponentialRampToValueAtTime(0.020, t + 0.02);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    ring.connect(rg).connect(this.master);
+    ring.start(t);
+    ring.stop(t + 1.15);
+  }
+
+  /** The drone chorus: one rotor bed whose pitch and level track the nearest. */
+  setDroneField(nearest, engaged) {
+    if (!this.ctx || !this.enabled) return;
+    if (!this.beds.rotor) this.beds.rotor = this._rotorBed();
+    const bed = this.beds.rotor;
+    const t = this.ctx.currentTime;
+    const level = nearest === null ? 0 : clamp01(1 - nearest / 90);
+    for (const p of bed.parts) {
+      p.gain.gain.setTargetAtTime(p.target * level, t, 0.25);
+    }
+    if (bed.osc) {
+      const hz = 62 + (1 - level) * 10 + engaged * 3;
+      bed.osc.frequency.setTargetAtTime(hz, t, 0.3);
+    }
+  }
+
+  _rotorBed() {
+    const ctx = this.ctx;
+    const a = this._bedSource('bandpass', 1450, 3.0, 0.16);
+    const b = this._bedSource('highpass', 3400, 0.7, 0.05);
+    // A buzzing sub under the hiss, amplitude modulated like a rotor.
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = 64;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 340;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    osc.connect(f).connect(g).connect(this.master);
+    osc.start();
+    return { parts: [a, b, { gain: g, target: 0.085 }], osc, level: 0 };
+  }
+
   _footstep(surface, force) {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;

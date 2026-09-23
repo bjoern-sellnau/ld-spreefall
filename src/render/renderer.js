@@ -10,6 +10,7 @@ import { WORLD_VS, WORLD_FS, SHADOW_VS, SHADOW_FS } from '../shaders/world.js';
 import { TREE_VS, TREE_FS, TREE_SHADOW_VS, TREE_SHADOW_FS } from '../shaders/trees.js';
 import { FULLSCREEN_VS, BRIGHT_FS, BLUR_FS, COMPOSITE_FS } from '../shaders/post.js';
 import { sunDirection, sunColour, berlinDate } from './sun.js';
+import { Actors } from './actors.js';
 
 // std140 layout, see src/shaders/common.js
 const CAM_FLOATS = 112;
@@ -67,6 +68,10 @@ export class Renderer {
     this.progWorld.int('uShadow0', 4).int('uShadow1', 5).int('uDebugMode', 0);
     this.debugMode = 0;
     this.progTree.use().int('uShadow0', 4).int('uShadow1', 5);
+
+    this.actors = new Actors(gl, caps);
+    this.drawActors = true;
+    this.viewmodel = null;      // set by the game layer each frame, or null
 
     this.shadowFbo = [];
     this.sceneFbo = null;
@@ -275,6 +280,10 @@ export class Renderer {
         draws++;
       }
 
+      if (i === 0 && this.drawActors) {
+        draws += this.actors.drawDroneShadows(this.lightVp[i]);
+      }
+
       if (i === 0) {
         this.progTreeShadow.use().mat4('uLightViewProj', this.lightVp[i]);
         for (const tile of this.tiles.resident.values()) {
@@ -344,12 +353,32 @@ export class Renderer {
     }
     gl.enable(gl.CULL_FACE);
 
+    // Drones, which are solid, then the sky, then the additive effects on top.
+    if (this.drawActors) {
+      gl.enable(gl.CULL_FACE);
+      draws += this.actors.drawDrones();
+      tris += this.actors.drone.instanceCount * (this.actors.drone.count / 3);
+    }
+
     // Sky last, depth equal to the far plane, so it only fills what is left.
     gl.depthFunc(gl.LEQUAL);
     this.progSky.use();
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     draws++;
+
+    if (this.drawActors) {
+      gl.disable(gl.CULL_FACE);
+      draws += this.actors.drawSparks();
+      gl.enable(gl.CULL_FACE);
+    }
+
+    // The weapon in your hands, in its own projection on a cleared depth buffer.
+    if (this.viewmodel) {
+      draws += this.actors.drawViewmodel(
+        this.width / Math.max(1, this.height), this.viewmodel, this.viewmodel.muzzle);
+      tris += this.actors.weapon.count / 3;
+    }
 
     gl.bindVertexArray(null);
     this.stats.drawCalls = draws;

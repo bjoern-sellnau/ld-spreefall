@@ -3,6 +3,25 @@
 
 import { TILE_SIZE, COLLISION_GRID, GROUND_SCALE, SURFACE } from '../shared/constants.js';
 
+/**
+ * Ray against the vertical quad standing on segment a to b between base and top.
+ * Returns the distance along the ray, or -1.
+ */
+function rayVerticalQuad(ox, oy, oz, dx, dy, dz, ax, az, bx, bz, base, top) {
+  const ex = bx - ax, ez = bz - az;
+  // Cross product of the ray direction and the edge, in the ground plane.
+  const denom = dx * ez - dz * ex;
+  if (Math.abs(denom) < 1e-9) return -1;
+  const rx = ax - ox, rz = az - oz;
+  const t = (rx * ez - rz * ex) / denom;
+  if (t < 0) return -1;
+  const s = (rx * dz - rz * dx) / denom;
+  if (s < 0 || s > 1) return -1;
+  const y = oy + dy * t;
+  if (y < base || y > top) return -1;
+  return t;
+}
+
 export class World {
   constructor(manifest, buffer) {
     this.manifest = manifest;
@@ -157,6 +176,120 @@ export class World {
         if (segs.length) fn(segs, segs.length / 6);
       }
     }
+  }
+
+  // --- raycasting ---------------------------------------------------------
+
+  /**
+   * Nearest hit along a ray against the city: the vertical faces in the
+   * collision layer plus the ground height field. The same query serves the
+   * bullets and the drone line of sight, so it walks the tile grid with a 2D
+   * DDA rather than testing every segment in a bounding box.
+   *
+   * @returns {{t:number, x:number, y:number, z:number, nx:number, ny:number, nz:number, kind:string}|null}
+   */
+  raycast(ox, oy, oz, dx, dy, dz, maxDist = 400, out = null) {
+    const hit = out || this._rayHit || (this._rayHit = {
+      t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, kind: '',
+    });
+    let best = maxDist;
+    let found = false;
+
+    // --- walls ---
+    const ts = this.tileSize;
+    let tx = Math.floor((ox - this.minX) / ts);
+    let tz = Math.floor((oz - this.minZ) / ts);
+    const stepX = dx > 0 ? 1 : -1;
+    const stepZ = dz > 0 ? 1 : -1;
+    const invDx = Math.abs(dx) < 1e-9 ? Infinity : 1 / dx;
+    const invDz = Math.abs(dz) < 1e-9 ? Infinity : 1 / dz;
+    // Distance along the ray to the next tile boundary on each axis.
+    let tMaxX = invDx === Infinity ? Infinity
+      : ((this.minX + (tx + (stepX > 0 ? 1 : 0)) * ts) - ox) * invDx;
+    let tMaxZ = invDz === Infinity ? Infinity
+      : ((this.minZ + (tz + (stepZ > 0 ? 1 : 0)) * ts) - oz) * invDz;
+    const tDeltaX = invDx === Infinity ? Infinity : Math.abs(ts * invDx);
+    const tDeltaZ = invDz === Infinity ? Infinity : Math.abs(ts * invDz);
+
+    let travelled = 0;
+    let guard = 0;
+    while (travelled <= best && guard++ < 256) {
+      if (tx >= 0 && tz >= 0 && tx < this.nx && tz < this.nz) {
+        const segs = this.segments(tz * this.nx + tx);
+        const count = segs.length / 6;
+        for (let i = 0; i < count; i++) {
+          const o = i * 6;
+          const t = rayVerticalQuad(
+            ox, oy, oz, dx, dy, dz,
+            segs[o], segs[o + 1], segs[o + 2], segs[o + 3], segs[o + 4], segs[o + 5],
+          );
+          if (t < 0 || t >= best) continue;
+          best = t;
+          found = true;
+          const ex = segs[o + 2] - segs[o], ez = segs[o + 3] - segs[o + 1];
+          const len = Math.hypot(ex, ez) || 1;
+          // Face the normal back towards where the ray came from.
+          let nx = ez / len, nz = -ex / len;
+          if (nx * dx + nz * dz > 0) { nx = -nx; nz = -nz; }
+          hit.nx = nx; hit.ny = 0; hit.nz = nz;
+          hit.kind = 'wall';
+        }
+      }
+      // Advance to the next tile.
+      if (tMaxX < tMaxZ) { travelled = tMaxX; tx += stepX; tMaxX += tDeltaX; }
+      else { travelled = tMaxZ; tz += stepZ; tMaxZ += tDeltaZ; }
+      if (!Number.isFinite(travelled)) break;
+    }
+
+    // --- ground ---
+    // Marched rather than solved, because the height field is bilinear and a
+    // closed form is not worth it. The step is fine near the shooter and coarse
+    // far away, which is where the error stops mattering.
+    if (dy < 0.999) {
+      let t = 0;
+      let prevGap = oy - this.groundHeight(ox, oz);
+      while (t < best) {
+        const step = Math.max(0.35, t * 0.05);
+        const nt = Math.min(best, t + step);
+        const px = ox + dx * nt, py = oy + dy * nt, pz = oz + dz * nt;
+        const gap = py - this.groundHeight(px, pz);
+        if (gap <= 0) {
+          // Bisect once for a tidy impact position.
+          let lo = t, hi = nt;
+          for (let k = 0; k < 8; k++) {
+            const mid = (lo + hi) * 0.5;
+            const g = (oy + dy * mid) - this.groundHeight(ox + dx * mid, oz + dz * mid);
+            if (g <= 0) hi = mid; else lo = mid;
+          }
+          if (hi < best) {
+            best = hi;
+            found = true;
+            hit.nx = 0; hit.ny = 1; hit.nz = 0;
+            hit.kind = 'ground';
+          }
+          break;
+        }
+        prevGap = gap;
+        if (nt >= best) break;
+        t = nt;
+      }
+    }
+
+    if (!found) return null;
+    hit.t = best;
+    hit.x = ox + dx * best;
+    hit.y = oy + dy * best;
+    hit.z = oz + dz * best;
+    return hit;
+  }
+
+  /** True when nothing solid stands between the two points. */
+  lineOfSight(ax, ay, az, bx, by, bz) {
+    const dx = bx - ax, dy = by - ay, dz = bz - az;
+    const dist = Math.hypot(dx, dy, dz);
+    if (dist < 0.001) return true;
+    const h = this.raycast(ax, ay, az, dx / dist, dy / dist, dz / dist, dist - 0.05);
+    return h === null;
   }
 
   /** Trees packed in a tile, unpacked to world space. */
