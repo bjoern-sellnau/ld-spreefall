@@ -30,6 +30,9 @@ async function run() {
     permissions: ['clipboard-read', 'clipboard-write'],
   });
   const page = await context.newPage();
+  // A software rasteriser needs longer than the thirty second default to hand
+  // back a frame, on this machine and on a CI runner alike.
+  context.setDefaultTimeout(180000);
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));

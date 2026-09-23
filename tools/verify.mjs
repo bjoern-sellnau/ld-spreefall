@@ -22,7 +22,7 @@ export const VIEWPOINTS = [
     caption: 'The lime avenue on Unter den Linden' },
   { name: '04-memorial', x: 45, z: 260, yaw: 20, pitch: -4, tod: 13.0,
     caption: 'Inside the field of 2711 stelae' },
-  { name: '05-reichstag', x: -104, z: -118, yaw: 0, pitch: 15, tod: 7.4,
+  { name: '05-reichstag', x: -230, z: -255, yaw: -90, pitch: 10, tod: 7.4,
     caption: 'The Reichstag across the Platz der Republik, early morning' },
   { name: '06-museum-island', x: 1395, z: -195, yaw: -46, pitch: 17, tod: 18.4,
     caption: 'The Berlin Cathedral over the Lustgarten' },
@@ -93,6 +93,46 @@ async function run() {
   });
   await page.waitForTimeout(1200);
 
+  // Reads the canvas back at a coarse resolution and describes it: how bright
+  // it is, how many different tones are in it, and how much of the lower half
+  // is something other than flat sky. Cheap enough to run at every viewpoint.
+  await page.evaluate(() => {
+    window.frameStats = () => {
+      const src = document.getElementById('view');
+      const w = 64, h = 36;
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(src, 0, 0, w, h);
+      const d = ctx.getImageData(0, 0, w, h).data;
+      const tones = new Set();
+      const lum = new Float32Array(w * h);
+      let sum = 0;
+      for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+        lum[p] = (d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722) / 255;
+        sum += lum[p];
+        tones.add((d[i] >> 4) << 8 | (d[i + 1] >> 4) << 4 | (d[i + 2] >> 4));
+      }
+      // Edges, not colours. A sky is a smooth gradient whichever way the light
+      // goes, and the inside of a building is flatter still, while a street
+      // full of windows, kerbs and trees is nothing but edges. Colour tests do
+      // not survive sunset or a blue grey pavement; this one does.
+      let edges = 0;
+      let pairs = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 1; x < w; x++) {
+          pairs++;
+          if (Math.abs(lum[y * w + x] - lum[y * w + x - 1]) > 0.02) edges++;
+        }
+      }
+      return {
+        mean: sum / (w * h),
+        distinct: tones.size,
+        detail: pairs ? edges / pairs : 0,
+      };
+    };
+  });
+
   const results = [];
   for (const v of VIEWPOINTS) {
     await page.evaluate((vp) => {
@@ -106,16 +146,29 @@ async function run() {
     // Let the tiles stream in and the shadow cascades settle.
     await page.waitForTimeout(2600);
     const shot = path.join(SHOTS, `${v.name}.png`);
-    await page.screenshot({ path: shot });
+    // A software rasteriser drawing four hundred thousand triangles can take
+    // most of a minute to produce a frame the shutter is willing to keep, so
+    // the default thirty seconds is not enough on a CI runner.
+    await page.screenshot({ path: shot, timeout: 180000 });
     const stats = await page.evaluate(() => ({
       fps: window.spreefall.loop.stats.fps,
       frameMs: window.spreefall.loop.stats.frameMs,
       tris: window.spreefall.renderer.stats.triangles,
       draws: window.spreefall.renderer.stats.drawCalls,
       tiles: window.spreefall.tiles.stats.visible,
+      frame: frameStats(),
     }));
+    // Whoever reads this runs it somewhere the screenshots cannot be seen, on
+    // CI or over a log, so the frame reports on itself: a view with one colour
+    // in it, or nothing but sky, is a black screen however good the numbers.
+    const f = stats.frame;
+    if (f.distinct < 12 || f.detail < 0.05) {
+      errors.push(`${v.name}: the frame carries no city, `
+        + `${f.distinct} distinct tones and ${(f.detail * 100).toFixed(1)}% of it edges`);
+    }
     results.push({ ...v, ...stats, file: path.relative(ROOT, shot) });
-    console.log(`  ${v.name.padEnd(22)} ${stats.tris.toLocaleString().padStart(9)} tris  ${String(stats.draws).padStart(4)} draws  ${stats.frameMs.toFixed(1)} ms`);
+    console.log(`  ${v.name.padEnd(22)} ${stats.tris.toLocaleString().padStart(9)} tris  ${String(stats.draws).padStart(4)} draws  ${stats.frameMs.toFixed(1)} ms  `
+      + `${(f.mean * 100).toFixed(0)}% lit, ${f.distinct} tones, ${(f.detail * 100).toFixed(0)}% edges`);
   }
 
   // A short walk, to prove the controller does not fall through the world or

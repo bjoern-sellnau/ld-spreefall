@@ -276,11 +276,21 @@ floor: everything below is what a pure software rasteriser managed.
 | Through the Gate | 64,800 | 162 |
 | Unter den Linden | 21,508 | 79 |
 | Inside the stelae field | 39,274 | 46 |
-| The Reichstag across the lawn | 5,841 | 43 |
+| The Reichstag across the lawn | 33,521 | 75 |
 | Under the Fernsehturm | 7,468 | 42 |
 | Gendarmenmarkt | 16,845 | 53 |
 
 Software rasteriser, 1600 by 900: 3 to 5 fps.
+
+`npm run verify` also reads each frame back at 64 by 36 and describes it: how
+much of it is lit, how many tones are in it, and what share of neighbouring
+pixels differ enough to count as an edge. A city frame runs from 15 to 52 per
+cent edges, so a frame under five per cent fails the run. This is not
+decoration. The Reichstag viewpoint spent weeks pointing at the inside of a
+generated building, with a wall a hundred millimetres from the camera, and the
+screenshot went on being saved and never looked at. Edges rather than colour,
+because a colour test does not survive a sunset or a blue grey pavement: the
+first version of this check called Pariser Platz empty.
 
 **No measurement on real hardware, and none on a phone.** The build environment
 has no GPU and no device to test on, so the 60 fps on integrated graphics and

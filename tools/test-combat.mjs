@@ -24,6 +24,9 @@ async function run() {
       '--ignore-gpu-blocklist', '--no-sandbox', '--disable-dev-shm-usage'],
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  // A software rasteriser needs longer than the thirty second default to hand
+  // back a frame, on this machine and on a CI runner alike.
+  page.setDefaultTimeout(180000);
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)); });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
