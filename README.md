@@ -244,6 +244,30 @@ The rest are in [docs/screenshots](docs/screenshots), and
 second walk from the Gate down Unter den Linden to the foot of the Fernsehturm.
 `npm run clip` records it, straight from the page.
 
+## Deploying
+
+The live site is at <https://bjoern-sellnau.github.io/ld-spreefall/>.
+
+The Pages source is **GitHub Actions**, so `.github/workflows/pages.yml` is what
+publishes it. On every push it runs the unit tests, fetches a live OpenStreetMap
+extract from the Overpass API, builds the world bundle and `dist/`, and deploys
+that. The runners can reach Overpass, so **the deployed city is real map data**,
+not the offline fallback described above. The Overpass fetch takes three to five
+minutes, which is most of the run. The `Record which source was used` step prints
+which dataset the build actually got, so a silent fallback cannot go unnoticed.
+
+The other way to publish this repository is **Deploy from a branch**, where
+GitHub serves the branch contents as they are and the Actions workflow never
+deploys. That path needs the built bundle in the repository rather than
+gitignored, which is why `public/world.bin` and `public/world.json` are committed
+and there is a `.nojekyll` at the root. They are redundant now that Actions does
+the deploying. They are also build output, so as long as they are kept, run
+`npm run world` and commit the result after changing anything under `tools/`, or
+a branch served site would go on serving the old city.
+
+To host it anywhere else: run `npm run build` and copy `dist/`. There is no
+backend, no environment variable, and no build step at the far end.
+
 ## Attribution and licence
 
 Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors,
@@ -256,43 +280,3 @@ geometry in `public/world.bin` is a produced work in ODbL terms: it is generated
 from OSM data and is distributed with the attribution above.
 
 The code in this repository is offered under the MIT licence.
-
-## Deploying
-
-The live site is at <https://bjoern-sellnau.github.io/ld-spreefall/>.
-
-There are two ways this repository can reach that URL, and which one is in use
-is a repository setting under Settings, Pages.
-
-**Deploy from a branch**, which is what is switched on now. GitHub serves the
-branch contents as they are, so the built world bundle has to be in the
-repository: `public/world.bin` and `public/world.json` are committed for exactly
-that reason, along with a `.nojekyll` so the build is a plain copy. They are
-build output, so after changing anything in `tools/` run `npm run world` and
-commit the result, or the site will still be serving the old city. This path
-serves whatever dataset was used to build those two files, which here is the
-offline fallback described above.
-
-**GitHub Actions**, which is the better of the two. Set the Pages source to
-GitHub Actions and `.github/workflows/pages.yml` takes over: it runs the unit
-tests, fetches a live OpenStreetMap extract, builds the world and `dist/`, and
-publishes that. The runners can reach Overpass, so the deployed city is real
-map data rather than the fallback. On the last run the Overpass fetch took three
-minutes and twenty six seconds and everything downstream of it passed, so the
-only thing that path needs is the setting.
-
-For the Actions path, two things have to be true:
-
-1. **The Pages source has to be GitHub Actions**, not a branch. While it is set
-   to a branch, `actions/configure-pages` fails with "Get Pages site failed" and
-   the deploy job is skipped, which is what every run of this workflow has done
-   so far. Everything before that step passes.
-2. **The workflow has to run on a branch the `github-pages` environment allows.**
-   It is wired to `main`, `master` and `claude/**`, so merging to the default
-   branch will deploy.
-
-The `Record which source was used` step in the workflow prints which dataset the
-build actually used.
-
-To host it anywhere else: run `npm run build` and copy `dist/`. There is no
-backend, no environment variable, and no build step at the far end.
