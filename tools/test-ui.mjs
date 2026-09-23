@@ -195,14 +195,33 @@ async function run() {
   check('H opens the help panel', await page.isVisible('#helppanel'));
   await page.keyboard.press('KeyH');
 
-  await page.keyboard.press('Digit1');
+  // The number row carries the weapons now, so the tiers are on the function
+  // keys, and the number row is checked for what it actually does.
+  await page.keyboard.press('F1');
   await page.waitForTimeout(1400);
-  check('1 drops to the low quality tier',
+  check('F1 drops to the low quality tier',
     await page.evaluate(() => window.spreefall.renderer.quality) === 'low');
-  await page.keyboard.press('Digit3');
+  await page.keyboard.press('F3');
   await page.waitForTimeout(1400);
-  check('3 returns to high',
+  check('F3 returns to high',
     await page.evaluate(() => window.spreefall.renderer.quality) === 'high');
+
+  await page.keyboard.press('Digit2');
+  await page.waitForTimeout(500);
+  check('2 brings up the shotgun',
+    await page.evaluate(() => window.spreefall.weapon.id) === 'shotgun');
+  await page.keyboard.press('Digit6');
+  await page.waitForTimeout(500);
+  const banana = await page.evaluate(() => ({
+    id: window.spreefall.weapon.id,
+    label: document.getElementById('weaponname').textContent,
+  }));
+  check('6 is the banana, and the interface says so',
+    banana.id === 'banana' && banana.label === 'BANANA', JSON.stringify(banana));
+  await page.keyboard.press('KeyQ');
+  await page.waitForTimeout(500);
+  check('Q goes back to what you had before',
+    await page.evaluate(() => window.spreefall.weapon.id) === 'shotgun');
 
   await browser.close();
 

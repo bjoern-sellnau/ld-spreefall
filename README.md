@@ -105,8 +105,10 @@ What is under the hood:
   full magazine of the M16 peaks about five degrees up and leaves two behind.
 - Grenades, rockets, C4 and bananas are real objects with gravity that bounce
   off the actual walls of actual buildings, because they collide against the
-  same raycast the bullets use. A blast damages everything inside its radius
-  that it can see, including you. C4 sticks where it lands and waits.
+  same raycast the bullets use, and against whoever is standing in the way: the
+  first version of the rocket flew through the man it was aimed at and went off
+  on the wall behind him. A blast damages everything inside its radius that it
+  can see, including you. C4 sticks where it lands and waits.
 - Drones patrol, pursue, attack and evade. They steer with four horizontal probes
   and a ground clearance term, so they do not fly into walls, and they re-test
   line of sight every 0.22 s rather than every frame, on a rota, so the cost is

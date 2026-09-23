@@ -140,6 +140,13 @@ async function main() {
   const effects = new Effects();
   soldiers = new Soldiers(world, (x, y, z) => combat.isSanctuary(x, y, z));
   soldiers.hazards = () => projectiles.hazards();
+  // A rocket goes off on whoever it hits, not on the wall behind them.
+  projectiles.hitActors = (x, y, z, dx, dy, dz, maxT) => {
+    const d = drones.raycast(x, y, z, dx, dy, dz, maxT);
+    const sHit = soldiers.raycast(x, y, z, dx, dy, dz, d ? d.t : maxT);
+    if (sHit) return { t: sHit.t, target: sHit.soldier };
+    return d ? { t: d.t, target: d.drone } : null;
+  };
   weapon.soldiers = soldiers;
 
   // --- spawn ---------------------------------------------------------------

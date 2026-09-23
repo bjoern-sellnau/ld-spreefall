@@ -46,6 +46,11 @@ export class Projectiles {
     for (let i = 0; i < MAX; i++) this.pool.push(new Body());
     this.active = [];
     this.onBounce = null;
+    // Set by the game layer: the same raycast the bullets use against drones
+    // and soldiers. Without it a rocket flies through the man it was aimed at
+    // and goes off on the wall behind him, which is exactly what the first
+    // version of this did.
+    this.hitActors = null;
   }
 
   clear() {
@@ -153,7 +158,18 @@ export class Projectiles {
         if (speed < 1e-6) break;
         const dx = b.vx / speed, dy = b.vy / speed, dz = b.vz / speed;
         const dist = speed * remaining + b.spec.radius;
-        const hit = w.raycast(b.x, b.y, b.z, dx, dy, dz, dist);
+        let hit = w.raycast(b.x, b.y, b.z, dx, dy, dz, dist);
+        // Whoever is in the way counts too, and the nearer of the two wins.
+        if (this.hitActors) {
+          const actor = this.hitActors(b.x, b.y, b.z, dx, dy, dz, hit ? hit.t : dist);
+          if (actor && (!hit || actor.t < hit.t)) {
+            hit = {
+              t: actor.t, kind: 'actor', target: actor.target,
+              x: b.x + dx * actor.t, y: b.y + dy * actor.t, z: b.z + dz * actor.t,
+              nx: -dx, ny: -dy, nz: -dz,
+            };
+          }
+        }
         if (!hit) {
           b.x += b.vx * remaining;
           b.y += b.vy * remaining;
