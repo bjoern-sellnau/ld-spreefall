@@ -22,7 +22,7 @@ the sound and the data pipeline are all written from scratch.
 | Audio | raw Web Audio API, every sound synthesised at run time |
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
 | Shipped as | one HTML file, JS modules, one binary bundle, no backend |
-| Payload | 9.42 MB, 2.28 MB over the wire with gzip |
+| Payload | 21.33 MB deployed, 7.90 MB over the wire with gzip, against a 25 MB budget |
 | Third party code at run time | none |
 
 ## Try it
@@ -106,6 +106,39 @@ What is under the hood:
 - Every sound is synthesised: a noise burst through a swept bandpass for the shot,
   a rotor bed whose level and pitch follow the nearest drone, and two different
   confirms for a hull hit and a core hit.
+
+## Two cities, and which one you are looking at
+
+The sandbox this was built in denies every OpenStreetMap host, so the local
+build runs on the offline fallback described below. The deploy has no such
+limit: GitHub Actions fetches the live Overpass extract on every push, and the
+site at the link above is built from it. They are not the same city.
+
+| | offline fallback | deployed, live OSM |
+|---|---|---|
+| Source | 1.47 MB of generated OSM XML | 22.78 MB from overpass-api.de |
+| Buildings | 1,672 | 3,354 |
+| Street | 44.3 km | 364.1 km |
+| Trees | 3,728 | 5,582 |
+| Stelae | 2,711 | 2,711 |
+| Triangles | 132,397 | 413,173 |
+| Payload | 9.42 MB, 2.28 MB gzipped | 21.33 MB, 7.90 MB gzipped |
+
+Everything this project knows about Berlin that OpenStreetMap does not is in
+`tools/berlin-facts.mjs`: the surveyed footprints of the landmarks, the eleven
+card texts, and the size and count of the stelae. `tools/annotate.mjs` attaches
+those facts to whatever extract the build was handed, and it prefers the real
+feature every time. On the live extract it finds 21 of the 23 landmarks already
+mapped and gives them their proper shapes on their real footprints, adds the two
+it cannot find, and hangs the stelae field on the memorial outline that OSM
+already draws. Only where the data has nothing does a surveyed footprint get
+used as it stands.
+
+This matters more than it sounds. Every piece of curated content rides on those
+facts, including the weapons free zone: the game finds the memorial through the
+landmark card, so without this pass the deployed city would have no memorial,
+no stelae and no sanctuary at all, which was exactly the state of it until the
+build log was read.
 
 ## What is real and what is generated
 

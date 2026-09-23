@@ -38,18 +38,26 @@ Stages, each one a separate module so it can be tested on its own:
    Overpass, that file is used untouched.
 3. `osm-xml.mjs` is our own parser. A single pass tokeniser over the XML text
    producing `{nodes, ways, relations}` with tag maps. No XML library.
-4. `earcut.mjs` is our own ear clipping triangulator with hole support. The hole
+4. `annotate.mjs` attaches the surveyed facts in `berlin-facts.mjs` to the
+   parsed document: the eleven landmark cards, the size and count of the stelae,
+   and the bespoke shape of each landmark. Real OSM has never heard of our
+   `spreefall:*` tags, so without this pass a build from the live extract has no
+   memorial, no landmark cards and no weapons free zone, while a build from the
+   fallback has all three. It prefers the real feature every time, by distance,
+   area and name, and only invents a footprint where the data has nothing. It is
+   idempotent, so on the fallback it is a no op.
+5. `earcut.mjs` is our own ear clipping triangulator with hole support. The hole
    elimination step follows the bridge method described by Eberly, "Triangulation
    by Ear Clipping" (2002), section 3: find the hole vertex with maximum x, cast
    a ray to the right, split the outer ring with a two sided bridge.
-5. `build-world.mjs` turns the parsed OSM into geometry:
+6. `build-world.mjs` turns the parsed OSM into geometry:
    buildings (walls, flat, gabled, hipped and domed roofs), roads (ribbon meshes
    with joins), pedestrian areas, water, parks and grass, trees, rails and trams,
    the procedural stelae field, and the landmark specials.
-6. Tiling: the world is cut into 100 m by 100 m tiles. Every triangle is assigned
+7. Tiling: the world is cut into 100 m by 100 m tiles. Every triangle is assigned
    to the tile containing its centroid. Per tile we write an interleaved vertex
    buffer, an index buffer, and a collision blob.
-7. `bundle.mjs` writes `public/world.bin` plus `public/world.json`.
+8. `bundle.mjs` writes `public/world.bin` plus `public/world.json`.
 
 ### 2.1 Vertex format, 20 bytes, interleaved
 
@@ -254,3 +262,13 @@ Recorded here as they happen, per the working style.
   Murdered Jews of Europe is a weapons free zone: the weapon holsters itself
   inside it and the drones will not enter. Both are enforced in the game layer
   and covered by `tools/test-combat.mjs`.
+
+- 2026-09-23: the deployed city and the city built here are not the same. The
+  sandbox cannot reach OpenStreetMap, so it builds from the fallback; the
+  GitHub Actions deploy fetches the live extract. Until the build log was read,
+  that difference silently cost the deployed site every piece of curated
+  content, because it all hung off tags that only the fallback writes. The
+  deploy reported `0 stelae` and nobody had looked. `tools/annotate.mjs` now
+  attaches the surveyed facts to either source, and a second workflow renders
+  the live city in a browser and fights drones in it, because the log of that
+  run is the only way anyone here can see it.

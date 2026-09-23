@@ -97,7 +97,7 @@ export function annotate(osm, { log = () => {} } = {}) {
     areas.push({ tags: rel.tags, area, cx, cz });
   }
 
-  const report = { cards: 0, landmarksTagged: 0, landmarksAdded: 0, memorial: 'none' };
+  const report = { cards: 0, landmarksTagged: 0, landmarksAdded: 0, added: [], memorial: 'none' };
 
   // --- the landmark cards -------------------------------------------------
   // These carry the name, the radius and the sentence of history, and the game
@@ -236,10 +236,13 @@ export function annotate(osm, { log = () => {} } = {}) {
         'spreefall:kind': b.kind,
       });
       report.landmarksAdded++;
+      report.added.push(b.key);
     }
   }
 
   log(`facts: ${report.cards} cards added, ${report.landmarksTagged} landmarks found in the data, `
-    + `${report.landmarksAdded} added from the survey, stelae field ${report.memorial}`);
+    + `${report.landmarksAdded} added from the survey`
+    + `${report.added.length ? ` (${report.added.join(', ')})` : ''}`
+    + `, stelae field ${report.memorial}`);
   return report;
 }
