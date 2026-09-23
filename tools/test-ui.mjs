@@ -56,6 +56,18 @@ async function run() {
   const mode2 = await page.evaluate(() => window.spreefall.state.mode);
   check('clicking lands the camera and starts the walk', mode2 === 'walk', `mode ${mode2}`);
 
+  // This suite is about the interface, so the fight is switched off for it.
+  // On the live city it is not, and the first run of this file there ended with
+  // the player shot dead halfway through: the systems down panel came up over
+  // the whole screen and every later click landed on that instead of on what it
+  // was aimed at.
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.enabled = false; s.drones.reset();
+    s.soldiers.enabled = false; s.soldiers.reset();
+    s.combat.reset();
+  });
+
   // --- landmark cards ------------------------------------------------------
   await page.evaluate(() => {
     const s = window.spreefall;
@@ -113,6 +125,12 @@ async function run() {
   await page.waitForTimeout(400);
 
   // --- shareable URL -------------------------------------------------------
+  // The pointer is locked, and a synthetic click jumps the mouse across the
+  // page, which the game reads as an enormous look. That is right for a game
+  // and wrong for a test, so the lock goes before anything is clicked and the
+  // view is set after.
+  await page.evaluate(() => { window.spreefall.input.exitLock(); });
+  await page.waitForTimeout(200);
   await page.evaluate(() => { const s = window.spreefall; s.teleport(420, -40); s.look(-88, 3); s.setTime(12.25); });
   await page.waitForFunction(() => /^#4[12]\d(\.\d)?,/.test(location.hash), null, { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(400);

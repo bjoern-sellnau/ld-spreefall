@@ -123,6 +123,28 @@ async function run() {
     `${troops.dist} m, ${troops.shots} rounds, ${troops.before} to ${troops.after}`);
   check('and the kill is credited', troops.kills === 1, `kills ${troops.kills}`);
 
+  // --- the rocket ----------------------------------------------------------
+  const rocket = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false;
+    s.teleport(81, 0); s.look(90, 0);
+    s.camera.update(16 / 9);
+    const target = s.spawnSoldier(-45, 0);
+    s.weapon.select('rpg');
+    s.weapon.cooldown = 0;
+    s.weapon.spread = 0;
+    const before = target.health;
+    s.shoot();
+    const born = s.projectiles.count;
+    let flight = 0;
+    for (let i = 0; i < 60 * 4 && s.projectiles.count; i++) { s.projectiles.update(1 / 60); flight++; }
+    return { born, flightMs: Math.round(flight / 60 * 1000), before,
+      after: Math.round(target.health), dead: target.state === 5 };
+  });
+  check('a rocket crosses the square and goes off on what it hits', rocket.dead,
+    `${rocket.flightMs} ms of flight, ${rocket.before} to ${rocket.after}`);
+
   // --- the banana ----------------------------------------------------------
   const slip = await page.evaluate(async () => {
     const s = window.spreefall;
