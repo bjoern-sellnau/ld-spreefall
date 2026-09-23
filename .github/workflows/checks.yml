@@ -32,7 +32,7 @@ concurrency:
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -66,6 +66,14 @@ jobs:
       - name: Serve
         run: node tools/serve.mjs & sleep 2
       - name: Render the fixed viewpoints and fail on any console error
+        # Smaller and cheaper than the reference shots taken by hand: the live
+        # city is three times the geometry, and a software rasteriser charges
+        # for every pixel of it. What this run is checking is that the city is
+        # there and that nothing throws.
+        env:
+          SPREEFALL_WIDTH: '1024'
+          SPREEFALL_HEIGHT: '576'
+          SPREEFALL_QUALITY: low
         run: node tools/verify.mjs
       - name: Fight drones in it
         run: node tools/test-combat.mjs

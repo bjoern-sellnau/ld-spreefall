@@ -10,6 +10,13 @@ import { chromium } from 'playwright';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SHOTS = path.join(ROOT, 'docs', 'screenshots');
 const URL_BASE = process.env.SPREEFALL_URL || 'http://localhost:8080/';
+// The deployed city is three times the size of the one this builds from, and a
+// software rasteriser takes minutes a frame on it at full size. CI asks for the
+// smaller frame and the low tier: it is checking that a city is there and that
+// nothing throws, not judging the bloom.
+const VIEW_W = parseInt(process.env.SPREEFALL_WIDTH || '1600', 10);
+const VIEW_H = parseInt(process.env.SPREEFALL_HEIGHT || '900', 10);
+const QUALITY_TIER = process.env.SPREEFALL_QUALITY || '';
 
 // Fixed viewpoints, so a screenshot can be compared across builds.
 // x and z are metres in the local plane, yaw and pitch in degrees.
@@ -58,7 +65,7 @@ async function run() {
       '--no-sandbox',
     ],
   });
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({ viewport: { width: VIEW_W, height: VIEW_H }, deviceScaleFactor: 1 });
 
   const errors = [];
   const logs = [];
@@ -82,7 +89,7 @@ async function run() {
   console.log(`renderer: ${info.renderer}`);
   console.log(`world: ${JSON.stringify(info.totals)}`);
 
-  await page.evaluate(() => {
+  await page.evaluate((tier) => {
     const s = window.spreefall;
     s.skipToWalk();
     // These are reference shots of the city, compared across builds, so the
@@ -90,7 +97,8 @@ async function run() {
     s.state.holstered = true;
     s.drones.enabled = false;
     s.drones.reset();
-  });
+    if (tier) s.setQuality(tier);
+  }, QUALITY_TIER);
   await page.waitForTimeout(1200);
 
   // Reads the canvas back at a coarse resolution and describes it: how bright

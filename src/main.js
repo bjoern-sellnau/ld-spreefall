@@ -730,6 +730,7 @@ async function main() {
     look(yawDeg, pitchDeg) { camera.yaw = yawDeg * DEG; camera.pitch = pitchDeg * DEG; },
     setTime(t) { renderer.timeOfDay = t; el.tod.value = String(t); },
     debugMode(n) { renderer.debugMode = n | 0; },
+    setQuality(name) { setQuality(name); },
     viewmodelPose: { hip: VM_HIP, aim: VM_AIM },
     skipToWalk() {
       el.title.classList.add('hidden');
