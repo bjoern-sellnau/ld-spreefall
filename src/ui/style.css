@@ -51,6 +51,27 @@ html, body {
   padding: 2rem 1.5rem;
 }
 
+.markdef {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* The Brandenburg Gate mark, the same drawing as the favicon. */
+.logo {
+  display: block;
+  width: clamp(92px, 15vw, 148px);
+  height: auto;
+  margin: 0 auto 1.15rem;
+  fill: var(--accent);
+  filter: drop-shadow(0 3px 24px rgba(0, 0, 0, 0.7));
+}
+.logo.big {
+  width: clamp(126px, 23vw, 236px);
+  margin-bottom: 1.5rem;
+}
+
 .wordmark {
   font: 700 clamp(28px, 6vw, 54px)/1 ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.16em;

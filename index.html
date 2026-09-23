@@ -4,16 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d10">
-<title>SPREE|FALL, a walkable Berlin</title>
+<title>SPREE|FALL</title>
 <meta name="description" content="Central Berlin rebuilt from OpenStreetMap data and rendered in raw WebGL2. Walk from the Brandenburg Gate to the Fernsehturm in your browser.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0d10'/%3E%3Crect x='6' y='12' width='3' height='14' fill='%23d8c9a8'/%3E%3Crect x='11' y='12' width='3' height='14' fill='%23d8c9a8'/%3E%3Crect x='16' y='12' width='3' height='14' fill='%23d8c9a8'/%3E%3Crect x='21' y='12' width='3' height='14' fill='%23d8c9a8'/%3E%3Crect x='4' y='8' width='22' height='4' fill='%23d8c9a8'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='11' fill='%230b0d10'/%3E%3Cpath transform='translate(0 10)' fill='%23e2c98d' d='M27.3 .4h1.7v2.2h-1.7zM29.9 .4h1.7v2.2h-1.7zM32.5 .4h1.7v2.2h-1.7zM35.1 .4h1.7v2.2h-1.7zM26 2.6h12v2.4h-12zM11 5h42v6h-42zM2 11h60v6h-60zM6.3 17h7.4v2.2h-7.4zM15.1 17h7.4v2.2h-7.4zM23.9 17h7.4v2.2h-7.4zM32.7 17h7.4v2.2h-7.4zM41.5 17h7.4v2.2h-7.4zM50.3 17h7.4v2.2h-7.4zM7.5 19.2h5v19.8h-5zM16.3 19.2h5v19.8h-5zM25.1 19.2h5v19.8h-5zM33.9 19.2h5v19.8h-5zM42.7 19.2h5v19.8h-5zM51.5 19.2h5v19.8h-5zM4 39h56v2.6h-56zM1 41.6h62v2.4h-62z'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="src/ui/style.css">
 </head>
 <body>
 <canvas id="view"></canvas>
 
+<svg class="markdef" aria-hidden="true" focusable="false">
+  <symbol id="gatemark" viewBox="0 0 64 44">
+    <path d="M27.3 .4h1.7v2.2h-1.7zM29.9 .4h1.7v2.2h-1.7zM32.5 .4h1.7v2.2h-1.7zM35.1 .4h1.7v2.2h-1.7zM26 2.6h12v2.4h-12zM11 5h42v6h-42zM2 11h60v6h-60zM6.3 17h7.4v2.2h-7.4zM15.1 17h7.4v2.2h-7.4zM23.9 17h7.4v2.2h-7.4zM32.7 17h7.4v2.2h-7.4zM41.5 17h7.4v2.2h-7.4zM50.3 17h7.4v2.2h-7.4zM7.5 19.2h5v19.8h-5zM16.3 19.2h5v19.8h-5zM25.1 19.2h5v19.8h-5zM33.9 19.2h5v19.8h-5zM42.7 19.2h5v19.8h-5zM51.5 19.2h5v19.8h-5zM4 39h56v2.6h-56zM1 41.6h62v2.4h-62z"/>
+  </symbol>
+</svg>
+
 <div id="loading" class="overlay">
   <div class="loadbox">
+    <svg class="logo" viewBox="0 0 64 44" role="img" aria-label="Brandenburg Gate"><use href="#gatemark"/></svg>
     <div class="wordmark">SPREE<span>|</span>FALL</div>
     <div class="tagline">Central Berlin, rebuilt from OpenStreetMap</div>
     <div class="bar"><i id="loadbar"></i></div>
@@ -23,6 +30,7 @@
 
 <div id="title" class="overlay hidden">
   <div class="titlebox">
+    <svg class="logo big" viewBox="0 0 64 44" role="img" aria-label="Brandenburg Gate"><use href="#gatemark"/></svg>
     <div class="wordmark big">SPREE<span>|</span>FALL</div>
     <p class="blurb">Every building, street, tree and bend of the river here comes from
     OpenStreetMap. The renderer, the physics and the sound are written from scratch
