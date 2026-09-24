@@ -11,7 +11,14 @@ export class Loop {
     this.last = 0;
     this.running = false;
     this.frame = 0;
-    this.stats = { fps: 0, frameMs: 0, simSteps: 0, drawCalls: 0, triangles: 0, tiles: 0 };
+    // frameMs is the cost of our own render call. intervalMs is the wall clock
+    // between frames, which is the only number that knows about the GPU: the
+    // draw calls return long before the work is done, so a dynamic resolution
+    // controller fed frameMs would think a machine at four frames a second had
+    // plenty of headroom.
+    this.stats = {
+      fps: 0, frameMs: 0, intervalMs: 16.7, simSteps: 0, drawCalls: 0, triangles: 0, tiles: 0,
+    };
     this._fpsAcc = 0;
     this._fpsFrames = 0;
     this._raf = null;
@@ -56,6 +63,7 @@ export class Loop {
     this.onRender(alpha, elapsed);
     const t1 = performance.now();
 
+    this.stats.intervalMs = this.stats.intervalMs * 0.9 + Math.min(500, elapsed * 1000) * 0.1;
     this.stats.simSteps = steps;
     this.stats.frameMs = this.stats.frameMs * 0.9 + (t1 - t0) * 0.1;
     this._fpsAcc += elapsed;

@@ -79,6 +79,16 @@ export class Renderer {
     this.bloomFbo = [];
     this.width = 1; this.height = 1;
     this.renderScale = 1;
+    // Dynamic resolution. The scene is drawn into a target that shrinks when
+    // frames get expensive and grows back when they are cheap, while the
+    // interface stays at native size because text at 62 per cent looks broken
+    // in a way a slightly softer skyline does not.
+    this.dynamicScale = 1;
+    this.targetFrameMs = 1000 / 60;
+    this.dynamicRange = { min: 0.55, max: 1 };
+    this.dynamicEnabled = true;
+    this._frameAvg = this.targetFrameMs;
+    this._scaleHoldMs = 0;
 
     this.sunDir = new Float32Array(3);
     this.sunCol = new Float32Array(3);
@@ -122,13 +132,54 @@ export class Renderer {
     }
   }
 
+  /**
+   * Folds one frame's cost into the running average and decides whether the
+   * scene target should shrink or grow. Called once a frame with the real
+   * elapsed milliseconds.
+   *
+   * The average is heavily smoothed and every change is followed by a hold,
+   * because a controller that reacts to a single frame will oscillate: it
+   * shrinks, the frame gets cheap, it grows, the frame gets dear, for ever.
+   *
+   * @returns {boolean} true when the target needs rebuilding
+   */
+  updateDynamicScale(frameMs) {
+    if (!this.dynamicEnabled) return false;
+    this._frameAvg = this._frameAvg * 0.88 + frameMs * 0.12;
+    // The hold is a duration rather than a count of frames: on a machine at
+    // four frames a second, thirty frames is seven seconds of sitting at the
+    // wrong resolution.
+    this._scaleHoldMs -= frameMs;
+    if (this._scaleHoldMs > 0) return false;
+
+    const target = this.targetFrameMs;
+    const r = this.dynamicRange;
+    let next = this.dynamicScale;
+    // Twenty per cent over budget: give up pixels. Thirty per cent under, and
+    // the average is steady: take some back, in smaller steps than it gave.
+    if (this._frameAvg > target * 1.2 && this.dynamicScale > r.min) {
+      next = Math.max(r.min, this.dynamicScale - 0.08);
+    } else if (this._frameAvg < target * 0.7 && this.dynamicScale < r.max) {
+      next = Math.min(r.max, this.dynamicScale + 0.04);
+    }
+    if (Math.abs(next - this.dynamicScale) < 0.001) return false;
+    this.dynamicScale = next;
+    this._scaleHoldMs = 450;       // settle before moving again
+    return true;
+  }
+
+  get effectiveScale() {
+    return this.renderScale * (this.dynamicEnabled ? this.dynamicScale : 1);
+  }
+
   resize(cssWidth, cssHeight, dpr) {
     const gl = this.gl;
     this.cssWidth = cssWidth;
     this.cssHeight = cssHeight;
     this.dpr = dpr;
-    const w = Math.max(2, Math.round(cssWidth * dpr * this.renderScale));
-    const h = Math.max(2, Math.round(cssHeight * dpr * this.renderScale));
+    const scale = this.renderScale * (this.dynamicEnabled ? this.dynamicScale : 1);
+    const w = Math.max(2, Math.round(cssWidth * dpr * scale));
+    const h = Math.max(2, Math.round(cssHeight * dpr * scale));
     if (w === this.width && h === this.height) return;
     this.width = w; this.height = h;
     if (this.sceneFbo) this.sceneFbo.dispose();

@@ -204,6 +204,7 @@ async function main() {
     holstered: false,
     muzzle: 0,
     sway: { x: 0, y: 0 },
+    timeScale: 1,
     charging: false,
     shieldTimer: 0,
     recoilApplied: { pitch: 0, yaw: 0 },
@@ -852,6 +853,10 @@ async function main() {
     }
 
     tiles.updateResidency(camera.position[0], camera.position[2], loop.frame);
+    // Dynamic resolution, fed the real cost of the last frame. When it decides
+    // to move, the scene target is rebuilt at the new size; the page and the
+    // interface never change.
+    if (renderer.updateDynamicScale(loop.stats.intervalMs)) resize();
     renderer.render(camera, state.time, w, h);
 
     if (photo.pendingShot) {
@@ -931,17 +936,20 @@ async function main() {
       const ts = tiles.stats;
       el.debug.textContent =
         `fps        ${loop.stats.fps.toFixed(1)}\n`
-        + `frame      ${loop.stats.frameMs.toFixed(2)} ms\n`
+        + `frame      ${loop.stats.frameMs.toFixed(2)} ms cpu, ${loop.stats.intervalMs.toFixed(1)} ms wall\n`
         + `draw calls ${s.drawCalls} (+${s.shadowDraws} shadow)\n`
         + `triangles  ${s.triangles.toLocaleString()}\n`
         + `tiles      ${ts.visible} visible, ${ts.resident} resident\n`
         + `gpu bytes  ${(ts.bytes / 1e6).toFixed(1)} MB\n`
-        + `quality    ${renderer.quality}\n`
+        + `quality    ${renderer.quality}, scale ${(renderer.effectiveScale * 100).toFixed(0)}%`
+        + ` (${renderer.width} by ${renderer.height})\n`
+        + `drones     ${drones.count} live, soldiers ${soldiers.count} live\n`
+        + `reflex     ${(reflex.fraction * 100).toFixed(0)}%, time ${state.timeScale.toFixed(2)}x\n`
         + `pos        ${camera.position[0].toFixed(1)}, ${camera.position[1].toFixed(1)}, ${camera.position[2].toFixed(1)}\n`
         + `ground     ${player.groundY.toFixed(2)}  surface ${['asphalt', 'cobble', 'grass', 'water', 'gravel', 'stone'][player.surface]}\n`
         + `sun alt    ${(renderer.sunAltitude * 180 / Math.PI).toFixed(1)} deg, night ${renderer.night.toFixed(2)}\n`
         + `walked     ${(player.distanceWalked / 1000).toFixed(3)} km\n`
-        + `drones     ${drones.count} live, ${drones.engaged} engaged, tier ${combat.tier + 1}\n`
+        + `engaged    ${drones.engaged + soldiers.engaged}, tier ${combat.tier + 1}\n`
         + `weapon     ${weapon.ammo}/${weapon.reserve}  spread ${(weapon.spread * 1000).toFixed(1)} mrad  `
         + `accuracy ${(weapon.accuracy * 100).toFixed(0)}%\n`
         + `health     ${combat.health.toFixed(0)}  score ${combat.score}  kills ${combat.kills}`;
