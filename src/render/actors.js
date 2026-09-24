@@ -6,7 +6,7 @@ import { createProgram } from '../engine/gl.js';
 import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
-  SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS,
+  SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_SHADOW_VS,
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
@@ -176,7 +176,7 @@ export function buildWeaponMesh() {
   m.box(0, 0.104, -0.400, 0.036, 0.006, 0.066, 3);      // sight hood
   m.box(0, 0.088, -0.400, 0.006, 0.014, 0.004, 3);      // the post you aim with
   // Flash cone at the muzzle. Invisible unless the shader is told otherwise.
-  m.cylinder(0, 0.012, -0.894, 0.005, 0.070, -0.170, 10, 4, 'z');
+  m.cylinder(0, 0.012, -0.894, 0.005, 0.070, -0.170, 10, 7, 'z');
   return m;
 }
 
@@ -195,7 +195,7 @@ export function buildShotgunMesh() {
   m.box(0, -0.008, -0.560, 0.046, 0.044, 0.130, 2);      // pump
   m.box(0, -0.092, -0.300, 0.044, 0.110, 0.060, 2);      // grip
   m.box(0, 0.040, -0.372, 0.010, 0.014, 0.010, 3);       // bead
-  m.cylinder(0, 0.020, -0.802, 0.006, 0.090, -0.200, 10, 4, 'z');
+  m.cylinder(0, 0.020, -0.802, 0.006, 0.090, -0.200, 10, 7, 'z');
   return m;
 }
 
@@ -209,7 +209,7 @@ export function buildRpgMesh() {
   // The warhead, sticking out of the front where you can see it.
   m.cylinder(0, 0.000, -0.900, 0.052, 0.052, -0.120, 12, 1, 'z');
   m.cylinder(0, 0.000, -1.020, 0.052, 0.006, -0.130, 12, 1, 'z');   // the nose
-  m.cylinder(0, 0.000, -0.902, 0.006, 0.130, -0.260, 10, 4, 'z');
+  m.cylinder(0, 0.000, -0.902, 0.006, 0.130, -0.260, 10, 7, 'z');
   return m;
 }
 
@@ -225,7 +225,7 @@ export function buildGrenadeMesh() {
 
 export function buildC4Mesh() {
   const m = new MeshBuild();
-  m.box(0, -0.020, -0.330, 0.150, 0.075, 0.110, 2);      // the brick
+  m.box(0, -0.020, -0.330, 0.150, 0.075, 0.110, 5);      // the brick
   m.box(0, 0.024, -0.330, 0.090, 0.014, 0.060, 0);       // the taped detonator
   m.box(0.030, 0.034, -0.330, 0.012, 0.010, 0.012, 3);   // the light
   m.box(-0.086, -0.020, -0.300, 0.026, 0.060, 0.050, 0); // the trigger in your hand
@@ -243,7 +243,7 @@ export function buildBananaMesh() {
     const z = -0.330 - Math.cos(a) * R * 0.45;
     const y = -0.020 + Math.cos(a * 1.6) * 0.020 - 0.02;
     const r = 0.030 * (1 - Math.abs(t) * 1.3);
-    if (r > 0.004) m.box(x, y, z, r * 2, r * 2, 0.040, 3);
+    if (r > 0.004) m.box(x, y, z, r * 2, r * 2, 0.040, 6);
   }
   m.box(Math.sin(-0.75) * R * 0.5, -0.048, -0.330 - Math.cos(-0.75) * R * 0.45, 0.014, 0.014, 0.030, 2);
   return m;
@@ -341,6 +341,7 @@ export class Actors {
     // fails with INVALID_OPERATION and renders nothing at all.
     this.progDrone.use().int('uShadow0', 4).int('uShadow1', 5);
     this.progSoldier = createProgram(gl, SOLDIER_VS, DRONE_FS, 'soldier');
+    this.progSoldierShadow = createProgram(gl, SOLDIER_SHADOW_VS, DRONE_SHADOW_FS, 'soldierShadow');
     this.progSoldier.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
@@ -549,6 +550,17 @@ export class Actors {
     gl.bindVertexArray(this.drone.vao);
     gl.drawElementsInstanced(gl.TRIANGLES, this.drone.count, this.drone.indexType, 0,
       this.drone.instanceCount);
+    gl.bindVertexArray(null);
+    return 1;
+  }
+
+  drawSoldierShadows(lightViewProj) {
+    if (!this.soldier.instanceCount) return 0;
+    const gl = this.gl;
+    this.progSoldierShadow.use().mat4('uLightViewProj', lightViewProj);
+    gl.bindVertexArray(this.soldier.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, this.soldier.count, this.soldier.indexType, 0,
+      this.soldier.instanceCount);
     gl.bindVertexArray(null);
     return 1;
   }

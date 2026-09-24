@@ -222,6 +222,11 @@ than one voice per drone, and two different hit confirms for hull and core.
 5. `dist/` deploys to GitHub Pages with no console errors.
 6. The shooter: a drone dies to a burst in a real browser, the Gate stops a shot
    fired at one behind it, and the memorial stays a weapons free zone.
+7. The deployed city is the same city: the surveyed facts reach a build from the
+   live extract, and a browser in CI renders it, fights in it and drives its
+   interface, because nothing here can open the deployed page.
+8. The arsenal: six things to carry, recoil that comes back, explosives that
+   bounce off real walls, and soldiers in the streets who slip on a banana.
 
 ## 7. Deviations from the original brief
 
@@ -290,3 +295,10 @@ Recorded here as they happen, per the working style.
   attaches the surveyed facts to either source, and a second workflow renders
   the live city in a browser and fights drones in it, because the log of that
   run is the only way anyone here can see it.
+
+- 2026-09-24: the targets are drones and soldiers. The drones came first and the
+  reasoning for them stands, but an open world shooter with nothing on the
+  ground is a demo of flight AI, not a game, and the ask was for soldiers. They
+  are hostile militia in a scenario: no insignia, no nation, no faces, and they
+  keep out of the memorial like everything else that carries a weapon here. The
+  one line that does not move is the weapons free zone.

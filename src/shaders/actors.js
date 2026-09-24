@@ -247,6 +247,23 @@ precision highp float;
 void main() {}
 `;
 
+// A soldier's shadow has to lie down when they do, or a dead man goes on
+// casting a standing shadow on the pavement next to his own body.
+export const SOLDIER_SHADOW_VS = `${VERSION}
+precision highp float;
+layout(location = 0) in vec3 aPos;
+layout(location = 5) in vec4 iPosYaw;
+layout(location = 6) in vec4 iState;
+uniform mat4 uLightViewProj;
+void main() {
+  float fc = cos(-iState.x), fs = sin(-iState.x);
+  mat3 fall = mat3(1.0, 0.0, 0.0, 0.0, fc, fs, 0.0, -fs, fc);
+  float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
+  mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
+  gl_Position = uLightViewProj * vec4(rot * (fall * aPos) + iPosYaw.xyz, 1.0);
+}
+`;
+
 // ---------------------------------------------------------------------------
 // Tracers and impact sparks, drawn as camera facing quads with additive blend.
 
@@ -380,6 +397,19 @@ void main() {
   } else if (vPart < 3.5) {
     albedo = vec3(0.10, 0.10, 0.11);               // sight
     rough = 0.25;
+  } else if (vPart < 5.5) {
+    // Plastic explosive in your hands, with the detonator light on it.
+    albedo = vec3(0.70, 0.68, 0.62);
+    rough = 0.85;
+    metal = 0.02;
+    float blink = step(0.5, fract(uCamPos.w * 1.6));
+    emissive = vec3(1.0, 0.1, 0.06) * 2.0 * blink;
+  } else if (vPart < 6.5) {
+    // A banana. It has to read as one at a glance, so it is the one thing in
+    // the hand that is not a shade of gunmetal.
+    albedo = vec3(0.88, 0.74, 0.14);
+    rough = 0.55;
+    metal = 0.04;
   } else {
     // Muzzle flash cone. It is geometry that exists all the time, so it has to
     // take itself out of the picture between shots rather than draw as a black

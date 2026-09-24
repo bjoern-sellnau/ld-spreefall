@@ -359,6 +359,9 @@ worth naming because each of them was invisible until something was checked:
 ![The weapons free zone](docs/screenshots/combat-04-sanctuary.png)
 *Inside the memorial the weapon is holstered and the screen says why.*
 
+![Soldiers on Pariser Platz](docs/screenshots/combat-05-soldiers.png)
+*Soldiers working across Pariser Platz, with a banana on the cobbles.*
+
 The rest are in [docs/screenshots](docs/screenshots), and
 [docs/media/gate-to-tower.webm](docs/media/gate-to-tower.webm) is the eleven
 second walk from the Gate down Unter den Linden to the foot of the Fernsehturm.

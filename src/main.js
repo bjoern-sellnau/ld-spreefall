@@ -730,6 +730,10 @@ async function main() {
       // Hip fire holds the weapon down and to the right. Aiming brings the
       // sight onto the centre line, which is what the narrowed field of view
       // is actually for.
+      // Each weapon may sit differently in the hand; the aim pose is shared,
+      // because aiming means putting the sight on the centre line whatever you
+      // are holding.
+      const hip = weapon.spec.hold ? { ...VM_HIP, ...weapon.spec.hold } : VM_HIP;
       const mix = (a, b) => a + (b - a) * aim;
       // A weight left behind by the turn keeps its own orientation, so in view
       // space it rotates against the look: the translation follows the sway and
@@ -737,12 +741,12 @@ async function main() {
       // back towards the eye. Holstering drops it and turns the muzzle down and
       // away, so it leaves the frame at the bottom rather than across it.
       renderer.viewmodel = {
-        x: mix(VM_HIP.x, VM_AIM.x) + bobX + state.sway.x * 0.30,
-        y: mix(VM_HIP.y, VM_AIM.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
-        z: mix(VM_HIP.z, VM_AIM.z) + kick * 0.030,
-        pitch: mix(VM_HIP.pitch, VM_AIM.pitch) + kick * 0.075 - state.sway.y * 0.5 - hol * 0.95,
-        yaw: mix(VM_HIP.yaw, VM_AIM.yaw) - state.sway.x * 0.8,
-        roll: mix(VM_HIP.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
+        x: mix(hip.x, VM_AIM.x) + bobX + state.sway.x * 0.30,
+        y: mix(hip.y, VM_AIM.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
+        z: mix(hip.z, VM_AIM.z) + kick * 0.030,
+        pitch: mix(hip.pitch, VM_AIM.pitch) + kick * 0.075 - state.sway.y * 0.5 - hol * 0.95,
+        yaw: mix(hip.yaw, VM_AIM.yaw) - state.sway.x * 0.8,
+        roll: mix(hip.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
         muzzle: state.muzzle * (1 - hol),
         weapon: weapon.id,
       };

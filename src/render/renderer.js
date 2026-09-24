@@ -282,6 +282,7 @@ export class Renderer {
 
       if (i === 0 && this.drawActors) {
         draws += this.actors.drawDroneShadows(this.lightVp[i]);
+        draws += this.actors.drawSoldierShadows(this.lightVp[i]);
       }
 
       if (i === 0) {

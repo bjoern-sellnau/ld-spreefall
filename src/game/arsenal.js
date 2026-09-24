@@ -81,6 +81,17 @@ export const WEAPONS = {
   },
 };
 
+/**
+ * Where each one sits in your hands, as an offset over the default rifle pose
+ * in main.js. A rifle is held out at arm's length and a grenade is not, and a
+ * banana held like a rifle is a dark speck in the middle of the screen, which
+ * is what the first version of this looked like.
+ */
+WEAPONS.rpg.hold = { x: 0.205, y: -0.132, z: -0.430, pitch: -0.012, yaw: 0.115, roll: 0.04 };
+WEAPONS.grenade.hold = { x: 0.185, y: -0.118, z: -0.175, pitch: 0.06, yaw: 0.22, roll: 0.10 };
+WEAPONS.c4.hold = { x: 0.180, y: -0.128, z: -0.150, pitch: 0.05, yaw: 0.26, roll: 0.08 };
+WEAPONS.banana.hold = { x: 0.175, y: -0.105, z: -0.120, pitch: 0.09, yaw: 0.30, roll: 0.16 };
+
 export const LOADOUT = ['m16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana'];
 
 export function weaponBySlot(slot) {
