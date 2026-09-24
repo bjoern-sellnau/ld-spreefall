@@ -23,6 +23,7 @@ the sound and the data pipeline are all written from scratch.
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
 | Shipped as | one HTML file, JS modules, one binary bundle, no backend |
 | Payload | 21.33 MB deployed, 7.90 MB over the wire with gzip, against a 25 MB budget |
+| Difficulty | easy, normal and hard, with shields that come back |
 | Third party code at run time | none |
 
 ## Try it
@@ -56,6 +57,10 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | N | sound on and off |
 | H | help |
 | 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |
+| 7 8 9 0 | railgun, plasma rifle, flak cannon, splinter gun |
+| E, or right Shift | reflexes: the city slows and you do not |
+| Space while reflexes run | a leap, paid for out of the same meter |
+| F5 F6 F7 | difficulty: easy, normal, hard |
 | Q | back to the weapon you had before |
 | T | blow the C4 you have put down |
 | Left mouse, or RT on a pad | fire |
@@ -152,6 +157,16 @@ What is under the hood:
   air at once, from six to fourteen. Integrity regenerates after a pause, and
   going down clears the sky, drops the threat by a tier and puts you back on
   your feet where you fell.
+- Buildings take damage, and it is worth being exact about what that means.
+  An explosion marks the wall it went off against: soot spreading with a ragged
+  edge, the render darkened and roughened, the specular killed, and the lit
+  windows inside the mark blown out. The blast also knocks debris off whatever
+  surfaces are close enough, found with the same raycast the bullets use. What
+  it does not do is knock the building down. The geometry is baked into the
+  tile buffers at build time, so nothing here moves a wall; the city is marked,
+  not demolished. The sixteen most recent marks are kept and the oldest is
+  overwritten, because a fragment shader that loops over an hour of accumulated
+  damage is a fragment shader nobody can afford.
 - The scene is drawn into a target that shrinks when frames get expensive and
   grows back when they are cheap, between roughly half and full resolution. It
   is driven by the wall clock between frames rather than by how long our own

@@ -74,6 +74,15 @@ export class Renderer {
     this.viewmodel = null;      // set by the game layer each frame, or null
     this.reflex = 0;            // 0 to 1, how far into slowed time we are
 
+    // Blast marks on the city. A fixed ring: the sixteen most recent, oldest
+    // overwritten, because the alternative is a city that accumulates damage
+    // for an hour and a fragment shader that loops over all of it.
+    this.MAX_SCARS = 16;
+    this.scars = new Float32Array(this.MAX_SCARS * 4);
+    this.scarInfo = new Float32Array(this.MAX_SCARS * 4);
+    this.scarCount = 0;
+    this._scarNext = 0;
+
     this.shadowFbo = [];
     this.sceneFbo = null;
     this.bloomFbo = [];
@@ -170,6 +179,40 @@ export class Renderer {
 
   get effectiveScale() {
     return this.renderScale * (this.dynamicEnabled ? this.dynamicScale : 1);
+  }
+
+  /**
+   * Marks the city where something went off.
+   * @param {number} radius how far the soot reaches, usually the blast radius
+   * @param {number} severity 0 to 1, how black it goes
+   */
+  addScar(x, y, z, radius, severity = 1) {
+    const i = this._scarNext;
+    this.scars[i * 4] = x;
+    this.scars[i * 4 + 1] = y;
+    this.scars[i * 4 + 2] = z;
+    this.scars[i * 4 + 3] = radius;
+    this.scarInfo[i * 4] = Math.max(0, Math.min(1, severity));
+    this.scarInfo[i * 4 + 1] = 0;
+    this._scarNext = (i + 1) % this.MAX_SCARS;
+    this.scarCount = Math.min(this.MAX_SCARS, this.scarCount + 1);
+  }
+
+  clearScars() {
+    this.scarCount = 0;
+    this._scarNext = 0;
+    this.scars.fill(0);
+    this.scarInfo.fill(0);
+  }
+
+  _uploadScars() {
+    const gl = this.gl;
+    this.progWorld.int('uScarCount', this.scarCount);
+    if (!this.scarCount) return;
+    const a = this.progWorld.loc('uScars');
+    const b = this.progWorld.loc('uScarInfo');
+    if (a) gl.uniform4fv(a, this.scars);
+    if (b) gl.uniform4fv(b, this.scarInfo);
   }
 
   resize(cssWidth, cssHeight, dpr) {
@@ -384,6 +427,7 @@ export class Renderer {
     let draws = 0, tris = 0;
     this.progWorld.use();
     this.progWorld.int('uDebugMode', this.debugMode);
+    this._uploadScars();
     for (const tile of visible) {
       if (!tile.vao) continue;
       this.progWorld.vec3('uTileOrigin', tile.ox, 0, tile.oz);

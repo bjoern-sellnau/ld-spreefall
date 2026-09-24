@@ -345,6 +345,11 @@ async function main() {
     audio.explosion();
     effects.explode(x, y, z);
     effects.blast(x, y, z, splash.radius);
+    // Mark whatever it went off against. The soot reaches further than the
+    // damage does, which is how a blast looks on a wall.
+    renderer.addScar(x, y, z, splash.radius * 1.5,
+      Math.min(1, splash.damage / 180));
+    debris(x, y, z, splash.radius);
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
     effects.shake = Math.min(1.4, effects.shake
       + Math.max(0, 1 - dist / (splash.radius * 3)) * 0.9);
@@ -380,6 +385,21 @@ async function main() {
     }
     if (killed > 1) toast(`${killed} at once`);
     return killed;
+  }
+
+  /**
+   * Whatever the blast knocked off the wall. The raycast tells us which
+   * surfaces are near enough to lose something, so debris comes off the
+   * building rather than out of the air.
+   */
+  function debris(x, y, z, radius) {
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
+      const hit = world.raycast(x, y, z, Math.cos(a), 0.1 - Math.random() * 0.4, Math.sin(a),
+        radius * 1.2);
+      if (!hit || hit.kind === 'ground') continue;
+      effects.impact(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, hit.kind);
+    }
   }
 
   /** One kill, however it was made: by a bullet, a blast or a fall. */
@@ -507,6 +527,7 @@ async function main() {
     jets.reset();
     projectiles.clear();
     reflex.reset();
+    renderer.clearScars();
     drones.setTier(Math.max(0, combat.tier - 1));
     effects.clear();
     if (!isTouch) input.requestLock();

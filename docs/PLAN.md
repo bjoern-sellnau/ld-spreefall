@@ -315,3 +315,13 @@ Recorded here as they happen, per the working style.
   are hostile militia in a scenario: no insignia, no nation, no faces, and they
   keep out of the memorial like everything else that carries a weapon here. The
   one line that does not move is the weapons free zone.
+
+- 2026-09-24: buildings are marked by explosions rather than destroyed. The
+  geometry is quantised into per tile vertex buffers at build time and the
+  collision is a list of segments beside it, so a wall that actually fell would
+  mean rebuilding and reuploading a tile and its collision blob in the middle of
+  a frame. What the game does instead is carry the sixteen most recent blasts in
+  the world shader and scorch, roughen and blow the windows out of whatever is
+  inside their radius, with debris knocked off the real surfaces nearby. It is
+  the honest version of what this engine can do at sixty frames a second, and
+  the README says so plainly rather than calling it destruction.

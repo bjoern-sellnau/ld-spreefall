@@ -295,6 +295,37 @@ async function run() {
   check('and it does not hurt you from forty metres away', blast.health === 100,
     `integrity ${blast.health}`);
 
+  // --- what a blast leaves on a building -----------------------------------
+  const scar = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.jets.reset();
+    s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false; s.drones.enabled = false; s.jets.enabled = false;
+    s.renderer.clearScars();
+    s.teleport(120, -30);
+    // Find a wall and stand off it.
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    let best = null;
+    for (let a = 0; a < 360; a += 6) {
+      const r = a * Math.PI / 180;
+      const h = s.world.raycast(eye.x, eye.y, eye.z, Math.cos(r), 0, Math.sin(r), 140);
+      if (h && h.kind !== 'ground' && (!best || h.t < best.t)) best = { ...h, r };
+    }
+    if (!best) return { error: 'no wall' };
+    s.teleport(best.x - Math.cos(best.r) * 26, best.z - Math.sin(best.r) * 26);
+    s.look(Math.atan2(-Math.cos(best.r), -Math.sin(best.r)) * 180 / Math.PI, 6);
+    s.camera.update(16 / 9);
+    const was = s.renderer.scarCount;
+    s.weapon.select('rpg');
+    s.weapon.cooldown = 0;
+    s.weapon.spread = 0;
+    s.shoot();
+    for (let i = 0; i < 60 * 3 && s.projectiles.count; i++) s.projectiles.update(1 / 60);
+    return { was, now: s.renderer.scarCount, health: Math.round(s.combat.health) };
+  });
+  check('a rocket into a wall leaves a mark on it', !scar.error && scar.now > scar.was,
+    `${scar.was} to ${scar.now} marks`);
+
   // --- jets -----------------------------------------------------------------
   const jet = await page.evaluate(() => {
     const s = window.spreefall;

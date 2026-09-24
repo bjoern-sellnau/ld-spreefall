@@ -64,6 +64,13 @@ in float vAo;
 float vViewDist;
 
 uniform vec3 uPalette[64];
+// Blast marks. Up to sixteen of them, newest first, each a centre and a radius
+// with a severity. The loop only runs as far as uScarCount, so a city nobody
+// has fired at costs nothing at all for this.
+#define MAX_SCARS 16
+uniform vec4 uScars[MAX_SCARS];      // xyz centre, w radius
+uniform vec4 uScarInfo[MAX_SCARS];   // x severity 0..1, y age in seconds
+uniform int uScarCount;
 uniform int uDebugMode;   // 0 off, 1 material, 2 normals, 3 uv, 4 world position
 
 layout(location = 0) out vec4 fragColour;
@@ -606,6 +613,34 @@ void main() {
   ambient *= mix(0.62, 1.0, vAo);
   // Contact darkening near the ground so buildings sit on the street.
   ambient *= mix(0.80, 1.0, clamp(vWorld.y * 0.28, 0.0, 1.0));
+
+  // --- what the explosions did ---------------------------------------------
+  // Scorching, cracked render and blown out windows around each blast, falling
+  // off with distance from it. Nothing moves: the geometry is baked into the
+  // tiles, so a building here is marked rather than demolished.
+  float scorch = 0.0;
+  float shatter = 0.0;
+  for (int i = 0; i < uScarCount; i++) {
+    vec3 d = vWorld - uScars[i].xyz;
+    float r = uScars[i].w;
+    float dist = length(d);
+    if (dist > r) continue;
+    float t = 1.0 - dist / r;
+    float sev = uScarInfo[i].x;
+    // A ragged edge rather than a circle, from the same noise the facades use.
+    float edge = vnoise(vWorld.xz * 1.7 + vWorld.y * 0.9 + float(i) * 17.0) * 0.35;
+    float mark = smoothstep(0.0, 0.45, t + edge - 0.25) * sev;
+    scorch = max(scorch, mark);
+    shatter = max(shatter, smoothstep(0.1, 0.75, t) * sev);
+  }
+  if (scorch > 0.001) {
+    // Soot: darker, rougher, and it kills the specular on whatever it is on.
+    s.albedo = mix(s.albedo, s.albedo * 0.16 + vec3(0.012, 0.010, 0.009), scorch * 0.9);
+    s.roughness = mix(s.roughness, 0.98, scorch * 0.8);
+    s.metallic = mix(s.metallic, 0.0, scorch);
+    // Glass near a blast is gone: the lit window becomes a hole.
+    s.emissive *= 1.0 - clamp(shatter * 1.4, 0.0, 1.0);
+  }
 
   vec3 diffuse = s.albedo * (direct + ambient);
 
