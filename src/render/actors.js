@@ -13,6 +13,7 @@ const MAX_DRONES = 48;
 const MAX_SPARKS = 256;
 const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
+const MAX_JETS = 6;
 
 // --- mesh building ---------------------------------------------------------
 
@@ -270,6 +271,14 @@ export function buildProjectileMesh(kind) {
   } else if (kind === 'c4') {
     m.box(0, 0, 0, 0.22, 0.09, 0.15, 9);
     m.box(0, 0.052, 0, 0.10, 0.02, 0.07, 7);
+  } else if (kind === 'plasma') {
+    m.icosphere(0, 0, 0, 0.16, 10, 6, 11);
+  } else if (kind === 'flak') {
+    m.box(0, 0, 0, 0.14, 0.10, 0.14, 8);
+    m.box(0, 0, 0, 0.08, 0.18, 0.08, 8);
+  } else if (kind === 'splinter') {
+    m.box(0, 0, 0.06, 0.030, 0.030, 0.22, 11);
+    m.box(0, 0, -0.10, 0.012, 0.012, 0.10, 8);
   } else {
     // The banana, which is the same arc as the one in your hand, lying down.
     const R = 0.16;
@@ -281,6 +290,93 @@ export function buildProjectileMesh(kind) {
       const r = 0.036 * (1 - Math.abs(t) * 1.25);
       if (r > 0.006) m.box(x, 0.02, z, r * 2, r * 2, 0.05, 10);
     }
+  }
+  return m;
+}
+
+/** The arena four, in the hand. Same parts palette as the other viewmodels. */
+export function buildRailgunMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.008, -0.180, 0.050, 0.070, 0.170, 2);      // stock
+  m.box(0, 0.004, -0.380, 0.058, 0.090, 0.260, 0);       // body
+  m.box(0, 0.056, -0.400, 0.030, 0.026, 0.300, 3);       // scope
+  m.cylinder(0, 0.056, -0.250, 0.024, 0.024, -0.060, 10, 3, 'z');
+  // Twin rails with the gap between them, which is the whole look.
+  m.box(-0.022, 0.014, -0.700, 0.014, 0.030, 0.420, 1);
+  m.box(0.022, 0.014, -0.700, 0.014, 0.030, 0.420, 1);
+  m.box(0, 0.014, -0.520, 0.070, 0.016, 0.060, 0);
+  m.box(0, -0.094, -0.300, 0.042, 0.115, 0.060, 2);      // grip
+  m.cylinder(0, 0.014, -0.912, 0.004, 0.060, -0.150, 10, 7, 'z');
+  return m;
+}
+
+export function buildPlasmaMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.006, -0.230, 0.062, 0.084, 0.230, 0);      // body
+  m.box(0, 0.050, -0.300, 0.034, 0.030, 0.180, 3);       // sight block
+  m.cylinder(0, 0.006, -0.520, 0.030, 0.030, -0.300, 12, 1, 'z');   // barrel
+  m.icosphere(0, 0.006, -0.360, 0.052, 10, 6, 5);        // the cell, glowing
+  m.box(0, -0.090, -0.250, 0.044, 0.110, 0.062, 2);      // grip
+  m.box(0, -0.030, -0.430, 0.040, 0.050, 0.090, 2);      // fore grip
+  m.cylinder(0, 0.006, -0.826, 0.005, 0.075, -0.170, 10, 7, 'z');
+  return m;
+}
+
+export function buildFlakMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.004, -0.250, 0.070, 0.096, 0.260, 0);      // receiver
+  m.cylinder(0, 0.010, -0.560, 0.042, 0.052, -0.340, 12, 1, 'z');   // wide bore
+  m.cylinder(0, 0.010, -0.880, 0.056, 0.062, -0.060, 12, 0, 'z');   // muzzle ring
+  m.box(0, -0.092, -0.280, 0.046, 0.112, 0.064, 2);      // grip
+  m.box(0, -0.048, -0.470, 0.044, 0.070, 0.100, 2);      // pump
+  m.box(0, 0.058, -0.300, 0.026, 0.024, 0.090, 3);       // sight
+  m.cylinder(0, 0.010, -0.902, 0.006, 0.110, -0.220, 10, 7, 'z');
+  return m;
+}
+
+export function buildSplinterMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.000, -0.260, 0.058, 0.080, 0.280, 0);       // body
+  // The magazine of darts sits on top, where you can see it.
+  for (let i = 0; i < 5; i++) {
+    m.box(-0.030 + i * 0.015, 0.058, -0.330, 0.008, 0.034, 0.150, 6);
+  }
+  m.cylinder(0, 0.004, -0.500, 0.022, 0.018, -0.260, 10, 1, 'z');
+  m.box(0, -0.088, -0.270, 0.042, 0.110, 0.060, 2);      // grip
+  m.box(0, 0.046, -0.240, 0.022, 0.020, 0.070, 3);       // sight
+  m.cylinder(0, 0.004, -0.762, 0.004, 0.055, -0.140, 10, 7, 'z');
+  return m;
+}
+
+/**
+ * A fighter jet, built nose towards -z like everything else here, about
+ * fourteen metres long. Parts: 0 airframe, 5 canopy, 8 intakes and nozzles,
+ * 11 the afterburner glow.
+ */
+export function buildJetMesh() {
+  const m = new MeshBuild();
+  // Fuselage: a long box with a tapered nose made of two shrinking sections.
+  m.box(0, 0, -1.2, 1.5, 1.3, 7.0, 0);
+  m.box(0, 0.05, -5.2, 1.1, 0.95, 1.2, 0);
+  m.box(0, 0.05, -6.1, 0.7, 0.6, 0.8, 0);
+  m.cylinder(0, 0.05, -6.5, 0.32, 0.04, -0.9, 8, 0, 'z');      // the nose
+  // Canopy.
+  m.box(0, 0.72, -3.4, 0.85, 0.5, 2.2, 5);
+  // Wings, swept back by offsetting each panel further aft as it goes out.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 5; i++) {
+      const t = i / 4;
+      m.box(side * (1.0 + t * 3.4), -0.05, -0.4 + t * 2.4,
+        0.9, 0.22 - t * 0.1, 3.2 - t * 1.9, 0);
+    }
+    // Tailplane and fin.
+    m.box(side * 1.3, 0.1, 2.6, 1.6, 0.18, 1.5, 0);
+    m.box(side * 0.55, 1.1, 2.3, 0.16, 1.9, 2.0, 0);
+    // Intake under the wing root.
+    m.box(side * 0.95, -0.45, -2.2, 0.55, 0.6, 2.6, 8);
+    // Engine nozzle at the back, with the glow inside it.
+    m.cylinder(side * 0.45, 0, 2.3, 0.42, 0.46, 0.9, 10, 8, 'z');
+    m.cylinder(side * 0.45, 0, 2.9, 0.34, 0.30, 0.5, 10, 11, 'z');
   }
   return m;
 }
@@ -346,6 +442,7 @@ export class Actors {
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
     this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 2);
+    this.jet = this._uploadMesh(buildJetMesh(), MAX_JETS, 2);
     // Every viewmodel is uploaded once. They are a few hundred triangles each,
     // so carrying all six costs less than switching would.
     this.weapons = {
@@ -355,6 +452,10 @@ export class Actors {
       grenade: this._uploadMesh(buildGrenadeMesh(), 0, 0),
       c4: this._uploadMesh(buildC4Mesh(), 0, 0),
       banana: this._uploadMesh(buildBananaMesh(), 0, 0),
+      railgun: this._uploadMesh(buildRailgunMesh(), 0, 0),
+      plasma: this._uploadMesh(buildPlasmaMesh(), 0, 0),
+      flak: this._uploadMesh(buildFlakMesh(), 0, 0),
+      splinter: this._uploadMesh(buildSplinterMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
 
@@ -364,6 +465,9 @@ export class Actors {
       rocket: this._uploadMesh(buildProjectileMesh('rocket'), MAX_PROPS, 2),
       grenade: this._uploadMesh(buildProjectileMesh('grenade'), MAX_PROPS, 2),
       c4: this._uploadMesh(buildProjectileMesh('c4'), MAX_PROPS, 2),
+      plasma: this._uploadMesh(buildProjectileMesh('plasma'), MAX_PROPS, 2),
+      flak: this._uploadMesh(buildProjectileMesh('flak'), MAX_PROPS, 2),
+      splinter: this._uploadMesh(buildProjectileMesh('splinter'), MAX_PROPS, 2),
       banana: this._uploadMesh(buildProjectileMesh('banana'), MAX_PROPS, 2),
     };
 
@@ -460,14 +564,14 @@ export class Actors {
   /** Sorts what is in the air into its per kind instance buffers. */
   updateProjectiles(list) {
     const gl = this.gl;
-    const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0 };
+    const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0, splinter: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] >= MAX_PROPS) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
-      const flying = b.kind === 'rocket';
+      const flying = b.kind === 'rocket' || b.kind === 'splinter';
       const yaw = flying ? Math.atan2(-b.vx, -b.vz) : b.spin * 0.7;
       const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, b.vy
         / (Math.hypot(b.vx, b.vy, b.vz) || 1)))) : b.spin;
@@ -513,6 +617,39 @@ export class Actors {
     gl.bindVertexArray(this.soldier.vao);
     gl.drawElementsInstanced(gl.TRIANGLES, this.soldier.count, this.soldier.indexType, 0,
       this.soldier.instanceCount);
+    gl.bindVertexArray(null);
+    return 1;
+  }
+
+  updateJets(list) {
+    const gl = this.gl;
+    const data = this.jet.instData;
+    let n = 0;
+    for (const j of list) {
+      if (!j.alive || n >= MAX_JETS) continue;
+      const o = n * 8;
+      data[o] = j.x; data[o + 1] = j.y; data[o + 2] = j.z; data[o + 3] = j.yaw;
+      data[o + 4] = j.pitch; data[o + 5] = j.roll; data[o + 6] = j.hitFlash;
+      data[o + 7] = j.afterburner;
+      n++;
+    }
+    this.jet.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.jet.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  drawJets() {
+    if (!this.jet.instanceCount) return 0;
+    const gl = this.gl;
+    // Jets bank and pitch, so they ride the drone transform, which already
+    // does yaw, then roll, then pitch in that order.
+    this.progDrone.use();
+    gl.bindVertexArray(this.jet.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, this.jet.count, this.jet.indexType, 0,
+      this.jet.instanceCount);
     gl.bindVertexArray(null);
     return 1;
   }
@@ -636,7 +773,7 @@ export class Actors {
 
   dispose() {
     const gl = this.gl;
-    for (const mesh of [this.drone, this.soldier, ...Object.values(this.weapons),
+    for (const mesh of [this.drone, this.soldier, this.jet, ...Object.values(this.weapons),
       ...Object.values(this.props)]) {
       gl.deleteVertexArray(mesh.vao);
       gl.deleteBuffer(mesh.vbo);

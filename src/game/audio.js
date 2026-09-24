@@ -232,6 +232,13 @@ export class Audio {
       bodyHz: 110, bodyEnd: 28, bodyGain: 0.34, bodyTail: 0.5, hp: 220 },
     throw: { crackHz: 3200, sweepHz: 1400, crackGain: 0.12, tail: 0.14,
       bodyHz: 260, bodyEnd: 120, bodyGain: 0.05, bodyTail: 0.08, hp: 1400 },
+    // A rail shot is a crack and a long metallic ring after it.
+    rail: { crackHz: 5200, sweepHz: 900, crackGain: 0.40, tail: 0.95,
+      bodyHz: 420, bodyEnd: 60, bodyGain: 0.30, bodyTail: 0.7, hp: 600 },
+    // Plasma is more tone than noise, which is what makes it sound like energy
+    // rather than gunpowder.
+    plasma: { crackHz: 1800, sweepHz: 2600, crackGain: 0.14, tail: 0.18,
+      bodyHz: 520, bodyEnd: 900, bodyGain: 0.22, bodyTail: 0.14, hp: 700 },
   };
 
   gunshot(kind = 'rifle') {
@@ -494,6 +501,55 @@ export class Audio {
     const bed = this.beds && this.beds.rotor;
     if (!bed || !bed.osc || !this.ctx) return;
     this._timeScale = scale;
+  }
+
+  /**
+   * A jet going past: noise swept from bright to dark with a doppler drop in
+   * the body of it. It is a fly by rather than a positional loop, because what
+   * matters is that you hear the pass coming and know to move.
+   */
+  jetPass() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(320, t);
+    bp.frequency.exponentialRampToValueAtTime(1800, t + 0.9);
+    bp.frequency.exponentialRampToValueAtTime(260, t + 2.2);
+    bp.Q.value = 0.9;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.30, t + 0.8);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 1.2);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (pan) {
+      pan.pan.setValueAtTime(-0.8, t);
+      pan.pan.linearRampToValueAtTime(0.8, t + 2.0);
+      src.connect(bp).connect(g).connect(pan).connect(this.master);
+    } else {
+      src.connect(bp).connect(g).connect(this.master);
+    }
+    src.start(t, Math.random() * 3, 2.8);
+    src.stop(t + 2.8);
+
+    // The engine note under it, dropping as it goes away.
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(88, t);
+    o.frequency.setValueAtTime(88, t + 0.9);
+    o.frequency.exponentialRampToValueAtTime(52, t + 2.2);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.09, t + 0.7);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 2.5);
+    o.connect(og).connect(this.master);
+    o.start(t);
+    o.stop(t + 2.6);
   }
 
   /** Two quick clicks: one weapon down, the next one up. */

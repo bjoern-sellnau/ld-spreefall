@@ -93,6 +93,111 @@ async function run() {
       arsenal.map((w) => `${w.id}:${w.before}>${w.after}`).join(' '));
   }
 
+  // --- the arena four ------------------------------------------------------
+  const rail = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false;
+    s.teleport(81, 0); s.look(90, 0); s.camera.update(16 / 9);
+    // Three in a line, which is what a rail shot is for.
+    const line = [s.spawnSoldier(-24, 0), s.spawnSoldier(-32, 0), s.spawnSoldier(-40, 0)];
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const t = line[0];
+    const to = { x: t.x - eye.x, y: t.y + 1.1 - eye.y, z: t.z - eye.z };
+    const l = Math.hypot(to.x, to.y, to.z);
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+    s.camera.update(16 / 9);
+    s.weapon.select('railgun');
+    s.weapon.cooldown = 0;
+    s.weapon.spread = 0;
+    s.shoot();
+    return { hurt: line.filter((x) => x.health < 100).length, health: line.map((x) => Math.round(x.health)) };
+  });
+  check('one rail shot goes through a line of them', rail.hurt >= 2,
+    `${rail.hurt} hit, health ${rail.health.join(' ')}`);
+
+  const plasma = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.projectiles.clear();
+    s.weapon.select('plasma');
+    s.weapon.cooldown = 0;
+    s.weapon.spread = 0;
+    // Into the cobbles a few metres ahead, so it actually meets something:
+    // fired level across the square it is still in the air over the Tiergarten
+    // when the window closes.
+    s.look(90, -14); s.camera.update(16 / 9);
+    s.shoot();
+    const born = s.projectiles.count;
+    let bounced = 0;
+    s.projectiles.onBounce = () => { bounced++; };
+    for (let i = 0; i < 60 * 6 && s.projectiles.count; i++) s.projectiles.update(1 / 60);
+    s.projectiles.onBounce = null;
+    return { born, bounced, left: s.projectiles.count };
+  });
+  check('a plasma bolt bounces off the street and then goes off',
+    plasma.born === 1 && plasma.bounced >= 1 && plasma.left === 0,
+    `${plasma.bounced} bounces, ${plasma.left} left`);
+
+  const flak = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.projectiles.clear();
+    s.weapon.select('flak');
+    s.weapon.cooldown = 0;
+    s.shoot();
+    return { shards: s.projectiles.count };
+  });
+  check('the flak cannon throws a handful at once', flak.shards >= 5,
+    `${flak.shards} in the air`);
+
+  const darts = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false;
+    // A target off to one side: a dart that flies straight would miss it.
+    const t = s.spawnSoldier(-30, 6);
+    s.look(90, 0); s.camera.update(16 / 9);
+    s.weapon.select('splinter');
+    s.weapon.spread = 0;
+    const before = t.health;
+    for (let i = 0; i < 10; i++) {
+      s.weapon.cooldown = 0;
+      s.weapon.spread = 0;
+      s.shoot();
+      for (let k = 0; k < 40; k++) s.projectiles.update(1 / 60);
+    }
+    return { before, after: Math.round(t.health) };
+  });
+  check('darts steer onto a target that is not in front of you', darts.after < darts.before,
+    `${darts.before} to ${darts.after}`);
+
+  const lock = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false;
+    const t = s.spawnSoldier(-60, 0);
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const to = { x: t.x - eye.x, y: t.y + 1.1 - eye.y, z: t.z - eye.z };
+    const l = Math.hypot(to.x, to.y, to.z);
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+    s.camera.update(16 / 9);
+    s.weapon.select('rpg');
+    const dir = { x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] };
+    // Hold the sight on it.
+    for (let i = 0; i < 90; i++) s.weapon.update(1 / 60, false, eye, dir);
+    const locked = s.weapon.lockProgress >= 1 && s.weapon.lockTarget === t;
+    // Now fire well wide of it and let the rocket steer.
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI + 22, 4);
+    s.camera.update(16 / 9);
+    s.weapon.cooldown = 0;
+    s.weapon.spread = 0;
+    const before = t.health;
+    s.shoot();
+    for (let i = 0; i < 60 * 5 && s.projectiles.count; i++) s.projectiles.update(1 / 60);
+    return { locked, before, after: Math.round(t.health), dead: t.state === 5 };
+  });
+  check('a locked rocket chases a target you are no longer pointing at',
+    lock.locked && lock.after < lock.before, `locked ${lock.locked}, ${lock.before} to ${lock.after}`);
+
   // --- soldiers ------------------------------------------------------------
   const troops = await page.evaluate(() => {
     const s = window.spreefall;
@@ -190,14 +295,73 @@ async function run() {
   check('and it does not hurt you from forty metres away', blast.health === 100,
     `integrity ${blast.health}`);
 
+  // --- jets -----------------------------------------------------------------
+  const jet = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false; s.drones.enabled = false;
+    s.jets.enabled = true;
+    s.teleport(81, 0);
+    const j = s.spawnJet(-400, 60, 90);
+    const player = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z, vx: 0, vz: 0, alive: true };
+    const states = new Set();
+    let closest = 1e9;
+    let shots = 0;
+    let missiles = 0;
+    s.jets.onGun = () => { shots++; };
+    s.jets.onMissile = () => { missiles++; };
+    for (let i = 0; i < 60 * 40; i++) {
+      s.jets.update(1 / 60, player, i / 60);
+      if (!j.alive) break;
+      states.add(j.state);
+      closest = Math.min(closest, Math.hypot(j.x - player.x, j.z - player.z));
+    }
+    return {
+      states: [...states].sort(), closest: Math.round(closest), shots, missiles,
+      height: Math.round(j.y - s.world.groundHeight(j.x, j.z)),
+      passes: j.passes,
+    };
+  });
+  check('a jet runs in, attacks and breaks off, more than once',
+    jet.states.includes(0) && jet.states.includes(1) && jet.states.includes(2) && jet.passes >= 2,
+    `states ${jet.states.join('')}, ${jet.passes} passes, closest ${jet.closest} m`);
+  check('and it shoots on the pass without ever landing',
+    jet.shots > 0 && jet.height > 20, `${jet.shots} rounds, ${jet.missiles} missiles, ${jet.height} m up`);
+
+  const jetKill = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.jets.reset(); s.projectiles.clear(); s.combat.reset();
+    const j = s.spawnJet(-70, 0, 40);
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const to = { x: j.x - eye.x, y: j.y - eye.y, z: j.z - eye.z };
+    const l = Math.hypot(to.x, to.y, to.z);
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+    s.camera.update(16 / 9);
+    s.weapon.select('railgun');
+    const before = j.health;
+    for (let i = 0; i < 4 && j.state !== 4; i++) {
+      s.weapon.cooldown = 0;
+      s.weapon.spread = 0;
+      s.shoot();
+    }
+    return { before, after: Math.round(j.health), down: j.state === 4, dist: Math.round(l) };
+  });
+  check('a jet can be shot down', jetKill.down,
+    `${jetKill.dist} m, ${jetKill.before} to ${jetKill.after}`);
+
   await page.evaluate(() => {
     const s = window.spreefall;
-    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset(); s.projectiles.clear(); s.combat.reset();
     s.teleport(81, 0); s.look(90, 2); s.setTime(16.6);
     s.weapon.reset(); s.weapon.select('shotgun');
     for (const [dx, dz] of [[-16, -4], [-22, 3], [-30, -8], [-26, 9]]) s.spawnSoldier(dx, dz);
     s.projectiles.launch('banana', { x: s.player.x - 8, y: s.player.y + 0.1, z: s.player.z + 1,
       vx: 0, vy: 0, vz: 0, slip: { radius: 1.05, seconds: 3.4 } }).stuck = true;
+    // A jet banking across the square behind the Gate, where it can be seen.
+    const j = s.spawnJet(-145, 10, 52);
+    j.roll = 0.55; j.pitch = 0.04;
+    j.yaw = Math.PI * 0.58;
+    s.weapon.select('m16');
   });
   await page.waitForTimeout(3000);
   await page.screenshot({ path: path.join(SHOTS, 'combat-05-soldiers.png') });

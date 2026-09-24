@@ -22,6 +22,7 @@ import { Effects } from './game/effects.js';
 import { Projectiles } from './game/projectiles.js';
 import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
+import { Jets } from './game/jets.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -38,7 +39,7 @@ const el = {
   combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
   ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
   shieldbar: $('shieldbar'), shieldnum: $('shieldnum'), shieldflash: $('shieldflash'),
-  reflexbar: $('reflexbar'),
+  reflexbar: $('reflexbar'), lockon: $('lockon'), locktext: $('locktext'),
   diffnote: $('diffnote'),
   weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
@@ -149,16 +150,52 @@ async function main() {
   const reflex = new Reflex();
   reflex.drainScale = combat.rules.reflexDrain;
   soldiers = new Soldiers(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const jets = new Jets(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  jets.accuracyScale = combat.rules.enemyAccuracy;
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
   projectiles.hitActors = (x, y, z, dx, dy, dz, maxT) => {
     const d = drones.raycast(x, y, z, dx, dy, dz, maxT);
     const sHit = soldiers.raycast(x, y, z, dx, dy, dz, d ? d.t : maxT);
+    const jHit = jets.raycast(x, y, z, dx, dy, dz, sHit ? sHit.t : (d ? d.t : maxT));
+    if (jHit) return { t: jHit.t, target: jHit.jet };
     if (sHit) return { t: sHit.t, target: sHit.soldier };
     return d ? { t: d.t, target: d.drone } : null;
   };
+
+  // A jet's cannon pass, and the missile it drops on every second run.
+  jets.onGun = (j, damage) => {
+    audio.gunshot('rifle');
+    effects.tracer(j.x, j.y - 1, j.z,
+      camera.position[0] + (Math.random() - 0.5) * 6,
+      camera.position[1] - 1 + Math.random() * 2,
+      camera.position[2] + (Math.random() - 0.5) * 6, false);
+    if (damage > 0 && combat.health > 0) combat.hurt(damage, j.x, j.z, player.x, player.z);
+  };
+  jets.onMissile = (j) => {
+    audio.gunshot('rpg');
+    const dx = player.x - j.x, dy = (player.y + PLAYER.eye) - j.y, dz = player.z - j.z;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    projectiles.launch('rocket', {
+      x: j.x, y: j.y - 1.2, z: j.z,
+      vx: dx / l * 70, vy: dy / l * 70, vz: dz / l * 70,
+      splash: { radius: 8, damage: 90, force: 18 },
+      weapon: 'jet',
+      // It chases you, but slowly enough that moving is an answer.
+      homing: { turn: 1.5, range: 400 },
+      target: { x: player.x, y: player.y, z: player.z, height: 1.8, alive: true },
+    });
+    toast('missile inbound');
+  };
+  jets.onPass = () => audio.jetPass();
+  jets.onDeath = (j) => {
+    effects.blast(j.x, j.y, j.z, 10);
+    audio.explosion();
+    creditTarget(j, false, 'jet');
+  };
   weapon.soldiers = soldiers;
+  weapon.jets = jets;
 
   // --- spawn ---------------------------------------------------------------
   const [sx, sz] = project(m, SPAWN.lon, SPAWN.lat);
@@ -292,10 +329,10 @@ async function main() {
       effects.impact(shot.end.x, shot.end.y, shot.end.z,
         shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
     }
-    if (shot.drone || shot.soldier) {
+    if (shot.target) {
       audio.hitMarker(shot.core);
       showHitmarker(shot.killed ? 'kill' : (shot.core ? 'core' : ''));
-      if (shot.killed) creditTarget(shot.drone || shot.soldier, shot.core, !!shot.drone);
+      if (shot.killed) creditTarget(shot.target, shot.core, shot.surface);
     }
   };
 
@@ -319,7 +356,7 @@ async function main() {
       // Line of sight, so a wall between the grenade and the target is a wall.
       if (!world.lineOfSight(x, y, z, d.x, d.y, d.z)) continue;
       const dmg = splash.damage * (1 - r / splash.radius);
-      if (drones.damage(d, dmg)) { creditTarget(d, false, true); killed++; }
+      if (drones.damage(d, dmg)) { creditTarget(d, false, 'drone'); killed++; }
     }
     if (soldiers) {
       for (const sd of [...soldiers.active]) {
@@ -328,9 +365,14 @@ async function main() {
         if (!world.lineOfSight(x, y, z, sd.x, sd.y + 0.9, sd.z)) continue;
         const dmg = splash.damage * (1 - r / splash.radius);
         if (soldiers.damage(sd, dmg, { x: 0, y: 0, z: 0 })) {
-          creditTarget(sd, false, false); killed++;
+          creditTarget(sd, false, 'soldier'); killed++;
         }
       }
+    }
+    for (const j of [...jets.active]) {
+      const r = Math.hypot(j.x - x, j.y - y, j.z - z);
+      if (r > splash.radius * 1.6) continue;      // a jet is a big thing to miss
+      if (jets.damage(j, splash.damage * (1 - r / (splash.radius * 1.6)))) killed++;
     }
     if (dist < splash.radius
       && world.lineOfSight(x, y, z, player.x, player.y + PLAYER.eye, player.z)) {
@@ -341,13 +383,13 @@ async function main() {
   }
 
   /** One kill, however it was made: by a bullet, a blast or a fall. */
-  function creditTarget(target, core, isDrone) {
+  function creditTarget(target, core, kind) {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
     effects.explode(target.x, target.y, target.z);
     audio.droneDown();
-    feed(`<b>${isDrone ? 'drone' : 'soldier'} down</b> ${Math.round(dist)} m`
-      + `${core ? ' <i>core</i>' : ''}`);
+    const name = kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
+    feed(`<b>${name} down</b> ${Math.round(dist)} m${core ? ' <i>core</i>' : ''}`);
   }
   weapon.onDryFire = () => audio.dryFire();
   weapon.onReloadStart = (seconds) => audio.reload(seconds);
@@ -358,6 +400,16 @@ async function main() {
     el.combat.classList.toggle('explosive', spec.kind !== 'hitscan');
   };
   input.onWheel = (dir) => { if (!state.holstered) weapon.cycle(dir); };
+  // The lock indicator: a ring that closes as the lock fills, and reads solid
+  // when the rocket will chase whatever you are pointing at.
+  weapon.onLock = (target, progress) => {
+    const on = !!target && progress > 0.01;
+    el.lockon.classList.toggle('hidden', !on);
+    if (!on) return;
+    el.lockon.style.setProperty('--p', String(progress));
+    el.lockon.classList.toggle('locked', progress >= 1);
+    el.locktext.textContent = progress >= 1 ? 'locked' : 'lock';
+  };
   // Q goes back to whatever you were holding before, which is the swap you
   // actually want in a fight.
   weapon.onSwapFrom = (from) => { state.lastWeapon = from; };
@@ -400,6 +452,8 @@ async function main() {
     toast(`${rules.label}`);
     try { localStorage.setItem('spreefall.difficulty', rules.name); } catch { /* private mode */ }
     soldiers.accuracyScale = rules.enemyAccuracy;
+    jets.accuracyScale = rules.enemyAccuracy;
+    reflex.drainScale = rules.reflexDrain;
   };
 
   combat.onHurt = () => {
@@ -438,6 +492,8 @@ async function main() {
   combat.onTier = (tier) => {
     drones.setTier(tier);
     soldiers.setTier(tier);
+    jets.setTier(tier);
+    if (tier === 2) toast('air support inbound');
     feed(`<b>threat level ${tier + 1}</b>`);
     toast(`threat level ${tier + 1}`);
   };
@@ -448,6 +504,7 @@ async function main() {
     weapon.reset();
     drones.reset();
     soldiers.reset();
+    jets.reset();
     projectiles.clear();
     reflex.reset();
     drones.setTier(Math.max(0, combat.tier - 1));
@@ -581,8 +638,8 @@ async function main() {
         if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
         break;
       }
-      case 'Digit1': case 'Digit2': case 'Digit3':
-      case 'Digit4': case 'Digit5': case 'Digit6':
+      case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5':
+      case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9': case 'Digit0':
         weapon.selectSlot(Number(code.slice(5)));
         break;
       // The number row carries the weapons now, so the quality tiers moved to
@@ -710,6 +767,8 @@ async function main() {
     drones.update(worldDt, eye, state.time);
     soldiers.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
       alive: combat.health > 0 }, state.time);
+    jets.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
+      vx: player.vx, vz: player.vz, alive: combat.health > 0 }, state.time);
 
     audio.update(dt, player, camera);
     audio.setTimeScale(scale);
@@ -840,6 +899,7 @@ async function main() {
       };
       renderer.actors.updateDrones(drones.active);
       renderer.actors.updateSoldiers(soldiers.active);
+      renderer.actors.updateJets(jets.active);
       renderer.actors.updateProjectiles(projectiles.active);
       renderer.actors.updateSparks(effects.list);
       renderer.drawActors = true;
@@ -847,6 +907,7 @@ async function main() {
       renderer.viewmodel = null;
       renderer.actors.updateDrones(state.mode === 'walk' ? drones.active : []);
       renderer.actors.updateSoldiers(state.mode === 'walk' ? soldiers.active : []);
+      renderer.actors.updateJets(state.mode === 'walk' ? jets.active : []);
       renderer.actors.updateProjectiles(state.mode === 'walk' ? projectiles.active : []);
       renderer.actors.updateSparks(state.mode === 'walk' ? effects.list : []);
       renderer.drawActors = state.mode === 'walk';
@@ -888,7 +949,7 @@ async function main() {
       el.combat.classList.toggle('empty', weapon.ammo === 0);
       el.reloadhint.classList.toggle('hidden', weapon.state !== 2);
       el.tiernum.textContent = String(combat.tier + 1);
-      el.contactnum.textContent = String(drones.engaged + soldiers.engaged);
+      el.contactnum.textContent = String(drones.engaged + soldiers.engaged + jets.engaged);
       el.scorenum.textContent = combat.score.toLocaleString();
       // The crosshair opens with the spread cone.
       const px = Math.round(6 + (weapon.spread / weapon.spec.spreadMax) * 30);
@@ -965,8 +1026,17 @@ async function main() {
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
-    combat, drones, weapon, effects, projectiles, reflex,
+    combat, drones, weapon, effects, projectiles, reflex, jets,
     get soldiers() { return soldiers; },
+    spawnJet(dx, dz, height = 80) {
+      const j = jets.free();
+      if (!j) return null;
+      const x = player.x + dx, z = player.z + dz;
+      j.spawn(x, world.groundHeight(x, z) + height, z,
+        Math.atan2(-(player.x - x), -(player.z - z)), combat.tier);
+      jets.active.push(j);
+      return j;
+    },
     spawnSoldier(dx, dz) {
       const s = soldiers.free();
       if (!s) return null;

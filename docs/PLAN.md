@@ -193,6 +193,16 @@ interface, and `tools/test-combat.mjs` checks each part of it in a browser.
   grenade bounces off a real wall and rolls down a real kerb. Rockets go off on
   contact, grenades on a fuse, C4 when you press the trigger, and the banana
   never: it lies there until somebody walks onto it.
+- `reflex.js`: super reflexes. Only the simulation is scaled: looking around,
+  the weapon and the interface stay on the real clock, so the city crawls and
+  your aim does not, which is the whole fantasy. Scaling everything would just
+  be a slower game. The high jump comes out of the same meter, because both are
+  the same idea: for a few seconds you are quicker than the city is.
+- `jets.js`: fighter jets, which neither hover nor stop. One state machine over
+  a curve: bank towards a heading, hold a height above whatever ground is under
+  you, and never turn faster than the turn rate allows. Inbound, attack, break,
+  orbit, and round again. You cannot chase it; you can only be ready for the
+  next pass.
 - `soldiers.js`: the enemy that walks. Patrol, advance, fight, slipped and
   dying. They test line of sight from their eyes to yours on the same staggered
   rota as the drones, strafe rather than stand still, fire in bursts with an
@@ -227,6 +237,9 @@ than one voice per drone, and two different hit confirms for hull and core.
    interface, because nothing here can open the deployed page.
 8. The arsenal: six things to carry, recoil that comes back, explosives that
    bounce off real walls, and soldiers in the streets who slip on a banana.
+9. Survivable: a shield that comes back, three difficulties, reflexes that slow
+   the city down, four more weapons, jets overhead, and a scene target that
+   shrinks to hold the frame rate.
 
 ## 7. Deviations from the original brief
 

@@ -127,11 +127,19 @@ void main() {
     metal = 0.02;
     float blink = step(0.5, fract(uCamPos.w * 1.6));
     emissive = vec3(1.0, 0.1, 0.06) * 3.0 * blink;
-  } else {
+  } else if (vPart < 10.5) {
     // A banana.
     albedo = vec3(0.86, 0.72, 0.13);
     rough = 0.6;
     metal = 0.05;
+  } else {
+    // Energy: a plasma bolt or a dart in flight. Its own light source, so it
+    // reads at a hundred metres against a grey street.
+    albedo = vec3(0.02);
+    float pulse = 0.75 + 0.25 * sin(uCamPos.w * 22.0 + vWorld.x * 3.0);
+    emissive = vec3(0.35, 0.85, 1.0) * 7.0 * pulse;
+    rough = 0.1;
+    metal = 0.0;
   }
 
   vec3 L = uSunDir.xyz;

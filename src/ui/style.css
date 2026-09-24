@@ -281,6 +281,44 @@ html, body {
     rgba(0, 0, 0, 0) 48%, rgba(30, 60, 110, 0.5) 100%);
 }
 
+/* The rocket lock: a ring that closes as it fills and snaps shut when it is
+   yours. It sits on the crosshair, because that is where you are looking. */
+#lockon {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 84px; height: 84px;
+  margin: -42px 0 0 -42px;
+  pointer-events: none;
+}
+#lockon i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 190, 90, 0.75);
+  transform: scale(calc(1.9 - 0.9 * var(--p, 0)));
+  opacity: calc(0.35 + 0.65 * var(--p, 0));
+  transition: opacity 0.1s linear;
+}
+#lockon span {
+  position: absolute;
+  left: 50%; top: -18px;
+  transform: translateX(-50%);
+  font: 700 9px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 190, 90, 0.85);
+}
+#lockon.locked i {
+  border-color: #ff6a4a;
+  box-shadow: 0 0 12px rgba(255, 106, 74, 0.6);
+  animation: lockpulse 0.5s ease-in-out infinite;
+}
+#lockon.locked span { color: #ff8a6a; }
+@keyframes lockpulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
 #combat .num {
   font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--dim);

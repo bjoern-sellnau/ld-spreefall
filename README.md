@@ -72,6 +72,25 @@ with the time taken and the distance walked. The URL always carries your
 position, heading and time of day, so a link opens exactly the view you were
 looking at.
 
+## Staying alive
+
+**Shields first.** A layer over your health that takes the hit, comes back on
+its own after a few seconds out of the fire, and breaks with a sound you will
+learn to dread. The shot that empties it spends only what the shield had left,
+so the break is a warning rather than a wound, and you get the moment after it
+to find a wall.
+
+**Three difficulties, chosen on the title screen or with F5, F6 and F7.** They
+change the size of the shield, how long the quiet has to be before it comes
+back, how hard everything out there hits, and how straight it shoots. On easy
+your health comes back too, which is most of what makes it easy.
+
+**Reflexes, on E.** The city drops to a third of speed and you do not: your
+aim, your trigger and your feet all stay on the real clock, so a magazine goes
+three times as far and a burst that was going to hit you is something you can
+walk out of. The meter drains while it is on and fills when it is not.
+Jumping while it runs spends a slice of it and throws you most of a storey up.
+
 ## The shooter
 
 **The targets are drones, not people.** This is a reconstruction of a real city,
@@ -94,11 +113,17 @@ What is under the hood:
   marches the ground height field, at about 4.3 microseconds a ray. The world is
   tested first and the drones only within that distance, so cover is not a
   special case, it is the same geometry you are standing on.
-- Six things to carry, on the number row or the mouse wheel: an M16, a pump
+- Ten things to carry, on the number row or the mouse wheel: an M16, a pump
   shotgun that throws eleven pellets, a rocket launcher, grenades, C4 you place
-  and blow with T, and a banana. Each one is a row in `src/game/arsenal.js`,
-  because every difference between a rifle and a shotgun that the game cares
-  about is a number.
+  and blow with T, a banana, a railgun that goes through everyone in the line, a
+  plasma rifle whose bolts bounce round a corner, a flak cannon that fills a
+  doorway with shrapnel, and a splinter gun whose darts chase. The last four are
+  the arena tradition, which the deathmatch shooters of the nineties built;
+  the names and the numbers are ours. Each one is a row in
+  `src/game/arsenal.js`, because every difference between a rifle and a shotgun
+  that the game cares about is a number.
+- Hold the sight on something with the launcher and it locks, and the rocket
+  chases what it locked rather than where you were pointing when you fired.
 - Recoil kicks and comes back. The view carries the climb as an offset and gets
   it back as the spring settles, keeping only the small share each weapon is
   allowed to keep, so a burst walks instead of stranding your aim in the sky. A
@@ -113,6 +138,11 @@ What is under the hood:
   and a ground clearance term, so they do not fly into walls, and they re-test
   line of sight every 0.22 s rather than every frame, on a rota, so the cost is
   spread across frames instead of spiking whenever the sky fills up.
+- Fighter jets arrive at threat three. They do not hover: one comes in from
+  half a kilometre out, aims at where you are going rather than where you are,
+  fires on the pass, breaks off, and comes round again in a wide turn. You
+  cannot chase it, only be ready for the next run. Every second pass it drops a
+  missile that chases you slowly enough that moving is an answer.
 - Soldiers walk the same streets. They advance, take an angle on you, fire in
   bursts and lose you when you break line of sight, testing that line of sight
   from their eyes to yours through the real geometry. They will not walk into
@@ -122,6 +152,12 @@ What is under the hood:
   air at once, from six to fourteen. Integrity regenerates after a pause, and
   going down clears the sky, drops the threat by a tier and puts you back on
   your feet where you fell.
+- The scene is drawn into a target that shrinks when frames get expensive and
+  grows back when they are cheap, between roughly half and full resolution. It
+  is driven by the wall clock between frames rather than by how long our own
+  draw calls took to return, because a GPU signs for the work and finishes it
+  later: fed the latter, a machine at four frames a second thinks it has
+  headroom. The interface never scales.
 - Every sound is synthesised: a noise burst through a swept bandpass for the shot,
   a rotor bed whose level and pitch follow the nearest drone, and two different
   confirms for a hull hit and a core hit.
