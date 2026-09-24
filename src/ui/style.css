@@ -1,0 +1,743 @@
+:root {
+  --ink: #f2efe8;
+  --dim: #a9a49a;
+  --ground: #0b0d10;
+  --accent: #e2c98d;
+  --panel: rgba(14, 16, 20, 0.88);
+  --edge: rgba(226, 201, 141, 0.28);
+  --ui: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ground);
+  color: var(--ink);
+  font: var(--ui);
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+#view {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: default;
+}
+#view.locked { cursor: none; }
+
+.hidden { display: none !important; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(11, 13, 16, 0.55), rgba(6, 7, 9, 0.94));
+  z-index: 40;
+  backdrop-filter: blur(2px);
+}
+
+.loadbox, .titlebox {
+  text-align: center;
+  max-width: min(640px, 88vw);
+  padding: 2rem 1.5rem;
+}
+
+.markdef {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* The Brandenburg Gate mark, the same drawing as the favicon. */
+.logo {
+  display: block;
+  width: clamp(92px, 15vw, 148px);
+  height: auto;
+  margin: 0 auto 1.15rem;
+  fill: var(--accent);
+  filter: drop-shadow(0 3px 24px rgba(0, 0, 0, 0.7));
+}
+.logo.big {
+  width: clamp(126px, 23vw, 236px);
+  margin-bottom: 1.5rem;
+}
+
+.wordmark {
+  font: 700 clamp(28px, 6vw, 54px)/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.7);
+}
+.wordmark span { color: var(--accent); margin: 0 0.06em; }
+.wordmark.big { font-size: clamp(38px, 9vw, 84px); }
+
+.tagline, .blurb {
+  color: var(--dim);
+  margin: 1.1rem auto 0;
+  max-width: 46ch;
+  font-size: 14px;
+}
+.blurb { line-height: 1.65; }
+
+.bar {
+  width: min(360px, 70vw);
+  height: 3px;
+  margin: 1.8rem auto 0.6rem;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.18s linear;
+}
+.loadnote { color: var(--dim); font-size: 12px; letter-spacing: 0.08em; }
+
+.play {
+  margin-top: 1.8rem;
+  padding: 0.85rem 2.4rem;
+  font: 600 15px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  color: var(--ground);
+  background: var(--accent);
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.play:hover { transform: translateY(-1px); background: #f0dba8; }
+.play:active { transform: translateY(0); }
+
+.hint { color: #7d7a73; font-size: 12px; margin-top: 1.6rem; }
+.hint b { color: var(--dim); font-weight: 600; }
+
+/* --- head up display --- */
+
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+
+/* Four ticks that open with the spread cone, plus a centre dot. */
+#crosshair {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 0; height: 0;
+  --gap: 7px;
+}
+#crosshair::after {
+  content: "";
+  position: absolute;
+  left: -1px; top: -1px;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+#crosshair i {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+#crosshair i:nth-child(1), #crosshair i:nth-child(2) {
+  width: 1.5px; height: 6px; left: -0.75px;
+}
+#crosshair i:nth-child(1) { top: calc(-1 * var(--gap) - 6px); }
+#crosshair i:nth-child(2) { top: var(--gap); }
+#crosshair i:nth-child(3), #crosshair i:nth-child(4) {
+  height: 1.5px; width: 6px; top: -0.75px;
+}
+#crosshair i:nth-child(3) { left: calc(-1 * var(--gap) - 6px); }
+#crosshair i:nth-child(4) { left: var(--gap); }
+#crosshair.aiming i { opacity: 0; }
+#crosshair.holstered i, #crosshair.holstered::after { opacity: 0.18; }
+
+/* The X that confirms a shot connected. */
+#hitmarker {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
+  opacity: 0;
+  background:
+    linear-gradient(45deg, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%),
+    linear-gradient(-45deg, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%);
+  -webkit-mask: radial-gradient(circle, transparent 3px, #000 3px);
+  mask: radial-gradient(circle, transparent 3px, #000 3px);
+  color: rgba(255, 255, 255, 0.95);
+}
+#hitmarker.on { animation: hitpop 0.24s ease-out forwards; }
+#hitmarker.core { color: #ffd07a; }
+#hitmarker.kill { color: #ff8a5c; }
+@keyframes hitpop {
+  0% { opacity: 1; transform: scale(0.62); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+/* Red vignette when you are hit, leaning towards whatever hit you. */
+#damage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  background: radial-gradient(120% 90% at var(--dx, 50%) var(--dy, 50%),
+              rgba(190, 30, 24, 0) 38%, rgba(160, 18, 14, 0.62) 100%);
+}
+#damage.on { opacity: 1; transition: opacity 0.08s ease; }
+
+#combat {
+  position: absolute;
+  left: 22px; bottom: 34px;
+  display: flex;
+  align-items: flex-end;
+  gap: 26px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+#combat .vitals { width: 188px; }
+#combat .label {
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 5px;
+}
+#combat .hbar {
+  height: 5px;
+  background: rgba(255, 255, 255, 0.13);
+  border-radius: 1px;
+  overflow: hidden;
+}
+#combat .hbar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #7fd1a0, #cfe8b0);
+  transition: width 0.18s ease, background 0.3s ease;
+}
+#combat.hurt .hbar i { background: linear-gradient(90deg, #d4553f, #e8a06a); }
+/* The shield sits over the health, thicker and colder, because it is the bar
+   you watch in a fight and the one that comes back on its own. */
+#combat .sbar {
+  height: 9px;
+  background: rgba(120, 190, 255, 0.14);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-bottom: 3px;
+  box-shadow: inset 0 0 0 1px rgba(150, 210, 255, 0.18);
+}
+#combat .sbar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #58a8ff, #9fd8ff);
+  box-shadow: 0 0 10px rgba(90, 175, 255, 0.55);
+  transition: width 0.12s linear, opacity 0.2s ease;
+}
+/* Recharging: the bar breathes, which is the visual half of the rising tone. */
+#combat.recharging .sbar i { animation: shieldpulse 0.9s ease-in-out infinite; }
+@keyframes shieldpulse {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
+}
+#combat.broken .sbar { box-shadow: inset 0 0 0 1px rgba(255, 110, 90, 0.5); }
+/* The reflex meter: thin, amber, under the other two, because it is a
+   resource rather than a state of your body. */
+#combat .rbar {
+  height: 3px;
+  background: rgba(255, 190, 90, 0.12);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: 3px;
+}
+#combat .rbar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #f0a44c, #ffd79a);
+  transition: width 0.1s linear;
+}
+#combat.reflexready .rbar i { box-shadow: 0 0 8px rgba(240, 170, 80, 0.7); }
+
+/* While the world is slowed the whole interface goes cold and the edges
+   darken, so it is unmistakable which clock you are on. */
+#hud.slow #combat, #hud.slow #threat, #hud.slow #minimap { filter: saturate(0.55) brightness(1.12); }
+#hud.slow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center,
+    rgba(0, 0, 0, 0) 48%, rgba(30, 60, 110, 0.5) 100%);
+}
+
+/* The rocket lock: a ring that closes as it fills and snaps shut when it is
+   yours. It sits on the crosshair, because that is where you are looking. */
+#lockon {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 84px; height: 84px;
+  margin: -42px 0 0 -42px;
+  pointer-events: none;
+}
+#lockon i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 190, 90, 0.75);
+  transform: scale(calc(1.9 - 0.9 * var(--p, 0)));
+  opacity: calc(0.35 + 0.65 * var(--p, 0));
+  transition: opacity 0.1s linear;
+}
+#lockon span {
+  position: absolute;
+  left: 50%; top: -18px;
+  transform: translateX(-50%);
+  font: 700 9px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 190, 90, 0.85);
+}
+#lockon.locked i {
+  border-color: #ff6a4a;
+  box-shadow: 0 0 12px rgba(255, 106, 74, 0.6);
+  animation: lockpulse 0.5s ease-in-out infinite;
+}
+#lockon.locked span { color: #ff8a6a; }
+@keyframes lockpulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+#combat .num {
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--dim);
+  margin-top: 5px;
+}
+#combat .num #shieldnum { color: #9fd8ff; }
+#combat .num em {
+  font-style: normal;
+  margin-left: 8px;
+  color: var(--dim);
+}
+#combat.hurt .num em { color: #e8836a; }
+
+/* The screen edge answers the shield: blue when it takes a hit, red when it is
+   gone and the next one is yours. */
+#shieldflash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  background: radial-gradient(ellipse at center,
+    rgba(0, 0, 0, 0) 45%, rgba(110, 190, 255, 0.5) 100%);
+}
+#shieldflash.on { opacity: 1; transition: opacity 0.05s ease; }
+#shieldflash.broken {
+  background: radial-gradient(ellipse at center,
+    rgba(0, 0, 0, 0) 40%, rgba(255, 90, 60, 0.55) 100%);
+}
+.difficulty {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 18px 0 10px;
+}
+.difficulty .diff {
+  font: 600 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.difficulty .diff:hover { color: var(--ink); border-color: rgba(255, 255, 255, 0.3); }
+.difficulty .diff.on {
+  color: #0b0d10;
+  background: #9fd8ff;
+  border-color: #9fd8ff;
+}
+.diffnote {
+  max-width: 460px;
+  margin: 0 auto 6px;
+  font: 400 12px/1.5 ui-sans-serif, system-ui, sans-serif;
+  color: var(--dim);
+}
+
+#combat .ammo {
+  font: 600 28px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  position: relative;
+}
+#combat .ammo #weaponname {
+  display: block;
+  font: 600 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 5px;
+}
+#combat.explosive .ammo #weaponname { color: var(--accent); }
+#combat .ammo .sep { color: rgba(255, 255, 255, 0.28); margin: 0 4px; }
+#combat .ammo #reservenum { font-size: 15px; color: var(--dim); }
+#combat.empty .ammo #ammonum { color: #e2705a; }
+#combat .ammo b {
+  position: absolute;
+  left: 0; top: -15px;
+  font: 600 9.5px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+#threat {
+  position: absolute;
+  right: 18px; bottom: 34px;
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+#threat span[id] { color: var(--accent); font-weight: 600; }
+#threat .tsep { margin-left: 14px; }
+
+#sanctuary {
+  position: absolute;
+  left: 50%; top: 22%;
+  transform: translateX(-50%);
+  max-width: min(460px, 82vw);
+  padding: 12px 20px;
+  text-align: center;
+  background: rgba(10, 12, 15, 0.7);
+  border: 1px solid var(--edge);
+  font-size: 12px;
+  line-height: 1.6;
+  color: #d6d1c6;
+  backdrop-filter: blur(3px);
+}
+#sanctuary b {
+  display: block;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+/* What you are carrying that has a clock on it. One chip per power up, with
+   the seconds left counting down, because the whole decision a power up asks
+   of you is how long you have got. */
+#powers {
+  position: absolute;
+  left: 22px; bottom: 96px;
+  display: flex;
+  gap: 8px;
+}
+#powers div {
+  font: 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 5px 8px 4px;
+  border-radius: 2px;
+  color: #0d0d0d;
+  background: #cfcabf;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+  animation: powerin 0.22s ease;
+}
+#powers div b { font-weight: 700; }
+#powers div em {
+  font-style: normal;
+  margin-left: 6px;
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+}
+#powers .quad { background: linear-gradient(90deg, #5a86ff, #a8c4ff); }
+#powers .ultra { background: linear-gradient(90deg, #ffc64c, #ffe6a8); }
+#powers .overload { background: linear-gradient(90deg, #6fe08a, #c2f5cd); }
+/* Under three seconds it blinks, which is the only warning you get. */
+#powers .ending { animation: powerblink 0.4s steps(2) infinite; }
+@keyframes powerin {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes powerblink {
+  0% { opacity: 1; }
+  100% { opacity: 0.35; }
+}
+
+#killfeed {
+  position: absolute;
+  right: 18px; top: 240px;
+  width: 210px;
+  text-align: right;
+}
+#killfeed div {
+  font: 11px/1.5 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #cfcabf;
+  text-shadow: 0 1px 4px #000;
+  opacity: 0;
+  animation: feedin 3.4s ease forwards;
+}
+#killfeed div b { color: var(--accent); }
+#killfeed div i { color: #e2705a; font-style: normal; }
+@keyframes feedin {
+  0% { opacity: 0; transform: translateX(10px); }
+  8% { opacity: 1; transform: translateX(0); }
+  78% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+#minimap {
+  position: absolute;
+  right: 16px; top: 16px;
+  width: 196px; height: 196px;
+  border-radius: 50%;
+  background: rgba(10, 12, 15, 0.72);
+  border: 1px solid var(--edge);
+  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.5);
+  transition: width 0.22s ease, height 0.22s ease, border-radius 0.22s ease;
+}
+#minimap.big {
+  width: min(86vw, 1100px); height: min(60vh, 620px);
+  right: 50%; top: 50%;
+  transform: translate(50%, -50%);
+  border-radius: 6px;
+}
+
+#compass {
+  position: absolute;
+  right: 16px; top: 16px;
+  width: 196px;
+  text-align: center;
+  font: 600 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  padding-top: 6px;
+  text-shadow: 0 1px 4px #000;
+}
+
+#progress {
+  position: absolute;
+  right: 18px; top: 224px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  text-shadow: 0 1px 4px #000;
+  text-align: right;
+  width: 192px;
+}
+#progress span { color: var(--accent); font-weight: 600; }
+
+#cardhost { position: absolute; left: 0; bottom: 92px; width: min(430px, 82vw); }
+
+.card {
+  margin: 0 0 10px 18px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border-left: 2px solid var(--accent);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  transform: translateX(-118%);
+  animation: slidein 0.5s cubic-bezier(0.16, 0.9, 0.3, 1) forwards;
+}
+.card.out { animation: slideout 0.45s ease forwards; }
+.card h3 {
+  margin: 0 0 6px;
+  font: 600 15px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+}
+.card p { margin: 0; color: #cfcabf; font-size: 12.5px; line-height: 1.6; }
+
+@keyframes slidein { to { transform: translateX(0); } }
+@keyframes slideout { to { transform: translateX(-118%); opacity: 0; } }
+
+#toast {
+  position: absolute;
+  left: 50%; bottom: 96px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  font-size: 12px;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+
+#debug {
+  position: absolute;
+  left: 14px; top: 14px;
+  padding: 10px 13px;
+  background: rgba(8, 9, 11, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #b9e3c0;
+  white-space: pre;
+  pointer-events: none;
+}
+
+#controls {
+  position: absolute;
+  left: 50%; bottom: 42px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+#controls button, .tbtn {
+  padding: 7px 14px;
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  background: rgba(10, 12, 15, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  cursor: pointer;
+}
+#controls button:hover { color: var(--ink); border-color: var(--edge); }
+
+#touchui { position: absolute; inset: 0; pointer-events: none; }
+#stick {
+  position: absolute;
+  width: 118px; height: 118px;
+  margin: -59px 0 0 -59px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+#stick.on { opacity: 0.75; }
+#stickknob {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 46px; height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  background: rgba(226, 201, 141, 0.35);
+  border: 1px solid var(--edge);
+}
+.tbtn {
+  position: absolute;
+  pointer-events: auto;
+  padding: 16px 20px;
+  border-radius: 50%;
+}
+#btnjump { right: 24px; bottom: 108px; }
+#btnrun { right: 104px; bottom: 44px; }
+
+/* --- photo mode --- */
+
+#photo {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+}
+.photobar {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 10px 16px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  font-size: 12px;
+  color: var(--dim);
+}
+.photobar label { display: flex; gap: 8px; align-items: center; }
+.photobar input[type=range] { width: 150px; accent-color: var(--accent); }
+.photobar button {
+  padding: 6px 14px;
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ground);
+  background: var(--accent);
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.photobar span { color: var(--ink); font-variant-numeric: tabular-nums; min-width: 6ch; }
+
+/* --- panels --- */
+
+.panel {
+  position: fixed;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 45;
+  width: min(560px, 90vw);
+  padding: 26px 30px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.6);
+}
+.panel h2 { margin: 0 0 16px; font-size: 16px; letter-spacing: 0.06em; color: var(--accent); font-weight: 600; }
+.panel table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.panel td { padding: 5px 0; color: #cfcabf; vertical-align: top; }
+.panel td:first-child { color: var(--accent); width: 46%; padding-right: 16px; }
+.panel p { font-size: 12.5px; color: var(--dim); line-height: 1.6; }
+.panel button {
+  margin-top: 18px;
+  padding: 7px 18px;
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ground);
+  background: var(--accent);
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+#attribution {
+  position: fixed;
+  left: 12px; bottom: 8px;
+  z-index: 25;
+  font-size: 10.5px;
+  color: rgba(210, 205, 195, 0.62);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  pointer-events: auto;
+  max-width: 70vw;
+}
+#attribution a { color: rgba(226, 201, 141, 0.85); }
+
+@media (max-width: 720px) {
+  #combat { left: 12px; bottom: 74px; gap: 14px; }
+  #powers { left: 12px; bottom: 132px; gap: 6px; }
+  #combat .vitals { width: 118px; }
+  #combat .ammo { font-size: 21px; }
+  #threat { right: 12px; bottom: 74px; font-size: 9.5px; letter-spacing: 0.08em; }
+  #threat .tsep { margin-left: 8px; }
+  #killfeed { top: 172px; width: 150px; }
+  #minimap { width: 116px; height: 116px; }
+  #compass { width: 116px; }
+  #progress { top: 142px; width: 116px; font-size: 10px; }
+  #cardhost { bottom: 150px; width: 86vw; }
+  #controls { bottom: 12px; }
+  #attribution { font-size: 9.5px; max-width: 58vw; }
+}

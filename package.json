@@ -1,0 +1,26 @@
+{
+  "name": "spreefall",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A walkable first person reconstruction of central Berlin in raw WebGL2, with no engine and no 3D library.",
+  "scripts": {
+    "fetch": "node tools/fetch-osm.mjs",
+    "world": "node tools/build-world.mjs",
+    "test": "node --test tools/test/*.test.mjs",
+    "build": "node tools/build-dist.mjs",
+    "serve": "node tools/serve.mjs",
+    "verify": "node tools/verify.mjs",
+    "test:ui": "node tools/test-ui.mjs",
+    "test:combat": "node tools/test-combat.mjs",
+    "test:arsenal": "node tools/test-arsenal.mjs",
+    "clip": "node tools/capture-walk.mjs",
+    "all": "npm run world && npm run test && npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.1"
+  }
+}
