@@ -334,6 +334,168 @@ export class Audio {
     o.stop(t + 0.85);
   }
 
+  /**
+   * The shield going down: a hard electrical crack with a falling tone under
+   * it. It has to be unmistakable, because it is the only warning you get that
+   * the next hit is the one that hurts.
+   */
+  shieldBreak() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(4200, t);
+    bp.frequency.exponentialRampToValueAtTime(700, t + 0.35);
+    bp.Q.value = 1.4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.34, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3, 0.5);
+    src.stop(t + 0.5);
+
+    for (const [hz, end, at, gain] of [[880, 180, 0, 0.16], [1320, 240, 0.02, 0.1]]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(hz, t + at);
+      o.frequency.exponentialRampToValueAtTime(end, t + at + 0.4);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0.0001, t + at);
+      og.gain.exponentialRampToValueAtTime(gain, t + at + 0.01);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.45);
+      o.connect(og).connect(this.master);
+      o.start(t + at);
+      o.stop(t + at + 0.5);
+    }
+  }
+
+  /**
+   * The shield coming back: a tone that rises while it charges and resolves
+   * when it is full, held as long as the recharge takes rather than fired and
+   * forgotten, so the sound tells you how far along it is.
+   */
+  shieldCharge(on, seconds = 2.4) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) {
+      return;
+    }
+    const t = ctx.currentTime;
+    if (!on) {
+      if (this._shieldOsc) {
+        this._shieldGain.gain.cancelScheduledValues(t);
+        this._shieldGain.gain.setTargetAtTime(0.0001, t, 0.05);
+        const osc = this._shieldOsc;
+        osc.stop(t + 0.4);
+        this._shieldOsc = null;
+        this._shieldGain = null;
+      }
+      return;
+    }
+    if (this._shieldOsc) return;
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(320, t);
+    o.frequency.exponentialRampToValueAtTime(760, t + Math.max(0.3, seconds));
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 7.5;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 26;
+    lfo.connect(lfoGain).connect(o.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.055, t + 0.12);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    lfo.start(t);
+    lfo.stop(t + Math.max(0.3, seconds) + 0.6);
+    this._shieldOsc = o;
+    this._shieldGain = g;
+  }
+
+  /** The chime when it is full again, so you know you can step out. */
+  shieldFull() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    for (const [hz, at] of [[784, 0], [1046, 0.07]]) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = hz;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(0.10, t + at + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.30);
+      o.connect(g).connect(this.master);
+      o.start(t + at);
+      o.stop(t + at + 0.34);
+    }
+  }
+
+  /**
+   * Entering and leaving the slow: a swept filter on everything, so the city
+   * goes underwater, plus a sub tone that sits under the whole thing. The
+   * master chain grows a lowpass the first time this is called, which keeps the
+   * ordinary graph as cheap as it was.
+   */
+  reflex(on) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    this._ensureSlowFilter();
+    if (!this._slowFilter) return;
+    this._slowFilter.frequency.cancelScheduledValues(t);
+    this._slowFilter.frequency.setTargetAtTime(on ? 620 : 20000, t, 0.12);
+    if (on) {
+      if (this._slowOsc) return;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(70, t);
+      o.frequency.exponentialRampToValueAtTime(42, t + 0.5);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.10, t + 0.18);
+      o.connect(g).connect(this.master);
+      o.start(t);
+      this._slowOsc = o;
+      this._slowGain = g;
+    } else if (this._slowOsc) {
+      this._slowGain.gain.cancelScheduledValues(t);
+      this._slowGain.gain.setTargetAtTime(0.0001, t, 0.1);
+      this._slowOsc.stop(t + 0.6);
+      this._slowOsc = null;
+      this._slowGain = null;
+    }
+  }
+
+  _ensureSlowFilter() {
+    if (this._slowFilter || !this.ctx || !this.master) return;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 20000;
+    f.Q.value = 0.7;
+    // Splice it in front of the destination without disturbing anything that
+    // is already connected to the master bus.
+    try {
+      this.master.disconnect();
+    } catch { /* nothing was connected yet */ }
+    this.master.connect(f);
+    f.connect(this._masterDestination || this.ctx.destination);
+    this._slowFilter = f;
+  }
+
+  /** The rotor bed drops in pitch with the world, which sells the slow. */
+  setTimeScale(scale) {
+    const bed = this.beds && this.beds.rotor;
+    if (!bed || !bed.osc || !this.ctx) return;
+    this._timeScale = scale;
+  }
+
   /** Two quick clicks: one weapon down, the next one up. */
   swap() {
     const ctx = this.ctx;
@@ -355,6 +517,28 @@ export class Audio {
       src.start(t + at, Math.random() * 3, 0.07);
       src.stop(t + at + 0.07);
     }
+  }
+
+  /** The thrust of a reflex leap: a short upward whoosh. */
+  leap() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(400, t);
+    bp.frequency.exponentialRampToValueAtTime(2400, t + 0.28);
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3, 0.4);
+    src.stop(t + 0.4);
   }
 
   /** Magazine out, magazine in, bolt. Three clicks spaced over the reload. */

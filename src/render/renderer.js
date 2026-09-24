@@ -72,6 +72,7 @@ export class Renderer {
     this.actors = new Actors(gl, caps);
     this.drawActors = true;
     this.viewmodel = null;      // set by the game layer each frame, or null
+    this.reflex = 0;            // 0 to 1, how far into slowed time we are
 
     this.shadowFbo = [];
     this.sceneFbo = null;
@@ -429,6 +430,7 @@ export class Renderer {
       .int('uScene', 0).int('uBloom', 1)
       .vec2('uTexel', 1 / this.width, 1 / this.height)
       .float('uExposure', this.exposure)
+      .float('uSlow', this.reflex || 0)
       .float('uBloomAmount', this.q.bloom ? 0.62 : 0)
       .float('uVignette', 0.34)
       .float('uFxaa', this.q.fxaa && !this.debugMode ? 1 : 0)

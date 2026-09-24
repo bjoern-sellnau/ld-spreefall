@@ -50,6 +50,7 @@ uniform float uBloomAmount;
 uniform float uVignette;
 uniform float uFxaa;
 uniform float uRaw;      // 1 while a debug view is up, so nothing is graded
+uniform float uSlow;     // 0 to 1, how far into the slowed world we are
 layout(location = 0) out vec4 fragColour;
 
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -89,6 +90,20 @@ void main() {
   vec2 d = vUv - 0.5;
   float vig = 1.0 - dot(d, d) * uVignette;
   c *= clamp(vig, 0.0, 1.0);
+
+  // Slowed time: the colour drains towards a cold blue and the corners close
+  // in. It is a grade rather than an overlay, so the city keeps its shape and
+  // you can still see what is about to hit you.
+  if (uSlow > 0.001) {
+    float l = luma(c);
+    vec3 cold = mix(vec3(l), vec3(l * 0.72, l * 0.86, l * 1.22), 0.65);
+    c = mix(c, cold, uSlow * 0.8);
+    float edge = 1.0 - dot(d, d) * 2.1 * uSlow;
+    c *= clamp(edge, 0.0, 1.0);
+    // A faint scan of brightness across the frame, so the still world still
+    // has something moving in it.
+    c *= 1.0 + uSlow * 0.05 * sin(vUv.y * 140.0);
+  }
   fragColour = vec4(linearToSrgb(c), 1.0);
 }
 `;

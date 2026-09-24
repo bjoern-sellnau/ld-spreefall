@@ -35,6 +35,12 @@
     <p class="blurb">Every building, street, tree and bend of the river here comes from
     OpenStreetMap. The renderer, the physics and the sound are written from scratch
     in WebGL2 and the Web Audio API, with no game engine and no 3D library.</p>
+    <div class="difficulty" role="radiogroup" aria-label="Difficulty">
+      <button class="diff" data-diff="easy">Easy</button>
+      <button class="diff on" data-diff="normal">Normal</button>
+      <button class="diff" data-diff="hard">Hard</button>
+    </div>
+    <p class="diffnote" id="diffnote">Shields take the hit first and come back on their own. On easy they come back faster, and so does your health.</p>
     <button id="playbtn" class="play">Press to walk</button>
     <p class="hint" id="controlhint">
       <b>W A S D</b> or arrows to walk &nbsp; <b>Shift</b> to run &nbsp; <b>Space</b> to jump
@@ -47,11 +53,14 @@
   <div id="crosshair"><i></i><i></i><i></i><i></i></div>
   <div id="hitmarker"></div>
   <div id="damage"></div>
+  <div id="shieldflash"></div>
   <div id="combat">
     <div class="vitals">
-      <div class="label">integrity</div>
+      <div class="label">shield</div>
+      <div class="sbar"><i id="shieldbar"></i></div>
       <div class="hbar"><i id="healthbar"></i></div>
-      <div class="num" id="healthnum">100</div>
+      <div class="rbar"><i id="reflexbar"></i></div>
+      <div class="num"><span id="shieldnum">120</span><em id="healthnum">100</em></div>
     </div>
     <div class="ammo">
       <span id="weaponname">M16</span>
@@ -104,13 +113,15 @@
   <table>
     <tr><td>W A S D, arrows</td><td>walk</td></tr>
     <tr><td>Shift</td><td>run</td></tr>
-    <tr><td>Space</td><td>jump onto kerbs and low walls</td></tr>
+    <tr><td>Space</td><td>jump onto kerbs and low walls, or leap while reflexes are on</td></tr>
+    <tr><td>E, or right Shift</td><td>reflexes: the city slows down and you do not</td></tr>
     <tr><td>Mouse, or drag on the right of the screen</td><td>look</td></tr>
     <tr><td>P</td><td>photo mode, hides the interface and unlocks the clock</td></tr>
     <tr><td>M</td><td>enlarge the map</td></tr>
     <tr><td>N</td><td>sound on and off</td></tr>
     <tr><td>F</td><td>debug overlay</td></tr>
     <tr><td>F1 F2 F3</td><td>quality: low, medium, high</td></tr>
+    <tr><td>F5 F6 F7</td><td>difficulty: easy, normal, hard</td></tr>
     <tr><td>Left mouse</td><td>fire</td></tr>
     <tr><td>Right mouse</td><td>aim down the sight</td></tr>
     <tr><td>1 to 6, or the wheel</td><td>M16, shotgun, rocket launcher, grenade, C4, banana</td></tr>

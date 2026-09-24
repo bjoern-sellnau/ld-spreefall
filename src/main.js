@@ -17,10 +17,11 @@ import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
 import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
-import { Combat, COMBAT } from './game/combat.js';
+import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
 import { Projectiles } from './game/projectiles.js';
 import { Soldiers } from './game/soldiers.js';
+import { Reflex, REFLEX } from './game/reflex.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -36,6 +37,9 @@ const el = {
   crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
   combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
   ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
+  shieldbar: $('shieldbar'), shieldnum: $('shieldnum'), shieldflash: $('shieldflash'),
+  reflexbar: $('reflexbar'),
+  diffnote: $('diffnote'),
   weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
   sanctuary: $('sanctuary'), killfeed: $('killfeed'),
@@ -130,7 +134,11 @@ async function main() {
   const photo = new PhotoMode(el.canvas, el.hud, el.photo, el.attribution);
 
   // --- the shooter --------------------------------------------------------
-  const combat = new Combat(m);
+  // The difficulty is chosen on the title screen and remembered, because the
+  // first thing anyone wants after dying twice is a different one.
+  let wanted = 'normal';
+  try { wanted = localStorage.getItem('spreefall.difficulty') || 'normal'; } catch { /* private mode */ }
+  const combat = new Combat(m, wanted);
   const drones = new Drones(world, (x, y, z) => combat.isSanctuary(x, y, z));
   // Filled in by the soldier layer below, and referenced by the blast handler
   // before it exists, which is why it is a binding rather than a constant.
@@ -138,8 +146,11 @@ async function main() {
   const projectiles = new Projectiles(world, (x, y, z, splash, body) => explode(x, y, z, splash, body));
   const weapon = new Weapon(world, drones, { projectiles });
   const effects = new Effects();
+  const reflex = new Reflex();
+  reflex.drainScale = combat.rules.reflexDrain;
   soldiers = new Soldiers(world, (x, y, z) => combat.isSanctuary(x, y, z));
   soldiers.hazards = () => projectiles.hazards();
+  soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
   projectiles.hitActors = (x, y, z, dx, dy, dz, maxT) => {
     const d = drones.raycast(x, y, z, dx, dy, dz, maxT);
@@ -193,6 +204,8 @@ async function main() {
     holstered: false,
     muzzle: 0,
     sway: { x: 0, y: 0 },
+    charging: false,
+    shieldTimer: 0,
     recoilApplied: { pitch: 0, yaw: 0 },
     bob: 0,
     inSanctuary: false,
@@ -365,8 +378,39 @@ async function main() {
     combat.hurt(damage, d.x, d.z, player.x, player.z);
   };
 
+  reflex.onStart = () => { audio.reflex(true); el.hud.classList.add('slow'); };
+  reflex.onStop = () => { audio.reflex(false); el.hud.classList.remove('slow'); };
+  reflex.onEmpty = () => toast('reflex spent');
+
+  combat.onShieldBreak = () => {
+    audio.shieldBreak();
+    effects.shake = Math.min(1.4, effects.shake + 0.35);
+    el.shieldflash.classList.add('broken', 'on');
+    clearTimeout(state.shieldTimer);
+    state.shieldTimer = setTimeout(() => el.shieldflash.classList.remove('on'), 520);
+    toast('shield down');
+  };
+  combat.onShieldFull = () => {
+    audio.shieldCharge(false);
+    audio.shieldFull();
+    el.shieldflash.classList.remove('broken');
+  };
+  combat.onDifficulty = (rules) => {
+    toast(`${rules.label}`);
+    try { localStorage.setItem('spreefall.difficulty', rules.name); } catch { /* private mode */ }
+    soldiers.accuracyScale = rules.enemyAccuracy;
+  };
+
   combat.onHurt = () => {
     audio.playerHurt();
+    // A hit that the shield ate flashes blue at the edge of the screen; one
+    // that reached you is the red vignette below.
+    if (combat.shield > 0) {
+      el.shieldflash.classList.remove('broken');
+      el.shieldflash.classList.add('on');
+      clearTimeout(state.shieldTimer);
+      state.shieldTimer = setTimeout(() => el.shieldflash.classList.remove('on'), 220);
+    }
     effects.shake = Math.min(1, effects.shake + 0.3);
     const dir = combat.damageDir;
     // Put the red vignette on the side the shot came from.
@@ -404,6 +448,7 @@ async function main() {
     drones.reset();
     soldiers.reset();
     projectiles.clear();
+    reflex.reset();
     drones.setTier(Math.max(0, combat.tier - 1));
     effects.clear();
     if (!isTouch) input.requestLock();
@@ -440,6 +485,25 @@ async function main() {
     if (!isTouch) input.requestLock();
   }
   el.play.addEventListener('click', beginWalk);
+
+  // The difficulty buttons on the title screen.
+  const diffButtons = [...document.querySelectorAll('.difficulty .diff')];
+  const showDifficulty = () => {
+    for (const b of diffButtons) b.classList.toggle('on', b.dataset.diff === combat.rules.name);
+    const r = combat.rules;
+    el.diffnote.textContent = r.name === 'easy'
+      ? 'Shields take the hit first and come back fast, your health comes back too, and they shoot straighter than you do only half the time.'
+      : r.name === 'hard'
+        ? 'Thin shields, a long wait before they come back, and everything out there hits harder and more often.'
+        : 'Shields take the hit first and come back on their own after a few seconds out of the fire. Your health does not.';
+  };
+  for (const b of diffButtons) {
+    b.addEventListener('click', () => {
+      combat.setDifficulty(b.dataset.diff);
+      showDifficulty();
+    });
+  }
+  showDifficulty();
 
   function skipIntro() {
     if (state.mode !== 'intro') return;
@@ -510,6 +574,7 @@ async function main() {
         break;
       case 'KeyF': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyQ': weapon.select(state.lastWeapon || 'm16'); break;
+      case 'KeyE': case 'ShiftRight': reflex.toggle(); break;
       case 'KeyT': {
         const n = weapon.detonate();
         if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
@@ -524,6 +589,9 @@ async function main() {
       case 'F1': setQuality('low'); break;
       case 'F2': setQuality('medium'); break;
       case 'F3': setQuality('high'); break;
+      case 'F5': combat.setDifficulty('easy'); break;
+      case 'F6': combat.setDifficulty('normal'); break;
+      case 'F7': combat.setDifficulty('hard'); break;
       default: break;
     }
   };
@@ -565,7 +633,15 @@ async function main() {
   let urlTimer = 0;
 
   function fixed(dt) {
-    state.time += dt;
+    // dt is a slice of real time. The reflex decides how much of it the world
+    // gets: you keep all of it, which is the whole trick.
+    const scale = reflex.update(dt);
+    const worldDt = dt * scale;
+    // You slow down too, but nothing like as much, so you can walk out of a
+    // burst that is hanging in the air.
+    const selfDt = dt * (0.55 + 0.45 * scale);
+    state.timeScale = scale;
+    state.time += worldDt;
     input.poll();
 
     if (state.mode === 'intro' || state.mode === 'landing') return;
@@ -585,7 +661,15 @@ async function main() {
       wishZ = (basis[1] * input.moveZ + basis[3] * input.moveX) * speed;
     }
     const wasGround = player.onGround;
-    player.step(dt, wishX, wishZ, !photo.active && input.takeJump());
+    // Jumping while the reflex is running spends a slice of the meter and
+    // throws you most of a storey into the air.
+    const jumped = !photo.active && input.takeJump();
+    let boost = 1;
+    if (jumped && player.onGround && reflex.active) {
+      boost = reflex.leap();
+      if (boost > 1) audio.leap();
+    }
+    player.step(selfDt, wishX, wishZ, jumped, boost);
     player.vx = wishX; player.vz = wishZ;
     if (!wasGround && player.onGround) audio.land(player.surface);
 
@@ -618,13 +702,16 @@ async function main() {
     // in the sky the way the first version did.
     applyRecoil();
 
-    combat.update(dt);
-    projectiles.update(dt);
-    drones.update(dt, eye, state.time);
-    soldiers.update(dt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
+    // The world runs on the slowed clock. The weapon above does not, which is
+    // why a magazine goes further in here than it does outside.
+    combat.update(worldDt);
+    projectiles.update(worldDt);
+    drones.update(worldDt, eye, state.time);
+    soldiers.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
       alive: combat.health > 0 }, state.time);
 
     audio.update(dt, player, camera);
+    audio.setTimeScale(scale);
     let nearest = null;
     for (const d of drones.active) {
       if (d.state === DRONE_STATE.DYING) continue;
@@ -633,7 +720,7 @@ async function main() {
     }
     audio.setDroneField(nearest, drones.engaged);
 
-    urlTimer += dt;
+    urlTimer += worldDt;
     if (urlTimer > 0.6) {
       urlTimer = 0;
       writeState({
@@ -777,6 +864,20 @@ async function main() {
       el.healthbar.style.width = `${Math.max(0, combat.health)}%`;
       el.healthnum.textContent = String(hp);
       el.combat.classList.toggle('hurt', combat.health < 45);
+      el.shieldbar.style.width = `${combat.shieldFraction * 100}%`;
+      el.shieldnum.textContent = String(Math.round(combat.shield));
+      el.combat.classList.toggle('recharging', combat.recharging);
+      el.reflexbar.style.width = `${reflex.fraction * 100}%`;
+      el.combat.classList.toggle('reflexready', reflex.ready);
+      renderer.reflex = reflex.blend;
+      el.combat.classList.toggle('broken', combat.shield <= 0);
+      // The recharge tone runs for as long as the recharge does.
+      const wantCharge = combat.recharging && combat.health > 0;
+      if (wantCharge !== state.charging) {
+        state.charging = wantCharge;
+        audio.shieldCharge(wantCharge,
+          (combat.maxShield - combat.shield) / combat.rules.shieldRate);
+      }
       el.ammonum.textContent = String(weapon.ammo);
       el.reservenum.textContent = String(weapon.reserve);
       el.combat.classList.toggle('empty', weapon.ammo === 0);
@@ -856,7 +957,7 @@ async function main() {
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
-    combat, drones, weapon, effects, projectiles,
+    combat, drones, weapon, effects, projectiles, reflex,
     get soldiers() { return soldiers; },
     spawnSoldier(dx, dz) {
       const s = soldiers.free();

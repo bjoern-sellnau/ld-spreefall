@@ -82,6 +82,8 @@ export class Soldiers {
     this.onDeath = null;
     this.onSlip = null;
     this.hazards = () => [];
+    // Scaled by the difficulty: how often their aimed shot is actually aimed.
+    this.accuracyScale = 1;
   }
 
   reset() {
@@ -386,7 +388,7 @@ export class Soldiers {
     // Distance and their own accuracy decide whether that round is a hit. The
     // shot is reported either way, so you hear it go past.
     const falloff = 1 - Math.min(1, dist / SPEC.fireRange) * 0.55;
-    const hit = Math.random() < SPEC.accuracy * falloff;
+    const hit = Math.random() < SPEC.accuracy * falloff * this.accuracyScale;
     if (this.onShot) this.onShot(s, hit ? SPEC.damage : 0);
   }
 

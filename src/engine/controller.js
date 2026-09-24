@@ -124,8 +124,9 @@ export class CharacterController {
    * @param {number} wishX desired horizontal velocity, metres per second
    * @param {number} wishZ
    * @param {boolean} jump
+   * @param {number} jumpBoost multiplier on the jump, for the reflex leap
    */
-  step(dt, wishX, wishZ, jump) {
+  step(dt, wishX, wishZ, jump, jumpBoost = 1) {
     const startX = this.x, startZ = this.z;
 
     if (this.noclip) {
@@ -168,7 +169,7 @@ export class CharacterController {
     }
 
     if (jump && this.onGround) {
-      this.vy = PLAYER.jumpSpeed;
+      this.vy = PLAYER.jumpSpeed * jumpBoost;
       this.onGround = false;
     }
 
