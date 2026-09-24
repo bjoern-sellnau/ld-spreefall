@@ -23,6 +23,7 @@ import { Projectiles } from './game/projectiles.js';
 import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
+import { Pickups, PICKUP } from './game/pickups.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -43,7 +44,7 @@ const el = {
   diffnote: $('diffnote'),
   weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
-  sanctuary: $('sanctuary'), killfeed: $('killfeed'),
+  sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
   down: $('down'), downText: $('downtext'), downBtn: $('downbtn'),
   touchui: $('touchui'), stick: $('stick'), knob: $('stickknob'),
   btnJump: $('btnjump'), btnRun: $('btnrun'), source: $('datasource'),
@@ -152,6 +153,7 @@ async function main() {
   soldiers = new Soldiers(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const jets = new Jets(world, (x, y, z) => combat.isSanctuary(x, y, z));
   jets.accuracyScale = combat.rules.enemyAccuracy;
+  const pickups = new Pickups(world, (x, y, z) => combat.isSanctuary(x, y, z));
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
@@ -221,6 +223,10 @@ async function main() {
   tiles.updateResidency(spawn.x, spawn.z, 0);
   tiles.uploadsPerFrame = 8;
   player.teleport(spawn.x, spawn.z);
+
+  // The pads are scattered once, around wherever you came in, so a deep link
+  // into Museum Island gets a map laid out around Museum Island.
+  pickups.place(spawn.x, spawn.z);
 
   const intro = new Intro(spawn.x, spawn.z, world.groundHeight(spawn.x, spawn.z));
 
@@ -451,6 +457,28 @@ async function main() {
     combat.hurt(damage, d.x, d.z, player.x, player.z);
   };
 
+  // Taking something off a pad. Ammunition and health apply here and are done;
+  // the three power ups hand off to combat, which owns their clocks.
+  pickups.onTaken = (pad, spec) => {
+    audio.pickup(pad.kind);
+    if (pad.kind === 'ammo') {
+      const given = weapon.resupply(spec.held, spec.others);
+      feed(`<b>ammunition</b> +${given}`);
+      return;
+    }
+    if (pad.kind === 'health') {
+      const got = Math.round(combat.heal(spec.heal));
+      feed(got > 0 ? `<b>medical kit</b> +${got}` : '<b>medical kit</b> full');
+      return;
+    }
+    combat.givePower(pad.kind, spec);
+  };
+  combat.onPower = (kind, spec) => {
+    feed(`<i>${spec.label}</i> ${spec.seconds}s`);
+    toast(spec.name);
+  };
+  combat.onPowerEnd = () => audio.powerEnd();
+
   reflex.onStart = () => { audio.reflex(true); el.hud.classList.add('slow'); };
   reflex.onStop = () => { audio.reflex(false); el.hud.classList.remove('slow'); };
   reflex.onEmpty = () => toast('reflex spent');
@@ -527,11 +555,44 @@ async function main() {
     jets.reset();
     projectiles.clear();
     reflex.reset();
+    pickups.reset();
     renderer.clearScars();
     drones.setTier(Math.max(0, combat.tier - 1));
     effects.clear();
     if (!isTouch) input.requestLock();
   });
+
+  // The power up chips. The row is rebuilt only when the set of things you are
+  // carrying changes; the seconds inside it are written every frame, which is
+  // one text node per chip rather than a DOM rebuild at sixty hertz.
+  const powerChips = new Map();
+  function drawPowers() {
+    for (const kind of ['quad', 'ultra', 'overload']) {
+      const left = combat.powers[kind];
+      const chip = powerChips.get(kind);
+      if (left <= 0) {
+        if (chip) { chip.root.remove(); powerChips.delete(kind); }
+        continue;
+      }
+      if (!chip) {
+        const root = document.createElement('div');
+        root.className = kind;
+        const b = document.createElement('b');
+        b.textContent = PICKUP[kind].label;
+        const em = document.createElement('em');
+        root.append(b, em);
+        el.powers.appendChild(root);
+        powerChips.set(kind, { root, em, shown: -1 });
+        continue;
+      }
+      const secs = Math.ceil(left);
+      if (secs !== chip.shown) {
+        chip.shown = secs;
+        chip.em.textContent = `${secs}s`;
+      }
+      chip.root.classList.toggle('ending', left <= 3);
+    }
+  }
 
   function formatClock(seconds) {
     const mm = Math.floor(seconds / 60);
@@ -551,6 +612,7 @@ async function main() {
     combat.reset();
     drones.reset();
     weapon.reset();
+    pickups.reset();
     effects.clear();
     audio.start();
     el.btnSound.textContent = 'sound on';
@@ -784,6 +846,14 @@ async function main() {
     // The world runs on the slowed clock. The weapon above does not, which is
     // why a magazine goes further in here than it does outside.
     combat.update(worldDt);
+    // What you are carrying scales what the weapon does. Read every step rather
+    // than pushed on pickup, so a power running out takes effect on its own.
+    weapon.damageScale = combat.damageScale;
+    weapon.rateScale = combat.rateScale;
+    weapon.reloadScale = combat.reloadScale;
+    // The pads turn on the world clock but are taken on your own position, so
+    // walking over one in the slow still picks it up.
+    pickups.update(worldDt, { x: player.x, y: player.y, z: player.z });
     projectiles.update(worldDt);
     drones.update(worldDt, eye, state.time);
     soldiers.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
@@ -923,6 +993,7 @@ async function main() {
       renderer.actors.updateJets(jets.active);
       renderer.actors.updateProjectiles(projectiles.active);
       renderer.actors.updateSparks(effects.list);
+      renderer.actors.updatePickups(pickups.live, camera.position);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -931,6 +1002,7 @@ async function main() {
       renderer.actors.updateJets(state.mode === 'walk' ? jets.active : []);
       renderer.actors.updateProjectiles(state.mode === 'walk' ? projectiles.active : []);
       renderer.actors.updateSparks(state.mode === 'walk' ? effects.list : []);
+      renderer.actors.updatePickups(state.mode === 'walk' ? pickups.live : [], camera.position);
       renderer.drawActors = state.mode === 'walk';
     }
 
@@ -965,6 +1037,7 @@ async function main() {
         audio.shieldCharge(wantCharge,
           (combat.maxShield - combat.shield) / combat.rules.shieldRate);
       }
+      drawPowers();
       el.ammonum.textContent = String(weapon.ammo);
       el.reservenum.textContent = String(weapon.reserve);
       el.combat.classList.toggle('empty', weapon.ammo === 0);
@@ -1047,7 +1120,8 @@ async function main() {
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
-    combat, drones, weapon, effects, projectiles, reflex, jets,
+    combat, drones, weapon, effects, projectiles, reflex, jets, pickups,
+    pickupSpecs: PICKUP,
     get soldiers() { return soldiers; },
     spawnJet(dx, dz, height = 80) {
       const j = jets.free();
@@ -1072,6 +1146,14 @@ async function main() {
       d.spawn(player.x + dx, player.y + PLAYER.eye + dy, player.z + dz, combat.tier);
       drones.active.push(d);
       return d;
+    },
+    /** Drops a pad right under you, for the tests and for nothing else. */
+    dropPickup(kind, dx = 0, dz = 0) {
+      const x = player.x + dx, z = player.z + dz;
+      const pad = { kind, x, y: world.groundHeight(x, z) + 0.9, z,
+        ready: true, timer: 0, bob: 0, spin: 0 };
+      pickups.pads.push(pad);
+      return pad;
     },
     shoot() {
       weapon.fire(

@@ -96,6 +96,22 @@ three times as far and a burst that was going to hit you is something you can
 walk out of. The meter drains while it is on and fills when it is not.
 Jumping while it runs spends a slice of it and throws you most of a storey up.
 
+**Things lying in the street.** Thirty odd pads scattered over walkable
+ground, found by asking the world where a person could actually stand rather
+than by anyone authoring a list of coordinates. Run over one and it is yours;
+it comes back on a timer, so the map is something you learn to move around.
+Ammunition fills the weapon in your hands and tops up the rest of the loadout.
+A medical kit puts fifty five back. Then the three that have a clock on them
+and a chip on the interface counting it down:
+
+| | |
+|---|---|
+| Quad damage | everything you fire hits four times as hard, for 22 s |
+| Ultrashield | an overshield well above your normal maximum, for 26 s, then it bleeds back down rather than vanishing |
+| Overload | you fire almost twice as fast and reload in under half the time, for 18 s |
+
+None of them spawns in the weapons free zone.
+
 ## The shooter
 
 **The targets are drones, not people.** This is a reconstruction of a real city,
@@ -173,6 +189,13 @@ What is under the hood:
   draw calls took to return, because a GPU signs for the work and finishes it
   later: fed the latter, a machine at four frames a second thinks it has
   headroom. The interface never scales.
+- The pads are placed once, at load, from wherever you came into the city. A
+  candidate has to be inside the world, out of the memorial, clear of anything
+  within arm's reach in six directions, and 45 m from every other pad; ninety
+  tries per pad and whatever sticks is the map. Each is drawn as one instanced
+  mesh per kind, fourteen centimetres proud of the collision height because the
+  street that is drawn is not the height field that is collided against, and
+  only within 260 m, where the fog has them anyway.
 - Every sound is synthesised: a noise burst through a swept bandpass for the shot,
   a rotor bed whose level and pitch follow the nearest drone, and two different
   confirms for a hull hit and a core hit.
@@ -412,6 +435,10 @@ worth naming because each of them was invisible until something was checked:
 
 ![Soldiers on Pariser Platz](docs/screenshots/combat-05-soldiers.png)
 *Soldiers working across Pariser Platz, with a banana on the cobbles.*
+
+![Pickups on Pariser Platz](docs/screenshots/combat-06-pickups.png)
+*All five pads on the square: ammunition, a medical kit, quad damage,
+ultrashield and overload, with two of them running on the chips bottom left.*
 
 The rest are in [docs/screenshots](docs/screenshots), and
 [docs/media/gate-to-tower.webm](docs/media/gate-to-tower.webm) is the eleven

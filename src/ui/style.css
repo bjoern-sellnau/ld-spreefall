@@ -441,6 +441,47 @@ html, body {
   margin-bottom: 5px;
 }
 
+/* What you are carrying that has a clock on it. One chip per power up, with
+   the seconds left counting down, because the whole decision a power up asks
+   of you is how long you have got. */
+#powers {
+  position: absolute;
+  left: 22px; bottom: 96px;
+  display: flex;
+  gap: 8px;
+}
+#powers div {
+  font: 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 5px 8px 4px;
+  border-radius: 2px;
+  color: #0d0d0d;
+  background: #cfcabf;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+  animation: powerin 0.22s ease;
+}
+#powers div b { font-weight: 700; }
+#powers div em {
+  font-style: normal;
+  margin-left: 6px;
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+}
+#powers .quad { background: linear-gradient(90deg, #5a86ff, #a8c4ff); }
+#powers .ultra { background: linear-gradient(90deg, #ffc64c, #ffe6a8); }
+#powers .overload { background: linear-gradient(90deg, #6fe08a, #c2f5cd); }
+/* Under three seconds it blinks, which is the only warning you get. */
+#powers .ending { animation: powerblink 0.4s steps(2) infinite; }
+@keyframes powerin {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes powerblink {
+  0% { opacity: 1; }
+  100% { opacity: 0.35; }
+}
+
 #killfeed {
   position: absolute;
   right: 18px; top: 240px;
@@ -687,6 +728,7 @@ html, body {
 
 @media (max-width: 720px) {
   #combat { left: 12px; bottom: 74px; gap: 14px; }
+  #powers { left: 12px; bottom: 132px; gap: 6px; }
   #combat .vitals { width: 118px; }
   #combat .ammo { font-size: 21px; }
   #threat { right: 12px; bottom: 74px; font-size: 9.5px; letter-spacing: 0.08em; }

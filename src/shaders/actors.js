@@ -132,7 +132,7 @@ void main() {
     albedo = vec3(0.86, 0.72, 0.13);
     rough = 0.6;
     metal = 0.05;
-  } else {
+  } else if (vPart < 11.5) {
     // Energy: a plasma bolt or a dart in flight. Its own light source, so it
     // reads at a hundred metres against a grey street.
     albedo = vec3(0.02);
@@ -140,6 +140,44 @@ void main() {
     emissive = vec3(0.35, 0.85, 1.0) * 7.0 * pulse;
     rough = 0.1;
     metal = 0.0;
+  } else if (vPart < 12.5) {
+    // The pad a pickup stands on: a scuffed steel plate, no light of its own.
+    albedo = vec3(0.10, 0.105, 0.115);
+    rough = 0.55;
+    metal = 0.6;
+  } else {
+    // The five pickups. Each has its own colour and each throbs, because the
+    // one thing they all have to do is be seen down a street.
+    vec3 tint = vec3(1.0);
+    float force = 3.0;
+    // The tints are deliberately near zero in two channels. An emissive that is
+    // bright in all three comes out of the tone map white, whatever colour it
+    // started as, and five white shapes in a street tell you nothing.
+    if (vPart < 13.5) {
+      tint = vec3(1.0, 0.46, 0.05);            // ammunition, amber on olive
+      albedo = vec3(0.13, 0.15, 0.08);
+      force = 1.5;
+    } else if (vPart < 14.5) {
+      tint = vec3(1.0, 0.045, 0.03);           // the medical cross
+      albedo = vec3(0.30, 0.04, 0.035);
+      force = 3.4;
+    } else if (vPart < 15.5) {
+      tint = vec3(0.045, 0.22, 1.0);           // quad damage
+      albedo = vec3(0.02, 0.04, 0.18);
+      force = 4.2;
+    } else if (vPart < 16.5) {
+      tint = vec3(1.0, 0.62, 0.02);            // ultrashield
+      albedo = vec3(0.18, 0.13, 0.03);
+      force = 3.6;
+    } else {
+      tint = vec3(0.10, 1.0, 0.22);            // overload
+      albedo = vec3(0.03, 0.15, 0.05);
+      force = 3.6;
+    }
+    float pulse = 0.68 + 0.32 * sin(uCamPos.w * 3.4 + vPart);
+    emissive = tint * force * pulse;
+    rough = 0.25;
+    metal = 0.2;
   }
 
   vec3 L = uSunDir.xyz;
@@ -164,6 +202,45 @@ void main() {
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
                     uSkyHorizon.rgb, uSkyZenith.rgb, uFog, uSkyZenith.w);
   fragColour = vec4(colour, 1.0);
+}
+`;
+
+// Pickups ride the drone's fragment shader too. What is different is the
+// motion: the pad stays flat on the pavement while the thing standing on it
+// turns and bobs. Which is which comes from the mesh itself, in the second
+// component of the vertex info, so one instanced draw carries both.
+export const PICKUP_VS = `${VERSION}
+precision highp float;
+${CAMERA_BLOCK}
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aInfo;     // x part id, y 1 if this part floats
+layout(location = 5) in vec4 iPosYaw;   // xyz pad position, w spin
+layout(location = 6) in vec4 iState;    // x bob height, y unused, z flash, w unused
+
+out vec3 vWorld;
+out vec3 vNormal;
+flat out float vPart;
+flat out float vFlash;
+out float vViewDist;
+
+void main() {
+  vec3 p = aPos;
+  vec3 n = aNormal;
+  if (aInfo.y > 0.5) {
+    float c = cos(iPosYaw.w), s = sin(iPosYaw.w);
+    mat3 spin = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
+    p = spin * p;
+    n = spin * n;
+    p.y += iState.x;
+  }
+  vec3 world = p + iPosYaw.xyz;
+  vWorld = world;
+  vNormal = normalize(n);
+  vPart = aInfo.x;
+  vFlash = iState.z;
+  vViewDist = length(world - uCamPos.xyz);
+  gl_Position = uViewProj * vec4(world, 1.0);
 }
 `;
 

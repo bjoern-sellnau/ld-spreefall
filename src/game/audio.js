@@ -445,6 +445,91 @@ export class Audio {
   }
 
   /**
+   * Picking something up. Ammunition and health are a short mechanical click
+   * with a body to it; the three power ups get a rising chord instead, which
+   * is the whole point of hearing one from across a square.
+   *
+   * @param {string} kind ammo, health, quad, ultra or overload
+   */
+  pickup(kind) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const chords = {
+      quad: [196, 261, 392, 523],
+      ultra: [262, 330, 440, 660],
+      overload: [220, 277, 440, 554],
+    };
+    const chord = chords[kind];
+    if (chord) {
+      for (let i = 0; i < chord.length; i++) {
+        const at = i * 0.055;
+        const o = ctx.createOscillator();
+        o.type = kind === 'overload' ? 'sawtooth' : 'triangle';
+        o.frequency.setValueAtTime(chord[i], t + at);
+        o.frequency.linearRampToValueAtTime(chord[i] * 1.01, t + at + 0.5);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t + at);
+        g.gain.exponentialRampToValueAtTime(0.085, t + at + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.62);
+        const f = ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 2600;
+        o.connect(f).connect(g).connect(this.master);
+        o.start(t + at);
+        o.stop(t + at + 0.7);
+      }
+      return;
+    }
+    // The crate and the kit: a click and a thump, health a little higher.
+    const high = kind === 'health';
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(high ? 680 : 420, t);
+    o.frequency.exponentialRampToValueAtTime(high ? 1180 : 240, t + 0.09);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.075, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.17);
+    if (this._noiseBuffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = this._noiseBuffer;
+      const nf = ctx.createBiquadFilter();
+      nf.type = 'bandpass';
+      nf.frequency.value = high ? 2400 : 1200;
+      nf.Q.value = 1.1;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.06, t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      src.connect(nf).connect(ng).connect(this.master);
+      src.start(t, Math.random() * 2, 0.12);
+      src.stop(t + 0.12);
+    }
+  }
+
+  /** A power up running out: the chord, falling instead of rising. */
+  powerEnd() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    for (const [hz, at] of [[440, 0], [330, 0.08], [220, 0.16]]) {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = hz;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(0.055, t + at + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.28);
+      o.connect(g).connect(this.master);
+      o.start(t + at);
+      o.stop(t + at + 0.32);
+    }
+  }
+
+  /**
    * Entering and leaving the slow: a swept filter on everything, so the city
    * goes underwater, plus a sub tone that sits under the whole thing. The
    * master chain grows a lowpass the first time this is called, which keeps the

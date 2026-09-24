@@ -325,3 +325,30 @@ Recorded here as they happen, per the working style.
   inside their radius, with debris knocked off the real surfaces nearby. It is
   the honest version of what this engine can do at sixty frames a second, and
   the README says so plainly rather than calling it destruction.
+
+- 2026-09-24: the ratio of what comes at you was measured rather than guessed.
+  A probe stepped the spawners for ninety seconds at four places in the city
+  and reported five drones to three soldiers at the opening tier, which is the
+  opposite of what an open world shooter on the ground should feel like.
+  Drones now start at a budget of two and grow slowly; soldiers start at seven,
+  reach eighteen, and arrive in squads of one to three within 45 to 115 m. The
+  same probe now reports two drones to seven soldiers at tier zero and five to
+  thirteen at tier three.
+
+- 2026-09-24: the pickups are placed by asking the world, not by hand. A list
+  of coordinates would be wrong the first time the OSM extract changed, and
+  this project rebuilds its city from live data on a schedule. So a pad is a
+  point that survives four questions: inside the world, out of the memorial,
+  nothing within 2.2 m in any of six directions at standing height, and 45 m
+  from every other pad. What that buys is that the same code lays out a usable
+  map whether the build came from the live extract or the fallback.
+
+  One thing it cost a debugging session to learn: the plate a pickup stands on
+  was invisible, because `groundHeight` is the collision height field and the
+  street that is actually drawn sits above it. Pavements are laid 0.12 m proud,
+  plazas 0.05, grass 0.05. A plate two centimetres above the height field is a
+  plate under the pavement. They now stand fourteen centimetres clear of it.
+
+  The second thing: five emissive colours all came out white. An emissive that
+  is bright in all three channels is white after the tone map whatever colour
+  it started as, so the five tints are near zero in two channels each.

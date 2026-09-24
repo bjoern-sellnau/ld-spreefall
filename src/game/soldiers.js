@@ -75,7 +75,9 @@ export class Soldiers {
     for (let i = 0; i < MAX_SOLDIERS; i++) this.pool.push(new Soldier());
     this.active = [];
     this.enabled = true;
-    this.budget = 4;
+    // The soldiers are the fight. They are on the ground and mostly behind
+    // something, so there have to be enough of them that you keep meeting one.
+    this.budget = 7;
     this.tier = 0;
     this.spawnTimer = 3;
     this.onShot = null;      // fn(soldier, damage)
@@ -94,7 +96,7 @@ export class Soldiers {
 
   setTier(tier) {
     this.tier = tier;
-    this.budget = Math.min(12, 3 + tier * 2);
+    this.budget = Math.min(18, 7 + tier * 2);
   }
 
   free() {
@@ -196,8 +198,15 @@ export class Soldiers {
 
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0 && this.active.length < this.budget) {
-      this.spawnTimer = Math.max(1.2, 5.0 - this.tier * 0.4);
-      this.spawnNear(player.x, player.z, 70, 150);
+      this.spawnTimer = Math.max(0.9, 2.8 - this.tier * 0.22);
+      // They arrive as a section rather than one at a time, which is both how
+      // they fight and what makes them read as present in a street.
+      const squad = 1 + (Math.random() < 0.55 ? 1 : 0) + (this.tier > 2 && Math.random() < 0.4 ? 1 : 0);
+      const first = this.spawnNear(player.x, player.z, 45, 115);
+      for (let k = 1; k < squad && first; k++) {
+        const mate = this.spawnNear(first.x, first.z, 4, 16);
+        if (mate) { mate.targetX = first.targetX; mate.targetZ = first.targetZ; }
+      }
     }
 
     const playerSafe = this.isSanctuary(player.x, player.y, player.z);

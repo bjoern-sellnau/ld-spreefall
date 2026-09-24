@@ -7,6 +7,7 @@ import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
   SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_SHADOW_VS,
+  PICKUP_VS,
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
@@ -14,6 +15,9 @@ const MAX_SPARKS = 256;
 const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
+const MAX_PICKUPS = 16;
+// Past this there is no point drawing a pad: the fog has it anyway.
+const PICKUP_RANGE = 260;
 
 // --- mesh building ---------------------------------------------------------
 
@@ -26,7 +30,9 @@ function facesForward(a, b, c, n) {
 }
 
 export class MeshBuild {
-  constructor() { this.v = []; this.i = []; this.n = 0; }
+  // flag rides along in the second info component. Everything ignores it
+  // except the pickups, where it says which parts of the mesh float.
+  constructor() { this.v = []; this.i = []; this.n = 0; this.flag = 0; }
 
   /** A box from its centre, with a part id carried through to the shader. */
   box(cx, cy, cz, w, h, d, part, rotY = 0) {
@@ -66,7 +72,7 @@ export class MeshBuild {
   }
 
   vertex(p, n, part) {
-    this.v.push(p[0], p[1], p[2], n[0], n[1], n[2], part, 0);
+    this.v.push(p[0], p[1], p[2], n[0], n[1], n[2], part, this.flag);
     this.n++;
   }
 
@@ -349,6 +355,71 @@ export function buildSplinterMesh() {
 }
 
 /**
+ * What is lying in the street. Every pickup is a steel plate on the pavement
+ * with the thing itself turning above it, which is the arena shooter shape and
+ * is readable at a hundred metres because the item glows and the plate does
+ * not. The mesh is built about the pad centre, so the pad is at y -0.9 and the
+ * item sits around the origin.
+ *
+ * Parts: 12 the plate, then 13 ammunition, 14 health, 15 quad, 16 ultrashield,
+ * 17 overload. Anything built while flag is 1 turns and bobs in the shader.
+ */
+export function buildPickupMesh(kind) {
+  const m = new MeshBuild();
+  const part = { ammo: 13, health: 14, quad: 15, ultra: 16, overload: 17 }[kind] || 13;
+
+  // The plate, with a rim around it in the kind's own colour. It stands a
+  // clear fourteen centimetres proud of the collision height, because the
+  // street that is drawn is not the height field that is collided against:
+  // pavements and plazas are laid up to twelve centimetres above it, and a
+  // plate any lower than this disappears into the one it happens to be on.
+  m.cylinder(0, -0.76, 0, 0.92, 0.92, 0.07, 18, 12);
+  m.ring(0, -0.685, 0, 0.74, 0.92, 22, part);
+
+  // Everything from here up floats.
+  m.flag = 1;
+  if (kind === 'ammo') {
+    // A crate with two straps over it.
+    m.box(0, 0, 0, 0.70, 0.46, 0.52, part);
+    m.box(0, 0.26, 0, 0.60, 0.08, 0.42, 12);
+    m.box(-0.20, 0.02, 0, 0.08, 0.50, 0.56, 12);
+    m.box(0.20, 0.02, 0, 0.08, 0.50, 0.56, 12);
+  } else if (kind === 'health') {
+    // A cross, which needs no caption in any language.
+    m.box(0, 0, 0, 0.72, 0.24, 0.20, part);
+    m.box(0, 0, 0, 0.24, 0.72, 0.20, part);
+  } else if (kind === 'quad') {
+    // Two pyramids base to base: an octahedron, sharp enough to read as a
+    // threat at a distance.
+    m.cylinder(0, 0.00, 0, 0.40, 0.001, 0.46, 4, part);
+    m.cylinder(0, 0.00, 0, 0.40, 0.001, -0.46, 4, part);
+  } else if (kind === 'ultra') {
+    // A shell: a sphere inside a pair of standing hoops.
+    m.icosphere(0, 0, 0, 0.30, 12, 8, part);
+    for (const a of [0, Math.PI / 2]) {
+      for (let i = 0; i < 16; i++) {
+        const t0 = (i / 16) * Math.PI * 2, t1 = ((i + 1) / 16) * Math.PI * 2;
+        const at = (t, r) => [Math.cos(a) * Math.cos(t) * r, Math.sin(t) * r,
+          Math.sin(a) * Math.cos(t) * r];
+        const n = [Math.cos(a) * Math.cos((t0 + t1) / 2), Math.sin((t0 + t1) / 2),
+          Math.sin(a) * Math.cos((t0 + t1) / 2)];
+        m.quad([at(t0, 0.44), at(t1, 0.44), at(t1, 0.50), at(t0, 0.50)], n, part);
+        m.quad([at(t0, 0.50), at(t1, 0.50), at(t1, 0.44), at(t0, 0.44)],
+          [-n[0], -n[1], -n[2]], part);
+      }
+    }
+  } else {
+    // Overload: a bolt, three slabs stepped down and across.
+    for (let i = 0; i < 3; i++) {
+      m.box((i - 1) * 0.15, (1 - i) * 0.24, 0, 0.24, 0.30, 0.15, part, 0.5);
+    }
+    m.box(0, 0, 0, 0.12, 0.76, 0.12, part, 0.5);
+  }
+  m.flag = 0;
+  return m;
+}
+
+/**
  * A fighter jet, built nose towards -z like everything else here, about
  * fourteen metres long. Parts: 0 airframe, 5 canopy, 8 intakes and nozzles,
  * 11 the afterburner glow.
@@ -439,6 +510,8 @@ export class Actors {
     this.progSoldier = createProgram(gl, SOLDIER_VS, DRONE_FS, 'soldier');
     this.progSoldierShadow = createProgram(gl, SOLDIER_SHADOW_VS, DRONE_SHADOW_FS, 'soldierShadow');
     this.progSoldier.use().int('uShadow0', 4).int('uShadow1', 5);
+    this.progPickup = createProgram(gl, PICKUP_VS, DRONE_FS, 'pickup');
+    this.progPickup.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
     this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 2);
@@ -458,6 +531,12 @@ export class Actors {
       splinter: this._uploadMesh(buildSplinterMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
+
+    // The pads. One instanced mesh per kind, drawn only for what is near you.
+    this.pickups = {};
+    for (const kind of ['ammo', 'health', 'quad', 'ultra', 'overload']) {
+      this.pickups[kind] = this._uploadMesh(buildPickupMesh(kind), MAX_PICKUPS, 2);
+    }
 
     // The things in flight. One instanced mesh per kind, because a rocket and
     // a banana have nothing in common but the shader.
@@ -654,6 +733,53 @@ export class Actors {
     return 1;
   }
 
+  /**
+   * Packs the pads that are up and near enough to matter.
+   * @param {Array} list live pads, each with x y z bob spin
+   * @param {Float32Array|Array} camPos where you are, for the range cut
+   */
+  updatePickups(list, camPos) {
+    const gl = this.gl;
+    const counts = { ammo: 0, health: 0, quad: 0, ultra: 0, overload: 0 };
+    const cx = camPos ? camPos[0] : 0;
+    const cz = camPos ? camPos[2] : 0;
+    for (const p of list) {
+      const mesh = this.pickups[p.kind];
+      if (!mesh || counts[p.kind] >= MAX_PICKUPS) continue;
+      const dx = p.x - cx, dz = p.z - cz;
+      if (dx * dx + dz * dz > PICKUP_RANGE * PICKUP_RANGE) continue;
+      const o = counts[p.kind] * 8;
+      const d = mesh.instData;
+      d[o] = p.x; d[o + 1] = p.y; d[o + 2] = p.z; d[o + 3] = p.spin;
+      d[o + 4] = Math.sin(p.bob) * 0.13; d[o + 5] = 0; d[o + 6] = 0; d[o + 7] = 0;
+      counts[p.kind]++;
+    }
+    for (const kind in this.pickups) {
+      const mesh = this.pickups[kind];
+      mesh.instanceCount = counts[kind];
+      if (counts[kind] > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.instData, 0, counts[kind] * 8);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
+    }
+  }
+
+  drawPickups() {
+    const gl = this.gl;
+    let draws = 0;
+    this.progPickup.use();
+    for (const kind in this.pickups) {
+      const mesh = this.pickups[kind];
+      if (!mesh.instanceCount) continue;
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
+    gl.bindVertexArray(null);
+    return draws;
+  }
+
   drawProjectiles() {
     const gl = this.gl;
     let draws = 0;
@@ -774,7 +900,7 @@ export class Actors {
   dispose() {
     const gl = this.gl;
     for (const mesh of [this.drone, this.soldier, this.jet, ...Object.values(this.weapons),
-      ...Object.values(this.props)]) {
+      ...Object.values(this.props), ...Object.values(this.pickups)]) {
       gl.deleteVertexArray(mesh.vao);
       gl.deleteBuffer(mesh.vbo);
       gl.deleteBuffer(mesh.ibo);

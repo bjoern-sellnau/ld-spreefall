@@ -62,6 +62,13 @@ export class Combat {
     this.onDifficulty = null;
     this.damageDir = { x: 0, z: 0, at: -99 };
 
+    // What you picked up and how long it lasts. One clock per kind, because
+    // taking a second quad while the first is running should extend it rather
+    // than stack into something silly.
+    this.powers = { quad: 0, ultra: 0, overload: 0 };
+    this.onPower = null;
+    this.onPowerEnd = null;
+
     // The memorial is a weapons free zone. Peter Eisenman's field is a memorial
     // to the murdered Jews of Europe, and turning it into a place to shoot in
     // would be grotesque. Inside it the weapon holsters itself and the drones
@@ -87,7 +94,9 @@ export class Combat {
   }
 
   reset() {
+    for (const kind in this.powers) this.powers[kind] = 0;
     this.health = COMBAT.maxHealth;
+    this.maxShield = this.rules.shield;
     this.shield = this.rules.shield;
     this.maxShield = this.rules.shield;
     this.shieldBroke = false;
@@ -179,6 +188,24 @@ export class Combat {
 
   update(dt) {
     this.sinceHit += dt;
+
+    // The power up clocks run whether you are down or not, so dying does not
+    // bank a quad for later.
+    for (const kind in this.powers) {
+      if (this.powers[kind] <= 0) continue;
+      this.powers[kind] -= dt;
+      if (this.powers[kind] <= 0) {
+        this.powers[kind] = 0;
+        if (kind === 'ultra') this.maxShield = this.rules.shield;
+        if (this.onPowerEnd) this.onPowerEnd(kind);
+      }
+    }
+    // An overshield bleeds back down to your normal maximum rather than being
+    // taken away in one frame.
+    if (this.powers.ultra <= 0 && this.shield > this.maxShield) {
+      this.shield = Math.max(this.maxShield, this.shield - 28 * dt);
+    }
+
     if (this.health <= 0) return;
     const r = this.rules;
     if (this.shield < this.maxShield && this.sinceHit > r.shieldDelay) {
@@ -194,6 +221,35 @@ export class Combat {
     if (r.healthRegen > 0 && this.health < COMBAT.maxHealth && this.sinceHit > r.shieldDelay) {
       this.health = Math.min(COMBAT.maxHealth, this.health + r.healthRegen * dt);
     }
+  }
+
+  /**
+   * Starts or refreshes a power up.
+   * @param {string} kind quad, ultra or overload
+   * @param {object} spec the row out of the pickup table
+   */
+  givePower(kind, spec) {
+    const fresh = this.powers[kind] <= 0;
+    this.powers[kind] = Math.max(this.powers[kind], spec.seconds);
+    if (kind === 'ultra') {
+      // An overshield sits above your normal maximum and drains back down to
+      // it when the clock runs out, rather than vanishing.
+      this.maxShield = Math.max(this.maxShield, spec.shield);
+      this.shield = spec.shield;
+    }
+    if (this.onPower) this.onPower(kind, spec, fresh);
+    return fresh;
+  }
+
+  get damageScale() { return this.powers.quad > 0 ? 4 : 1; }
+  get rateScale() { return this.powers.overload > 0 ? 0.55 : 1; }
+  get reloadScale() { return this.powers.overload > 0 ? 0.4 : 1; }
+  get hasPower() { return this.powers.quad > 0 || this.powers.ultra > 0 || this.powers.overload > 0; }
+
+  heal(amount) {
+    const before = this.health;
+    this.health = Math.min(COMBAT.maxHealth, this.health + amount);
+    return this.health - before;
   }
 
   /** 0 to 1, for the bar and for the shader that tints the screen. */

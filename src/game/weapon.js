@@ -63,6 +63,10 @@ export class Weapon {
     this.onDryFire = null;
     this.onReloadStart = null;
     this.onReloadEnd = null;
+    // Set by the game layer from whatever you have picked up.
+    this.damageScale = 1;
+    this.rateScale = 1;
+    this.reloadScale = 1;
     this.onSwap = null;
     this.onSwapFrom = null;
     this.onPlace = null;
@@ -75,6 +79,37 @@ export class Weapon {
   get reserve() { return this.carried[this.id].reserve; }
   set reserve(n) { this.carried[this.id].reserve = n; }
   get name() { return this.spec.name; }
+
+  /**
+   * An ammunition crate. It fills the magazine and the reserve of what you are
+   * holding, and tops the rest of the loadout up by a smaller share, so a crate
+   * is worth taking whatever is in your hands but is not a full resupply of
+   * everything you own.
+   *
+   * @param {number} held 0 to 1, the share of the held weapon's reserve to add
+   * @param {number} others 0 to 1, the same for everything else
+   * @returns {number} how many rounds it actually gave you
+   */
+  resupply(held = 1, others = 0.25) {
+    let given = 0;
+    for (const id of LOADOUT) {
+      const spec = WEAPONS[id];
+      const slot = this.carried[id];
+      const share = id === this.id ? held : others;
+      const want = Math.max(1, Math.round(spec.reserve * share));
+      const before = slot.reserve + slot.ammo;
+      slot.reserve = Math.min(spec.reserve, slot.reserve + want);
+      if (id === this.id && this.state !== STATE.RELOADING) {
+        // Top the magazine straight up, so a crate you run over mid fight is
+        // felt at once rather than after a reload.
+        const room = Math.min(spec.magazine - slot.ammo, slot.reserve);
+        slot.ammo += room;
+        slot.reserve -= room;
+      }
+      given += (slot.reserve + slot.ammo) - before;
+    }
+    return given;
+  }
 
   reset() {
     for (const id of LOADOUT) {
@@ -143,8 +178,8 @@ export class Weapon {
     const spec = this.spec;
     if (this.ammo >= spec.magazine || this.reserve <= 0) return false;
     this.state = STATE.RELOADING;
-    this.reloadLeft = spec.reloadTime;
-    if (this.onReloadStart) this.onReloadStart(spec.reloadTime);
+    this.reloadLeft = spec.reloadTime * this.reloadScale;
+    if (this.onReloadStart) this.onReloadStart(spec.reloadTime * this.reloadScale);
     return true;
   }
 
@@ -314,7 +349,7 @@ export class Weapon {
   fire(eye, dir) {
     const spec = this.spec;
     this.ammo--;
-    this.cooldown = spec.fireInterval;
+    this.cooldown = spec.fireInterval * this.rateScale;
     this.shotsFired++;
 
     if (spec.kind === KIND.HITSCAN) this._fireHitscan(eye, dir, spec);
@@ -353,7 +388,7 @@ export class Weapon {
       const target = near.target;
       if (seen.has(target)) { from += near.t + 0.4; continue; }
       seen.add(target);
-      const dmg = spec.damage * (near.core ? spec.coreMultiplier : 1);
+      const dmg = spec.damage * (near.core ? spec.coreMultiplier : 1) * this.damageScale;
       const killed = this._damage(near, dmg, dir);
       hits++;
       if (this.onFire) {
@@ -405,7 +440,7 @@ export class Weapon {
       if (isTarget) {
         hitAnything = true;
         const mult = shot.core ? spec.coreMultiplier : 1;
-        shot.killed = this._damage(shot, spec.damage * mult, dir);
+        shot.killed = this._damage(shot, spec.damage * mult * this.damageScale, dir);
       }
       // The report is about the most interesting pellet: a kill beats a hit,
       // a hit beats a wall, and one wall is as good as another.
@@ -468,7 +503,7 @@ export class Weapon {
         vx: sd.x * spec.muzzleSpeed * (0.8 + Math.random() * 0.4),
         vy: sd.y * spec.muzzleSpeed * (0.8 + Math.random() * 0.4) + 1.2,
         vz: sd.z * spec.muzzleSpeed * (0.8 + Math.random() * 0.4),
-        fuse: spec.fuse, splash: spec.splash, weapon: this.id,
+        fuse: spec.fuse, splash: this._scaledSplash(spec.splash), weapon: this.id,
       });
     }
     const d = this._spray(dir, this.spread);
@@ -489,7 +524,7 @@ export class Weapon {
       vy: d.y * spec.muzzleSpeed + (spec.kind === KIND.THROW ? 3.4 : 0),
       vz: d.z * spec.muzzleSpeed,
       fuse: spec.fuse,
-      splash: spec.splash,
+      splash: this._scaledSplash(spec.splash),
       slip: spec.slip,
       weapon: this.id,
       homing, target,
@@ -513,6 +548,13 @@ export class Weapon {
         pellet: 0, pellets: 1,
       });
     }
+  }
+
+  /** A blast carries the quad too, but its radius does not grow. */
+  _scaledSplash(splash) {
+    if (!splash) return splash;
+    if (this.damageScale === 1) return splash;
+    return { ...splash, damage: splash.damage * this.damageScale };
   }
 
   /** Blow every piece of C4 you have put down. */

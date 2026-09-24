@@ -380,6 +380,219 @@ async function run() {
   check('a jet can be shot down', jetKill.down,
     `${jetKill.dist} m, ${jetKill.before} to ${jetKill.after}`);
 
+  // --- pickups -------------------------------------------------------------
+  // The pads are found by asking the world where a person could stand, so the
+  // first thing to check is that it found somewhere at all, and that nothing
+  // landed inside the memorial.
+  const placed = await page.evaluate(() => {
+    const s = window.spreefall;
+    const counts = {};
+    let inZone = 0;
+    let underground = 0;
+    for (const p of s.pickups.pads) {
+      counts[p.kind] = (counts[p.kind] || 0) + 1;
+      if (s.combat.isSanctuary(p.x, 0, p.z)) inZone++;
+      if (Math.abs(p.y - (s.world.groundHeight(p.x, p.z) + 0.9)) > 0.01) underground++;
+    }
+    return { counts, total: s.pickups.pads.length, inZone, underground };
+  });
+  check('the city is scattered with pads', placed.total >= 20,
+    `${placed.total}: ${Object.entries(placed.counts).map(([k, n]) => `${n} ${k}`).join(', ')}`);
+  check('and every kind of pad is out there',
+    ['ammo', 'health', 'quad', 'ultra', 'overload'].every((k) => placed.counts[k] > 0));
+  check('none of them is in the weapons free zone', placed.inZone === 0,
+    `${placed.inZone} inside`);
+  check('and all of them stand on the ground', placed.underground === 0);
+
+  // An ammunition crate refills what you are holding.
+  const ammo = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0; s.combat.reset(); s.weapon.reset();
+    s.weapon.select('m16');
+    s.weapon.ammo = 2; s.weapon.reserve = 10;
+    s.weapon.carried.shotgun.reserve = 4;
+    const pad = s.dropPickup('ammo', 0.4, 0);
+    const took = s.pickups.update(0.1, { x: s.player.x, y: s.player.y, z: s.player.z });
+    return {
+      took: !!took && took === pad,
+      ammo: s.weapon.ammo, reserve: s.weapon.reserve,
+      shotgun: s.weapon.carried.shotgun.reserve,
+      ready: pad.ready, timer: Math.round(pad.timer),
+    };
+  });
+  check('walking over a crate takes it', ammo.took && !ammo.ready,
+    `back in ${ammo.timer} s`);
+  check('and it fills the magazine you are holding', ammo.ammo === 30 && ammo.reserve > 10,
+    `${ammo.ammo} + ${ammo.reserve} in reserve`);
+  check('and tops up what you are not', ammo.shotgun > 4, `shotgun ${ammo.shotgun}`);
+
+  // A medical kit, and only what you are short of.
+  const health = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0; s.combat.reset();
+    s.combat.health = 30;
+    s.dropPickup('health', 0.4, 0);
+    s.pickups.update(0.1, { x: s.player.x, y: s.player.y, z: s.player.z });
+    const healed = Math.round(s.combat.health);
+    s.combat.health = 98;
+    s.dropPickup('health', 0.4, 0.3);
+    s.pickups.update(0.1, { x: s.player.x, y: s.player.y, z: s.player.z });
+    return { healed, capped: Math.round(s.combat.health) };
+  });
+  check('a medical kit puts you back up', health.healed === 85, `30 to ${health.healed}`);
+  check('and never past a hundred', health.capped === 100);
+
+  // Quad damage: four times out of the same weapon, and it runs out.
+  const quad = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0; s.combat.reset(); s.weapon.reset(); s.drones.reset();
+    s.weapon.select('m16');
+    // Park one drone in the open and aim straight at it, so the only thing
+    // that changes between the three shots is what you are carrying.
+    const measure = () => {
+      s.drones.reset();
+      const d = s.spawnDrone(-24, 4, 0);
+      d.vx = d.vy = d.vz = 0;
+      d.targetX = d.x; d.targetY = d.y; d.targetZ = d.z;
+      const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+      const vx = d.x - ex, vy = d.y - ey, vz = d.z - ez;
+      const l = Math.hypot(vx, vy, vz);
+      s.look(Math.atan2(-vx, -vz) * 180 / Math.PI, Math.asin(vy / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+      const before = d.health;
+      s.weapon.cooldown = 0; s.weapon.spread = 0;
+      s.shoot();
+      return before - d.health;
+    };
+    const plain = measure();
+    s.combat.givePower('quad', s.pickupSpecs.quad);
+    s.weapon.damageScale = s.combat.damageScale;
+    const boosted = measure();
+    // Run the clock out and check it goes away on its own.
+    for (let i = 0; i < 60 * 30; i++) s.combat.update(1 / 60);
+    s.weapon.damageScale = s.combat.damageScale;
+    const after = measure();
+    s.drones.reset();
+    return { plain: Math.round(plain), boosted: Math.round(boosted), after: Math.round(after),
+      left: s.combat.powers.quad };
+  });
+  check('quad damage hits four times as hard',
+    quad.plain > 0 && Math.abs(quad.boosted - quad.plain * 4) < 1.5,
+    `${quad.plain} to ${quad.boosted}`);
+  check('and it wears off', quad.left === 0 && Math.abs(quad.after - quad.plain) < 1.5,
+    `back to ${quad.after}`);
+
+  // Ultrashield: an overshield above your normal maximum that drains back.
+  const ultra = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0; s.combat.reset();
+    const normal = s.combat.maxShield;
+    s.combat.givePower('ultra', s.pickupSpecs.ultra);
+    const over = Math.round(s.combat.shield);
+    for (let i = 0; i < 60 * 30; i++) s.combat.update(1 / 60);
+    const settledMax = s.combat.maxShield;
+    // And the bleed does not take it below where it started.
+    for (let i = 0; i < 60 * 20; i++) s.combat.update(1 / 60);
+    return { normal, over, settledMax, shield: Math.round(s.combat.shield) };
+  });
+  check('an ultrashield puts you over your own maximum', ultra.over > ultra.normal,
+    `${ultra.normal} to ${ultra.over}`);
+  check('and it bleeds back down to normal rather than vanishing',
+    ultra.settledMax === ultra.normal && ultra.shield === ultra.normal,
+    `settled at ${ultra.shield}`);
+
+  // Overload: the same magazine, in less time.
+  const overload = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0; s.combat.reset(); s.weapon.reset(); s.drones.reset();
+    s.weapon.select('m16');
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const dir = { x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] };
+    const burst = () => {
+      s.weapon.reset(); s.weapon.select('m16');
+      let steps = 0;
+      while (s.weapon.shotsFired < 20 && steps < 2000) {
+        s.weapon.update(1 / 120, true, eye, dir); steps++;
+      }
+      return steps;
+    };
+    s.weapon.rateScale = 1;
+    const plain = burst();
+    s.combat.givePower('overload', s.pickupSpecs.overload);
+    s.weapon.rateScale = s.combat.rateScale;
+    s.weapon.reloadScale = s.combat.reloadScale;
+    const fast = burst();
+    const reload = s.weapon.spec.reloadTime * s.weapon.reloadScale;
+    s.weapon.rateScale = 1; s.weapon.reloadScale = 1;
+    return { plain, fast, reload: Number(reload.toFixed(2)),
+      full: s.weapon.spec.reloadTime };
+  });
+  check('overload empties a magazine faster', overload.fast < overload.plain * 0.7,
+    `${overload.plain} to ${overload.fast} steps for twenty rounds`);
+  check('and reloads faster too', overload.reload < overload.full * 0.5,
+    `${overload.full} s to ${overload.reload} s`);
+
+  // A taken pad comes back on its own.
+  const respawn = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0; s.combat.reset();
+    const pad = s.dropPickup('ammo', 0.4, 0);
+    const me = { x: s.player.x, y: s.player.y, z: s.player.z };
+    s.pickups.update(0.1, me);
+    const gone = !pad.ready;
+    // Stand somewhere else while it comes back, or it is taken again at once.
+    const away = { x: s.player.x + 60, y: s.player.y, z: s.player.z };
+    for (let i = 0; i < 60 * 25; i++) s.pickups.update(1 / 60, away);
+    const back = pad.ready;
+    // And going down and getting back up puts everything back at once.
+    s.pickups.update(0.1, me);
+    const takenAgain = !pad.ready;
+    s.pickups.reset();
+    return { gone, back, takenAgain, revived: pad.ready };
+  });
+  check('and a pad comes back after a while', respawn.gone && respawn.back);
+  check('and getting back on your feet resets them all',
+    respawn.takenAgain && respawn.revived);
+
+  // The pads are drawn: put five under the camera and count the instances.
+  const drawn = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0;
+    const kinds = ['ammo', 'health', 'quad', 'ultra', 'overload'];
+    kinds.forEach((k, i) => s.dropPickup(k, 8 + i * 3, 4));
+    s.look(90, -6);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const counts = {};
+    let tris = 0;
+    for (const k of kinds) {
+      counts[k] = s.renderer.actors.pickups[k].instanceCount;
+      tris += s.renderer.actors.pickups[k].count / 3;
+    }
+    return { counts, tris: Math.round(tris) };
+  });
+  check('all five pads reach the instance buffers',
+    Object.values(drawn.counts).every((n) => n === 1),
+    `${drawn.tris} triangles across the five meshes`);
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0;
+    s.combat.reset();
+    s.teleport(81, 0); s.look(90, -4); s.setTime(16.9);
+    // A fan of all five across the square, near enough to read.
+    for (const [k, dx, dz] of [['quad', -8.5, -4.2], ['ultra', -9.5, 2.0], ['overload', -13.5, -7.0],
+      ['health', -6.5, 5.4], ['ammo', -15, -0.6]]) s.dropPickup(k, dx, dz);
+    s.combat.givePower('quad', s.pickupSpecs.quad);
+    s.combat.givePower('overload', s.pickupSpecs.overload);
+  });
+  await page.waitForTimeout(1800);
+  await page.screenshot({ path: path.join(SHOTS, 'combat-06-pickups.png') });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.pickups.pads.length = 0;
+    s.combat.reset();
+  });
+
   await page.evaluate(() => {
     const s = window.spreefall;
     s.soldiers.reset(); s.drones.reset(); s.jets.reset(); s.projectiles.clear(); s.combat.reset();

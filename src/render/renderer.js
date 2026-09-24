@@ -464,6 +464,11 @@ export class Renderer {
         const mesh = this.actors.props[kind];
         tris += mesh.instanceCount * (mesh.count / 3);
       }
+      draws += this.actors.drawPickups();
+      for (const kind in this.actors.pickups) {
+        const mesh = this.actors.pickups[kind];
+        tris += mesh.instanceCount * (mesh.count / 3);
+      }
     }
 
     // Sky last, depth equal to the far plane, so it only fills what is left.

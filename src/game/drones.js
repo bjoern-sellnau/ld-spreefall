@@ -65,7 +65,9 @@ export class Drones {
     this.onShot = null;      // fn(drone, damageToPlayer)
     this.onDeath = null;     // fn(drone)
     this.enabled = true;
-    this.budget = 6;
+    // Drones are the garnish, not the meal. They own the sky and are visible
+    // from everywhere, so a handful of them reads as far more than a handful.
+    this.budget = 2;
     this._los = { t: 0, next: 0 };
   }
 
@@ -79,7 +81,7 @@ export class Drones {
 
   setTier(tier) {
     this.tier = tier;
-    this.budget = Math.min(14, 5 + tier * 2);
+    this.budget = Math.min(7, 2 + tier);
   }
 
   free() { return this.pool.find((d) => !d.alive) || null; }
@@ -179,7 +181,7 @@ export class Drones {
     // Keep the sky populated near the player without ever spawning in view.
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0 && this.active.length < this.budget) {
-      this.spawnTimer = Math.max(0.8, 3.4 - this.tier * 0.25);
+      this.spawnTimer = Math.max(2.4, 7.0 - this.tier * 0.5);
       this.spawnNear(player.x, player.z, 110, 190);
     }
 
