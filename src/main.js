@@ -463,7 +463,7 @@ async function main() {
     audio.pickup(pad.kind);
     if (pad.kind === 'ammo') {
       const given = weapon.resupply(spec.held, spec.others);
-      feed(`<b>ammunition</b> +${given}`);
+      feed(given > 0 ? `<b>ammunition</b> +${given}` : '<b>ammunition</b> full');
       return;
     }
     if (pad.kind === 'health') {
@@ -1067,7 +1067,8 @@ async function main() {
     }
 
     if (state.mode === 'walk' || state.mode === 'landing') {
-      minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found);
+      minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
+        state.mode === 'walk' ? pickups.live : null);
       el.found.textContent = String(landmarks.found.size);
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
       const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];

@@ -110,7 +110,8 @@ and a chip on the interface counting it down:
 | Ultrashield | an overshield well above your normal maximum, for 26 s, then it bleeds back down rather than vanishing |
 | Overload | you fire almost twice as fast and reload in under half the time, for 18 s |
 
-None of them spawns in the weapons free zone.
+None of them spawns in the weapons free zone. The map marks every pad that is
+up, in the colour it glows in on the street.
 
 ## The shooter
 

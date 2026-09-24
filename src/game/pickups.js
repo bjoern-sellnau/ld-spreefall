@@ -137,17 +137,4 @@ export class Pickups {
     if (taken && this.onTaken) this.onTaken(taken, PICKUP[taken.kind]);
     return taken;
   }
-
-  /** The nearest live pad, for the map and for telling you where to run. */
-  nearest(x, z, kind = null) {
-    let best = null;
-    let bestD = Infinity;
-    for (const p of this.pads) {
-      if (!p.ready) continue;
-      if (kind && p.kind !== kind) continue;
-      const d = Math.hypot(p.x - x, p.z - z);
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    return best ? { pad: best, distance: bestD } : null;
-  }
 }

@@ -14,6 +14,16 @@ const CLASS_STYLE = {
   pedestrian: ['#4a463c', 1.6],
 };
 
+// What each kind of pad shows as on the map. The same five colours the pads
+// themselves glow in, so the map and the street agree.
+const PAD_COLOUR = {
+  ammo: '#e8a83a',
+  health: '#e8574a',
+  quad: '#5a86ff',
+  ultra: '#ffc64c',
+  overload: '#6fe08a',
+};
+
 export class Minimap {
   constructor(canvas, world, landmarks) {
     this.canvas = canvas;
@@ -42,7 +52,13 @@ export class Minimap {
     requestAnimationFrame(() => this._sizeCanvas());
   }
 
-  draw(px, pz, yaw, found) {
+  /**
+   * @param {number} px @param {number} pz where you are
+   * @param {number} yaw heading, radians
+   * @param {Set} found the landmarks you have stood in front of
+   * @param {Array} pads live pickup pads to mark, if any
+   */
+  draw(px, pz, yaw, found, pads = null) {
     this._sizeCanvas();
     const ctx = this.ctx;
     const W = this.canvas.width, H = this.canvas.height;
@@ -112,6 +128,19 @@ export class Minimap {
       ctx.moveTo(pts[0], pts[1]);
       for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
       ctx.stroke();
+    }
+
+    // Pickup pads, under the landmark pins because a landmark is the thing you
+    // came for and a crate is the thing you pass on the way.
+    if (pads && pads.length) {
+      const r = (this.big ? 2.2 : 3.2) / scale * this.dpr * 0.5;
+      for (const p of pads) {
+        if (!this.big && Math.hypot(p.x - px, p.z - pz) > reach) continue;
+        ctx.fillStyle = PAD_COLOUR[p.kind] || '#cfcabf';
+        ctx.beginPath();
+        ctx.arc(p.x, p.z, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // Landmark pins.
