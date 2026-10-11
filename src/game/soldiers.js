@@ -127,6 +127,8 @@ export class Soldiers {
       const z = pz + Math.sin(a) * r;
       if (x < w.minX + 20 || x > w.maxX - 20) continue;
       if (z < w.minZ + 20 || z > w.maxZ - 20) continue;
+      // Nobody walks out of a district that has not landed yet.
+      if (w.isLoaded && !w.isLoaded(x, z)) continue;
       if (this.isSanctuary(x, 0, z)) continue;
       const g = w.groundHeight(x, z);
       // Somewhere they can actually stand: no wall within arm's reach.

@@ -1247,8 +1247,16 @@ async function main() {
     });
     state.travelTo = { x: tx, z: tz };
     state.mode = 'travel';
-    // Bring the tiles in along the way rather than at the far end, so the
-    // city is there when you arrive instead of popping in around you.
+    // The place you are flying to may be in a district that is not in memory,
+    // and the flight is seven seconds of warning that you are coming. Start
+    // fetching it now and bring the tiles in along the way, so the city is
+    // there when you arrive rather than appearing around you afterwards.
+    const far = world.entryAt(tx, tz);
+    if (far && !world.loaded(far.id)) {
+      world.loadDistrict(far.id).then(() => {
+        tiles.updateResidency(tx, tz, loop.frame);
+      }).catch(() => toast(`${far.name} could not be loaded`));
+    }
     tiles.updateResidency(tx, tz, loop.frame);
     return true;
   }
@@ -1440,6 +1448,7 @@ async function main() {
       const z = player.z + Math.sin(a) * far;
       if (x < world.minX + 60 || x > world.maxX - 60) continue;
       if (z < world.minZ + 60 || z > world.maxZ - 60) continue;
+      if (!world.isLoaded(x, z)) continue;
       if (dropNuke(x, z)) return;
     }
   }
@@ -1631,7 +1640,7 @@ async function main() {
     state.landFrom = { ...state.dronePose };
   }
 
-  el.btnMap.addEventListener('click', () => minimap.toggle());
+  el.btnMap.addEventListener('click', () => minimap.toggle({ x: player.x, z: player.z }));
   el.btnTravel.addEventListener('click', () => openTravel());
   el.btnHelp.addEventListener('click', () => el.help.classList.toggle('hidden'));
   el.helpClose.addEventListener('click', () => el.help.classList.add('hidden'));
@@ -1703,7 +1712,7 @@ async function main() {
     if (state.mode === 'intro') { skipIntro(); return; }
     switch (code) {
       case 'KeyP': togglePhoto(); break;
-      case 'KeyM': minimap.toggle(); break;
+      case 'KeyM': minimap.toggle({ x: player.x, z: player.z }); break;
       case 'KeyH': el.help.classList.toggle('hidden'); break;
       case 'KeyN': {
         const on = audio.toggle();
@@ -1983,7 +1992,12 @@ async function main() {
       const p = travel.sample(wall);
       state.dronePose = p;
       el.hud.classList.add('flying');
-      if (p.finished) {
+      // Nobody is put down on ground that has not arrived. The flight holds
+      // its last frame, a few hundred metres up, until the district is in.
+      if (p.finished && state.travelTo && !world.isLoaded(state.travelTo.x, state.travelTo.z)) {
+        el.district.textContent = `landing in ${world.nameAt(state.travelTo.x, state.travelTo.z) || 'Berlin'}`;
+        el.district.classList.add('loading');
+      } else if (p.finished) {
         const at = state.travelTo;
         player.teleport(at.x, at.z);
         state.prev = { x: at.x, y: player.y, z: at.z };
@@ -2295,7 +2309,7 @@ async function main() {
 
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
-    world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
+    world, renderer, tiles, camera, player, loop, state, landmarks, audio, input, minimap,
     combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs,
     demolition, demoSpec: DEMO, demoBite: bite, demoCrater: craterAt, travelSpec: TRAVEL,
     fires,

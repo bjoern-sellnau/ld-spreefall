@@ -97,6 +97,9 @@ export class Drones {
       const z = pz + Math.sin(a) * r;
       if (x < this.world.minX + 20 || x > this.world.maxX - 20) continue;
       if (z < this.world.minZ + 20 || z > this.world.maxZ - 20) continue;
+      // Not into a district that is still on the wire: there would be no
+      // buildings to fly round and no walls to break the line of sight.
+      if (this.world.isLoaded && !this.world.isLoaded(x, z)) continue;
       if (this.isSanctuary(x, 0, z)) continue;
       const g = this.world.groundHeight(x, z);
       const y = g + rand(22, 46);
