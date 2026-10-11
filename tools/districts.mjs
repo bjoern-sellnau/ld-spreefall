@@ -45,7 +45,8 @@ export const TIERS = [
     // window shader, trees from the extract, the full height field.
     name: 'full',
     minArea: 6, simplify: 0, roofs: true, windows: true, landmarks: true,
-    trees: 1, driveOnly: false, grid: 33, kerbs: true,
+    trees: 1, driveOnly: false, grid: 33, kerbs: true, groundStep: 12.5,
+    boxBelow: 0, service: true, surfaceStep: 2.5, roadSimplify: 0,
   },
   {
     // Next door. Still walkable detail, but sheds and garages go, the
@@ -53,7 +54,8 @@ export const TIERS = [
     // halved, which Berlin can afford because Berlin is flat.
     name: 'near',
     minArea: 24, simplify: 0.7, roofs: true, windows: true, landmarks: true,
-    trees: 1, driveOnly: false, grid: 17, kerbs: true,
+    trees: 1, driveOnly: false, grid: 17, kerbs: true, groundStep: 12.5,
+    boxBelow: 0, service: true, surfaceStep: 2.5, roadSimplify: 0,
   },
   {
     // The rest of the way out to the ring. Blocks: every building still solid
@@ -61,8 +63,12 @@ export const TIERS = [
     // trees, no kerbs, only the roads you can drive on, and a nine point
     // height field.
     name: 'block',
-    minArea: 60, simplify: 1.6, roofs: false, windows: false, landmarks: true,
-    trees: 0.5, driveOnly: true, grid: 9, kerbs: false,
+    minArea: 80, simplify: 2.2, roofs: false, windows: false, landmarks: true,
+    trees: 0.35, driveOnly: true, grid: 9, kerbs: false, groundStep: 50,
+    // A small building out here becomes the box that fits it: four walls
+    // instead of nine, which halves what the far half of the city costs. The
+    // big ones, the ones that give a street its shape, keep their footprint.
+    boxBelow: 450, service: false, surfaceStep: 5.0, roadSimplify: 3.0,
   },
 ];
 

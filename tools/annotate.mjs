@@ -57,7 +57,21 @@ function relationRing(rel, ways, pos) {
   return best;
 }
 
-export function annotate(osm, { log = () => {} } = {}) {
+/**
+ * Attach the surveyed facts to an extract.
+ *
+ * @param {object} osm the parsed extract, edited in place
+ * @param {object} opts log, and box: the district's own metres. Every fact in
+ *   berlin-facts.mjs stands somewhere specific, so a district only takes the
+ *   facts that stand inside it. Without that filter a build of a district out
+ *   by the ring put the Brandenburg Gate in it, which is how this was found.
+ */
+export function annotate(osm, { log = () => {}, box = null } = {}) {
+  const inBox = (lon, lat) => {
+    if (!box) return true;
+    const [x, z] = project(lon, lat);
+    return x >= box.minX && x < box.maxX && z >= box.minZ && z < box.maxZ;
+  };
   const pos = new Map();
   for (const n of osm.nodes.values()) pos.set(n.id, project(n.lon, n.lat));
 
@@ -108,6 +122,7 @@ export function annotate(osm, { log = () => {} } = {}) {
   }
   for (const c of LANDMARK_CARDS) {
     if (haveCard.has(c.key)) continue;
+    if (!inBox(c.lon, c.lat)) continue;
     mintNode(c.lon, c.lat, {
       tourism: 'attraction', name: c.name,
       'spreefall:card': c.key,
@@ -134,7 +149,9 @@ export function annotate(osm, { log = () => {} } = {}) {
   for (const way of osm.ways.values()) {
     if (way.tags && way.tags.memorial === 'stelae_field') { memorialDone = true; break; }
   }
-  if (!memorialDone) {
+  // The field stands between the Gate and Potsdamer Platz. A district that
+  // does not contain it does not get it.
+  if (!memorialDone && inBox(MEMORIAL.ring[0][0], MEMORIAL.ring[0][1])) {
     const ring = MEMORIAL.ring.map(([lon, lat]) => project(lon, lat));
     const [mx, mz] = ringCentroid(ring);
     const wanted = Math.abs(ringArea(ring));
@@ -163,8 +180,10 @@ export function annotate(osm, { log = () => {} } = {}) {
       mintWay(MEMORIAL.ring, { ...memTags });
       report.memorial = 'added from the surveyed outline';
     }
-  } else {
+  } else if (memorialDone) {
     report.memorial = 'already tagged in the source';
+  } else {
+    report.memorial = 'not in this district';
   }
 
   // --- the buildings people came to see -----------------------------------
@@ -181,6 +200,7 @@ export function annotate(osm, { log = () => {} } = {}) {
   for (const b of BUILDINGS) {
     if (!b.kind || !LANDMARK_BUILDERS[b.kind]) continue;
     if (claimed.has(b.key)) continue;
+    if (!inBox(b.lon, b.lat)) continue;
     const [bx, bz] = project(b.lon, b.lat);
     const wanted = b.w * b.d;
     const reach = Math.max(45, Math.hypot(b.w, b.d) * 0.6);

@@ -7,6 +7,8 @@
   "scripts": {
     "fetch": "node tools/fetch-osm.mjs",
     "world": "node tools/build-world.mjs",
+    "world:all": "node tools/fetch-osm.mjs --all && node tools/build-world.mjs --all",
+    "world:offline": "node tools/fetch-osm.mjs --all --offline && node tools/build-world.mjs --all",
     "test": "node --test tools/test/*.test.mjs",
     "build": "node tools/build-dist.mjs",
     "serve": "node tools/serve.mjs",

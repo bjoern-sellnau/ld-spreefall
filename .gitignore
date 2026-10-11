@@ -5,3 +5,7 @@ docs/screenshots/*.tmp.png
 .DS_Store
 data/raw/district-*.osm
 data/raw/district-*.json
+public/world-*.bin
+public/world-*.json
+!public/world-core.bin
+!public/world-core.json
