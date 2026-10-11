@@ -90,12 +90,38 @@ function buildingLevels(tags, height) {
   return Math.max(1, Math.round((height - 1.0) / LEVEL_HEIGHT));
 }
 
-const BERLIN_PALETTE = [
+const BERLIN_SEEDS = [
   [0.855, 0.796, 0.663], [0.886, 0.843, 0.741], [0.804, 0.749, 0.639],
   [0.784, 0.722, 0.580], [0.863, 0.827, 0.749], [0.761, 0.706, 0.604],
   [0.725, 0.663, 0.549], [0.839, 0.776, 0.659], [0.663, 0.498, 0.369],
   [0.588, 0.376, 0.290], [0.788, 0.765, 0.706], [0.824, 0.796, 0.733],
 ];
+
+/**
+ * Sixty of the twelve Berlin tones, five shades of each.
+ *
+ * The palette has to be identical in every district, because a vertex carries
+ * an index into it and the renderer uploads one palette for the whole city. It
+ * used to be grown as the data asked for colours, which was fine while there
+ * was one district and wrong the moment there were two: index seven would have
+ * meant sandstone in Mitte and brick in Wedding. So it is computed here, the
+ * same way every time, and a building that states its own colour is snapped to
+ * the nearest entry.
+ */
+function buildPalette() {
+  const out = [];
+  const shades = [0.88, 0.96, 1.0, 1.05, 1.12];
+  for (const seed of BERLIN_SEEDS) {
+    for (const k of shades) {
+      out.push(seed.map((c) => Math.min(1, Math.max(0, c * k))));
+    }
+  }
+  // A few greys for the concrete and the postwar blocks.
+  out.push([0.72, 0.72, 0.70], [0.63, 0.64, 0.63], [0.80, 0.80, 0.78], [0.55, 0.56, 0.57]);
+  return out;
+}
+
+const BERLIN_PALETTE = buildPalette();
 
 function parseColour(v) {
   if (!v) return null;
@@ -525,7 +551,7 @@ function buildDistrict(district) {
   // --- buildings ----------------------------------------------------------
   let buildingCount = 0;
   const landmarkIndex = [];
-  const palette = new Palette(BERLIN_PALETTE);
+  const palette = new Palette(BERLIN_PALETTE, { frozen: true });
   for (const b of buildings) {
     const ring = b.outer;
     if (ring.length < 3) continue;
@@ -780,7 +806,11 @@ function readIndex() {
  * leaves behind a city of the districts that finished rather than nothing.
  */
 function updateIndex(district, entry) {
-  const index = readIndex() || {
+  const previous = readIndex();
+  // The header is written fresh every time and the district list is carried
+  // over, so a change to anything city wide, the palette for instance, reaches
+  // the index on the next district built rather than on the next clean build.
+  const index = {
     version: 4,
     generator: 'spreefall build-world',
     origin: ORIGIN,
@@ -800,8 +830,10 @@ function updateIndex(district, entry) {
     groundScale: GROUND_SCALE,
     collisionGrid: COLLISION_GRID,
     materials: MATERIAL_NAMES,
+    facadePalette: BERLIN_PALETTE.map((c) => c.map((v) => Math.round(v * 255))),
+    waterLevel: -0.9,
     home: CORE_ID,
-    districts: [],
+    districts: previous ? previous.districts : [],
   };
   index.districts = index.districts.filter((d) => d.id !== district.id);
   index.districts.push({
@@ -1065,11 +1097,21 @@ function flatRing(ring) {
  * cap snaps to the nearest entry, so a building:colour from OSM always shows up
  * as itself or as the closest thing the palette has.
  */
+/**
+ * The facade palette. Vertices carry an index into it, and the renderer
+ * uploads one palette for the whole city, so every district has to agree on
+ * what index seven means. It is therefore frozen: the Berlin tones are the
+ * palette, and a building that gives its own colour in the data is snapped to
+ * the nearest tone rather than appended, which is what used to happen and
+ * would have had the same index mean two colours in two districts.
+ */
 class Palette {
-  constructor(seedColours) {
+  constructor(seedColours, { frozen = false } = {}) {
     this.list = [];
     this.byKey = new Map();
+    this.frozen = false;
     for (const c of seedColours) this.indexOf(c);
+    this.frozen = frozen;
   }
   key(c) {
     return `${Math.round(c[0] * 31)}_${Math.round(c[1] * 31)}_${Math.round(c[2] * 31)}`;
@@ -1078,7 +1120,7 @@ class Palette {
     const k = this.key(c);
     const hit = this.byKey.get(k);
     if (hit !== undefined) return hit;
-    if (this.list.length < 64) {
+    if (!this.frozen && this.list.length < 64) {
       this.list.push(c);
       this.byKey.set(k, this.list.length - 1);
       return this.list.length - 1;

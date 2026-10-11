@@ -8,14 +8,24 @@ import path from 'node:path';
 import { World } from '../../src/engine/world.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
-const BIN = path.join(ROOT, 'public', 'world.bin');
-const JSON_PATH = path.join(ROOT, 'public', 'world.json');
-const built = fs.existsSync(BIN) && fs.existsSync(JSON_PATH);
+const PUB = path.join(ROOT, 'public');
+const INDEX_PATH = path.join(PUB, 'world.json');
+const CORE_BIN = path.join(PUB, 'world-core.bin');
+const CORE_JSON = path.join(PUB, 'world-core.json');
+const built = fs.existsSync(INDEX_PATH) && fs.existsSync(CORE_BIN) && fs.existsSync(CORE_JSON);
 
+/**
+ * The middle district, read off the disk and handed to the world the same way
+ * a fetch would hand it over. Everything these tests ask about stands in it.
+ */
 function loadWorld() {
-  const manifest = JSON.parse(fs.readFileSync(JSON_PATH, 'utf8'));
-  const buf = fs.readFileSync(BIN);
-  return new World(manifest, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+  const index = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8'));
+  const world = new World(index);
+  const manifest = JSON.parse(fs.readFileSync(CORE_JSON, 'utf8'));
+  const buf = fs.readFileSync(CORE_BIN);
+  world.adopt(world.entryFor('core'), manifest,
+    buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+  return world;
 }
 
 const opts = built ? {} : { skip: 'run npm run world first' };

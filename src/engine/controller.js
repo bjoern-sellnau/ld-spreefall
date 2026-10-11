@@ -149,6 +149,18 @@ export class CharacterController {
       this.resolve();
     }
 
+    // A district that has not arrived yet is not somewhere you can walk: the
+    // ground, the walls and the pavements of it are all still on the wire. So
+    // the edge of what is loaded holds you, the same way a wall does, and the
+    // step is given back. It is a fraction of a second in practice, because
+    // the streamer starts fetching the next district a kilometre out.
+    this.heldByLoading = false;
+    if (this.world.isLoaded && !this.world.isLoaded(this.x, this.z)) {
+      this.x = startX;
+      this.z = startZ;
+      this.heldByLoading = true;
+    }
+
     // Vertical.
     this.vy -= PLAYER.gravity * dt;
     this.y += this.vy * dt;

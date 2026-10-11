@@ -79,6 +79,12 @@ export class Combat {
     // would be grotesque. Inside it the weapon holsters itself and the drones
     // keep out.
     this.sanctuaries = [];
+    this.refreshSanctuaries(manifest);
+  }
+
+  /** Called when a district arrives or leaves, because one of them has it. */
+  refreshSanctuaries(manifest) {
+    this.sanctuaries.length = 0;
     for (const l of (manifest.landmarks || [])) {
       if (l.key === 'memorial') {
         this.sanctuaries.push({ x: l.x, z: l.z, radius: 135, name: l.name });

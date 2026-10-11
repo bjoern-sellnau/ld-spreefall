@@ -39,7 +39,7 @@ const el = {
   canvas: $('view'), loading: $('loading'), loadbar: $('loadbar'), loadnote: $('loadnote'),
   title: $('title'), play: $('playbtn'), hud: $('hud'), minimap: $('minimap'),
   compass: $('compasslabel'), cards: $('cardhost'), toast: $('toast'), debug: $('debug'),
-  found: $('found'), total: $('total'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
+  found: $('found'), total: $('total'), district: $('district'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
@@ -161,6 +161,14 @@ async function main() {
   let wanted = 'normal';
   try { wanted = localStorage.getItem('spreefall.difficulty') || 'normal'; } catch { /* private mode */ }
   const combat = new Combat(m, wanted);
+  // Districts arrive and leave while you walk, and two things took a copy of
+  // the city's landmarks when they were built: the cards and the weapons free
+  // zone. Both are taken again whenever the city changes shape, so the
+  // memorial is still a sanctuary after Mitte has been dropped and reloaded.
+  world.onManifest = (manifest) => {
+    landmarks.refresh(manifest);
+    combat.refreshSanctuaries(manifest);
+  };
   const drones = new Drones(world, (x, y, z) => combat.isSanctuary(x, y, z));
   // Filled in by the soldier layer below, and referenced by the blast handler
   // before it exists, which is why it is a binding rather than a constant.
@@ -234,6 +242,23 @@ async function main() {
   const fromUrl = decodeState(location.hash);
   const deepLink = !!fromUrl;
   if (fromUrl) spawn = { ...spawn, ...fromUrl };
+
+  // A link can point anywhere in the city, including a district that is not
+  // the one the game loads first. Whichever it is, it is on the ground before
+  // the walk starts rather than a hole you fall through.
+  if (!world.isLoaded(spawn.x, spawn.z)) {
+    const entry = world.entryAt(spawn.x, spawn.z);
+    if (entry) {
+      el.loadnote.textContent = `loading ${entry.name}`;
+      try {
+        await world.loadDistrict(entry.id, (p) => {
+          el.loadbar.style.width = `${Math.round(p * 100)}%`;
+        });
+      } catch (err) {
+        toast(`${entry.name} could not be loaded`);
+      }
+    }
+  }
 
   renderer.timeOfDay = spawn.tod;
   renderer.dayOfYear = spawn.doy;
@@ -1228,6 +1253,34 @@ async function main() {
     return true;
   }
 
+  /**
+   * The district streamer. One district is in front of you, the next is on its
+   * way, and the ones behind are let go: the whole city is a hundred and six
+   * square kilometres and about twenty five megabytes, which is the budget for
+   * the lot, but only a few square kilometres of it is ever in memory.
+   */
+  function streamCity(x, z) {
+    const ride = state.inVehicle;
+    const flying = state.mode === 'travel' || state.mode === 'cinema'
+      || (ride && (ride.kind === 'jet' || ride.kind === 'heli'));
+    // From the air you see further and you get there faster, so the reach goes
+    // out and nothing is dropped while a flight is in progress.
+    const reach = flying ? 2200 : 1100;
+    const drop = flying ? 7000 : 3000;
+    const fetching = world.keepAround(x, z, reach, drop, flying ? 12 : 9);
+    const names = fetching.map((id) => {
+      const e = world.entryFor(id);
+      return e ? e.name : id;
+    });
+    if (names.length) {
+      el.district.textContent = `${world.nameAt(x, z) || 'Berlin'}  loading ${names.join(', ')}`;
+      el.district.classList.add('loading');
+    } else {
+      el.district.textContent = world.nameAt(x, z) || 'Berlin';
+      el.district.classList.remove('loading');
+    }
+  }
+
   /** How big the circle on the map is, which is what each mode is about. */
   function aimRadius(mode) {
     if (mode === 'travel') return 14;
@@ -2121,6 +2174,10 @@ async function main() {
       renderer.drawActors = live;
     }
 
+    // Keep the city around whoever is being followed: the district they are
+    // in, the ones within reach, and nothing beyond the drop distance. This
+    // starts fetches and returns at once; tiles appear as the bytes land.
+    streamCity(camera.position[0], camera.position[2]);
     tiles.updateResidency(camera.position[0], camera.position[2], loop.frame);
     // Dynamic resolution, fed the real cost of the last frame. When it decides
     // to move, the scene target is rebuilt at the new size; the page and the
@@ -2187,7 +2244,7 @@ async function main() {
       || state.mode === 'cinema') {
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live);
-      el.found.textContent = String(landmarks.found.size);
+      el.found.textContent = String(landmarks.foundInGoal);
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
       const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
       el.compass.textContent = `${names[Math.round(deg / 45) % 8]} ${Math.round(deg)}`;

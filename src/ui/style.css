@@ -546,6 +546,19 @@ html, body {
 }
 #progress span { color: var(--accent); font-weight: 600; }
 
+/* Which district you are standing in, and which ones are on their way. */
+#district {
+  position: absolute;
+  right: 18px; top: 244px;
+  width: 192px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-align: right;
+  color: var(--dim);
+  text-shadow: 0 1px 4px #000;
+}
+#district.loading { color: var(--accent); }
+
 #cardhost { position: absolute; left: 0; bottom: 92px; width: min(430px, 82vw); }
 
 .card {

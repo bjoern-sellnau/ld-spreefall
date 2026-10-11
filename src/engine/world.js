@@ -22,6 +22,15 @@ function rayVerticalQuad(ox, oy, oz, dx, dy, dz, ax, az, bx, bz, base, top) {
   return t;
 }
 
+const EMPTY = new Float32Array(0);
+
+/** Distance from a point to a box, zero inside it. */
+export function boxDistance(x, z, box) {
+  const dx = Math.max(box.minX - x, 0, x - box.maxX);
+  const dz = Math.max(box.minZ - z, 0, z - box.maxZ);
+  return Math.hypot(dx, dz);
+}
+
 /** Distance from a point to a line segment, all in the ground plane. */
 export function segmentDistance(px, pz, x1, z1, x2, z2) {
   const ex = x2 - x1, ez = z2 - z1;
@@ -32,37 +41,144 @@ export function segmentDistance(px, pz, x1, z1, x2, z2) {
 }
 
 export class World {
-  constructor(manifest, buffer) {
-    this.manifest = manifest;
-    this.buffer = buffer;
-    this.view = new DataView(buffer);
-    this.bytes = new Uint8Array(buffer);
-    this.tileSize = manifest.tileSize;
-    this.nx = manifest.tileCountX;
-    this.nz = manifest.tileCountZ;
-    this.minX = manifest.world.minX;
-    this.minZ = manifest.world.minZ;
-    this.maxX = manifest.world.maxX;
-    this.maxZ = manifest.world.maxZ;
-    this.waterLevel = manifest.waterLevel;
-    this.tiles = manifest.tiles;
+  /**
+   * The city, as an index plus however many districts are in memory.
+   *
+   * There is one tile grid over the whole of Berlin inside the Ring, and a
+   * district owns a rectangle of it. Tile records are dropped into one sparse
+   * array as districts arrive, each record remembering which district's buffer
+   * its offsets are in, so everything downstream, the collision, the height
+   * field, the raycasts and the renderer, carries on addressing the city by
+   * tile index and does not know or care that the bytes came from eight files.
+   *
+   * @param {object} index the city index, public/world.json
+   */
+  constructor(index) {
+    this.index = index;
+    this.base = '';
+    this.tileSize = index.tileSize;
+    this.nx = index.tileCountX;
+    this.nz = index.tileCountZ;
+    this.minX = index.world.minX;
+    this.minZ = index.world.minZ;
+    this.maxX = index.world.maxX;
+    this.maxZ = index.world.maxZ;
+    this.waterLevel = index.waterLevel !== undefined ? index.waterLevel : -0.9;
+    this.tiles = new Array(this.nx * this.nz).fill(null);
+    this.districts = new Map();        // id -> loaded district
+    this.pending = new Map();          // id -> promise, so two asks are one fetch
     this.collisionCache = new Map();
     this.heightCache = new Map();
-    const sg = manifest.surfaceGrid;
-    this.surface = {
-      step: sg.step, nx: sg.nx, nz: sg.nz,
-      data: new Uint8Array(buffer, sg.offset, sg.length),
+    this.onDistrict = null;            // fn(district) when one lands
+    this.onDrop = null;                // fn(district, indices) before one goes
+    // What the rest of the game reads. The arrays are the same objects for the
+    // life of the world and are filled and emptied in place as districts come
+    // and go, so anything holding a reference keeps seeing the truth.
+    this.manifest = {
+      origin: index.origin,
+      bbox: index.bbox,
+      city: index.city,
+      tileSize: index.tileSize,
+      materials: index.materials,
+      facadePalette: index.facadePalette,
+      waterLevel: this.waterLevel,
+      landmarks: [],
+      stations: [],
+      roadLines: [],
+      waterOutlines: [],
+      greenOutlines: [],
+      totals: { triangles: 0, vertices: 0, buildings: 0, stelae: 0, trees: 0, roadKm: 0, collisionSegments: 0 },
     };
   }
 
+  /** Every district the index knows about, built or not. */
+  get catalogue() { return this.index.districts || []; }
+
+  entryFor(id) { return this.catalogue.find((d) => d.id === id) || null; }
+
+  /** The district entry a point in metres falls in, loaded or not. */
+  entryAt(x, z) {
+    for (const d of this.catalogue) {
+      const b = d.bounds;
+      if (x >= b.minX && x < b.maxX && z >= b.minZ && z < b.maxZ) return d;
+    }
+    return null;
+  }
+
+  loaded(id) { return this.districts.has(id); }
+
+  /** True when the ground under a point is in memory. */
+  isLoaded(x, z) {
+    const index = this.tileIndex(x, z);
+    return index >= 0 && this.tiles[index] !== null;
+  }
+
+  get loadedIds() { return [...this.districts.keys()]; }
+
+  /** The name of the district a point is in, for the interface. */
+  nameAt(x, z) {
+    const e = this.entryAt(x, z);
+    return e ? e.name : '';
+  }
+
+  /**
+   * The index, and the district you start in. The rest arrive as you go.
+   *
+   * @param {string} base where the bundles are served from
+   * @param {(p:number)=>void} onProgress 0 to 1 over the home district
+   */
   static async load(base = '', onProgress = null) {
-    const manifest = await fetch(`${base}world.json`).then((r) => {
+    const index = await fetch(`${base}world.json`).then((r) => {
       if (!r.ok) throw new Error(`world.json: ${r.status}`);
       return r.json();
     });
-    const res = await fetch(`${base}world.bin`);
-    if (!res.ok) throw new Error(`world.bin: ${res.status}`);
-    const total = parseInt(res.headers.get('content-length') || '0', 10);
+    if (!index.districts || !index.districts.length) {
+      throw new Error('the index has no districts in it');
+    }
+    const world = new World(index);
+    world.base = base;
+    const home = index.home && world.entryFor(index.home)
+      ? index.home : index.districts[0].id;
+    world.home = home;
+    await world.loadDistrict(home, onProgress);
+    return world;
+  }
+
+  /**
+   * Fetch one district and splice it into the city. Asking twice while it is
+   * in flight gets the same promise, which is what stops the player walking
+   * back and forth across a boundary from fetching it twice.
+   *
+   * @returns {Promise<object|null>} the district, or null when there is no
+   *   such district in the index
+   */
+  loadDistrict(id, onProgress = null) {
+    if (this.districts.has(id)) return Promise.resolve(this.districts.get(id));
+    const waiting = this.pending.get(id);
+    if (waiting) return waiting;
+    const entry = this.entryFor(id);
+    if (!entry) return Promise.resolve(null);
+    const job = this._fetchDistrict(entry, onProgress)
+      .then((district) => {
+        this.pending.delete(id);
+        return district;
+      })
+      .catch((err) => {
+        this.pending.delete(id);
+        throw err;
+      });
+    this.pending.set(id, job);
+    return job;
+  }
+
+  async _fetchDistrict(entry, onProgress) {
+    const manifest = await fetch(`${this.base}${entry.json}`).then((r) => {
+      if (!r.ok) throw new Error(`${entry.json}: ${r.status}`);
+      return r.json();
+    });
+    const res = await fetch(`${this.base}${entry.bin}`);
+    if (!res.ok) throw new Error(`${entry.bin}: ${res.status}`);
+    const total = parseInt(res.headers.get('content-length') || '0', 10) || entry.bytes;
     let buffer;
     if (res.body && onProgress) {
       const reader = res.body.getReader();
@@ -73,7 +189,7 @@ export class World {
         if (done) break;
         chunks.push(value);
         got += value.length;
-        onProgress(total ? got / total : Math.min(0.99, got / 10e6));
+        onProgress(total ? Math.min(1, got / total) : Math.min(0.99, got / 10e6));
       }
       const out = new Uint8Array(got);
       let o = 0;
@@ -83,7 +199,135 @@ export class World {
       buffer = await res.arrayBuffer();
     }
     if (onProgress) onProgress(1);
-    return new World(manifest, buffer);
+    return this.adopt(entry, manifest, buffer);
+  }
+
+  /**
+   * Put a fetched district into the city. Separate from the fetch so a test,
+   * or a build step, can hand over bytes it already has.
+   */
+  adopt(entry, manifest, buffer) {
+    if (this.districts.has(entry.id)) return this.districts.get(entry.id);
+    const sg = manifest.surfaceGrid;
+    const district = {
+      id: entry.id,
+      entry,
+      manifest,
+      tier: manifest.tier,
+      name: manifest.name || entry.name || entry.id,
+      buffer,
+      view: new DataView(buffer),
+      bytes: new Uint8Array(buffer),
+      grid: manifest.collisionGrid,
+      indices: [],
+      surface: {
+        step: sg.step, nx: sg.nx, nz: sg.nz,
+        minX: manifest.world.minX, minZ: manifest.world.minZ,
+        data: new Uint8Array(buffer, sg.offset, sg.length),
+      },
+    };
+    for (const rec of manifest.tiles) {
+      // The record knows where its bytes are and the district knows how fine
+      // its height field is, both of which differ between tiers.
+      rec.d = district;
+      rec.view = district.view;
+      rec.grid = district.grid;
+      this.tiles[rec.t] = rec;
+      district.indices.push(rec.t);
+    }
+    this.districts.set(entry.id, district);
+    this._mergeManifest(district, 1);
+    if (this.onDistrict) this.onDistrict(district);
+    return district;
+  }
+
+  /**
+   * Let a district go: its tiles, its caches and its bytes. The renderer is
+   * told first so it can free whatever it has on the card.
+   */
+  unloadDistrict(id) {
+    const district = this.districts.get(id);
+    if (!district) return false;
+    if (this.onDrop) this.onDrop(district, district.indices);
+    for (const t of district.indices) {
+      this.tiles[t] = null;
+      this.collisionCache.delete(t);
+      this.heightCache.delete(t);
+    }
+    this._mergeManifest(district, -1);
+    this.districts.delete(id);
+    return true;
+  }
+
+  /** Add or remove a district's share of what the game reads. */
+  _mergeManifest(district, sign) {
+    const m = this.manifest;
+    const d = district.manifest;
+    const lists = ['landmarks', 'stations', 'roadLines', 'waterOutlines', 'greenOutlines'];
+    if (sign > 0) {
+      for (const key of lists) {
+        for (const item of (d[key] || [])) {
+          if (item && typeof item === 'object' && !Array.isArray(item)) item.district = district.id;
+          m[key].push(item);
+        }
+      }
+      for (const key of Object.keys(m.totals)) {
+        m.totals[key] = Math.round(((m.totals[key] || 0) + (d.totals[key] || 0)) * 10) / 10;
+      }
+    } else {
+      for (const key of lists) {
+        const mine = new Set(d[key] || []);
+        // Spliced in place rather than replaced, because anything that took a
+        // reference to the array itself has to keep seeing the truth.
+        const kept = m[key].filter((item) => !mine.has(item));
+        m[key].length = 0;
+        for (const item of kept) m[key].push(item);
+      }
+      for (const key of Object.keys(m.totals)) {
+        m.totals[key] = Math.round(((m.totals[key] || 0) - (d.totals[key] || 0)) * 10) / 10;
+      }
+    }
+    if (this.onManifest) this.onManifest(m, district, sign);
+  }
+
+  /**
+   * Keep the city around a point in memory: the district it is in, every
+   * district whose box comes within reach, and nothing further out than the
+   * drop distance. Called every frame by the game; it starts fetches and
+   * returns immediately.
+   *
+   * @param {number} reach metres, how close a district has to be to be wanted
+   * @param {number} drop metres, how far before one is let go
+   * @returns {Array<string>} the ids being fetched right now
+   */
+  keepAround(x, z, reach = 900, drop = 2600, max = 9) {
+    const want = new Set();
+    const here = this.entryAt(x, z);
+    if (here) want.add(here.id);
+    const sorted = this.catalogue
+      .map((d) => ({ d, away: boxDistance(x, z, d.bounds) }))
+      .sort((a, b) => a.away - b.away);
+    for (const { d, away } of sorted) {
+      if (want.size >= max) break;
+      if (away <= reach) want.add(d.id);
+    }
+    for (const id of want) {
+      if (!this.districts.has(id)) this.loadDistrict(id);
+    }
+    for (const id of this.districts.keys()) {
+      if (want.has(id)) continue;
+      const entry = this.entryFor(id);
+      if (!entry) continue;
+      if (boxDistance(x, z, entry.bounds) > drop) this.unloadDistrict(id);
+    }
+    return [...this.pending.keys()];
+  }
+
+  /** How many bytes of city are in memory. */
+  get residentBytes() {
+    let total = 0;
+    for (const d of this.districts.values()) total += d.buffer.byteLength;
+    return total;
   }
 
   tileIndex(x, z) {
@@ -100,17 +344,34 @@ export class World {
 
   // --- ground -------------------------------------------------------------
 
+  /**
+   * The quantised ground of one tile. How fine it is depends on the district's
+   * tier, so the field carries its own size: thirty three points across in the
+   * middle of town, nine out by the ring, where Berlin is flat enough that the
+   * difference is a couple of centimetres.
+   *
+   * @returns {Int16Array|null} with an `n` property, the points across
+   */
   heightField(index) {
     let hf = this.heightCache.get(index);
     if (hf) return hf;
     const rec = this.tiles[index];
     if (!rec) return null;
-    const segs = this.view.getUint16(rec.cOff, true);
+    const view = rec.view;
+    const segs = view.getUint16(rec.cOff, true);
+    const n = view.getUint16(rec.cOff + 2, true) || rec.grid || COLLISION_GRID;
     const gridOff = rec.cOff + 4 + segs * 12;
-    hf = new Int16Array(COLLISION_GRID * COLLISION_GRID);
-    for (let i = 0; i < hf.length; i++) hf[i] = this.view.getInt16(gridOff + i * 2, true);
+    hf = new Int16Array(n * n);
+    for (let i = 0; i < hf.length; i++) hf[i] = view.getInt16(gridOff + i * 2, true);
+    hf.n = n;
     this.heightCache.set(index, hf);
     return hf;
+  }
+
+  /** The points across the height field of a tile, for anything editing it. */
+  gridOf(index) {
+    const hf = this.heightField(index);
+    return hf ? hf.n : COLLISION_GRID;
   }
 
   /** Bilinear ground height. Outside the box it clamps to the edge tile. */
@@ -122,25 +383,29 @@ export class World {
     const hf = this.heightField(index);
     if (!hf) return 0;
     const [ox, oz] = this.tileOrigin(index);
-    const n = COLLISION_GRID - 1;
+    const across = hf.n;
+    const n = across - 1;
     const fx = Math.min(n, Math.max(0, ((cx - ox) / this.tileSize) * n));
     const fz = Math.min(n, Math.max(0, ((cz - oz) / this.tileSize) * n));
     const ix = Math.min(n - 1, Math.floor(fx));
     const iz = Math.min(n - 1, Math.floor(fz));
     const tx = fx - ix, tz = fz - iz;
-    const h00 = hf[iz * COLLISION_GRID + ix];
-    const h10 = hf[iz * COLLISION_GRID + ix + 1];
-    const h01 = hf[(iz + 1) * COLLISION_GRID + ix];
-    const h11 = hf[(iz + 1) * COLLISION_GRID + ix + 1];
+    const h00 = hf[iz * across + ix];
+    const h10 = hf[iz * across + ix + 1];
+    const h01 = hf[(iz + 1) * across + ix];
+    const h11 = hf[(iz + 1) * across + ix + 1];
     const a = h00 + (h10 - h00) * tx;
     const b = h01 + (h11 - h01) * tx;
     return (a + (b - a) * tz) / GROUND_SCALE;
   }
 
   surfaceAt(x, z) {
-    const s = this.surface;
-    const ix = Math.round((x - this.minX) / s.step);
-    const iz = Math.round((z - this.minZ) / s.step);
+    const index = this.tileIndex(x, z);
+    const rec = index >= 0 ? this.tiles[index] : null;
+    if (!rec) return SURFACE.ASPHALT;
+    const s = rec.d.surface;
+    const ix = Math.round((x - s.minX) / s.step);
+    const iz = Math.round((z - s.minZ) / s.step);
     if (ix < 0 || iz < 0 || ix >= s.nx || iz >= s.nz) return SURFACE.ASPHALT;
     return s.data[iz * s.nx + ix];
   }
@@ -155,18 +420,19 @@ export class World {
     let segs = this.collisionCache.get(index);
     if (segs) return segs;
     const rec = this.tiles[index];
-    if (!rec) return new Float32Array(0);
-    const count = this.view.getUint16(rec.cOff, true);
+    if (!rec) return EMPTY;
+    const view = rec.view;
+    const count = view.getUint16(rec.cOff, true);
     const [ox, oz] = this.tileOrigin(index);
     segs = new Float32Array(count * 6);
     let p = rec.cOff + 4;
     for (let i = 0; i < count; i++) {
-      segs[i * 6] = this.view.getInt16(p, true) / 64 + ox;
-      segs[i * 6 + 1] = this.view.getInt16(p + 2, true) / 64 + oz;
-      segs[i * 6 + 2] = this.view.getInt16(p + 4, true) / 64 + ox;
-      segs[i * 6 + 3] = this.view.getInt16(p + 6, true) / 64 + oz;
-      segs[i * 6 + 4] = this.view.getInt16(p + 8, true) / 32;
-      segs[i * 6 + 5] = this.view.getInt16(p + 10, true) / 32;
+      segs[i * 6] = view.getInt16(p, true) / 64 + ox;
+      segs[i * 6 + 1] = view.getInt16(p + 2, true) / 64 + oz;
+      segs[i * 6 + 2] = view.getInt16(p + 4, true) / 64 + ox;
+      segs[i * 6 + 3] = view.getInt16(p + 6, true) / 64 + oz;
+      segs[i * 6 + 4] = view.getInt16(p + 8, true) / 32;
+      segs[i * 6 + 5] = view.getInt16(p + 10, true) / 32;
       p += 12;
     }
     this.collisionCache.set(index, segs);
@@ -330,14 +596,15 @@ export class World {
     const rec = this.tiles[index];
     if (!rec || !rec.trCount) return null;
     const [ox, oz] = this.tileOrigin(index);
+    const view = rec.view;
     const out = new Float32Array(rec.trCount * 5);
     for (let i = 0; i < rec.trCount; i++) {
       const o = rec.trOff + i * 8;
-      out[i * 5] = this.view.getInt16(o, true) / 64 + ox;
-      out[i * 5 + 1] = this.view.getInt16(o + 2, true) / 64;
-      out[i * 5 + 2] = this.view.getInt16(o + 4, true) / 64 + oz;
-      out[i * 5 + 3] = this.view.getUint8(o + 6) / 8;
-      out[i * 5 + 4] = this.view.getUint8(o + 7);
+      out[i * 5] = view.getInt16(o, true) / 64 + ox;
+      out[i * 5 + 1] = view.getInt16(o + 2, true) / 64;
+      out[i * 5 + 2] = view.getInt16(o + 4, true) / 64 + oz;
+      out[i * 5 + 3] = view.getUint8(o + 6) / 8;
+      out[i * 5 + 4] = view.getUint8(o + 7);
     }
     return out;
   }

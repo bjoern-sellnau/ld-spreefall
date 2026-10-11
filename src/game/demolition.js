@@ -379,7 +379,6 @@ export class Demolition {
   digCrater(site) {
     const w = this.world;
     const r = site.craterRadius * DEMO.rimOut;
-    const step = w.tileSize / (COLLISION_GRID - 1);
     const tx0 = Math.max(0, Math.floor((site.x - r - w.minX) / w.tileSize));
     const tx1 = Math.min(w.nx - 1, Math.floor((site.x + r - w.minX) / w.tileSize));
     const tz0 = Math.max(0, Math.floor((site.z - r - w.minZ) / w.tileSize));
@@ -390,13 +389,17 @@ export class Demolition {
         const index = tz * w.nx + tx;
         const hf = w.heightField(index);
         if (!hf) continue;
+        // How fine the field is depends on which district the tile is in, so
+        // it is read off the field rather than assumed.
+        const grid = hf.n || COLLISION_GRID;
+        const step = w.tileSize / (grid - 1);
         const [ox, oz] = w.tileOrigin(index);
-        for (let j = 0; j < COLLISION_GRID; j++) {
-          for (let i = 0; i < COLLISION_GRID; i++) {
+        for (let j = 0; j < grid; j++) {
+          for (let i = 0; i < grid; i++) {
             const px = ox + i * step, pz = oz + j * step;
             const d = craterAt(px, pz, site);
             if (d === 0) continue;
-            hf[j * COLLISION_GRID + i] += Math.round(d * GROUND_SCALE);
+            hf[j * grid + i] += Math.round(d * GROUND_SCALE);
             moved++;
           }
         }

@@ -148,14 +148,22 @@ export class Audio {
     for (const p of bed.parts) p.gain.gain.setTargetAtTime(p.target * level, t, 0.6);
   }
 
-  /** Distance from the player to the nearest road, cheaply, from the surface map. */
+  /**
+   * Distance from the player to the nearest road, cheaply, from the surface
+   * map. The map belongs to the district you are standing in, and how fine it
+   * is depends on that district's tier, so both come from there rather than
+   * from the city.
+   */
   _proximity(x, z, want, radius) {
-    const s = this.world.surface;
+    const index = this.world.tileIndex(x, z);
+    const rec = index >= 0 ? this.world.tiles[index] : null;
+    if (!rec) return Infinity;
+    const s = rec.d.surface;
     const step = s.step;
     const r = Math.ceil(radius / step);
     let best = Infinity;
-    const ix0 = Math.round((x - this.world.minX) / step);
-    const iz0 = Math.round((z - this.world.minZ) / step);
+    const ix0 = Math.round((x - s.minX) / step);
+    const iz0 = Math.round((z - s.minZ) / step);
     for (let dz = -r; dz <= r; dz += 2) {
       for (let dx = -r; dx <= r; dx += 2) {
         const ix = ix0 + dx, iz = iz0 + dz;

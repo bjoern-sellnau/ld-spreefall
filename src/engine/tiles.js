@@ -31,12 +31,50 @@ export class TileManager {
     // that view is the whole point of the fog. There are only a couple of dozen
     // of them and they cost about twelve thousand triangles in total.
     this.skyline = [];
-    for (let i = 0; i < world.tiles.length; i++) {
-      const rec = world.tiles[i];
-      if (rec.tris > 0 && rec.max[1] > 40) this.skyline.push(i);
+    this.skylineSet = new Set();
+    // Tiles the city does not have in memory yet. Without this the uploader
+    // spends every frame queueing the same two hundred holes in the grid where
+    // a district has not arrived.
+    this.absent = new Set();
+    this.addSkyline(world.tiles);
+    // Districts come and go while the game runs, so the skyline grows with
+    // them and whatever is on the card for a district that goes is freed.
+    world.onDistrict = (district) => {
+      for (const t of district.indices) this.absent.delete(t);
+      this.addSkyline(district.manifest.tiles);
+      for (const index of this.skyline) {
+        if (!this.resident.has(index)) this.upload(index);
+      }
+    };
+    world.onDrop = (district, indices) => {
+      for (const t of indices) {
+        this.evict(t);
+        this.absent.delete(t);
+        if (this.skylineSet.has(t)) {
+          this.skylineSet.delete(t);
+          const at = this.skyline.indexOf(t);
+          if (at >= 0) this.skyline.splice(at, 1);
+        }
+      }
+      this.stats.skyline = this.skyline.length;
+    };
+  }
+
+  /**
+   * Anything tall enough to be seen from the next district over stays
+   * resident, wherever you are.
+   *
+   * @param {Array} records tile records, sparse or dense
+   */
+  addSkyline(records) {
+    for (const rec of records) {
+      if (!rec || rec.tris <= 0 || rec.max[1] <= 40) continue;
+      const index = rec.t !== undefined ? rec.t : records.indexOf(rec);
+      if (this.skylineSet.has(index)) continue;
+      this.skyline.push(index);
+      this.skylineSet.add(index);
     }
     this.stats.skyline = this.skyline.length;
-    this.skylineSet = new Set(this.skyline);
   }
 
   /** Upload the skyline tiles once, before the first frame. */
@@ -54,7 +92,7 @@ export class TileManager {
     const gl = this.gl;
     const world = this.world;
     const rec = world.tiles[index];
-    if (!rec) return null;
+    if (!rec) { this.absent.add(index); return null; }
     const [ox, oz] = world.tileOrigin(index);
     const tile = {
       index, ox, oz,
@@ -76,7 +114,7 @@ export class TileManager {
       const vbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
       gl.bufferData(gl.ARRAY_BUFFER,
-        new Uint8Array(world.buffer, rec.vOff, rec.vCount * VERTEX_STRIDE), gl.STATIC_DRAW);
+        new Uint8Array(rec.d.buffer, rec.vOff, rec.vCount * VERTEX_STRIDE), gl.STATIC_DRAW);
 
       gl.enableVertexAttribArray(ATTRIB.POSITION);
       gl.vertexAttribIPointer(ATTRIB.POSITION, 3, gl.SHORT, VERTEX_STRIDE, 0);
@@ -93,7 +131,7 @@ export class TileManager {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
       const ibytes = rec.iCount * (rec.i32 ? 4 : 2);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
-        new Uint8Array(world.buffer, rec.iOff, ibytes), gl.STATIC_DRAW);
+        new Uint8Array(rec.d.buffer, rec.iOff, ibytes), gl.STATIC_DRAW);
 
       gl.bindVertexArray(null);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -159,6 +197,7 @@ export class TileManager {
         const index = tz * world.nx + tx;
         const t = this.resident.get(index);
         if (t) { t.lastUsed = frame; continue; }
+        if (this.absent.has(index)) continue;
         this._queue.push([d, index]);
       }
     }
