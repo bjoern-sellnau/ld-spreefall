@@ -28,6 +28,7 @@ import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS } from './game/cheats.js';
 import { Gibs } from './game/gibs.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
+import { Cinema, CINEMA } from './game/cinema.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -54,7 +55,8 @@ const el = {
   cheatSpawns: $('cheatspawns'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
-  targetHint: $('targethint'), targetIn: $('targetin'), targetOut: $('targetout'),
+  targetHint: $('targethint'), cinemaHint: $('cinemahint'),
+  targetIn: $('targetin'), targetOut: $('targetout'),
   targetFit: $('targetfit'), targetZoom: $('targetzoom'),
   targetConfirm: $('targetconfirm'), confirmWhere: $('confirmwhere'),
   confirmSelf: $('confirmself'), confirmFire: $('confirmfire'),
@@ -172,6 +174,7 @@ async function main() {
   const gibs = new Gibs(world);
   const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const travel = new Travel();
+  const cinema = new Cinema();
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
@@ -272,6 +275,7 @@ async function main() {
     bob: 0,
     inSanctuary: false,
     targeting: false,
+    blastSlow: 0,
     mapMode: 'nuke',
     pendingNuke: null,
     travelTo: null,
@@ -397,6 +401,11 @@ async function main() {
       // the city a quarter of a kilometre across.
       audio.nuke(dist);
       effects.nuke(x, y, z, splash.radius);
+      cinema.detonated(x, y, z);
+      // A warhead going off in slow motion, if that is switched on. It runs
+      // on its own clock rather than out of the reflex meter, because this
+      // is a thing to watch rather than a thing to fight through.
+      if (cheats.slowBlast) state.blastSlow = 3.2;
       // The flash is as bright as the distance allows, falling off smoothly
       // rather than over a cliff. Standing on top of one takes the whole
       // frame; watching from half a kilometre away is a glare you can see
@@ -640,6 +649,12 @@ async function main() {
     combat.godmode = cheats.godmode;
     combat.cheated = cheats.used;
     weapon.infiniteAmmo = cheats.infiniteAmmo;
+    // Switching the drones off stops them coming and takes down whatever is
+    // already up, because an enemy frozen in the air is worse than no enemy.
+    if (drones.enabled === cheats.noDrones) {
+      drones.enabled = !cheats.noDrones;
+      if (cheats.noDrones) drones.reset();
+    }
     soldiers.gore.gib = cheats.gibbing;
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;
@@ -1020,13 +1035,39 @@ async function main() {
     cheats.used = true;
     applyCheats();
     const ground = world.groundHeight(x, z);
-    projectiles.launch('nuke', {
+    const body = projectiles.launch('nuke', {
       x, y: ground + NUKE.drop, z,
       vx: 0, vy: -NUKE.speed, vz: 0,
       splash: { radius: NUKE.radius, damage: NUKE.damage, burst: NUKE.burst, nuke: true },
     });
     audio.incoming(NUKE.fall);
+    if (cheats.cinematic && state.mode === 'walk') startCinema(body, x, z);
     return true;
+  }
+
+  /**
+   * Hands the camera to the warhead. The player stays exactly where they
+   * were and the world keeps running underneath, slowed; nothing about this
+   * is a cutaway to somewhere else.
+   */
+  function startCinema(body, x, z) {
+    cinema.start({
+      x: player.x, y: player.y + PLAYER.eye, z: player.z,
+      yaw: camera.yaw, pitch: camera.pitch,
+    }, body, { x, z, y: world.groundHeight(x, z) });
+    state.mode = 'cinema';
+    el.hud.classList.add('flying');
+    el.cinemaHint.classList.remove('hidden');
+    input.exitLock();
+  }
+
+  function endCinema() {
+    if (state.mode !== 'cinema') return;
+    cinema.stop();
+    state.mode = 'walk';
+    el.hud.classList.remove('flying');
+    el.cinemaHint.classList.add('hidden');
+    relock();
   }
 
   /** True when a circle of this radius would reach into a weapons free zone. */
@@ -1304,6 +1345,11 @@ async function main() {
       toggleCheatMenu(false);
       return;
     }
+    if (state.mode === 'cinema') {
+      // Anything gets you out, but space is what the screen says.
+      if (code === 'Space' || code === 'Escape' || code === 'Enter') endCinema();
+      return;
+    }
     if (state.targeting && (code === 'Enter' || code === 'NumpadEnter')) {
       releaseNuke();
       return;
@@ -1389,7 +1435,18 @@ async function main() {
   function fixed(dt) {
     // dt is a slice of real time. The reflex decides how much of it the world
     // gets: you keep all of it, which is the whole trick.
-    const scale = reflex.update(dt);
+    let scale = reflex.update(dt);
+    // Two other things can slow the world down: a cinematic warhead for as
+    // long as it is running, and the slow motion switch for a few seconds
+    // after anything large goes off. Whichever is slowest wins, so they do
+    // not multiply into a standstill.
+    if (state.blastSlow > 0) {
+      state.blastSlow = Math.max(0, state.blastSlow - dt);
+      scale = Math.min(scale, 0.18);
+    }
+    if (state.mode === 'cinema') {
+      scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
+    }
     const worldDt = dt * scale;
     // You slow down too, but nothing like as much, so you can walk out of a
     // burst that is hanging in the air.
@@ -1402,6 +1459,23 @@ async function main() {
 
     const [lx, ly] = input.takeLook();
     if (state.mode === 'walk' && !photo.active) camera.rotate(lx, ly);
+
+    // While the camera is off following a warhead the city keeps running,
+    // because the whole point of the shot is watching what happens to it.
+    // The player does not: they are standing where you left them, and the
+    // controls are not theirs for the moment.
+    if (state.mode === 'cinema') {
+      const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z, alive: combat.health > 0 };
+      combat.update(worldDt);
+      projectiles.update(worldDt);
+      gibs.update(worldDt);
+      demolition.update(worldDt);
+      drones.update(worldDt, eye, state.time);
+      soldiers.update(worldDt, eye, state.time);
+      jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
+      audio.setTimeScale(scale);
+      return;
+    }
 
     if (state.mode !== 'walk') return;
 
@@ -1512,6 +1586,9 @@ async function main() {
     if (state.mode === 'intro') {
       state.dronePose = intro.sample(wall);
       if (intro.t > 13.5) skipIntro();
+    } else if (state.mode === 'cinema') {
+      const p = cinema.sample(wall);
+      if (p) state.dronePose = p;
     } else if (state.mode === 'travel') {
       const p = travel.sample(wall);
       state.dronePose = p;
@@ -1544,7 +1621,8 @@ async function main() {
       camera.position[1] = player.y + PLAYER.eye;
       camera.position[2] = player.z;
     } else if (state.mode === 'title' || state.mode === 'intro'
-      || state.mode === 'landing' || state.mode === 'travel') {
+      || state.mode === 'landing' || state.mode === 'travel'
+      || state.mode === 'cinema') {
       const p = state.dronePose || intro.sample(performance.now() / 1000);
       camera.position[0] = p.x;
       camera.position[1] = p.y;
@@ -1647,7 +1725,8 @@ async function main() {
       // In the air on the way somewhere the city is still the city: the
       // drones are still up, the pads still glow and the rubble is still
       // where it fell. Only the weapon goes away.
-      const live = state.mode === 'walk' || state.mode === 'travel';
+      const live = state.mode === 'walk' || state.mode === 'travel'
+        || state.mode === 'cinema';
       renderer.actors.updateDrones(live ? drones.active : []);
       renderer.actors.updateSoldiers(live ? soldiers.active : []);
       renderer.actors.updateJets(live ? jets.active : []);
@@ -1719,7 +1798,8 @@ async function main() {
       }
     }
 
-    if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel') {
+    if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
+      || state.mode === 'cinema') {
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live);
       el.found.textContent = String(landmarks.found.size);
@@ -1782,6 +1862,8 @@ async function main() {
     dropNuke(x, z) { return dropNuke(x, z); },
     openTargeting() { openTargeting(); },
     openTravel() { openTravel(); },
+    cinema, cinemaSpec: CINEMA,
+    endCinema() { endCinema(); },
     travel,
     beginTravel(x, z) { return beginTravel(x, z); },
     armNuke(x, z) { return armNuke(x, z); },

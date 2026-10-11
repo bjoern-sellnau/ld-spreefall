@@ -214,6 +214,9 @@ between visits.
 | God mode | nothing hurts you, though you are still told which way it came from |
 | Infinite ammunition | the magazine never reaches the bottom |
 | Nuke rain | one falls somewhere in the city every few seconds |
+| No drones | they stop coming, and whatever is up leaves |
+| Cinematic warheads | the camera follows one down and circles the hole |
+| Slow motion blasts | the world drops to a crawl for a few seconds after anything large |
 | Tear enemies apart | a killing hit takes them to pieces instead of laying them down |
 | Ragdoll | they fall with the momentum of the shot rather than on a timer |
 | Blood | hits spray |
@@ -272,6 +275,17 @@ And the warhead:
   the blast may not cross, so a refused target is something you can see coming
   rather than a message you get after clicking. This is the one line in the
   project that no switch in this menu moves.
+
+**Cinematic warheads.** With that switch on, releasing one hands the camera
+over. It leaves you where you are standing, takes a station beside the fall
+line a hundred and fifty metres to one side, and tracks the thing down; the
+world starts near real time and eases to a fifth of it as the bomb comes in,
+because holding a three second fall at a fifth of speed for all of it is
+fifteen seconds of watching an object get smaller. When it goes off, the
+camera circles the impact and climbs away from it, and the city comes back up
+to speed underneath. Space gives you back the controls. The simulation runs
+throughout: the drones are still flying and the buildings still come down,
+you are simply not the one looking.
 
 ## Free travel
 

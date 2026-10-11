@@ -61,7 +61,8 @@ async function run() {
   });
   check('the menu opens and closes', menu.open && menu.closed);
   check('every switch the brief asked for is in it',
-    ['godmode', 'infiniteAmmo', 'nukeRain', 'gib', 'ragdoll', 'blood', 'ultraGore']
+    ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic', 'slowBlast',
+      'gib', 'ragdoll', 'blood', 'ultraGore']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
   check('and every button', ['allWeapons', 'refill', 'nuke'].every((id) => menu.actions.includes(id)),
@@ -338,6 +339,68 @@ async function run() {
     waves.made.soldiers === 6 && waves.made.drones === 4 && waves.made.jets === 2,
     `${waves.live.soldiers} soldiers, ${waves.live.drones} drones, ${waves.live.jets} jets`);
   check('and none of them in the weapons free zone', waves.inZone === 0);
+
+  // --- switching the drones off --------------------------------------------
+  const noDrones = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.drones.enabled = true; s.drones.reset();
+    s.spawnWave('drones', 4);
+    const up = s.drones.active.length;
+    s.setCheat('noDrones', true);
+    const after = { live: s.drones.active.length, enabled: s.drones.enabled };
+    s.setCheat('noDrones', false);
+    const back = s.drones.enabled;
+    s.drones.enabled = false; s.drones.reset();
+    return { up, after, back };
+  });
+  check('switching the drones off clears the sky', noDrones.up === 4
+    && noDrones.after.live === 0 && noDrones.after.enabled === false,
+    `${noDrones.up} up, ${noDrones.after.live} left`);
+  check('and switching it back lets them come again', noDrones.back === true);
+
+  // --- the camera that follows a warhead down -------------------------------
+  const cine = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset(); s.projectiles.clear();
+    s.teleport(900, 0);
+    s.setCheat('godmode', true);
+    // Without the switch, dropping one leaves you on the ground.
+    s.dropNuke(s.player.x + 300, s.player.z);
+    const plain = s.state.mode;
+    s.projectiles.clear();
+    s.setCheat('cinematic', true);
+    const was = { x: s.player.x, z: s.player.z };
+    s.dropNuke(s.player.x + 300, s.player.z);
+    const started = s.state.mode;
+    // The player does not move, and the simulation keeps running.
+    const phases = new Set();
+    let slowest = 1;
+    let highest = 0;
+    for (let i = 0; i < 900; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+      if (s.state.mode !== 'cinema') break;
+      if (s.state.dronePose) phases.add(s.state.dronePose.phase);
+      slowest = Math.min(slowest, s.state.timeScale);
+      highest = Math.max(highest, s.camera.position[1]);
+      if (phases.has('orbit') && i > 40) break;
+    }
+    const moved = Math.round(Math.hypot(s.player.x - was.x, s.player.z - was.z));
+    s.endCinema();
+    const ended = s.state.mode;
+    s.cheats.reset(); s.projectiles.clear();
+    return { plain, started, phases: [...phases].join(' '), slowest: Number(slowest.toFixed(2)),
+      highest: Math.round(highest), moved, ended };
+  });
+  check('without the switch a warhead leaves you where you are', cine.plain === 'walk');
+  check('with it on the camera takes over', cine.started === 'cinema');
+  check('it pulls off the street, follows it down and circles the hole',
+    /pull/.test(cine.phases) && /chase/.test(cine.phases) && /orbit/.test(cine.phases),
+    cine.phases);
+  check('the world runs slowly while it does', cine.slowest < 0.4,
+    `down to ${cine.slowest} of real time`);
+  check('and you are still standing where you were', cine.moved === 0);
+  check('and space gives you back the controls', cine.ended === 'walk');
 
   // --- warheads ------------------------------------------------------------
   const refused = await page.evaluate(() => {

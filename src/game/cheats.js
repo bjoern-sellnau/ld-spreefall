@@ -12,11 +12,18 @@
 
 const KEY = 'spreefall.cheats';
 
+/** Every switch, in one list, so saving and clearing cannot miss one. */
+const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
+  'slowBlast', 'gib', 'ragdoll', 'blood', 'ultraGore'];
+
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
   { id: 'godmode', label: 'God mode', note: 'nothing can hurt you' },
   { id: 'infiniteAmmo', label: 'Infinite ammunition', note: 'no magazine ever empties' },
   { id: 'nukeRain', label: 'Nuke rain', note: 'one falls on the city every few seconds' },
+  { id: 'noDrones', label: 'No drones', note: 'they stop coming and the ones up leave' },
+  { id: 'cinematic', label: 'Cinematic warheads', note: 'the camera follows one down and circles what is left' },
+  { id: 'slowBlast', label: 'Slow motion blasts', note: 'the world drops to a crawl while something goes off' },
 ];
 
 export const GORE = [
@@ -45,6 +52,9 @@ export class Cheats {
     this.godmode = false;
     this.infiniteAmmo = false;
     this.nukeRain = false;
+    this.noDrones = false;
+    this.cinematic = false;
+    this.slowBlast = false;
     this.gib = false;
     this.ragdoll = false;
     this.blood = false;
@@ -58,7 +68,8 @@ export class Cheats {
 
   /** @returns {boolean} true when anything at all is on */
   get any() {
-    return this.godmode || this.infiniteAmmo || this.nukeRain
+    return this.godmode || this.infiniteAmmo || this.nukeRain || this.noDrones
+      || this.cinematic || this.slowBlast
       || this.gib || this.ragdoll || this.blood || this.ultraGore;
   }
 
@@ -87,8 +98,7 @@ export class Cheats {
 
   /** Everything off. Does not clear the mark on the run. */
   reset() {
-    for (const id of ['godmode', 'infiniteAmmo', 'nukeRain', 'gib', 'ragdoll',
-      'blood', 'ultraGore']) this[id] = false;
+    for (const id of KEYS) this[id] = false;
     this.save();
     if (this.onChange) this.onChange(null, false);
   }
@@ -96,8 +106,7 @@ export class Cheats {
   save() {
     try {
       const out = {};
-      for (const id of ['godmode', 'infiniteAmmo', 'nukeRain', 'gib', 'ragdoll',
-        'blood', 'ultraGore']) out[id] = this[id];
+      for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
   }

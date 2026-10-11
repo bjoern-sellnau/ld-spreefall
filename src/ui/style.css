@@ -820,6 +820,21 @@ html, body {
   letter-spacing: 0.18em;
 }
 
+#cinemahint {
+  position: fixed;
+  left: 50%; bottom: 6vh;
+  transform: translateX(-50%);
+  z-index: 55;
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(226, 201, 141, 0.85);
+  text-shadow: 0 1px 8px #000;
+  pointer-events: none;
+  animation: hintin 1.2s ease 0.8s both;
+}
+@keyframes hintin { from { opacity: 0; } to { opacity: 1; } }
+
 /* --- picking a target for a warhead --- */
 
 #nuketarget {

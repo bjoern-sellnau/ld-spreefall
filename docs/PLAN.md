@@ -508,3 +508,24 @@ Recorded here as they happen, per the working style.
   using it as a local float is a syntax error on the line after the one you
   wrote. Worth an entry only because the whole page fails to boot and the
   console error is the one place it says why.
+
+- 2026-10-11: the cinematic warhead camera does not cut. The temptation with
+  a shot like this is to teleport the camera somewhere good and then teleport
+  it back, and the reason not to is that a cut throws away the one thing
+  worth showing: that the place the bomb lands is a real place a measurable
+  distance from where you are standing. So it leaves the eye and arrives at
+  its station in one move, and the station is beside the fall line rather
+  than behind the bomb, because a camera chasing a falling object from above
+  shows an empty sky.
+
+  The slow motion is not constant either. Three seconds of fall held at a
+  fifth of speed is fifteen seconds of an object getting smaller, so the shot
+  runs at most of real time and eases down over the last half of the descent.
+  The world comes back up to speed under the orbit rather than snapping,
+  which is the same trick the other way round.
+
+  The simulation keeps running the whole time. `fixed` refuses to step
+  anything outside walking mode, which is right for the title screen and
+  wrong here: the point of the shot is what happens to the city, so this mode
+  steps the world and nothing else, with the controls disconnected and the
+  player standing exactly where they were left.
