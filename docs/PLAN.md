@@ -677,3 +677,50 @@ honest way to answer that is to build it and weigh it.
   non zero when a complete city is over it. The workflow that builds all
   twenty four districts from the live extract runs it, so the answer to "does
   all of Berlin fit" is a number in a log rather than an opinion.
+
+### What the whole city actually weighs
+
+The first complete build of all twenty four districts from the live extract,
+on 11 October 2026, is the answer to whether Berlin inside the Ring fits in
+the brief's twenty five megabytes. It does not.
+
+```
+24 of 24 districts built
+area            106.2 km2
+buildings       52806
+trees           55577
+road            2679.3 km
+deployed        193.48 MB
+download        70.61 MB gzipped, against a 25 MB budget
+per km2         0.665 MB of download
+```
+
+Every district came out with its own name from the place nodes in its own
+extract: Moabit, Gesundbrunnen, Prenzlauer Berg, Hansaviertel, Friedrichshain,
+Charlottenburg, Tiergarten, Kreuzberg, Wilmersdorf, Schoeneberg, Neukoelln,
+Alt-Treptow, Schmargendorf and the rest. The city is real and it builds. It is
+2.8 times the budget.
+
+Where the bytes were going, from the per district byte lines: in
+Gesundbrunnen, 8.8 square kilometres, the bundle was 28.7 MB of which 21 MB
+was vertices, and the district has 463 km of road in it. A ribbon costs four
+vertices per point of the line it follows and twelve with a pavement either
+side, and OpenStreetMap puts a point every few metres. Roads, not buildings,
+were the largest single thing in every outer district. That is why the build
+now prints where its vertices went, and why the tiers changed:
+
+- the four districts you can walk into directly from Mitte keep their roofs,
+  windows and trees but lose their pavements, and their centrelines are
+  simplified at 1.5 m;
+- everything else out to the ring is blocks, with only the roads you can
+  drive on, simplified at 5 m;
+- the corners outside the ring are an outline, simplified at 10 m.
+
+And because even that does not fit, what ships is decided by measurement
+rather than by hope. `tools/fit-city.mjs` takes districts outward from the
+middle until the budget is spent, drops the rest out of the index and deletes
+their bundles, and says in the log exactly which ones did not fit and by how
+much. The deploy is therefore always inside the brief's budget and always a
+contiguous city around Mitte, and the question "how much of Berlin fits in
+twenty five megabytes" has an answer that is printed on every build rather
+than argued about.

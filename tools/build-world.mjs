@@ -435,6 +435,13 @@ function buildDistrict(district) {
   // road ribbons drawn a hundred millimetres below the true ground, so 12.5 m,
   // and cells that something else already covers are simply not emitted. That
   // second part removes about a third of the world's triangles.
+  // What each part of the city costs in vertices. Printed at the end,
+  // because the first real build showed the roads were two thirds of the
+  // geometry and nobody had asked where the bytes were going.
+  const spent = {};
+  let mark = 0;
+  const since = (name) => { spent[name] = (spent[name] || 0) + (mesh.vertexCount - mark); mark = mesh.vertexCount; };
+  mark = mesh.vertexCount;
   const gstep = tier.groundStep;
   const gnx = Math.ceil(world.width / gstep);
   const gnz = Math.ceil(world.depth / gstep);
@@ -455,12 +462,14 @@ function buildDistrict(district) {
     }
   }
   console.log(`ground: ${groundCells} base cells drawn, ${skippedCells} skipped as already covered`);
+  since('ground');
 
   // --- green -------------------------------------------------------------
   for (const g of greens) {
     groundPolygon(mesh, g.ring, g.holes, MAT.GRASS, yAt, { lift: 0.05, seed: 5 });
   }
 
+  since('parks');
   // --- water --------------------------------------------------------------
   const waterLevel = terrain.waterLevel;
   for (const w of waterPolys) {
@@ -483,8 +492,10 @@ function buildDistrict(district) {
     }
   }
 
+  since('water');
   // --- roads --------------------------------------------------------------
   let roadMetres = 0;
+  let roadPoints = 0;
   const roadLines = [];
   for (const r of roads) {
     const cls = r.tags.highway;
@@ -502,6 +513,7 @@ function buildDistrict(district) {
       }
     }
     roadMetres += polylineLength(r.line);
+    roadPoints += r.line.length;
     if (!isFoot) {
       roadLines.push({
         cls,
@@ -514,6 +526,7 @@ function buildDistrict(district) {
     groundPolygon(mesh, a.ring, [], roadMaterial(a.tags), yAt, { lift: 0.05, seed: 3 });
   }
 
+  since('roads');
   // --- rails --------------------------------------------------------------
   for (const r of rails) {
     const elevated = r.tags.bridge === 'yes' || r.tags.railway === 'rail';
@@ -548,6 +561,7 @@ function buildDistrict(district) {
     }
   }
 
+  since('rails');
   // --- buildings ----------------------------------------------------------
   let buildingCount = 0;
   const landmarkIndex = [];
@@ -607,6 +621,7 @@ function buildDistrict(district) {
     buildingCount++;
   }
 
+  since('buildings');
   // --- the stelae field ---------------------------------------------------
   // The memorial floor is the one place where the terrain has detail finer than
   // the base grid can carry, because the whole point of it is that the ground
@@ -630,6 +645,7 @@ function buildDistrict(district) {
     stelae += buildStelae(mesh, collision, m, terrain);
   }
 
+  since('stelae');
   // --- trees --------------------------------------------------------------
   const treeList = [];
   for (const t of trees) {
@@ -652,6 +668,9 @@ function buildDistrict(district) {
     collision.push({ x1: x - 0.32, z1: z + 0.32, x2: x - 0.32, z2: z - 0.32, base: -1, top: 3, surface: SURFACE.STONE });
   }
 
+  console.log('vertices: ' + Object.entries(spent).filter(([, v]) => v > 0)
+    .map(([k, v]) => `${k} ${Math.round(v / 1000)}k`).join(', ')
+    + `  (${roadPoints} road points over ${(roadMetres / 1000).toFixed(1)} km)`);
   console.log(`geometry: ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${buildingCount} buildings, ${stelae} stelae, ${treeList.length} trees, ${(roadMetres / 1000).toFixed(1)} km of road`);
 
   // --- surface map for footsteps -----------------------------------------

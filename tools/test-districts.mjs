@@ -26,6 +26,15 @@ function check(name, ok, detail = '') {
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${name}${detail ? '  ' + detail : ''}`);
 }
 
+// A world with one district in it cannot be asked anything about streaming.
+// That is a missing build rather than a broken game, so it is said out loud
+// and counted separately instead of being failed or quietly passed.
+const skipped = [];
+function skip(name, why) {
+  skipped.push(name);
+  console.log(` skip  ${name}  ${why}`);
+}
+
 async function run() {
   fs.mkdirSync(SHOTS, { recursive: true });
   const pre = '/opt/pw-browsers/chromium';
@@ -115,9 +124,19 @@ async function run() {
   const neighbour = await page.evaluate(() => {
     const s = window.spreefall;
     const home = s.world.entryFor(s.world.home);
+    const near = (a, b) => Math.abs(a - b) < 1;
+    const overlaps = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0) > 200;
     let best = null, bestAway = Infinity;
     for (const d of s.world.catalogue) {
       if (d.id === home.id) continue;
+      // Sharing an edge, not merely being close: a district diagonally off the
+      // corner is nearer by centre distance than one above, and you cannot
+      // walk across a corner.
+      const sideBySide = (near(d.bounds.maxX, home.bounds.minX) || near(d.bounds.minX, home.bounds.maxX))
+        && overlaps(d.bounds.minZ, d.bounds.maxZ, home.bounds.minZ, home.bounds.maxZ);
+      const stacked = (near(d.bounds.maxZ, home.bounds.minZ) || near(d.bounds.minZ, home.bounds.maxZ))
+        && overlaps(d.bounds.minX, d.bounds.maxX, home.bounds.minX, home.bounds.maxX);
+      if (!sideBySide && !stacked) continue;
       const away = Math.hypot(
         (d.bounds.minX + d.bounds.maxX) / 2 - (home.bounds.minX + home.bounds.maxX) / 2,
         (d.bounds.minZ + d.bounds.maxZ) / 2 - (home.bounds.minZ + home.bounds.maxZ) / 2,
@@ -127,41 +146,56 @@ async function run() {
     return best;
   });
 
-  if (!many) {
-    check('a second district to walk into', false, 'only one district is built, run npm run world:offline');
+  if (!many || !neighbour) {
+    skip('walking from one district into the next',
+      many ? 'nothing next door to the middle is built'
+        : 'only one district is built, run npm run world:offline');
   } else {
     // Stand on our side of the boundary and walk across it.
     const crossing = await page.evaluate(async (other) => {
       const s = window.spreefall;
       const home = s.world.entryFor(s.world.home);
-      // The shared edge, in metres, and a point either side of it.
-      const sharedX = Math.abs(other.bounds.maxX - home.bounds.minX) < 1
-        ? home.bounds.minX
-        : (Math.abs(other.bounds.minX - home.bounds.maxX) < 1 ? home.bounds.maxX : null);
-      const z = Math.max(home.bounds.minZ, other.bounds.minZ) + 80;
-      if (sharedX === null) return { skip: true };
-      const inside = sharedX === home.bounds.minX ? sharedX + 25 : sharedX - 25;
-      const beyond = sharedX === home.bounds.minX ? sharedX - 25 : sharedX + 25;
+      // The shared edge, in metres, and a point either side of it. The two
+      // districts may be side by side or one above the other, so both axes
+      // are tried: the first version of this only knew about the first case
+      // and skipped itself whenever the nearest district was to the north.
+      const near = (a, b) => Math.abs(a - b) < 1;
+      let axis = null, cut = 0, toward = 0;
+      if (near(other.bounds.maxX, home.bounds.minX)) { axis = 'x'; cut = home.bounds.minX; toward = -1; }
+      else if (near(other.bounds.minX, home.bounds.maxX)) { axis = 'x'; cut = home.bounds.maxX; toward = 1; }
+      else if (near(other.bounds.maxZ, home.bounds.minZ)) { axis = 'z'; cut = home.bounds.minZ; toward = -1; }
+      else if (near(other.bounds.minZ, home.bounds.maxZ)) { axis = 'z'; cut = home.bounds.maxZ; toward = 1; }
+      if (!axis) return { skip: true };
+      // Along the edge, inside the overlap of the two districts.
+      const along = axis === 'x'
+        ? (Math.max(home.bounds.minZ, other.bounds.minZ) + Math.min(home.bounds.maxZ, other.bounds.maxZ)) / 2
+        : (Math.max(home.bounds.minX, other.bounds.minX) + Math.min(home.bounds.maxX, other.bounds.maxX)) / 2;
+      const insideAt = cut - toward * 25;
+      const beyondAt = cut + toward * 25;
+      const inside = axis === 'x' ? insideAt : along;
+      const beyond = axis === 'x' ? beyondAt : along;
+      const z = axis === 'x' ? along : insideAt;
+      const zBeyond = axis === 'x' ? along : beyondAt;
       s.teleport(inside, z);
       // Put the neighbour back on the wire first, so what is being measured
       // is the arrival of a district rather than one that is already here.
       s.world.unloadDistrict(other.id);
       const before = {
         loaded: s.world.loadedIds.slice(),
-        isLoadedBeyond: s.world.isLoaded(beyond, z),
+        isLoadedBeyond: s.world.isLoaded(beyond, zBeyond),
       };
       const t0 = performance.now();
       await s.world.loadDistrict(other.id);
       const after = {
         ms: Math.round(performance.now() - t0),
         loaded: s.world.loadedIds.slice(),
-        isLoadedBeyond: s.world.isLoaded(beyond, z),
+        isLoadedBeyond: s.world.isLoaded(beyond, zBeyond),
         groundInside: Math.round(s.world.groundHeight(inside, z) * 100) / 100,
-        groundBeyond: Math.round(s.world.groundHeight(beyond, z) * 100) / 100,
-        nameBeyond: s.world.nameAt(beyond, z),
+        groundBeyond: Math.round(s.world.groundHeight(beyond, zBeyond) * 100) / 100,
+        nameBeyond: s.world.nameAt(beyond, zBeyond),
         tiles: s.world.tiles.filter(Boolean).length,
       };
-      return { before, after, inside, beyond, z };
+      return { before, after, axis, inside, beyond, z, zBeyond };
     }, neighbour);
 
     if (crossing.skip) {
@@ -183,8 +217,11 @@ async function run() {
         const s = window.spreefall;
         const out = [];
         for (let d = -40; d <= 40; d += 4) {
-          const x = at.inside < at.beyond ? at.inside + d : at.inside - d;
-          out.push(Math.round(s.world.groundHeight(x, at.z) * 100) / 100);
+          // Walking the line from inside to beyond, whichever way the edge runs.
+          const k = (d + 40) / 80;
+          const x = at.inside + (at.beyond - at.inside) * k * 2 - (at.beyond - at.inside);
+          const z = at.z + (at.zBeyond - at.z) * k * 2 - (at.zBeyond - at.z);
+          out.push(Math.round(s.world.groundHeight(x, z) * 100) / 100);
         }
         let worst = 0;
         for (let i = 1; i < out.length; i++) {
@@ -198,16 +235,18 @@ async function run() {
       // Walking it for real, rather than teleporting.
       const walked = await page.evaluate(async (at) => {
         const s = window.spreefall;
-        const toward = at.beyond > at.inside ? 1 : -1;
-        s.teleport(at.inside - toward * 6, at.z);
-        const from = { x: s.player.x, y: s.player.y };
+        const dx = at.beyond - at.inside, dz = at.zBeyond - at.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const ux = dx / len, uz = dz / len;
+        s.teleport(at.inside - ux * 6, at.z - uz * 6);
+        const from = { x: s.player.x, z: s.player.z, y: s.player.y };
         for (let i = 0; i < 400; i++) {
-          s.player.step(1 / 60, toward * 5.2, 0, false);
+          s.player.step(1 / 60, ux * 5.2, uz * 5.2, false);
           await new Promise((r) => setTimeout(r, 0));
-          if (Math.abs(s.player.x - at.beyond) < 3) break;
+          if (Math.hypot(s.player.x - at.beyond, s.player.z - at.zBeyond) < 3) break;
         }
         return {
-          moved: Math.round((s.player.x - from.x) * toward * 10) / 10,
+          moved: Math.round(Math.hypot(s.player.x - from.x, s.player.z - from.z) * 10) / 10,
           y: Math.round(s.player.y * 100) / 100,
           dropped: from.y - s.player.y,
           where: s.world.nameAt(s.player.x, s.player.z),
@@ -315,7 +354,9 @@ async function run() {
     `${cityView.inside} of ${cityView.total} districts on the canvas`);
 
   // --- travelling across the city -----------------------------------------
-  if (many) {
+  if (!many || !neighbour) {
+    skip('travelling to a district that is not in memory', 'the same');
+  } else {
     const flight = await page.evaluate(async (other) => {
       const s = window.spreefall;
       const home = s.world.entryFor(s.world.home);
@@ -356,7 +397,8 @@ async function run() {
     console.error(`\n${errors.length} console errors:`);
     for (const e of errors.slice(0, 8)) console.error('  ' + e);
   }
-  console.log(`\n${checks.length - failed.length} of ${checks.length} checks passed`);
+  console.log(`\n${checks.length - failed.length} of ${checks.length} checks passed`
+    + (skipped.length ? `, ${skipped.length} not run` : ''));
   if (failed.length || errors.length) process.exit(1);
 }
 
