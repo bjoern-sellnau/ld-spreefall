@@ -29,6 +29,7 @@ import { Gibs } from './game/gibs.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
+import { Fires } from './game/fires.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -175,6 +176,7 @@ async function main() {
   const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const travel = new Travel();
   const cinema = new Cinema();
+  const fires = new Fires(world);
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
@@ -438,6 +440,10 @@ async function main() {
     // bring a frontage down when they have done enough; a warhead takes its
     // whole radius at once.
     demolition.blast(x, y, z, splash.radius, splash.damage);
+    // Anything that leaves a mark sets light to the trees in it. The radius
+    // is wider than the blast, because fire spreads and a blast does not.
+    fires.ignite(x, y, z, splash.radius * (splash.nuke ? 1.15 : 1.9),
+      Math.min(1, 0.5 + splash.damage / 400));
 
     // Where the damage radiates from, which is not always where the mark is.
     // A grenade goes off at the point it stopped. A warhead's fireball is tens
@@ -559,6 +565,18 @@ async function main() {
     feed(level >= 1
       ? `<i>collapsed</i> ${Math.round(site.radius * 2)} m across, ${away} m away`
       : `<i>caving in</i> ${Math.round(level * 100)}%, ${away} m away`);
+  };
+
+  fires.onFlame = (tree, strength) => effects.flame(tree.x, tree.y, tree.z, tree.height, strength);
+  fires.onBurst = (tree) => {
+    effects.treeBurst(tree.x, tree.y, tree.z, tree.height);
+    // Burning wood, thrown about. The same chunks the buildings use, in the
+    // charred part of the palette.
+    gibs.rubble(tree.x, tree.y + tree.height * 0.5, tree.z, tree.height * 0.4, 7, tree.height * 0.3);
+    audio.treeBurst(Math.hypot(player.x - tree.x, player.z - tree.z));
+  };
+  fires.onTopple = (tree) => {
+    audio.treeFall(Math.hypot(player.x - tree.x, player.z - tree.z));
   };
 
   gibs.onDrip = (x, y, z) => { if (cheats.bleeding) effects.drip(x, y, z); };
@@ -1246,7 +1264,9 @@ async function main() {
     pickups.reset();
     gibs.clear();
     demolition.reset();
+    fires.reset();
     renderer.clearCollapses();
+    renderer.clearFires();
     effects.clear();
     audio.start();
     el.btnSound.textContent = 'sound on';
@@ -1470,6 +1490,7 @@ async function main() {
       projectiles.update(worldDt);
       gibs.update(worldDt);
       demolition.update(worldDt);
+      fires.update(worldDt, player);
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
@@ -1548,6 +1569,7 @@ async function main() {
     projectiles.update(worldDt);
     gibs.update(worldDt);
     demolition.update(worldDt);
+    fires.update(worldDt, player);
     rainTick(worldDt);
     drones.update(worldDt, eye, state.time);
     soldiers.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
@@ -1742,6 +1764,7 @@ async function main() {
     // to move, the scene target is rebuilt at the new size; the page and the
     // interface never change.
     renderer.setCollapses(demolition.sites);
+    renderer.setFires(fires.sites);
     if (renderer.updateDynamicScale(loop.stats.intervalMs)) resize();
     renderer.render(camera, state.time, w, h);
 
@@ -1856,6 +1879,8 @@ async function main() {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
     combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs,
     demolition, demoSpec: DEMO, demoBite: bite, demoCrater: craterAt, travelSpec: TRAVEL,
+    fires,
+    explode(x, y, z, splash) { return explode(x, y, z, splash, null); },
     pickupSpecs: PICKUP,
     nukeSpec: NUKE,
     targetMap,

@@ -354,6 +354,30 @@ around a short list of collapse sites.
   until they have knocked something down.
 - The memorial does not come down, by the same rule as everything else.
 
+## Trees burn
+
+Anything that goes off sets light to the trees around it, over a radius
+getting on for twice the blast, because fire spreads and a blast does not.
+A tree that catches browns, then blackens, then either bursts or goes over,
+and which of those it does is decided by the tree.
+
+All three thousand seven hundred trees are drawn from one instanced call with
+no mesh data and no per tree storage, so a fire cannot be a list of burning
+trees in a buffer somewhere. It is a circle on the ground with an age: eight
+of them, as eight vec4s. Every tree inside one runs the same timeline off its
+own seed, so one goes up at three seconds and its neighbour stands for eight,
+and the edge of a fire catches about two seconds after the middle. The crown
+shrinks as the leaves go and glows at its edges while they are going, because
+a burning canopy is lit from the inside and the outline is the part that
+reads at a distance. A tree that topples rotates about its base in the
+direction its own seed picked, accelerating, and the shadow goes over with
+it.
+
+The JavaScript side runs the same seed arithmetic, so the flames come off
+real trunks and the crack of one going over happens on the tree that is going
+over. The two sets of timings are written out twice and have to agree; that
+is the price of not uploading anything.
+
 ## Two cities, and which one you are looking at
 
 The sandbox this was built in denies every OpenStreetMap host, so the local

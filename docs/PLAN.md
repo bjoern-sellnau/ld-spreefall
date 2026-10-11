@@ -529,3 +529,18 @@ Recorded here as they happen, per the working style.
   wrong here: the point of the shot is what happens to the city, so this mode
   steps the world and nothing else, with the controls disconnected and the
   player standing exactly where they were left.
+
+- 2026-10-11: burning trees are a uniform array, not a list of objects. Trees
+  are drawn from one instanced call per tile with five floats each and no
+  mesh data at all, which is why three thousand seven hundred of them cost
+  nothing; making each one burn separately would have meant a per tree state
+  buffer uploaded every frame, and that throws the whole design away for an
+  effect that only ever touches a few dozen of them at once.
+
+  So a fire is a circle with an age, eight of them, and every tree inside one
+  derives its own timeline from its own seed. The cost is that the two sides
+  have to agree: the shader decides when a tree bursts, and JavaScript has to
+  decide the same thing at the same moment so the flash goes off on the tree
+  that burst. Both run the same hash and the same two lines of arithmetic,
+  written out twice, and the test checks that the number of trees the game
+  saw burst is exactly the number the seeds said would.

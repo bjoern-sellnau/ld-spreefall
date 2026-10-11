@@ -264,6 +264,99 @@ async function run() {
     uniforms.many.sites <= uniforms.max && uniforms.many.uniforms <= uniforms.max,
     `${uniforms.many.sites} sites, ${uniforms.max} slots`);
 
+  // --- trees that burn ------------------------------------------------------
+  const fire = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.fires.reset(); s.renderer.clearFires();
+    // Where the trees actually are, rather than a coordinate that might be a
+    // square with nothing on it.
+    const w = s.world;
+    let best = null;
+    for (let tz = 0; tz < w.nz; tz++) {
+      for (let tx = 0; tx < w.nx; tx++) {
+        const d = w.trees(tz * w.nx + tx);
+        if (!d || d.length < 5 * 8) continue;
+        let mx = 0, mz = 0;
+        const n = d.length / 5;
+        for (let i = 0; i < d.length; i += 5) { mx += d[i]; mz += d[i + 2]; }
+        if (!best || n > best.n) best = { x: mx / n, z: mz / n, n };
+      }
+    }
+    if (!best) return { skip: true };
+    const quiet = s.renderer.fireCount;
+    const site = s.fires.ignite(best.x, 0, best.z, 70, 1);
+    if (!site) return { skip: true };
+    const caught = site.trees.length;
+    const willBurst = site.trees.filter((t) => t.bursts).length;
+    // Nobody has given up yet.
+    const early = site.trees.filter((t) => t.done).length;
+    // Run the fire out, on this file's clock rather than the game's, so the
+    // test does not depend on how fast the machine is.
+    const seen = { burst: 0, topple: 0, flames: 0 };
+    s.fires.onBurst = () => { seen.burst++; };
+    s.fires.onTopple = () => { seen.topple++; };
+    const realFlame = s.fires.onFlame;
+    s.fires.onFlame = () => { seen.flames++; };
+    const me = { x: best.x, z: best.z };
+    for (let i = 0; i < 60 * 14; i++) s.fires.update(1 / 60, me);
+    s.renderer.setFires(s.fires.sites);
+    const uniforms = s.renderer.fireCount;
+    const gone = site.trees.filter((t) => t.gone).length;
+    const done = site.trees.filter((t) => t.done).length;
+    // And the edge of a fire catches after the middle of it.
+    const byDistance = site.trees
+      .map((t) => ({ d: Math.hypot(t.x - best.x, t.z - best.z), at: t.caughtAt }))
+      .sort((a, b) => a.d - b.d);
+    const ordered = byDistance.every((t, i) =>
+      i === 0 || t.at >= byDistance[i - 1].at - 1e-6);
+    s.fires.onFlame = realFlame;
+    s.fires.reset(); s.renderer.clearFires();
+    return { quiet, caught, willBurst, early, seen, uniforms, gone, done, ordered,
+      total: site.trees.length };
+  });
+  check('a fire takes hold of the trees that are really there',
+    !fire.skip && fire.caught > 10, fire.skip ? 'no trees found' : `${fire.caught} of them`);
+  check('and none of them is alight the instant it starts', fire.early === 0);
+  check('they catch from the middle of the fire outward', fire.ordered);
+  check('some burn until they burst and the rest go over',
+    fire.seen.burst > 0 && fire.seen.topple > 0
+    && fire.seen.burst + fire.seen.topple === fire.total,
+    `${fire.seen.burst} burst, ${fire.seen.topple} fell, out of ${fire.total}`);
+  check('and which it is was decided by the tree, not by a dice',
+    fire.seen.burst === fire.willBurst,
+    'the same seed the shader reads picks it');
+  check('a burning tree makes flames while it burns', fire.seen.flames > 50,
+    `${fire.seen.flames} over fourteen seconds`);
+  check('an unburnt city costs the tree shader nothing', fire.quiet === 0);
+  check('and a fire reaches it', fire.uniforms === 1);
+
+  const lit = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.fires.reset(); s.renderer.clearFires();
+    const w = s.world;
+    let at = null;
+    for (let tz = 0; tz < w.nz && !at; tz++) {
+      for (let tx = 0; tx < w.nx; tx++) {
+        const d = w.trees(tz * w.nx + tx);
+        if (!d || d.length < 5 * 8) continue;
+        at = { x: d[0], z: d[2] };
+        break;
+      }
+    }
+    if (!at) return { skip: true };
+    s.projectiles.clear();
+    // A rocket into the trees, through the real blast path.
+    s.explode(at.x, s.world.groundHeight(at.x, at.z) + 1, at.z,
+      { radius: 9, damage: 150 });
+    const n = s.fires.count;
+    const trees = n ? s.fires.sites[0].trees.length : 0;
+    s.fires.reset(); s.renderer.clearFires();
+    return { n, trees };
+  });
+  check('a rocket into a row of trees sets them alight',
+    !lit.skip && lit.n === 1 && lit.trees > 0,
+    lit.skip ? 'no trees found' : `${lit.trees} caught`);
+
   // --- free travel ----------------------------------------------------------
   const flight = await page.evaluate(() => {
     const s = window.spreefall;
