@@ -33,6 +33,14 @@ export class Minimap {
     this.scale = 0.16;          // pixels per metre at the normal size
     this.big = false;
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    // Set while a warhead is being aimed: where the cursor is, how far the
+    // blast reaches, and whether that point is allowed.
+    this.aim = null;
+    // The weapons free zones, so the map can show where nothing may be aimed.
+    this.sanctuaries = [];
+    // The transform the last draw used, so a click can be turned back into a
+    // place in the city.
+    this._view = null;
     this._sizeCanvas();
   }
 
@@ -130,6 +138,28 @@ export class Minimap {
       ctx.stroke();
     }
 
+    // The weapons free zone, drawn under everything that can be shot at. On
+    // the targeting map it also carries the ring the blast may not cross, so
+    // a refused target is a thing you can see coming rather than a message
+    // you get after clicking.
+    for (const z of this.sanctuaries) {
+      ctx.fillStyle = 'rgba(226, 201, 141, 0.07)';
+      ctx.beginPath();
+      ctx.arc(z.x, z.z, z.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(226, 201, 141, 0.45)';
+      ctx.lineWidth = 1.4 / scale * this.dpr;
+      ctx.stroke();
+      if (this.aim) {
+        ctx.strokeStyle = 'rgba(226, 112, 90, 0.35)';
+        ctx.setLineDash([6 / scale * this.dpr, 7 / scale * this.dpr]);
+        ctx.beginPath();
+        ctx.arc(z.x, z.z, z.radius + this.aim.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
     // Pickup pads, under the landmark pins because a landmark is the thing you
     // came for and a crate is the thing you pass on the way.
     if (pads && pads.length) {
@@ -188,6 +218,34 @@ export class Minimap {
     ctx.stroke();
     ctx.restore();
 
+    // The aiming reticle, while a warhead is being put somewhere. Drawn in
+    // world space so that the ring really is the blast radius on the map and
+    // not a fixed number of pixels that lies about the scale.
+    if (this.aim) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (!this.big) ctx.rotate(yaw);
+      ctx.scale(scale, scale);
+      ctx.translate(-originX, -originZ);
+      const ok = this.aim.allowed !== false;
+      ctx.strokeStyle = ok ? 'rgba(226, 112, 90, 0.9)' : 'rgba(120, 120, 128, 0.7)';
+      ctx.lineWidth = 2 / scale * this.dpr;
+      ctx.beginPath();
+      ctx.arc(this.aim.x, this.aim.z, this.aim.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([8 / scale * this.dpr, 8 / scale * this.dpr]);
+      ctx.beginPath();
+      ctx.arc(this.aim.x, this.aim.z, this.aim.radius * 1.9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const t = 14 / scale * this.dpr;
+      ctx.beginPath();
+      ctx.moveTo(this.aim.x - t, this.aim.z); ctx.lineTo(this.aim.x + t, this.aim.z);
+      ctx.moveTo(this.aim.x, this.aim.z - t); ctx.lineTo(this.aim.x, this.aim.z + t);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // North arrow.
     ctx.save();
     ctx.translate(cx, cy);
@@ -201,5 +259,30 @@ export class Minimap {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+
+    this._view = { cx, cy, scale, originX, originZ, big: this.big };
+  }
+
+  /**
+   * A point on the canvas, in metres. Only the north up view is supported,
+   * because the heading up one is rotated by whichever way you happen to be
+   * looking and nothing wants to click on that.
+   *
+   * @param {number} clientX @param {number} clientY page coordinates
+   * @returns {{x:number,z:number}|null}
+   */
+  worldAt(clientX, clientY) {
+    const v = this._view;
+    if (!v || !v.big) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    // The canvas is drawn at device resolution and laid out in CSS pixels, so
+    // a click has to be taken through both.
+    const px = (clientX - rect.left) * (this.canvas.width / rect.width);
+    const py = (clientY - rect.top) * (this.canvas.height / rect.height);
+    return {
+      x: (px - v.cx) / v.scale + v.originX,
+      z: (py - v.cy) / v.scale + v.originZ,
+    };
   }
 }

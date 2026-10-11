@@ -145,7 +145,7 @@ void main() {
     albedo = vec3(0.10, 0.105, 0.115);
     rough = 0.55;
     metal = 0.6;
-  } else {
+  } else if (vPart < 17.5) {
     // The five pickups. Each has its own colour and each throbs, because the
     // one thing they all have to do is be seen down a street.
     vec3 tint = vec3(1.0);
@@ -178,6 +178,27 @@ void main() {
     emissive = tint * force * pulse;
     rough = 0.25;
     metal = 0.2;
+  } else if (vPart < 18.5) {
+    // A hazard stripe. Painted, not lit: the band round a warhead reads from
+    // the colour and the contrast, and a bomb that glows looks like a toy.
+    float band = step(0.5, fract((vWorld.x + vWorld.y + vWorld.z) * 2.2));
+    albedo = mix(vec3(0.52, 0.30, 0.03), vec3(0.06, 0.06, 0.07), band);
+    rough = 0.6;
+    metal = 0.15;
+  } else if (vPart < 19.5) {
+    // Flesh. Dark, wet and not very red, because blood on a dull street at
+    // four in the afternoon is nearly black and the bright version looks
+    // like paint.
+    float v = hash11(floor(vWorld.x * 9.0) + floor(vWorld.z * 9.0) * 17.0);
+    albedo = vec3(0.19, 0.030, 0.028) * (0.7 + 0.6 * v);
+    rough = 0.32;
+    metal = 0.0;
+  } else {
+    // Bone and torn webbing, the pale pieces, so a burst of gibs is not one
+    // uniform colour.
+    albedo = vec3(0.56, 0.52, 0.45);
+    rough = 0.8;
+    metal = 0.02;
   }
 
   vec3 L = uSunDir.xyz;
@@ -202,6 +223,51 @@ void main() {
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
                     uSkyHorizon.rgb, uSkyZenith.rgb, uFog, uSkyZenith.w);
   fragColour = vec4(colour, 1.0);
+}
+`;
+
+// The pieces. One mesh, drawn instanced, with the chunk's size and what it is
+// made of carried per instance rather than baked into the geometry, so a burst
+// of a dozen different looking chunks is still a single draw call.
+export const GIB_VS = `${VERSION}
+precision highp float;
+${CAMERA_BLOCK}
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aInfo;
+layout(location = 5) in vec4 iPosYaw;   // xyz world position, w yaw
+layout(location = 6) in vec4 iState;    // x pitch, y roll, z scale, w part id
+
+out vec3 vWorld;
+out vec3 vNormal;
+flat out float vPart;
+flat out float vFlash;
+out float vViewDist;
+
+mat3 rotY(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
+}
+mat3 rotX(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+}
+mat3 rotZ(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0);
+}
+
+void main() {
+  mat3 r = rotY(iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
+  vec3 world = r * (aPos * iState.z) + iPosYaw.xyz;
+  vWorld = world;
+  vNormal = normalize(r * aNormal);
+  // Each chunk declares what it is made of, so one mesh covers flesh, cloth,
+  // a helmet and a piece of rifle without four meshes and four draw calls.
+  vPart = iState.w;
+  vFlash = 0.0;
+  vViewDist = length(world - uCamPos.xyz);
+  gl_Position = uViewProj * vec4(world, 1.0);
 }
 `;
 
@@ -256,7 +322,7 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aInfo;     // x part id
 layout(location = 5) in vec4 iPosYaw;   // xyz feet position, w yaw
-layout(location = 6) in vec4 iState;    // x fall, y unused, z hit flash, w walk phase
+layout(location = 6) in vec4 iState;    // x fall, y roll, z hit flash, w walk phase
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -271,6 +337,10 @@ mat3 rotY(float a) {
 mat3 rotX(float a) {
   float c = cos(a), s = sin(a);
   return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+}
+mat3 rotZ(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0);
 }
 
 void main() {
@@ -298,8 +368,10 @@ void main() {
   }
 
   // The fall: rotate the whole body about the feet. This is death, and it is
-  // also what a banana does to you.
-  mat3 fall = rotX(-iState.x);
+  // also what a banana does to you. The roll is zero unless the ragdoll cheat
+  // is on, and then it carries whichever way the hit turned them, which is the
+  // difference between a body that lies down and one that is knocked over.
+  mat3 fall = rotZ(iState.y) * rotX(-iState.x);
   p = fall * p;
   n = fall * n;
 
@@ -342,7 +414,9 @@ layout(location = 6) in vec4 iState;
 uniform mat4 uLightViewProj;
 void main() {
   float fc = cos(-iState.x), fs = sin(-iState.x);
-  mat3 fall = mat3(1.0, 0.0, 0.0, 0.0, fc, fs, 0.0, -fs, fc);
+  mat3 pitch = mat3(1.0, 0.0, 0.0, 0.0, fc, fs, 0.0, -fs, fc);
+  float rc = cos(iState.y), rs = sin(iState.y);
+  mat3 fall = mat3(rc, rs, 0.0, -rs, rc, 0.0, 0.0, 0.0, 1.0) * pitch;
   float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
   gl_Position = uLightViewProj * vec4(rot * (fall * aPos) + iPosYaw.xyz, 1.0);

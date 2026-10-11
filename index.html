@@ -75,6 +75,7 @@
     <span class="tlabel">threat</span> <span id="tiernum">1</span>
     <span class="tsep">contacts</span> <span id="contactnum">0</span>
     <span class="tsep">score</span> <span id="scorenum">0</span>
+    <span id="cheatmark" class="hidden">cheated</span>
   </div>
   <div id="sanctuary" class="hidden"></div>
   <div id="killfeed"></div>
@@ -134,11 +135,34 @@
     <tr><td>T</td><td>blow the C4 you have put down</td></tr>
     <tr><td>R</td><td>reload</td></tr>
     <tr><td>G</td><td>holster the weapon, for walking and for photographs</td></tr>
+    <tr><td>C</td><td>cheats</td></tr>
     <tr><td>Esc</td><td>release the mouse</td></tr>
   </table>
   <p>A gamepad works too: left stick walks, right stick looks, A jumps, L3 runs,
   the right trigger fires and the left trigger brings up the sight.</p>
   <button id="helpclose">close</button>
+</div>
+
+<div id="cheats" class="panel hidden">
+  <h2>Cheats</h2>
+  <p class="warn">A run with any of these on is marked as such, here and on the
+  end screen. The memorial stays a weapons free zone whatever is switched on.</p>
+  <div class="row" id="cheatactions"></div>
+  <div class="group">
+    <div class="grouplabel">switches</div>
+    <div id="cheatswitches"></div>
+  </div>
+  <div class="group">
+    <div class="grouplabel">gore, all off unless you say otherwise</div>
+    <div id="cheatgore"></div>
+  </div>
+  <button id="cheatsclose">close</button>
+  <button id="cheatsreset" class="ghost">all off</button>
+</div>
+
+<div id="nuketarget" class="hidden">
+  <canvas id="targetmap"></canvas>
+  <div id="targethint">Click the city to put a warhead on it. Esc to think better of it.</div>
 </div>
 
 <div id="down" class="overlay hidden">

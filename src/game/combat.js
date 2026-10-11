@@ -61,6 +61,11 @@ export class Combat {
     this.onShieldFull = null;
     this.onDifficulty = null;
     this.damageDir = { x: 0, z: 0, at: -99 };
+    // Set from the cheat menu. It stops the damage, not the warning: you still
+    // see which way it came from, because a god who cannot tell he is being
+    // shot at is a god in a very boring game.
+    this.godmode = false;
+    this.cheated = false;
 
     // What you picked up and how long it lasts. One clock per kind, because
     // taking a second quad while the first is running should extend it rather
@@ -136,6 +141,14 @@ export class Combat {
    */
   hurt(amount, fromX, fromZ, px, pz) {
     if (this.health <= 0) return;
+    if (this.godmode) {
+      // The shot still landed, so the marker still points at whoever fired it.
+      const gx = fromX - px, gz = fromZ - pz;
+      const gl = Math.hypot(gx, gz) || 1;
+      this.damageDir = { x: gx / gl, z: gz / gl, at: performance.now() };
+      if (this.onHurt) this.onHurt(0);
+      return;
+    }
     const scaled = amount * this.rules.incoming;
     this.sinceHit = 0;
     this.streak = 0;

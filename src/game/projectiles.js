@@ -38,6 +38,12 @@ export const PROJECTILE = {
     radius: 0.09, gravity: 1.5, drag: 0, bounce: 0, armTime: 0.05, maxAge: 3.5,
     detonateOnContact: true, trail: 'spark', light: true, spin: 26,
   },
+  nuke: {
+    // Dropped rather than fired, so it comes in fast and nothing stops it on
+    // the way down. The radius is the warhead's own body, not its blast.
+    radius: 0.6, gravity: 19.6, drag: 0, bounce: 0, armTime: 0.1, maxAge: 20,
+    detonateOnContact: true, trail: 'smoke', light: true, spin: 2,
+  },
   banana: {
     radius: 0.12, gravity: 19.6, drag: 0.2, bounce: 0.25, armTime: 0.2,
     detonateOnContact: false, sticks: true, trail: 'none', light: false, spin: 10,

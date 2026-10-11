@@ -42,6 +42,10 @@ class Soldier {
     this.vx = 0; this.vz = 0;
     this.yaw = Math.random() * Math.PI * 2;
     this.lean = 0;
+    this.roll = 0;
+    this.spinLean = 0;
+    this.spinRoll = 0;
+    this.vy = 0;
     this.walk = Math.random() * 6.28;
     this.health = SPEC.health + tier * 12;
     this.maxHealth = this.health;
@@ -58,6 +62,7 @@ class Soldier {
     this.targetZ = z;
     this.slipLeft = 0;
     this.deathTime = 0;
+    this.gibbed = false;
     this.seed = Math.random();
     return this;
   }
@@ -82,6 +87,12 @@ export class Soldiers {
     this.spawnTimer = 3;
     this.onShot = null;      // fn(soldier, damage)
     this.onDeath = null;
+    // Called instead of onDeath when a killing hit is meant to take them to
+    // pieces. The game layer makes the chunks; this file only decides when.
+    this.onGib = null;
+    // Set from the cheat menu. With nothing on, a death is the canned fall
+    // this game has always had.
+    this.gore = { gib: false, ragdoll: false, scale: 1 };
     this.onSlip = null;
     this.hazards = () => [];
     // Scaled by the difficulty: how often their aimed shot is actually aimed.
@@ -142,14 +153,48 @@ export class Soldiers {
     // into a fight.
     if (s.state === STATE.PATROL) { s.state = STATE.ADVANCE; s.stateTime = 0; }
     if (s.health <= 0) {
+      const dir = from || { x: 0, y: 0, z: 0 };
+      // Coming apart is not a death animation, it is the absence of one: there
+      // is no body left to lie down, so they leave the active list here and
+      // the pieces are somebody else's problem.
+      if (this.gore.gib) {
+        // The flag outlives the soldier for exactly as long as the caller
+        // needs to credit the kill, which is how the game layer knows not to
+        // put a fireball where a body would have been.
+        s.gibbed = true;
+        if (this.onGib) this.onGib(s, dir);
+        this._retire(s);
+        return true;
+      }
       s.state = STATE.DYING;
       s.deathTime = 0;
-      s.vx = (from && from.x ? from.x : 0) * 1.5;
-      s.vz = (from && from.z ? from.z : 0) * 1.5;
+      s.vx = (dir.x || 0) * 1.5;
+      s.vz = (dir.z || 0) * 1.5;
+      if (this.gore.ragdoll) {
+        // Momentum from the shot rather than a timer. A hit from the front
+        // puts them on their back, a hit from the side turns them, and the
+        // body carries that rotation until the ground takes it away.
+        const push = 1.6 + this.gore.scale * 0.5;
+        s.vx = (dir.x || 0) * 4.2 * push + (Math.random() - 0.5) * 1.2;
+        s.vz = (dir.z || 0) * 4.2 * push + (Math.random() - 0.5) * 1.2;
+        s.vy = 1.9 + Math.random() * 1.9;
+        // Which way they turn comes from where the hit landed relative to the
+        // way they were facing, so it is the shot that decides, not a dice.
+        const facing = Math.atan2(-(dir.x || 0), -(dir.z || 0)) - s.yaw;
+        s.spinLean = (2.6 + Math.random() * 2.4) * Math.sign(Math.cos(facing) || 1);
+        s.spinRoll = Math.sin(facing) * (2.2 + Math.random() * 2.0);
+      }
       if (this.onDeath) this.onDeath(s);
       return true;
     }
     return false;
+  }
+
+  /** Off the active list at once, whatever the reason. */
+  _retire(s) {
+    s.alive = false;
+    const i = this.active.indexOf(s);
+    if (i >= 0) this.active.splice(i, 1);
   }
 
   /** A shot against the capsule and the head, nearest first. */
@@ -219,11 +264,46 @@ export class Soldiers {
 
       if (s.state === STATE.DYING) {
         s.deathTime += dt;
-        s.lean = Math.min(1.55, s.lean + dt * 4.2);
-        s.x += s.vx * dt; s.z += s.vz * dt;
-        s.vx *= 0.9; s.vz *= 0.9;
-        s.y = w.groundHeight(s.x, s.z);
-        if (s.deathTime > 8) { s.alive = false; this.active.splice(i, 1); }
+        if (this.gore.ragdoll) {
+          // A rigid body, not a jointed one. The whole figure tumbles about
+          // its feet with the angular momentum the shot gave it, falls, lands,
+          // and slides to a stop. It is the cheap version of a ragdoll and it
+          // is the honest name for what is happening here.
+          s.vy -= 19 * dt;
+          s.x += s.vx * dt; s.z += s.vz * dt;
+          s.lean += s.spinLean * dt;
+          s.roll += s.spinRoll * dt;
+          const ground = w.groundHeight(s.x, s.z);
+          const lying = Math.abs(Math.sin(s.lean)) > 0.82 || Math.abs(Math.sin(s.roll)) > 0.82;
+          s.y += s.vy * dt;
+          if (s.y <= ground) {
+            s.y = ground;
+            if (s.vy < -2) { s.vy = -s.vy * 0.18; } else { s.vy = 0; }
+            // Once it is down the ground eats the spin, and a body that is
+            // already flat stops turning rather than rolling across the square.
+            const brake = lying ? 9 : 3.2;
+            s.spinLean *= Math.max(0, 1 - brake * dt);
+            s.spinRoll *= Math.max(0, 1 - brake * dt);
+            s.vx *= Math.max(0, 1 - 5.5 * dt);
+            s.vz *= Math.max(0, 1 - 5.5 * dt);
+          }
+          // Settle flat rather than leaving them propped at an angle. The
+          // roll goes to the nearest half turn rather than to zero, because
+          // the two stable ways to lie are on your back and on your face, and
+          // which one you end up in is decided by how far the hit turned you.
+          if (Math.abs(s.spinLean) < 0.25 && s.y <= ground + 0.01) {
+            const target = Math.sign(s.lean || 1) * Math.PI * 0.5;
+            s.lean += (target - s.lean) * Math.min(1, dt * 3);
+            const rest = Math.round(s.roll / Math.PI) * Math.PI;
+            s.roll += (rest - s.roll) * Math.min(1, dt * 2);
+          }
+        } else {
+          s.lean = Math.min(1.55, s.lean + dt * 4.2);
+          s.x += s.vx * dt; s.z += s.vz * dt;
+          s.vx *= 0.9; s.vz *= 0.9;
+          s.y = w.groundHeight(s.x, s.z);
+        }
+        if (s.deathTime > 8) { this._retire(s); }
         continue;
       }
 
@@ -325,7 +405,7 @@ export class Soldiers {
       }
 
       // Too far behind you and not engaged: recycle rather than simulate.
-      if (dist > 320 && !s.canSee) { s.alive = false; this.active.splice(i, 1); }
+      if (dist > 320 && !s.canSee) { this._retire(s); }
     }
   }
 
