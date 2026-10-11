@@ -835,7 +835,14 @@ function updateIndex(district, entry) {
     home: CORE_ID,
     districts: previous ? previous.districts : [],
   };
-  index.districts = index.districts.filter((d) => d.id !== district.id);
+  // A district whose bundle is not on this disk does not belong in this
+  // index. The index is committed so the game runs from a fresh clone, and
+  // without this pass it carried entries for districts built on a developer's
+  // machine: the deploy then listed bundles it had never built, and the game
+  // asked for them and got four hundred and four.
+  index.districts = index.districts.filter((d) => d.id !== district.id
+    && fs.existsSync(path.join(OUT_DIR, `world-${d.id}.bin`))
+    && fs.existsSync(path.join(OUT_DIR, `world-${d.id}.json`)));
   index.districts.push({
     id: district.id,
     tier: district.tier,

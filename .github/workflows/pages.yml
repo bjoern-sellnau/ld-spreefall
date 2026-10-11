@@ -70,6 +70,8 @@ jobs:
         run: node --max-old-space-size=6144 tools/build-world.mjs --all
       - name: Weigh the city against the budget
         run: node tools/weigh-city.mjs
+      - name: Ship as much of it as the budget allows
+        run: node tools/fit-city.mjs
       - name: Record which source was used
         run: cat data/raw/source.json
       - name: Build dist

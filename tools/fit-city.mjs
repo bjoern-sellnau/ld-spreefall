@@ -1,0 +1,117 @@
+// Fit the city into the budget by choosing how much of it to ship.
+//
+// The brief allows twenty five megabytes of download for the whole playable
+// area. Berlin inside the Ring, measured on the live extract rather than
+// guessed, does not fit at any detail this project can build and still call
+// walkable, so something has to give, and the thing that gives is extent: the
+// city ships outward from the middle until the budget is spent, and the
+// districts that do not fit are not deployed.
+//
+// This runs after the build and before the packaging. It reads the index,
+// takes districts in order of distance from Mitte, keeps what fits, and
+// deletes the bundles of what does not so the packager cannot ship them by
+// accident. The log says exactly what was left out and by how much, because
+// that number is the answer to "how much of Berlin fits" and it should not
+// have to be worked out from a stack trace.
+//
+//   node tools/fit-city.mjs                 fit to 25 MB of download
+//   node tools/fit-city.mjs --budget=18     fit to another figure
+//   node tools/fit-city.mjs --dry           say what it would do
+
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { DISTRICTS, CORE_ID } from './districts.mjs';
+
+const ROOT = path.resolve(import.meta.dirname, '..');
+const PUB = path.join(ROOT, 'public');
+const INDEX = path.join(PUB, 'world.json');
+
+function gz(file) {
+  return zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
+}
+
+function walk(dir, out = []) {
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    if (fs.statSync(p).isDirectory()) walk(p, out);
+    else out.push(p);
+  }
+  return out;
+}
+
+/** How far a district is from the middle, in district steps. */
+function ringOf(id) {
+  const d = DISTRICTS.find((x) => x.id === id);
+  const core = DISTRICTS.find((x) => x.core);
+  if (!d || !core) return 99;
+  return Math.max(Math.abs(d.col - core.col), Math.abs(d.row - core.row));
+}
+
+function main() {
+  const dry = process.argv.includes('--dry');
+  const arg = process.argv.find((a) => a.startsWith('--budget='));
+  const budget = (arg ? parseFloat(arg.slice('--budget='.length)) : 25) * 1e6;
+  if (!fs.existsSync(INDEX)) {
+    console.error('no public/world.json, run: npm run world');
+    process.exit(1);
+  }
+  const index = JSON.parse(fs.readFileSync(INDEX, 'utf8'));
+
+  // The page and the code come down whatever else does, so they are spent
+  // before the first district is.
+  let code = 0;
+  for (const f of [path.join(ROOT, 'index.html'), ...walk(path.join(ROOT, 'src'))]) code += gz(f);
+  let spent = code + gz(INDEX);
+
+  // Outward from the middle, and within a ring, smallest first, so a cheap
+  // district is never left out because an expensive one came first.
+  const order = [...index.districts].sort((a, b) => {
+    if (a.id === CORE_ID) return -1;
+    if (b.id === CORE_ID) return 1;
+    const ra = ringOf(a.id), rb = ringOf(b.id);
+    if (ra !== rb) return ra - rb;
+    return a.gzip - b.gzip;
+  });
+
+  const keep = [];
+  const drop = [];
+  for (const d of order) {
+    if (spent + d.gzip <= budget) {
+      keep.push(d);
+      spent += d.gzip;
+    } else {
+      drop.push(d);
+    }
+  }
+
+  console.log(`budget          ${(budget / 1e6).toFixed(2)} MB of download`);
+  console.log(`code and page   ${(code / 1e6).toFixed(2)} MB gzipped`);
+  for (const d of order) {
+    const kept = keep.includes(d);
+    console.log(`${kept ? '  ship ' : '  skip '} ${d.id.padEnd(6)} ring ${ringOf(d.id)}  `
+      + `${String(d.name).slice(0, 22).padEnd(23)}${(d.gzip / 1e6).toFixed(2).padStart(6)} MB`);
+  }
+  console.log('');
+  console.log(`shipping        ${keep.length} of ${index.districts.length} districts built, `
+    + `${DISTRICTS.length} in the city`);
+  console.log(`download        ${(spent / 1e6).toFixed(2)} MB, `
+    + `${((budget - spent) / 1e6).toFixed(2)} MB of the budget unspent`);
+  if (drop.length) {
+    console.log(`left out        ${drop.map((d) => d.id).join(', ')}, `
+      + `${(drop.reduce((a, d) => a + d.gzip, 0) / 1e6).toFixed(2)} MB more than there is room for`);
+  }
+
+  if (dry) return;
+  index.districts = keep;
+  index.builtAt = new Date().toISOString();
+  fs.writeFileSync(INDEX, JSON.stringify(index));
+  for (const d of drop) {
+    for (const f of [d.bin, d.json]) {
+      const p = path.join(PUB, f);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+  }
+}
+
+main();

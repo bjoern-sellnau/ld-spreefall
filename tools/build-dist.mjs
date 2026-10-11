@@ -16,13 +16,21 @@ const COPY = [
   'public/world.json',
 ];
 
-/** Every district bundle that was built, whichever ones those are. */
+/**
+ * The district bundles the index lists, which is not the same as the ones on
+ * the disk: fit-city drops the districts that do not fit the budget out of
+ * the index, and anything left over in public/ is not shipped.
+ */
 function districtFiles() {
-  const dir = path.join(ROOT, 'public');
-  return fs.readdirSync(dir)
-    .filter((n) => /^world-[a-z0-9]+\.(bin|json)$/.test(n))
-    .sort()
-    .map((n) => `public/${n}`);
+  const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'world.json'), 'utf8'));
+  const out = [];
+  for (const d of index.districts || []) {
+    for (const rel of [`public/${d.bin}`, `public/${d.json}`]) {
+      if (fs.existsSync(path.join(ROOT, rel))) out.push(rel);
+      else { console.error(`the index lists ${rel}, which is not here`); process.exit(1); }
+    }
+  }
+  return out;
 }
 
 function rmrf(p) { fs.rmSync(p, { recursive: true, force: true }); }

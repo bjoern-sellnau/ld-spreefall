@@ -14,6 +14,7 @@
     "serve": "node tools/serve.mjs",
     "verify": "node tools/verify.mjs",
     "weigh": "node tools/weigh-city.mjs",
+    "fit": "node tools/fit-city.mjs",
     "test:ui": "node tools/test-ui.mjs",
     "test:combat": "node tools/test-combat.mjs",
     "test:arsenal": "node tools/test-arsenal.mjs",

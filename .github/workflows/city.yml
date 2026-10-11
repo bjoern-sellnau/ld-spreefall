@@ -54,6 +54,7 @@ jobs:
       - name: The budget
         run: |
           node tools/weigh-city.mjs | tee city-budget.txt
+          node tools/fit-city.mjs --dry | tee -a city-budget.txt
       - name: Serve
         run: node tools/serve.mjs & sleep 2
       - name: Walk from one district into the next, in the real city
