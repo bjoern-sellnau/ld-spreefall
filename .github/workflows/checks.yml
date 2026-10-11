@@ -1,0 +1,90 @@
+name: Check the live world in a browser
+
+# The deploy builds from the live Overpass extract, which is a different city
+# from the offline fallback the sandbox builds from: more buildings, real
+# footprints, and the landmark facts attached to them rather than invented. This
+# workflow is the only place that city is ever run, so it renders it in a real
+# browser and fights drones in it, and the log is the record.
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'claude/**'
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'index.html'
+      - 'package.json'
+      - '.github/workflows/checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A push while this is running makes the run before it stale, and two of them
+# competing for the same extract is what slows both down.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: The day, so the extract is fetched once a day and no more
+        run: echo "OSM_DAY=$(date -u +%F)" >> "$GITHUB_ENV"
+      - name: Cache the OSM extract
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: osm-${{ env.OSM_DAY }}
+      - name: Fetch the OSM extract
+        # Shared with the deploy workflow through the cache: the first run of
+        # the day fetches, the rest read what it left. Asking Overpass for the
+        # same twenty three megabytes twice on every push is what once left this
+        # step sitting for ten minutes. The repository carries a synthetic
+        # extract for the offline case, so the check is on where the file came
+        # from, not on whether it is there.
+        run: |
+          if grep -q overpass data/raw/source.json 2>/dev/null; then
+            echo "the cache already holds today's live extract"
+            cat data/raw/source.json
+          else
+            node --max-old-space-size=6144 tools/fetch-osm.mjs --force
+          fi
+      - name: Build the world bundle
+        run: node --max-old-space-size=6144 tools/build-world.mjs
+      - name: Serve
+        run: node tools/serve.mjs & sleep 2
+      - name: Render the fixed viewpoints and fail on any console error
+        # Smaller and cheaper than the reference shots taken by hand: the live
+        # city is three times the geometry, and a software rasteriser charges
+        # for every pixel of it. What this run is checking is that the city is
+        # there and that nothing throws.
+        env:
+          SPREEFALL_WIDTH: '1024'
+          SPREEFALL_HEIGHT: '576'
+          SPREEFALL_QUALITY: low
+        run: node tools/verify.mjs
+      - name: Fight drones in it
+        run: node tools/test-combat.mjs
+      - name: Fight soldiers in it, with everything you can carry
+        run: node tools/test-arsenal.mjs
+      - name: Drive the interface
+        run: node tools/test-ui.mjs
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-world-screenshots
+          path: docs/screenshots
+          retention-days: 7
