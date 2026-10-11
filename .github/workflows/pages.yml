@@ -55,8 +55,21 @@ jobs:
           else
             node --max-old-space-size=6144 tools/fetch-osm.mjs --force
           fi
-      - name: Build the world bundle
-        run: node --max-old-space-size=6144 tools/build-world.mjs
+      - name: Fetch the districts around it
+        # The deployed city is the middle plus the eight districts around it,
+        # which is as much of Berlin as can be fetched inside a deploy. The
+        # whole twenty four are built by the city workflow, which runs weekly
+        # and on demand rather than on every push. A district that cannot be
+        # fetched is simply not in the index, and the game streams what is.
+        continue-on-error: true
+        run: |
+          for d in c2r0 c3r0 c4r0 c2r1 c4r1 c2r2 c3r2 c4r2; do
+            node --max-old-space-size=6144 tools/fetch-osm.mjs --district=$d || true
+          done
+      - name: Build every district that has an extract
+        run: node --max-old-space-size=6144 tools/build-world.mjs --all
+      - name: Weigh the city against the budget
+        run: node tools/weigh-city.mjs
       - name: Record which source was used
         run: cat data/raw/source.json
       - name: Build dist
