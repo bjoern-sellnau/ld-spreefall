@@ -62,14 +62,14 @@ class OsmDoc {
   line(pts, tags) {
     return this.way(pts.map(([lon, lat]) => this.node(lat, lon)), tags);
   }
-  toXml() {
+  toXml(bbox = BBOX) {
     const esc = (s) => String(s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
     const out = [];
     out.push('<?xml version="1.0" encoding="UTF-8"?>');
     out.push('<osm version="0.6" generator="spreefall synth-osm">');
-    out.push(`  <bounds minlat="${BBOX.south}" minlon="${BBOX.west}" maxlat="${BBOX.north}" maxlon="${BBOX.east}"/>`);
+    out.push(`  <bounds minlat="${bbox.south}" minlon="${bbox.west}" maxlat="${bbox.north}" maxlon="${bbox.east}"/>`);
     for (const n of this.nodes) {
       const lat = n.lat.toFixed(7), lon = n.lon.toFixed(7);
       if (!n.tags || Object.keys(n.tags).length === 0) {
@@ -103,12 +103,16 @@ class OsmDoc {
 const CELL = 2.0;   // metres
 
 class Mask {
-  constructor() {
-    const [x0, z0] = project(BBOX.west, BBOX.north);
-    const [x1, z1] = project(BBOX.east, BBOX.south);
-    this.x0 = x0; this.z0 = z0;
-    this.nx = Math.ceil((x1 - x0) / CELL) + 2;
-    this.nz = Math.ceil((z1 - z0) / CELL) + 2;
+  /** @param {{minX,minZ,maxX,maxZ}} bounds the metres this mask covers */
+  constructor(bounds) {
+    const b = bounds || (() => {
+      const [x0, z0] = project(BBOX.west, BBOX.north);
+      const [x1, z1] = project(BBOX.east, BBOX.south);
+      return { minX: x0, minZ: z0, maxX: x1, maxZ: z1 };
+    })();
+    this.x0 = b.minX; this.z0 = b.minZ;
+    this.nx = Math.ceil((b.maxX - b.minX) / CELL) + 2;
+    this.nz = Math.ceil((b.maxZ - b.minZ) / CELL) + 2;
     this.data = new Uint8Array(this.nx * this.nz);
   }
   idx(ix, iz) { return iz * this.nx + ix; }
@@ -214,7 +218,18 @@ const PALETTE = [
 
 // ---------------------------------------------------------------------------
 
-export function buildSyntheticOsm() {
+/**
+ * The offline fallback.
+ *
+ * @param {object|null} district which district to synthesise. The middle one
+ *   is written out of the surveyed facts in berlin-facts.mjs; the others have
+ *   no surveyed facts to write, so they get a generated Berlin style grid of
+ *   streets with perimeter blocks along it, seeded by the district's own
+ *   position so the same district always comes out the same. A build from a
+ *   real Overpass extract uses none of this.
+ */
+export function buildSyntheticOsm(district = null) {
+  if (district && !district.core) return syntheticDistrict(district);
   const doc = new OsmDoc();
   const mask = new Mask();
   const rnd = mulberry32(20260908);
@@ -546,4 +561,122 @@ function pointInRing(x, z, ring) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const xml = buildSyntheticOsm();
   process.stdout.write(xml);
+}
+
+// ---------------------------------------------------------------------------
+// A district with no surveyed facts in it.
+//
+// Used only when Overpass cannot be reached. It lays a Berlin style street
+// lattice over the district's box: long avenues every few hundred metres, side
+// streets between them, a square or a park where a block would otherwise be,
+// and perimeter blocks along every frontage, which is the same filler the
+// middle district uses between its real streets. The lattice is bent by a
+// couple of degrees per district and the spacings are drawn from the district's
+// own seed, so no two of them look alike and each of them looks the same every
+// time it is built.
+
+function districtSeed(district) {
+  return 7919 + district.col * 131 + district.row * 17;
+}
+
+function syntheticDistrict(district) {
+  const b = district.bounds;
+  const rnd = mulberry32(districtSeed(district));
+  const doc = new OsmDoc();
+  // The mask reaches past the edges so blocks on the boundary are whole; the
+  // build keeps whatever has its middle inside and drops the rest.
+  const pad = 140;
+  const mask = new Mask({
+    minX: b.minX - pad, minZ: b.minZ - pad, maxX: b.maxX + pad, maxZ: b.maxZ + pad,
+  });
+  const x0 = b.minX - pad, x1 = b.maxX + pad;
+  const z0 = b.minZ - pad, z1 = b.maxZ + pad;
+  // A slight rotation, so the grid is not aligned with the tile grid and the
+  // blocks do not all face the same way.
+  const tilt = (rnd() - 0.5) * 0.14;
+  const line = (ax, az, bx, bz) => {
+    const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+    const rot = (x, z) => {
+      const dx = x - mx, dz = z - mz;
+      return [mx + dx * Math.cos(tilt) - dz * Math.sin(tilt),
+        mz + dx * Math.sin(tilt) + dz * Math.cos(tilt)];
+    };
+    return [rot(ax, az), rot(bx, bz)];
+  };
+
+  const streetWorld = [];
+  const emit = (pts, cls, name) => {
+    const tags = { highway: cls, name, surface: cls === 'residential' ? 'asphalt' : 'asphalt' };
+    tags.width = String(ROAD_WIDTH[cls] || 7);
+    doc.line(pts.map(worldToLonLat), tags);
+    streetWorld.push({ def: { cls, name, surface: 'asphalt' }, world: pts });
+    mask.stampPolyline(pts, (ROAD_WIDTH[cls] || 7) / 2 + 1.2, 1);
+  };
+
+  // Avenues one way, side streets the other, with the spacing wandering so the
+  // blocks are not all the same size.
+  let n = 0;
+  for (let x = x0 + 40 + rnd() * 50; x < x1 - 40; ) {
+    const major = n % 3 === 0;
+    emit(line(x, z0, x, z1), major ? 'secondary' : 'residential',
+      `${district.id} ${major ? 'Allee' : 'Strasse'} ${n + 1}`);
+    x += major ? 230 + rnd() * 90 : 95 + rnd() * 55;
+    n++;
+  }
+  let m = 0;
+  for (let z = z0 + 40 + rnd() * 50; z < z1 - 40; ) {
+    const major = m % 4 === 0;
+    emit(line(x0, z, x1, z), major ? 'primary' : 'residential',
+      `${district.id} ${major ? 'Chaussee' : 'Weg'} ${m + 1}`);
+    z += major ? 260 + rnd() * 110 : 105 + rnd() * 50;
+    m++;
+  }
+
+  // A park or two, and a square, placed on the lattice rather than on top of
+  // it: anywhere the mask is still free.
+  const greens = Math.max(1, Math.round((b.width * b.depth) / 1.1e6));
+  for (let i = 0; i < greens; i++) {
+    const w = 120 + rnd() * 180, d = 110 + rnd() * 160;
+    for (let tries = 0; tries < 40; tries++) {
+      const cx = x0 + 100 + rnd() * (x1 - x0 - 200);
+      const cz = z0 + 100 + rnd() * (z1 - z0 - 200);
+      if (!mask.rectFree(cx, cz, w, d, 1, 0)) continue;
+      const ring = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]]
+        .map(([u, v]) => [cx + u, cz + v]);
+      doc.ring(ring.map(worldToLonLat), i === 0
+        ? { leisure: 'park', name: `${district.id} Park` }
+        : { landuse: 'grass', name: `${district.id} Anlage` });
+      mask.fillPolygon(ring, 2, 3);
+      // Trees in it.
+      const count = Math.floor((w * d) / 420);
+      for (let k = 0; k < count; k++) {
+        const tx = cx - w / 2 + rnd() * w, tz = cz - d / 2 + rnd() * d;
+        const [lon, lat] = worldToLonLat([tx, tz]);
+        doc.node(lat, lon, { natural: 'tree' });
+      }
+      break;
+    }
+  }
+
+  // The blocks between the streets, then street trees along the avenues.
+  fillBlocks(doc, mask, streetWorld, rnd);
+  for (const s of streetWorld) {
+    if (s.def.cls === 'residential') continue;
+    const off = (ROAD_WIDTH[s.def.cls] || 7) / 2 + 3.0;
+    for (const side of [-1, 1]) {
+      for (const p of sampleAlong(offsetLine(s.world, off * side), 18)) {
+        if (mask.get(p[0], p[1]) === 3) continue;
+        const [lon, lat] = worldToLonLat(p);
+        doc.node(lat, lon, { natural: 'tree' });
+      }
+    }
+  }
+
+  // Something for the district to be called. A real extract carries the actual
+  // place nodes, and the build prefers those; this is a neutral stand in
+  // rather than a guess at which Ortsteil the box mostly covers.
+  const [clon, clat] = worldToLonLat([(b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2]);
+  doc.node(clat, clon, { place: 'suburb', name: `Ring ${district.col + 1}-${district.row + 1}` });
+
+  return doc.toXml(district.bbox);
 }

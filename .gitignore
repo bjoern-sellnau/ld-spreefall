@@ -3,3 +3,5 @@ node_modules/
 dist/
 docs/screenshots/*.tmp.png
 .DS_Store
+data/raw/district-*.osm
+data/raw/district-*.json
