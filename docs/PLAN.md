@@ -724,3 +724,26 @@ much. The deploy is therefore always inside the brief's budget and always a
 contiguous city around Mitte, and the question "how much of Berlin fits in
 twenty five megabytes" has an answer that is printed on every build rather
 than argued about.
+
+### Which twenty five megabytes
+
+Rule 6 of the brief is "total download under 25 MB for the whole playable
+area". While the city was one district that sentence never had to be read
+closely, because the deployed bundle was 21.33 MB and the same thing over the
+wire was 7.90 MB, and both are under twenty five. Districts pulled those two
+numbers apart: the live Mitte alone is 20.75 MB on disk and 7.67 MB gzipped,
+so on the stricter reading the whole game is Mitte and nothing else, and on
+the other one there is room for about a dozen districts.
+
+Download is what travels. Every browser sends an Accept-Encoding header
+asking for gzip and GitHub Pages serves it compressed, so the bytes a player
+actually downloads are the gzipped ones, and that is what the budget is now
+measured against, in all three tools: the packager, the weigher and the
+fitter, which until today disagreed with each other. The deployed size is
+printed next to it everywhere it appears, because it is the honest other
+number and because choosing the more convenient of two readings without
+saying so is how a budget stops meaning anything.
+
+If the intended reading was the stricter one, the change is one line in each
+of those three tools, and the shipped city becomes Mitte plus whatever fits
+in the four megabytes left over.
