@@ -38,6 +38,7 @@ export const ACTIONS = [
   { id: 'allWeapons', label: 'All weapons', note: 'every magazine and every reserve, full' },
   { id: 'refill', label: 'Reload everything', note: 'top up what you are carrying' },
   { id: 'nuke', label: 'Drop a nuke', note: 'pick the target on the map' },
+  { id: 'ion', label: 'Ion cannon', note: 'three beams, then the middle one' },
 ];
 
 /** Bringing more of them out. Each button is one squad, flight or section. */

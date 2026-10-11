@@ -6,7 +6,7 @@ import { createProgram } from '../engine/gl.js';
 import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
-  SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_SHADOW_VS,
+  SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_FS, SOLDIER_SHADOW_VS,
   PICKUP_VS, GIB_VS,
 } from '../shaders/actors.js';
 
@@ -521,6 +521,27 @@ export function buildSoldierMesh() {
   // The rifle, carried across the body.
   m.box(0.18, 1.14, -0.30, 0.06, 0.09, 0.52, 7);
   m.box(0.18, 1.08, -0.16, 0.05, 0.14, 0.10, 7);
+
+  // What is left when the cloth has gone. These are inside the body and
+  // scaled away to nothing by the vertex shader unless this one has been
+  // burnt, at which point the cloth and the webbing go instead and this is
+  // all that is standing. Part 8, which the shader renders as charred bone.
+  m.box(0, 1.16, 0, 0.055, 0.60, 0.055, 23);            // spine
+  for (let i = 0; i < 5; i++) {
+    const y = 1.00 + i * 0.105;
+    const w = 0.30 - Math.abs(i - 2) * 0.03;
+    m.box(0, y, 0, w, 0.035, 0.17, 23);                 // ribs
+  }
+  m.box(0, 0.88, 0, 0.26, 0.10, 0.16, 23);              // pelvis
+  m.box(0, 1.47, 0, 0.075, 0.10, 0.075, 23);            // neck
+  m.box(0, 1.60, 0, 0.19, 0.20, 0.20, 23);              // skull
+  m.box(0, 1.56, -0.10, 0.13, 0.06, 0.04, 23);          // jaw
+  for (const side of [-1, 1]) {
+    m.box(side * 0.11, 0.42, 0, 0.065, 0.84, 0.065, 23);     // leg
+    m.box(side * 0.11, 0.05, -0.04, 0.09, 0.07, 0.22, 23);   // foot
+    m.box(side * 0.30, 1.16, -0.05, 0.055, 0.54, 0.055, 23); // arm
+    m.box(side * 0.22, 1.42, 0, 0.17, 0.05, 0.05, 23);       // collarbone
+  }
   return m;
 }
 
@@ -541,7 +562,7 @@ export class Actors {
     // sampler2DShadow from a unit holding an ordinary texture, and every draw
     // fails with INVALID_OPERATION and renders nothing at all.
     this.progDrone.use().int('uShadow0', 4).int('uShadow1', 5);
-    this.progSoldier = createProgram(gl, SOLDIER_VS, DRONE_FS, 'soldier');
+    this.progSoldier = createProgram(gl, SOLDIER_VS, SOLDIER_FS, 'soldier');
     this.progSoldierShadow = createProgram(gl, SOLDIER_SHADOW_VS, DRONE_SHADOW_FS, 'soldierShadow');
     this.progSoldier.use().int('uShadow0', 4).int('uShadow1', 5);
     this.progPickup = createProgram(gl, PICKUP_VS, DRONE_FS, 'pickup');
@@ -550,7 +571,9 @@ export class Actors {
     this.progGib.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
-    this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 2);
+    // Three vec4s rather than two: the third carries how burnt they are,
+    // which the walk and the fall had no room left for.
+    this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 3);
     this.jet = this._uploadMesh(buildJetMesh(), MAX_JETS, 2);
     // Every viewmodel is uploaded once. They are a few hundred triangles each,
     // so carrying all six costs less than switching would.
@@ -724,18 +747,19 @@ export class Actors {
     let n = 0;
     for (const s of list) {
       if (!s.alive || n >= MAX_SOLDIERS) continue;
-      const o = n * 8;
+      const o = n * 12;
       data[o] = s.x; data[o + 1] = s.y; data[o + 2] = s.z; data[o + 3] = s.yaw;
       // x carries the fall, which is both death and a banana, y the roll a
       // ragdoll picks up from the hit, w the walk phase.
       data[o + 4] = s.lean; data[o + 5] = s.roll || 0;
       data[o + 6] = s.hitFlash; data[o + 7] = s.walk;
+      data[o + 8] = s.charred || 0; data[o + 9] = 0; data[o + 10] = 0; data[o + 11] = 0;
       n++;
     }
     this.soldier.instanceCount = n;
     if (n > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.soldier.instVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 12);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
     }
   }

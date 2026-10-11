@@ -544,3 +544,18 @@ Recorded here as they happen, per the working style.
   that burst. Both run the same hash and the same two lines of arithmetic,
   written out twice, and the test checks that the number of trees the game
   saw burst is exactly the number the seeds said would.
+
+- 2026-10-11: the skeletons are the same mesh as the soldiers. A separate
+  skeleton model would be a second mesh, a second upload and a second draw
+  call for something only a handful of bodies are ever in; instead the
+  soldier carries its own bones inside itself and the vertex shader collapses
+  whichever set is not wanted to a point. Cloth, webbing and helmet shrink
+  towards the body's own centre line as the charring rises and the bones come
+  out of the same place. It costs about forty triangles per soldier and
+  nothing else at all.
+
+  One thing that had to be split for it: the fragment shader is shared by the
+  drones, the projectiles, the pickups, the gibs and the soldiers, and only
+  the soldiers can be burnt. Rather than have everything read a varying that
+  nothing writes, the shader is now built twice from one template, once with
+  the charring compiled out as a constant and once with the real input.

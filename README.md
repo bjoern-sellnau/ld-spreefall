@@ -210,6 +210,7 @@ between visits.
 | All weapons | every magazine and every reserve in the loadout, full |
 | Reload everything | tops up what you are carrying |
 | Drop a nuke | opens a map of the city; click where you want it, then confirm |
+| Ion cannon | three beams in a ring, then the middle one |
 | Soldiers, Drones, Jets | brings a section, a flight or a pair out around you |
 | God mode | nothing hurts you, though you are still told which way it came from |
 | Infinite ammunition | the magazine never reaches the bottom |
@@ -286,6 +287,23 @@ camera circles the impact and climbs away from it, and the city comes back up
 to speed underneath. Space gives you back the controls. The simulation runs
 throughout: the drones are still flying and the buildings still come down,
 you are simply not the one looking.
+
+**The ion cannon.** Picked on the same map. Three columns of light come down
+in a ring fifty eight metres across and walk round the target for eight
+seconds, speeding up the whole time, and anything they pass over burns: a
+soldier caught by one loses the cloth and the webbing and what is left
+standing is a blackened skeleton with the embers still in it. Then the ring
+stops, holds for a second, and the middle fires: two hundred and ten metres
+of everything, which is bigger than a warhead and the largest thing in the
+game. It goes through the same blast path as everything else, so the
+buildings come down, the trees catch and the collision opens up the way they
+would from a grenade.
+
+The skeleton is real geometry rather than a texture. The soldier mesh carries
+a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
+vertex shader collapses one set of parts or the other to nothing depending on
+how burnt they are, so a person and a skeleton are the same mesh and the same
+draw call.
 
 ## Free travel
 

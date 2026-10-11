@@ -30,6 +30,7 @@ import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
 import { Fires } from './game/fires.js';
+import { Ion, ION, ION_STATE } from './game/ion.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -177,6 +178,7 @@ async function main() {
   const travel = new Travel();
   const cinema = new Cinema();
   const fires = new Fires(world);
+  const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
@@ -579,6 +581,59 @@ async function main() {
     audio.treeFall(Math.hypot(player.x - tree.x, player.z - tree.z));
   };
 
+  // --- the ion cannon -------------------------------------------------------
+  // What is under a beam. Soldiers burn down to the bone, drones and jets
+  // come apart, and you are not exempt.
+  ion.onSweep = (x, z, radius, dt) => {
+    const burn = dt * 2.6;
+    for (const sd of [...soldiers.active]) {
+      if (Math.hypot(sd.x - x, sd.z - z) > radius) continue;
+      sd.charred = Math.min(1, (sd.charred || 0) + burn);
+      if (soldiers.damage(sd, 220 * dt, { x: 0, y: 0, z: 0 })) {
+        // Burnt rather than blown apart: whatever is left stays standing
+        // until the ground takes it.
+        sd.charred = 1;
+        creditTarget(sd, false, 'soldier');
+      }
+      if (Math.random() < dt * 6) {
+        effects.flame(sd.x, sd.y, sd.z, 2.0, 0.5);
+      }
+    }
+    for (const d of [...drones.active]) {
+      if (Math.hypot(d.x - x, d.z - z) > radius + 3) continue;
+      if (drones.damage(d, 400 * dt)) creditTarget(d, false, 'drone');
+    }
+    for (const j of [...jets.active]) {
+      if (Math.hypot(j.x - x, j.z - z) > radius + 10) continue;
+      jets.damage(j, 400 * dt);
+    }
+    if (Math.hypot(player.x - x, player.z - z) < radius && combat.health > 0) {
+      combat.hurt(260 * dt, x, z, player.x, player.z);
+    }
+    // And it sets light to whatever it is standing on.
+    if (Math.random() < dt * 1.4) fires.ignite(x, 0, z, radius * 2.2, 0.8);
+  };
+
+  ion.onCharge = () => {
+    audio.ionCharge();
+    toast('ion cannon, charging');
+    feed('<i>ion cannon</i> charging');
+  };
+
+  ion.onMain = (x, y, z) => {
+    audio.ionFire();
+    if (cheats.slowBlast) state.blastSlow = 6.0;
+    // One blast, bigger than a warhead, straight through the normal path so
+    // the buildings, the trees and the collision all hear about it the same
+    // way they would from anything else.
+    explode(x, y + 40, z, {
+      radius: ION.blast, damage: ION.damage, burst: 40, nuke: true,
+    });
+    state.flash = Math.max(state.flash, 1.1);
+  };
+
+  ion.onDone = () => { feed('<i>ion cannon</i> spent'); };
+
   gibs.onDrip = (x, y, z) => { if (cheats.bleeding) effects.drip(x, y, z); };
   gibs.onPool = (x, y, z, size) => { if (cheats.bleeding) effects.stain(x, y, z, size); };
 
@@ -763,6 +818,9 @@ async function main() {
     } else if (id === 'nuke') {
       openTargeting();
       return;
+    } else if (id === 'ion') {
+      openMap('ion');
+      return;
     }
     applyCheats();
   }
@@ -821,6 +879,12 @@ async function main() {
       armed: 'Enter to go, Esc to cancel.',
       button: 'Fly there',
     },
+    ion: {
+      hint: 'Click the city to put the ion cannon on it. '
+        + 'Wheel zooms, drag moves. Esc to think better of it.',
+      armed: 'Enter to open fire, Esc to cancel.',
+      button: 'Open fire',
+    },
   };
 
   function openMap(mode) {
@@ -834,9 +898,7 @@ async function main() {
     state.mapMode = mode;
     state.pendingNuke = null;
     targetMap.resetView();
-    targetMap.aim = {
-      x: player.x, z: player.z, radius: mode === 'nuke' ? NUKE.radius : 14, allowed: true,
-    };
+    targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true };
     el.nukeTarget.classList.toggle('travel', mode === 'travel');
     el.nukeTarget.classList.remove('hidden');
     el.targetConfirm.classList.add('hidden');
@@ -898,23 +960,26 @@ async function main() {
       el.targetHint.textContent = MAP_MODE.travel.armed;
       return true;
     }
-    if (sanctuaryWithin(x, z, NUKE.radius)) {
+    const radius = aimRadius(state.mapMode);
+    if (sanctuaryWithin(x, z, radius)) {
       el.targetHint.textContent = 'not there: the memorial is a weapons free zone';
       el.targetConfirm.classList.add('hidden');
       state.pendingNuke = null;
       return false;
     }
     state.pendingNuke = { x, z };
-    const inside = countInside(x, z, NUKE.radius);
-    el.confirmWhere.textContent =
-      `${away} m away, ${NUKE.radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
-    const self = away < NUKE.radius;
+    const inside = countInside(x, z, radius);
+    el.confirmWhere.textContent = state.mapMode === 'ion'
+      ? `${away} m away. Three beams for ${Math.round(ION.charge)} seconds, `
+        + `then ${radius} m of everything. ${inside} target${inside === 1 ? '' : 's'} inside.`
+      : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
+    const self = away < radius;
     el.confirmSelf.classList.toggle('hidden', !self);
     el.confirmSelf.textContent = combat.godmode
       ? 'You are inside it. God mode is on.'
       : 'You are inside it. This will kill you.';
     el.targetConfirm.classList.remove('hidden');
-    el.targetHint.textContent = MAP_MODE.nuke.armed;
+    el.targetHint.textContent = MAP_MODE[state.mapMode].armed;
     return true;
   }
 
@@ -931,6 +996,18 @@ async function main() {
     if (state.mapMode === 'travel') {
       closeTargeting();
       beginTravel(at.x, at.z);
+      return true;
+    }
+    if (state.mapMode === 'ion') {
+      if (!ion.fire(at.x, at.z)) {
+        el.targetHint.textContent = ion.firing
+          ? 'the cannon is already firing'
+          : 'not there: the memorial is a weapons free zone';
+        return false;
+      }
+      cheats.used = true;
+      applyCheats();
+      closeTargeting();
       return true;
     }
     if (!dropNuke(at.x, at.z)) {
@@ -964,10 +1041,18 @@ async function main() {
     return true;
   }
 
+  /** How big the circle on the map is, which is what each mode is about. */
+  function aimRadius(mode) {
+    if (mode === 'travel') return 14;
+    if (mode === 'ion') return ION.blast;
+    return NUKE.radius;
+  }
+
   function aimAt(x, z) {
+    const r = aimRadius(state.mapMode);
     targetMap.aim = {
-      x, z, radius: NUKE.radius,
-      allowed: !sanctuaryWithin(x, z, NUKE.radius),
+      x, z, radius: r,
+      allowed: state.mapMode === 'travel' || !sanctuaryWithin(x, z, r),
     };
   }
 
@@ -1491,6 +1576,7 @@ async function main() {
       gibs.update(worldDt);
       demolition.update(worldDt);
       fires.update(worldDt, player);
+      ion.update(worldDt);
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
@@ -1570,6 +1656,7 @@ async function main() {
     gibs.update(worldDt);
     demolition.update(worldDt);
     fires.update(worldDt, player);
+    ion.update(worldDt);
     rainTick(worldDt);
     drones.update(worldDt, eye, state.time);
     soldiers.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
@@ -1666,6 +1753,25 @@ async function main() {
     // Screen shake from firing and from explosions, applied to the eye rather
     // than to the aim, so it never moves where your shots go.
     effects.update(elapsed);
+    // The beams are redrawn every frame rather than left to decay, because
+    // unlike a spark a beam is a thing that is there until it is not.
+    if (ion.firing) {
+      for (const b of ion.beams) {
+        const g = world.groundHeight(b.x, b.z);
+        const hot = b.main ? 1 : 0;
+        effects.beam(b.x, g, b.z, ION.height, b.radius,
+          0.55 + hot * 0.45, 0.85 + hot * 0.15, 1.0, b.x * 0.37 + b.z * 0.11);
+        // A second, wider and dimmer, so the column has an atmosphere round
+        // it rather than an edge.
+        effects.beam(b.x, g, b.z, ION.height * 0.75, b.radius * 2.6,
+          0.10 + hot * 0.2, 0.22 + hot * 0.2, 0.34, b.x * 0.19);
+        // And where it is standing.
+        if (Math.random() < 0.6) {
+          effects.flash(b.x, g + 1.5, b.z, b.radius * (b.main ? 2.6 : 1.5),
+            0.6, 0.9, 1.0, 0.1);
+        }
+      }
+    }
     // The muzzle flash fades over about seventy milliseconds, but the decay is
     // capped per frame so that a long frame cannot swallow it whole: a flash
     // that never renders at all is worse than one that lingers on a hitch.
@@ -1888,6 +1994,7 @@ async function main() {
     openTargeting() { openTargeting(); },
     openTravel() { openTravel(); },
     cinema, cinemaSpec: CINEMA,
+    ion, ionSpec: ION, ionState: ION_STATE,
     endCinema() { endCinema(); },
     travel,
     beginTravel(x, z) { return beginTravel(x, z); },

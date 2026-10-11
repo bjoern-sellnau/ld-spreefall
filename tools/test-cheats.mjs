@@ -55,7 +55,8 @@ async function run() {
     const panel = document.getElementById('cheats');
     const open = !panel.classList.contains('hidden');
     const switches = [...panel.querySelectorAll('.sw')].map((b) => b.dataset.cheat);
-    const actions = [...panel.querySelectorAll('.act')].map((b) => b.dataset.action);
+    // Only the one shot buttons: the spawn row shares the class.
+    const actions = [...panel.querySelectorAll('.act[data-action]')].map((b) => b.dataset.action);
     s.cheatMenu(false);
     return { open, closed: panel.classList.contains('hidden'), switches, actions };
   });
@@ -65,7 +66,8 @@ async function run() {
       'gib', 'ragdoll', 'blood', 'ultraGore']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
-  check('and every button', ['allWeapons', 'refill', 'nuke'].every((id) => menu.actions.includes(id)),
+  check('and every button',
+    ['allWeapons', 'refill', 'nuke', 'ion'].every((id) => menu.actions.includes(id)),
     menu.actions.join(', '));
 
   // Clicking a row really is what flips the flag, rather than the test poking
@@ -485,6 +487,78 @@ async function run() {
   check('nuke rain keeps dropping them', rain.dropped >= 6,
     `${rain.dropped} in seventy seconds`);
   check('and it runs off the simulation step, not off this test', rain.viaStep >= 1);
+
+  // --- the ion cannon -------------------------------------------------------
+  const ionRefused = await page.evaluate(() => {
+    const s = window.spreefall;
+    const m = s.combat.sanctuaries[0];
+    s.ion.stop();
+    return { memorial: s.ion.fire(m.x, m.z) === false, name: m.name };
+  });
+  check('the ion cannon cannot be put on the memorial either', ionRefused.memorial,
+    ionRefused.name);
+
+  const ionRun = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.ion.stop();
+    s.soldiers.reset(); s.demolition.reset(); s.renderer.clearCollapses();
+    s.fires.reset(); s.renderer.clearFires();
+    s.setCheat('godmode', true);
+    s.teleport(900, 0);
+    const at = { x: s.player.x - 160, z: s.player.z };
+    // A ring of them standing exactly where the beams sweep.
+    s.soldiers.enabled = true;
+    const budget = s.soldiers.budget;
+    s.soldiers.budget = 0;
+    const ring = s.ionSpec.ring;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const v = s.spawnSoldier(at.x - s.player.x + Math.cos(a) * ring,
+        at.z - s.player.z + Math.sin(a) * ring);
+      if (v) { v.health = 99999; v.charred = 0; }
+    }
+    const standing = s.soldiers.active.length;
+    const fired = s.ion.fire(at.x, at.z);
+    const twice = s.ion.fire(at.x + 40, at.z);
+    const states = [];
+    const spins = [];
+    let charredPeak = 0;
+    // Driven on this file's clock, so the test does not depend on the frame
+    // rate of a software renderer.
+    for (let i = 0; i < 60 * 13; i++) {
+      s.ion.update(1 / 60);
+      if (i % 60 === 0) { states.push(s.ion.state); spins.push(Number(s.ion.spin.toFixed(1))); }
+      charredPeak = Math.max(charredPeak,
+        s.soldiers.active.filter((v) => (v.charred || 0) > 0.5).length);
+    }
+    const out = {
+      standing, fired, twice,
+      states: [...new Set(states)].join(''),
+      spinRose: spins[1] < spins[6],
+      spins: `${spins[1]} to ${spins[6]}`,
+      charredPeak,
+      collapses: s.demolition.count,
+      done: s.ion.state === s.ionState.DONE,
+    };
+    s.ion.stop();
+    s.soldiers.budget = budget;
+    s.soldiers.enabled = false; s.soldiers.reset();
+    s.demolition.reset(); s.renderer.clearCollapses();
+    s.fires.reset(); s.renderer.clearFires();
+    s.cheats.reset();
+    return out;
+  });
+  check('the ion cannon fires once and will not be fired again while it is going',
+    ionRun.fired === true && ionRun.twice === false);
+  check('it goes through the ring, the pause and the middle beam',
+    /1/.test(ionRun.states) && /2/.test(ionRun.states) && /3/.test(ionRun.states)
+    && ionRun.done, `states ${ionRun.states}`);
+  check('and the ring speeds up as it turns', ionRun.spinRose,
+    `${ionRun.spins} radians a second`);
+  check('anything the beams pass over burns down to the bone',
+    ionRun.charredPeak >= 4, `${ionRun.charredPeak} of ${ionRun.standing} charred`);
+  check('and the middle beam takes the whole circle down',
+    ionRun.collapses > 0, `${ionRun.collapses} collapse sites`);
 
   // --- the target map ------------------------------------------------------
   const map = await page.evaluate(() => {

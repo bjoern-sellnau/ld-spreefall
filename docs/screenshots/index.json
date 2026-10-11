@@ -18,13 +18,13 @@
       "pitch": -1,
       "tod": 17.9,
       "caption": "The spawn on Pariser Platz, looking west at the Brandenburg Gate",
-      "fps": 4,
-      "frameMs": 111.64611764306127,
-      "tris": 34363,
-      "draws": 129,
+      "fps": 5.806077027288574,
+      "frameMs": 182.2862266904481,
+      "tris": 33843,
+      "draws": 128,
       "tiles": 97,
       "frame": {
-        "mean": 0.46894421987235546,
+        "mean": 0.46894628178173053,
         "distinct": 79,
         "detail": 0.4713403880070547
       },
@@ -38,14 +38,14 @@
       "pitch": 1,
       "tod": 8.6,
       "caption": "West of the Gate, looking back east down Unter den Linden",
-      "fps": 7.499062617172833,
-      "frameMs": 177.03141923909436,
-      "tris": 50161,
-      "draws": 73,
+      "fps": 5.807200929152164,
+      "frameMs": 137.96905072897707,
+      "tris": 50097,
+      "draws": 72,
       "tiles": 61,
       "frame": {
-        "mean": 0.4335490490969581,
-        "distinct": 65,
+        "mean": 0.4336421530137563,
+        "distinct": 66,
         "detail": 0.3055555555555556
       },
       "file": "docs/screenshots/02-through-the-gate.png"
@@ -58,15 +58,15 @@
       "pitch": 3,
       "tod": 16.5,
       "caption": "The lime avenue on Unter den Linden",
-      "fps": 5.807200929152164,
-      "frameMs": 30.413028165186176,
-      "tris": 19331,
-      "draws": 66,
+      "fps": 5.807200929152124,
+      "frameMs": 23.8239519236491,
+      "tris": 19043,
+      "draws": 65,
       "tiles": 51,
       "frame": {
-        "mean": 0.36137992438873173,
-        "distinct": 72,
-        "detail": 0.38403880070546736
+        "mean": 0.36097934744126786,
+        "distinct": 73,
+        "detail": 0.37962962962962965
       },
       "file": "docs/screenshots/03-unter-den-linden.png"
     },
@@ -78,13 +78,13 @@
       "pitch": -4,
       "tod": 13,
       "caption": "Inside the field of 2711 stelae",
-      "fps": 5.806077027288554,
-      "frameMs": 6.3591173660013665,
-      "tris": 40682,
-      "draws": 48,
+      "fps": 4,
+      "frameMs": 5.130832600807801,
+      "tris": 40106,
+      "draws": 47,
       "tiles": 41,
       "frame": {
-        "mean": 0.4359470684171861,
+        "mean": 0.43595883541921565,
         "distinct": 60,
         "detail": 0.5070546737213404
       },
@@ -98,15 +98,15 @@
       "pitch": 10,
       "tod": 7.4,
       "caption": "The Reichstag across the Platz der Republik, early morning",
-      "fps": 4.865390853065208,
-      "frameMs": 1.3745358253321656,
-      "tris": 35225,
-      "draws": 79,
+      "fps": 5.807200929152166,
+      "frameMs": 1.3274223101564935,
+      "tris": 35097,
+      "draws": 78,
       "tiles": 58,
       "frame": {
-        "mean": 0.4248594802176942,
-        "distinct": 77,
-        "detail": 0.23765432098765432
+        "mean": 0.4250974571623374,
+        "distinct": 82,
+        "detail": 0.23500881834215168
       },
       "file": "docs/screenshots/05-reichstag.png"
     },
@@ -118,15 +118,15 @@
       "pitch": 17,
       "tod": 18.4,
       "caption": "The Berlin Cathedral over the Lustgarten",
-      "fps": 7.742934572202888,
-      "frameMs": 0.7564560230048075,
-      "tris": 9955,
+      "fps": 8.10898475510868,
+      "frameMs": 0.8397228091124141,
+      "tris": 10219,
       "draws": 43,
       "tiles": 35,
       "frame": {
-        "mean": 0.47410224432436127,
+        "mean": 0.47364214435866514,
         "distinct": 111,
-        "detail": 0.2464726631393298
+        "detail": 0.24603174603174602
       },
       "file": "docs/screenshots/06-museum-island.png"
     },
@@ -138,9 +138,9 @@
       "pitch": 30,
       "tod": 19,
       "caption": "Under the Fernsehturm on Karl-Liebknecht-Strasse",
-      "fps": 6.857534716269467,
-      "frameMs": 0.809417530336092,
-      "tris": 7636,
+      "fps": 5.143151037202164,
+      "frameMs": 0.7652884859773971,
+      "tris": 8620,
       "draws": 43,
       "tiles": 30,
       "frame": {
@@ -158,15 +158,15 @@
       "pitch": 22,
       "tod": 19.4,
       "caption": "The Fernsehturm over the roofs from Schlossplatz, with the Cathedral dome on the left",
-      "fps": 4.737091425864498,
-      "frameMs": 0.7576572190508926,
-      "tris": 10459,
+      "fps": 6.154793045083845,
+      "frameMs": 0.6494723793728149,
+      "tris": 10507,
       "draws": 56,
       "tiles": 46,
       "frame": {
-        "mean": 0.4749826605677501,
-        "distinct": 92,
-        "detail": 0.29056437389770723
+        "mean": 0.47478346516274744,
+        "distinct": 93,
+        "detail": 0.29012345679012347
       },
       "file": "docs/screenshots/08-tower-over-the-roofs.png"
     },
@@ -178,15 +178,15 @@
       "pitch": 5,
       "tod": 20.2,
       "caption": "Looking east off Pariser Platz down Unter den Linden",
-      "fps": 5.000833472245362,
-      "frameMs": 0.8135336758225672,
-      "tris": 17717,
-      "draws": 58,
+      "fps": 6.857534716269467,
+      "frameMs": 0.6321882460487646,
+      "tris": 17837,
+      "draws": 57,
       "tiles": 43,
       "frame": {
-        "mean": 0.39373637513361043,
-        "distinct": 95,
-        "detail": 0.3355379188712522
+        "mean": 0.39380568297605756,
+        "distinct": 93,
+        "detail": 0.3350970017636684
       },
       "file": "docs/screenshots/08b-pariser-platz-east.png"
     },
@@ -198,15 +198,15 @@
       "pitch": 1,
       "tod": 23.6,
       "caption": "Unter den Linden after dark, with the windows lit",
-      "fps": 4,
-      "frameMs": 0.6598210018954108,
-      "tris": 17715,
-      "draws": 61,
+      "fps": 5.3340445392718925,
+      "frameMs": 0.6207222030310958,
+      "tris": 18347,
+      "draws": 60,
       "tiles": 45,
       "frame": {
-        "mean": 0.13079291573335972,
+        "mean": 0.13066509303179272,
         "distinct": 39,
-        "detail": 0.15961199294532627
+        "detail": 0.16049382716049382
       },
       "file": "docs/screenshots/09-night.png"
     },
@@ -218,13 +218,13 @@
       "pitch": 6,
       "tod": 11.2,
       "caption": "Gendarmenmarkt between the two cathedrals",
-      "fps": 6.153846153846155,
-      "frameMs": 0.7130184277615155,
-      "tris": 17181,
+      "fps": 8,
+      "frameMs": 0.8243717418243894,
+      "tris": 17229,
       "draws": 54,
       "tiles": 51,
       "frame": {
-        "mean": 0.46192912767097977,
+        "mean": 0.4619370147314233,
         "distinct": 81,
         "detail": 0.2786596119929453
       },
@@ -238,15 +238,15 @@
       "pitch": 17,
       "tod": 15.4,
       "caption": "Potsdamer Platz, with the Kollhoff tower and the Sony Center",
-      "fps": 5.998800239952027,
-      "frameMs": 0.7630976980373808,
-      "tris": 4456,
-      "draws": 30,
+      "fps": 7.742934572202888,
+      "frameMs": 0.6278573402186071,
+      "tris": 4360,
+      "draws": 31,
       "tiles": 19,
       "frame": {
-        "mean": 0.496631849334032,
-        "distinct": 92,
-        "detail": 0.4210758377425044
+        "mean": 0.49657279243628083,
+        "distinct": 93,
+        "detail": 0.42151675485008816
       },
       "file": "docs/screenshots/11-potsdamer-platz.png"
     },
@@ -258,15 +258,15 @@
       "pitch": -3,
       "tod": 7.6,
       "caption": "The Spree, looking north across the water",
-      "fps": 6.153846153846155,
-      "frameMs": 0.7131367616363875,
-      "tris": 5286,
+      "fps": 8,
+      "frameMs": 0.796387587015269,
+      "tris": 6102,
       "draws": 35,
       "tiles": 30,
       "frame": {
-        "mean": 0.44308295312415186,
+        "mean": 0.4433468593601396,
         "distinct": 73,
-        "detail": 0.21516754850088182
+        "detail": 0.21252204585537918
       },
       "file": "docs/screenshots/12-spree.png"
     }
@@ -285,5 +285,5 @@
     "maxY": -0.07736562999999687,
     "walked": 13.623509092742363
   },
-  "capturedAt": "2026-10-11T18:15:24.699Z"
+  "capturedAt": "2026-10-11T18:25:52.624Z"
 }
