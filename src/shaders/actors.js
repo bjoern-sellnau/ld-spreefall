@@ -212,12 +212,17 @@ void main() {
     albedo = vec3(0.26, 0.115, 0.082) * (0.7 + 0.6 * v);
     rough = 0.93;
     metal = 0.0;
-  } else {
+  } else if (vPart < 23.5) {
     // Bone. Only ever visible on somebody who has been burnt down to it, and
     // the charring above takes it the rest of the way to black.
     albedo = vec3(0.50, 0.47, 0.41);
     rough = 0.72;
     metal = 0.0;
+  } else {
+    // Glass, in a windscreen or a canopy. Dark and sharp, with the sky in it.
+    albedo = vec3(0.022, 0.030, 0.038);
+    rough = 0.06;
+    metal = 0.85;
   }
 
   vec3 L = uSunDir.xyz;

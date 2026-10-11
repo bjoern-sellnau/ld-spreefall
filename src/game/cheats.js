@@ -48,6 +48,14 @@ export const SPAWNS = [
   { id: 'jets', label: 'Jets', note: 'two, running in from half a kilometre', count: 2 },
 ];
 
+/** Things to get into, parked where you are standing. */
+export const RIDES = [
+  { id: 'jeep', label: 'Jeep', note: 'fast, open, a gun on the back' },
+  { id: 'tank', label: 'Tank', note: 'slow, hard to kill, one very large gun' },
+  { id: 'heli', label: 'Helicopter', note: 'hovers; space climbs, right mouse drops rockets' },
+  { id: 'jet', label: 'Fighter', note: 'will not fly below forty metres a second' },
+];
+
 export class Cheats {
   constructor() {
     this.godmode = false;

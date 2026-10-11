@@ -556,6 +556,11 @@ export class Renderer {
         const mesh = this.actors.props[kind];
         tris += mesh.instanceCount * (mesh.count / 3);
       }
+      draws += this.actors.drawVehicles();
+      for (const type in this.actors.vehicles) {
+        const mesh = this.actors.vehicles[type];
+        tris += mesh.instanceCount * (mesh.count / 3);
+      }
       draws += this.actors.drawGibs();
       tris += this.actors.gib.instanceCount * (this.actors.gib.count / 3);
       draws += this.actors.drawPickups();

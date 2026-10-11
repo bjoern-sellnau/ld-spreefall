@@ -24,13 +24,14 @@ import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
-import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS } from './game/cheats.js';
+import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES } from './game/cheats.js';
 import { Gibs } from './game/gibs.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
 import { Fires } from './game/fires.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
+import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -54,7 +55,8 @@ const el = {
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
   sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
-  cheatSpawns: $('cheatspawns'),
+  cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
+  vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
   targetHint: $('targethint'), cinemaHint: $('cinemahint'),
@@ -179,12 +181,14 @@ async function main() {
   const cinema = new Cinema();
   const fires = new Fires(world);
   const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
   projectiles.hitActors = (x, y, z, dx, dy, dz, maxT) => {
-    const d = drones.raycast(x, y, z, dx, dy, dz, maxT);
-    const sHit = soldiers.raycast(x, y, z, dx, dy, dz, d ? d.t : maxT);
+    const vHit = vehicles.raycast(x, y, z, dx, dy, dz, maxT);
+    const d = drones.raycast(x, y, z, dx, dy, dz, vHit ? vHit.t : maxT);
+    const sHit = soldiers.raycast(x, y, z, dx, dy, dz, d ? d.t : (vHit ? vHit.t : maxT));
     const jHit = jets.raycast(x, y, z, dx, dy, dz, sHit ? sHit.t : (d ? d.t : maxT));
     if (jHit) return { t: jHit.t, target: jHit.jet };
     if (sHit) return { t: sHit.t, target: sHit.soldier };
@@ -252,6 +256,7 @@ async function main() {
   // The pads are scattered once, around wherever you came in, so a deep link
   // into Museum Island gets a map laid out around Museum Island.
   pickups.place(spawn.x, spawn.z);
+  parkVehicles();
 
   const intro = new Intro(spawn.x, spawn.z, world.groundHeight(spawn.x, spawn.z));
 
@@ -581,6 +586,177 @@ async function main() {
     audio.treeFall(Math.hypot(player.x - tree.x, player.z - tree.z));
   };
 
+  // --- vehicles -------------------------------------------------------------
+  // The gun on whatever you are driving. It goes through the same hitscan and
+  // the same projectiles everything else uses; the only thing a vehicle gun
+  // has that a rifle does not is a muzzle that is four metres in front of
+  // your face.
+  vehicles.onFire = (v, gun) => {
+    const m = vehicles.muzzle(v);
+    const dir = {
+      x: camera.forward[0], y: camera.forward[1], z: camera.forward[2],
+    };
+    if (gun.kind === 'shell') {
+      projectiles.launch('rocket', {
+        x: m.x, y: m.y, z: m.z,
+        vx: dir.x * gun.speed, vy: dir.y * gun.speed, vz: dir.z * gun.speed,
+        splash: gun.splash, weapon: 'tank',
+      });
+      audio.gunshot('launcher');
+      effects.shake = Math.min(1.4, effects.shake + 0.45);
+      effects.flash(m.x, m.y, m.z, 2.2, 1.0, 0.7, 0.3, 0.12);
+      return;
+    }
+    const spread = gun.spread;
+    const d = {
+      x: dir.x + (Math.random() - 0.5) * spread,
+      y: dir.y + (Math.random() - 0.5) * spread,
+      z: dir.z + (Math.random() - 0.5) * spread,
+    };
+    const l = Math.hypot(d.x, d.y, d.z) || 1;
+    d.x /= l; d.y /= l; d.z /= l;
+    const wall = world.raycast(m.x, m.y, m.z, d.x, d.y, d.z, 420);
+    const actor = projectiles.hitActors(m.x, m.y, m.z, d.x, d.y, d.z,
+      wall ? wall.t : 420);
+    const t = actor ? actor.t : (wall ? wall.t : 420);
+    const end = { x: m.x + d.x * t, y: m.y + d.y * t, z: m.z + d.z * t };
+    effects.tracer(m.x, m.y, m.z, end.x, end.y, end.z, true);
+    if (actor) {
+      const target = actor.target;
+      if (actor.kind === 'soldier') {
+        if (soldiers.damage(target, gun.damage, d)) creditTarget(target, false, 'soldier');
+        if (cheats.bleeding) {
+          effects.blood(end.x, end.y, end.z, -d.x, 0.4, -d.z, cheats.goreScale);
+        }
+      } else if (actor.kind === 'drone') {
+        if (drones.damage(target, gun.damage)) creditTarget(target, false, 'drone');
+      } else if (actor.kind === 'jet') {
+        jets.damage(target, gun.damage);
+      } else if (actor.kind === 'vehicle') {
+        vehicles.damage(target, gun.damage);
+      }
+      audio.hitMarker(false);
+      showHitmarker('');
+    } else if (wall) {
+      effects.impact(end.x, end.y, end.z, wall.nx, wall.ny, wall.nz, wall.kind);
+    }
+    audio.gunshot('rifle');
+    state.muzzle = 1;
+    effects.shake = Math.min(1, effects.shake + 0.03);
+  };
+
+  vehicles.onLaunch = (v, rocket) => {
+    const m = vehicles.muzzle(v);
+    const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+    projectiles.launch('rocket', {
+      x: m.x, y: m.y - 0.6, z: m.z,
+      vx: dir.x * rocket.speed, vy: dir.y * rocket.speed, vz: dir.z * rocket.speed,
+      splash: rocket.splash, weapon: v.type,
+    });
+    audio.gunshot('launcher');
+    effects.shake = Math.min(1.2, effects.shake + 0.2);
+  };
+
+  vehicles.onDestroyed = (v) => {
+    explode(v.x, v.y + 1.2, v.z, { radius: 16, damage: 300 });
+    gibs.rubble(v.x, v.y + 1, v.z, 6, 12, 2);
+    feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
+    if (state.inVehicle === v) leaveVehicle(true);
+  };
+
+  vehicles.onBump = (v, speed) => {
+    if (speed < 4) return;
+    effects.impact(v.x, v.y + 1, v.z, 0, 1, 0, 'wall');
+    if (v === state.inVehicle) {
+      effects.shake = Math.min(1, effects.shake + Math.min(0.4, speed * 0.02));
+    }
+  };
+
+  /** Into the nearest one, or out of the one you are in. */
+  function toggleVehicle() {
+    if (state.mode !== 'walk') return;
+    if (state.inVehicle) { leaveVehicle(false); return; }
+    const near = vehicles.nearest(player.x, player.z, 7);
+    if (!near) { toast('nothing to get into'); return; }
+    if (!vehicles.enter(near)) return;
+    state.inVehicle = near;
+    state.holstered = true;
+    el.hud.classList.add('driving');
+    el.vehiclePanel.classList.remove('hidden');
+    el.vehicleName.textContent = near.spec.name;
+    audio.swap();
+    toast(`${near.spec.name}. F to get out.`);
+  }
+
+  function leaveVehicle(thrown) {
+    const v = state.inVehicle;
+    if (!v) return;
+    const out = vehicles.leave() || { x: v.x, z: v.z, y: v.y };
+    state.inVehicle = null;
+    state.holstered = false;
+    el.hud.classList.remove('driving');
+    el.vehiclePanel.classList.add('hidden');
+    player.teleport(out.x, out.z);
+    state.prev = { x: out.x, y: player.y, z: out.z };
+    state.curr = { x: out.x, y: player.y, z: out.z };
+    if (thrown) {
+      combat.hurt(22, v.x, v.z, out.x, out.z);
+      toast('thrown clear');
+    }
+  }
+
+  /**
+   * One of whatever you asked for, parked a few metres away on the first
+   * clear spot going round you.
+   */
+  function dropRide(type) {
+    if (state.mode !== 'walk') return null;
+    cheats.used = true;
+    applyCheats();
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const x = player.x + Math.cos(a) * 9;
+      const z = player.z + Math.sin(a) * 9;
+      let boxed = false;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (world.raycast(x, world.groundHeight(x, z) + 1.2, z, dx, 0, dz, 5)) {
+          boxed = true; break;
+        }
+      }
+      if (boxed) continue;
+      const v = vehicles.spawn(type, x, z, a + Math.PI);
+      if (v) return v;
+    }
+    return null;
+  }
+
+  /** Puts a few where you can find them, once, after the world loads. */
+  function parkVehicles() {
+    const kinds = ['jeep', 'jeep', 'tank', 'heli', 'jet'];
+    let placed = 0;
+    for (let i = 0; i < kinds.length; i++) {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 30 + Math.random() * 110;
+        const x = spawn.x + Math.cos(a) * r;
+        const z = spawn.z + Math.sin(a) * r;
+        if (combat.isSanctuary(x, 0, z)) continue;
+        // Somewhere a vehicle could actually sit: nothing within its own
+        // length in four directions.
+        let boxed = false;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (world.raycast(x, world.groundHeight(x, z) + 1.2, z, dx, 0, dz, 6)) {
+            boxed = true; break;
+          }
+        }
+        if (boxed) continue;
+        const air = kinds[i] === 'heli' || kinds[i] === 'jet';
+        if (vehicles.spawn(kinds[i], x, z, a, air ? 0 : 0)) { placed++; break; }
+      }
+    }
+    return placed;
+  }
+
   // --- the ion cannon -------------------------------------------------------
   // What is under a beam. Soldiers burn down to the bone, drones and jets
   // come apart, and you are not exempt.
@@ -744,6 +920,17 @@ async function main() {
       b.innerHTML = `<b>${a.label}</b><i>${a.note}</i>`;
       b.addEventListener('click', () => runCheatAction(a.id));
       el.cheatActions.appendChild(b);
+    }
+    for (const ride of RIDES) {
+      const b = document.createElement('button');
+      b.className = 'act';
+      b.dataset.ride = ride.id;
+      b.innerHTML = `<b>${ride.label}</b><i>${ride.note}</i>`;
+      b.addEventListener('click', () => {
+        const v = dropRide(ride.id);
+        toast(v ? `${v.spec.name} outside. F to get in.` : 'no room for one here');
+      });
+      el.cheatRides.appendChild(b);
     }
     for (const sp of SPAWNS) {
       const b = document.createElement('button');
@@ -1475,7 +1662,8 @@ async function main() {
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
-      case 'KeyF': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
+      case 'KeyF': toggleVehicle(); break;
+      case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(); else openTravel(); break;
       case 'KeyQ': weapon.select(state.lastWeapon || 'm16'); break;
@@ -1588,6 +1776,34 @@ async function main() {
 
     state.prev.x = player.x; state.prev.y = player.y; state.prev.z = player.z;
 
+    // Driving. The controls go to the vehicle instead of to your legs, and
+    // you go wherever it goes.
+    if (state.inVehicle) {
+      const v = state.inVehicle;
+      const air = v.spec.kind === 'air';
+      const controls = {
+        throttle: photo.active ? 0 : input.moveZ,
+        steer: photo.active ? 0 : (air ? input.moveX : -input.moveX),
+        // In the air the mouse flies it: looking up pitches up and the roll
+        // comes off the same stick as the yaw.
+        pitch: air && !photo.active ? clamp(-camera.pitch * 1.6, -1, 1) : 0,
+        roll: air && !photo.active ? clamp(input.moveX * -1, -1, 1) : 0,
+        lift: air && !photo.active ? (input.run ? 1 : (input.jumpHeld ? 1 : (input.secondary ? -1 : 0))) : 0,
+        brake: !air && input.run,
+        fire: input.fire && !photo.active,
+        secondary: false,
+      };
+      vehicles.update(selfDt, controls, state.time);
+      // Dead or alive, you are where it is.
+      player.teleport(v.x, v.z);
+      state.curr.x = v.x; state.curr.y = v.y; state.curr.z = v.z;
+      state.prev.x = v.x; state.prev.y = v.y; state.prev.z = v.z;
+      player.vx = 0; player.vz = 0;
+      landmarks.update(v.x, v.z, dt, player.distanceWalked);
+      runCombatWorld(dt, worldDt, scale);
+      return;
+    }
+
     let wishX = 0, wishZ = 0;
     if (!photo.active) {
       camera.walkBasis(basis);
@@ -1641,7 +1857,19 @@ async function main() {
     // in the sky the way the first version did.
     applyRecoil();
 
-    // The world runs on the slowed clock. The weapon above does not, which is
+    runCombatWorld(dt, worldDt, scale);
+  }
+
+  /**
+   * Everything in the city that keeps happening whether you are walking,
+   * driving or being carried along by a cinematic. The one thing it does not
+   * do is move you: that belongs to whoever is at the controls.
+   */
+  function runCombatWorld(dt, worldDt, scale) {
+    const eye = {
+      x: player.x, y: player.y + PLAYER.eye, z: player.z, alive: combat.health > 0,
+    };
+    // The world runs on the slowed clock. The weapon does not, which is
     // why a magazine goes further in here than it does outside.
     combat.update(worldDt);
     // What you are carrying scales what the weapon does. Read every step rather
@@ -1657,12 +1885,12 @@ async function main() {
     demolition.update(worldDt);
     fires.update(worldDt, player);
     ion.update(worldDt);
+    // The ones nobody is in still sit there and still burn.
+    if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     rainTick(worldDt);
     drones.update(worldDt, eye, state.time);
-    soldiers.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
-      alive: combat.health > 0 }, state.time);
-    jets.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
-      vx: player.vx, vz: player.vz, alive: combat.health > 0 }, state.time);
+    soldiers.update(worldDt, eye, state.time);
+    jets.update(worldDt, { ...eye, vx: player.vx, vz: player.vz }, state.time);
 
     audio.update(dt, player, camera);
     audio.setTimeScale(scale);
@@ -1738,6 +1966,32 @@ async function main() {
       camera.position[2] = p.z;
       camera.yaw = p.yaw;
       camera.pitch = p.pitch;
+    } else if (state.inVehicle) {
+      // A chase camera, hung behind and above whatever you are in, with the
+      // look you are holding. Third person because the inside of a tank is
+      // not a thing this project is going to model.
+      const v = state.inVehicle;
+      const s = v.spec;
+      const back = s.chase;
+      camera.position[0] = v.x - camera.forward[0] * back;
+      camera.position[1] = v.y + s.chaseUp - camera.forward[1] * back;
+      camera.position[2] = v.z - camera.forward[2] * back;
+      // Never through a wall: pull in until the shot is clear.
+      const toCam = {
+        x: camera.position[0] - v.x, y: camera.position[1] - (v.y + s.chaseUp),
+        z: camera.position[2] - v.z,
+      };
+      const l = Math.hypot(toCam.x, toCam.y, toCam.z) || 1;
+      const blocked = world.raycast(v.x, v.y + s.chaseUp, v.z,
+        toCam.x / l, toCam.y / l, toCam.z / l, l);
+      if (blocked) {
+        const t = Math.max(1.5, blocked.t - 0.6);
+        camera.position[0] = v.x + (toCam.x / l) * t;
+        camera.position[1] = v.y + s.chaseUp + (toCam.y / l) * t;
+        camera.position[2] = v.z + (toCam.z / l) * t;
+      }
+      const floor = world.groundHeight(camera.position[0], camera.position[2]) + 0.9;
+      if (camera.position[1] < floor) camera.position[1] = floor;
     } else {
       camera.position[0] = state.prev.x + (state.curr.x - state.prev.x) * alpha;
       camera.position[1] = state.prev.y + (state.curr.y - state.prev.y) * alpha + PLAYER.eye;
@@ -1795,7 +2049,7 @@ async function main() {
     camera.update(w / Math.max(1, h));
 
     // --- the weapon in your hands ---
-    if (state.mode === 'walk' && !photo.active) {
+    if (state.mode === 'walk' && !photo.active && !state.inVehicle) {
       const speed = Math.hypot(player.vx || 0, player.vz || 0);
       state.bob += elapsed * (speed > 4 ? 11.5 : 7.4) * Math.min(1, speed / 2.6);
       // Sway lags the look, which is what makes a viewmodel feel like a weight.
@@ -1847,6 +2101,7 @@ async function main() {
       renderer.actors.updateSparks(effects.list);
       renderer.actors.updatePickups(pickups.live, camera.position);
       renderer.actors.updateGibs(gibs.active);
+      renderer.actors.updateVehicles(vehicles.active);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -1862,6 +2117,7 @@ async function main() {
       renderer.actors.updateSparks(live ? effects.list : []);
       renderer.actors.updatePickups(live ? pickups.live : [], camera.position);
       renderer.actors.updateGibs(live ? gibs.active : []);
+      renderer.actors.updateVehicles(live ? vehicles.active : []);
       renderer.drawActors = live;
     }
 
@@ -1995,6 +2251,10 @@ async function main() {
     openTravel() { openTravel(); },
     cinema, cinemaSpec: CINEMA,
     ion, ionSpec: ION, ionState: ION_STATE,
+    vehicles, vehicleSpec: VEHICLE,
+    toggleVehicle() { toggleVehicle(); },
+    dropRide(type) { return dropRide(type); },
+    parkVehicles() { return parkVehicles(); },
     endCinema() { endCinema(); },
     travel,
     beginTravel(x, z) { return beginTravel(x, z); },

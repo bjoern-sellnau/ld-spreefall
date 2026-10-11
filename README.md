@@ -62,6 +62,8 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
+| F | get into the nearest vehicle, or out of the one you are in |
+| F4 | debug overlay |
 | V | free travel: pick a place on the map and fly there |
 | Q | back to the weapon you had before |
 | T | blow the C4 you have put down |
@@ -69,7 +71,7 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | Right mouse, or LT on a pad | aim down the sight |
 | R | reload |
 | G | holster the weapon, for walking and for photographs |
-| F | debug overlay |
+
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | F1 F2 F3 | quality tier: low, medium, high |
 
@@ -304,6 +306,35 @@ a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
 vertex shader collapses one set of parts or the other to nothing depending on
 how burnt they are, so a person and a skeleton are the same mesh and the same
 draw call.
+
+## Vehicles
+
+Four of them stand near the spawn when the city loads, and the cheat menu
+will park one wherever you are. **F** gets you into the nearest, and out of
+the one you are in. The camera goes to a chase view behind it, because the
+inside of a tank is not a thing this project is going to model, and the gun
+fires wherever you are looking.
+
+| | |
+|---|---|
+| Jeep | 24 m/s, light, a mounted gun on the back |
+| Tank | 12 m/s, two and a half thousand health, one shell every two and a half seconds |
+| Helicopter | hovers; space climbs, right mouse holds the rockets |
+| Fighter | 180 m/s, and it stops flying below 38 |
+
+They divide into two kinds rather than four. Something with wheels follows
+the ground, refuses a kerb taller than it can climb, leans into a slope, and
+loses its steering as it speeds up, so a jeep at full throttle cannot turn on
+the spot. Something with rotors or wings does not: the helicopter's thrust is
+up out of its own rotor disc so pitching forward is what makes it go forward,
+and the fighter's lift comes out of going fast, which is why below its stall
+speed it falls instead. Everything else between the four of them is numbers
+in one table.
+
+Both kinds collide against the same world as everything else: the ground
+height field under the wheels and the collision segments in front of the
+bumper, from the same raycast the bullets use. They can be shot at, they
+catch fire and they go up.
 
 ## Free travel
 
@@ -653,6 +684,9 @@ the square is untouched.*
 
 ![The Gate, flattened](docs/screenshots/city-04-flattened.png)
 *Three more rounds into the same place.*
+
+![Vehicles on Pariser Platz](docs/screenshots/city-05-vehicles.png)
+*A jeep, a tank, a helicopter and a fighter, parked on the square.*
 
 ![Flying across the city](docs/screenshots/city-03-travel.png)
 *Free travel, halfway across: three hundred metres up over the roofs of Mitte,

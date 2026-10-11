@@ -438,6 +438,102 @@ async function run() {
   });
   check('and you may still travel into the memorial', intoMemorial.ok, intoMemorial.name);
 
+  // --- things you can get into ----------------------------------------------
+  const rides = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.teleport(81, 0);
+    const made = ['jeep', 'tank', 'heli', 'jet']
+      .map((t) => s.vehicles.spawn(t, s.player.x - 14 - Math.random() * 20,
+        s.player.z + (Math.random() - 0.5) * 20, 1.4));
+    return { n: s.vehicles.count, types: made.map((v) => v && v.type).join(' ') };
+  });
+  check('all four of them can be put in the street', rides.n === 4, rides.types);
+
+  const parked = await page.evaluate(async () => {
+    const s = window.spreefall;
+    // Left alone, nothing happens to any of them.
+    const before = s.vehicles.active.map((v) => v.health);
+    for (let i = 0; i < 60 * 6; i++) s.vehicles.update(1 / 60, null, i / 60);
+    const after = s.vehicles.active.map((v) => v.health);
+    return { same: before.every((h, i) => after[i] === h), count: s.vehicles.count };
+  });
+  check('and parked ones are still parked six seconds later', parked.same,
+    'an aircraft on the ground is not crashing');
+
+  const drive = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const jeep = s.vehicles.active.find((v) => v.type === 'jeep');
+    s.teleport(jeep.x + 2, jeep.z);
+    const tooFar = s.vehicles.nearest(jeep.x + 300, jeep.z, 7);
+    s.toggleVehicle();
+    const inIt = s.state.inVehicle === jeep;
+    const was = { x: jeep.x, z: jeep.z };
+    // Through the real fixed step with the real throttle, so this is the
+    // path a player's key press takes and not a shortcut past it.
+    s.input.keys.add('KeyW');
+    for (let i = 0; i < 150; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('KeyW');
+    const moved = Math.hypot(jeep.x - was.x, jeep.z - was.z);
+    const rode = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
+    s.toggleVehicle();
+    const out = s.state.inVehicle === null;
+    const dropped = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
+    return { inIt, tooFar: tooFar === null, moved: Math.round(moved),
+      rode: Math.round(rode), out, dropped: Math.round(dropped) };
+  });
+  check('you can only get into one you are standing next to', drive.tooFar);
+  check('and then it drives', drive.inIt && drive.moved > 15, `${drive.moved} m`);
+  check('with you in it', drive.rode === 0);
+  check('and getting out puts you beside it', drive.out && drive.dropped <= 4,
+    `${drive.dropped} m away`);
+
+  const fly = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const heli = s.vehicles.active.find((v) => v.type === 'heli');
+    const jet = s.vehicles.active.find((v) => v.type === 'jet');
+    s.teleport(heli.x + 2, heli.z);
+    s.toggleVehicle();
+    const y0 = heli.y;
+    s.input.keys.add('Space');
+    s.input.jumpHeld = true;
+    for (let i = 0; i < 180; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('Space');
+    s.input.jumpHeld = false;
+    const climbed = heli.y - y0;
+    s.toggleVehicle();
+
+    // A fighter that is not going fast enough does not fly.
+    jet.y = s.world.groundHeight(jet.x, jet.z) + 200;
+    jet.grounded = false;
+    jet.speed = 5;
+    jet.pitch = 0.3;
+    const high = jet.y;
+    for (let i = 0; i < 90; i++) s.vehicles.update(1 / 60, null, i / 60);
+    const stalled = high - jet.y;
+    return { climbed: Math.round(climbed), stalled: Math.round(stalled),
+      stall: s.vehicleSpec.jet.stall };
+  });
+  check('a helicopter climbs when you hold space', fly.climbed > 20, `${fly.climbed} m`);
+  check('and a fighter below its stall speed falls out of the sky',
+    fly.stalled > 20, `${fly.stalled} m in a second and a half, under ${fly.stall} m/s`);
+
+  const shot = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    const tank = s.vehicles.spawn('tank', s.player.x - 20, s.player.z, 0);
+    const before = tank.health;
+    // Everything that can shoot at anything else can shoot at these too.
+    const hit = s.vehicles.raycast(s.player.x, s.player.y + 1.7, s.player.z,
+      (tank.x - s.player.x) / 20, 0, (tank.z - s.player.z) / 20, 60);
+    if (hit) s.vehicles.damage(hit.target, 3000);
+    const out = { found: !!hit, before, after: tank.health, dead: tank.health === 0 };
+    s.vehicles.reset();
+    return out;
+  });
+  check('and they can be shot at like anything else',
+    shot.found && shot.dead, `${shot.before} to ${shot.after}`);
+
   // --- the pictures ---------------------------------------------------------
   await page.evaluate(() => {
     const s = window.spreefall;
@@ -486,6 +582,19 @@ async function run() {
     s.cheats.reset();
     s.demolition.reset(); s.renderer.clearCollapses(); s.renderer.clearScars();
     s.gibs.clear(); s.effects.clear(); s.state.flash = 0;
+    s.vehicles.reset();
+    s.teleport(81, 0); s.look(96, -4); s.setTime(16.6);
+    s.vehicles.spawn('jeep', s.player.x - 16, s.player.z + 5, 1.1);
+    s.vehicles.spawn('tank', s.player.x - 27, s.player.z - 5, 1.9);
+    s.vehicles.spawn('heli', s.player.x - 44, s.player.z + 12, 0.7);
+    s.vehicles.spawn('jet', s.player.x - 62, s.player.z - 12, 1.5);
+  });
+  await page.waitForTimeout(1400);
+  await page.screenshot({ path: path.join(SHOTS, 'city-05-vehicles.png') });
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
     s.teleport(81, 0);
     s.beginTravel(s.player.x + 1200, s.player.z - 200);
   });

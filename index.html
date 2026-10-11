@@ -71,6 +71,7 @@
     </div>
   </div>
   <div id="powers"></div>
+  <div id="vehicle" class="hidden"><span id="vehiclename"></span><em>F to get out</em></div>
   <div id="threat">
     <span class="tlabel">threat</span> <span id="tiernum">1</span>
     <span class="tsep">contacts</span> <span id="contactnum">0</span>
@@ -124,7 +125,8 @@
     <tr><td>P</td><td>photo mode, hides the interface and unlocks the clock</td></tr>
     <tr><td>M</td><td>enlarge the map</td></tr>
     <tr><td>N</td><td>sound on and off</td></tr>
-    <tr><td>F</td><td>debug overlay</td></tr>
+    <tr><td>F</td><td>get into the nearest vehicle, or out of the one you are in</td></tr>
+    <tr><td>F4</td><td>debug overlay</td></tr>
     <tr><td>F1 F2 F3</td><td>quality: low, medium, high</td></tr>
     <tr><td>F5 F6 F7</td><td>difficulty: easy, normal, hard</td></tr>
     <tr><td>Left mouse</td><td>fire</td></tr>
@@ -153,6 +155,10 @@
   <div class="group">
     <div class="grouplabel">bring more of them out</div>
     <div class="row" id="cheatspawns"></div>
+  </div>
+  <div class="group">
+    <div class="grouplabel">something to get into</div>
+    <div class="row" id="cheatrides"></div>
   </div>
   <div class="group">
     <div class="grouplabel">switches</div>

@@ -815,6 +815,29 @@ html, body {
 
 /* The mark on a run. Sits with the threat readout, in red, and does not go
    away when the cheats are switched off again. */
+/* What you are driving. Replaces the ammunition readout, because the weapon
+   in your hands is not the one firing. */
+#vehicle {
+  position: absolute;
+  /* Beside the vitals, where the ammunition readout sits when you are on
+     foot, because it is the same piece of information: what you are firing. */
+  left: 236px; bottom: 34px;
+  font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+#vehicle span { display: block; font-size: 19px; letter-spacing: 0.04em; }
+#vehicle em {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+#hud.driving #combat .ammo, #hud.driving #crosshair i { opacity: 0.25; }
+#hud.driving #vehicle { display: block; }
+
 #cheatmark {
   color: #e2705a;
   letter-spacing: 0.18em;
@@ -949,6 +972,7 @@ html, body {
 
 @media (max-width: 720px) {
   #combat { left: 12px; bottom: 74px; gap: 14px; }
+  #vehicle { left: 142px; bottom: 74px; }
   #powers { left: 12px; bottom: 132px; gap: 6px; }
   #combat .vitals { width: 118px; }
   #combat .ammo { font-size: 21px; }

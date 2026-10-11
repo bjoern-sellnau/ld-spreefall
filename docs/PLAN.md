@@ -559,3 +559,23 @@ Recorded here as they happen, per the working style.
   the soldiers can be burnt. Rather than have everything read a varying that
   nothing writes, the shader is now built twice from one template, once with
   the charring compiled out as a constant and once with the real input.
+
+- 2026-10-11: the vehicles are two kinds, not four. A tank is a jeep that is
+  slow, heavy, turns badly and hits very hard; a fighter is a helicopter that
+  cannot hover and falls below its stall speed. Writing them as four classes
+  would have been four sets of the same bugs, so there are two update
+  functions and one table of numbers, the same shape as the arsenal.
+
+  Two things the first version got wrong, both the same mistake. An aircraft
+  sitting on the ground was pressed into it by its own weight every frame,
+  and the landing code counted that as an impact, so a parked fighter
+  destroyed itself in four frames and took a building with it. And the
+  forward wall check fired on a stationary aircraft with a building beside
+  it. Both are now gated on actually having been moving: a parked aircraft is
+  parked, not crashing.
+
+  The simulation also had to be split. `fixed` walked the player and then ran
+  the world, and driving is the same world with somebody else at the
+  controls, so everything from the combat clock down is now one function that
+  the walking path, the driving path and the cinematic camera all call. The
+  one thing it does not do is move you.
