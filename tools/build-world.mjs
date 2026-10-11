@@ -1,11 +1,24 @@
-// The world builder. Reads the cached OSM, produces public/world.bin and
-// public/world.json, and prints the stats the brief asks for.
+// The world builder. Reads a district's cached OSM, produces
+// public/world-<id>.bin and .json for it, keeps public/world.json as the index
+// of every district built so far, and prints the stats the brief asks for.
+//
+//   node tools/build-world.mjs                   the middle district
+//   node tools/build-world.mjs --district=c2r1   one named district
+//   node tools/build-world.mjs --all             every district with an extract
+//
+// Districts are cut on the lines of one city wide tile grid, so a tile index
+// means the same thing in every one of them, and each district only builds
+// what has its middle inside its own box: a building on a boundary belongs to
+// one district and is built once. The detail tier comes from the district
+// table, and what it costs is in the budget line at the end.
 
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { parseOsmXml, counts } from './osm-xml.mjs';
 import { annotate } from './annotate.mjs';
-import { project, BBOX, worldBounds, ORIGIN } from './geo.mjs';
+import { project, BBOX, CITY, worldBounds, cityGrid, ORIGIN } from './geo.mjs';
+import { DISTRICTS, TIERS, CORE_ID, districtById } from './districts.mjs';
 import { Mesh } from './mesh.mjs';
 import { Terrain } from './terrain.mjs';
 import { fbm2, hashInt } from './noise.mjs';
@@ -21,8 +34,13 @@ import {
 } from '../src/shared/constants.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const RAW_FILE = path.join(ROOT, 'data', 'raw', 'berlin-center.osm');
+const RAW_DIR = path.join(ROOT, 'data', 'raw');
 const OUT_DIR = path.join(ROOT, 'public');
+const INDEX_FILE = path.join(OUT_DIR, 'world.json');
+
+function rawFile(id) {
+  return path.join(RAW_DIR, id === CORE_ID ? 'berlin-center.osm' : `district-${id}.osm`);
+}
 
 // ---------------------------------------------------------------------------
 // Tag helpers
@@ -72,12 +90,38 @@ function buildingLevels(tags, height) {
   return Math.max(1, Math.round((height - 1.0) / LEVEL_HEIGHT));
 }
 
-const BERLIN_PALETTE = [
+const BERLIN_SEEDS = [
   [0.855, 0.796, 0.663], [0.886, 0.843, 0.741], [0.804, 0.749, 0.639],
   [0.784, 0.722, 0.580], [0.863, 0.827, 0.749], [0.761, 0.706, 0.604],
   [0.725, 0.663, 0.549], [0.839, 0.776, 0.659], [0.663, 0.498, 0.369],
   [0.588, 0.376, 0.290], [0.788, 0.765, 0.706], [0.824, 0.796, 0.733],
 ];
+
+/**
+ * Sixty of the twelve Berlin tones, five shades of each.
+ *
+ * The palette has to be identical in every district, because a vertex carries
+ * an index into it and the renderer uploads one palette for the whole city. It
+ * used to be grown as the data asked for colours, which was fine while there
+ * was one district and wrong the moment there were two: index seven would have
+ * meant sandstone in Mitte and brick in Wedding. So it is computed here, the
+ * same way every time, and a building that states its own colour is snapped to
+ * the nearest entry.
+ */
+function buildPalette() {
+  const out = [];
+  const shades = [0.88, 0.96, 1.0, 1.05, 1.12];
+  for (const seed of BERLIN_SEEDS) {
+    for (const k of shades) {
+      out.push(seed.map((c) => Math.min(1, Math.max(0, c * k))));
+    }
+  }
+  // A few greys for the concrete and the postwar blocks.
+  out.push([0.72, 0.72, 0.70], [0.63, 0.64, 0.63], [0.80, 0.80, 0.78], [0.55, 0.56, 0.57]);
+  return out;
+}
+
+const BERLIN_PALETTE = buildPalette();
 
 function parseColour(v) {
   if (!v) return null;
@@ -126,11 +170,38 @@ function roadMaterial(tags) {
 // ---------------------------------------------------------------------------
 
 function main() {
+  const all = process.argv.includes('--all');
+  const named = process.argv.find((a) => a.startsWith('--district='));
+  let wanted;
+  if (all) {
+    wanted = DISTRICTS.filter((d) => fs.existsSync(rawFile(d.id)));
+    if (!wanted.length) {
+      console.error('no district extracts at all, run: node tools/fetch-osm.mjs --all');
+      process.exit(1);
+    }
+    const missing = DISTRICTS.length - wanted.length;
+    if (missing) console.log(`building ${wanted.length} districts, ${missing} have no extract yet`);
+  } else if (named) {
+    const d = districtById(named.slice('--district='.length));
+    if (!d) { console.error(`no such district: ${named}`); process.exit(1); }
+    wanted = [d];
+  } else {
+    wanted = [districtById(CORE_ID)];
+  }
+  for (const district of wanted) buildDistrict(district);
+  writeIndexSummary();
+}
+
+function buildDistrict(district) {
   const t0 = Date.now();
+  const tier = TIERS[district.tier];
+  const RAW_FILE = rawFile(district.id);
   if (!fs.existsSync(RAW_FILE)) {
-    console.error(`missing ${RAW_FILE}, run: node tools/fetch-osm.mjs`);
+    console.error(`missing ${RAW_FILE}, run: node tools/fetch-osm.mjs --district=${district.id}`);
     process.exit(1);
   }
+  console.log('');
+  console.log(`=== ${district.id}  tier ${district.tier} (${tier.name})  ${district.nx} by ${district.nz} tiles ===`);
   const src = fs.readFileSync(RAW_FILE, 'utf8');
   const osm = parseOsmXml(src);
   const c = counts(osm);
@@ -139,9 +210,21 @@ function main() {
   // Attach the surveyed facts before anything is classified, so a build from
   // the live extract carries the same landmarks, cards and stelae field as one
   // from the offline fallback.
-  annotate(osm, { log: (line) => console.log(line) });
+  annotate(osm, {
+    log: (line) => console.log(line),
+    box: {
+      minX: district.bounds.minX, minZ: district.bounds.minZ,
+      maxX: district.bounds.maxX, maxZ: district.bounds.maxZ,
+    },
+  });
 
-  const world = worldBounds();
+  // The district's own block of the global grid. Already tile aligned, so no
+  // tile is ever shared between two districts.
+  const world = {
+    minX: district.bounds.minX, minZ: district.bounds.minZ,
+    maxX: district.bounds.maxX, maxZ: district.bounds.maxZ,
+    width: district.bounds.width, depth: district.bounds.depth,
+  };
   const pos = new Map();
   for (const [id, n] of osm.nodes) pos.set(id, project(n.lon, n.lat));
 
@@ -155,16 +238,17 @@ function main() {
   };
 
   // --- classify -----------------------------------------------------------
-  const buildings = [];     // {outer, holes, tags}
-  const roads = [];
-  const areas = [];         // pedestrian areas
-  const waterPolys = [];
-  const greens = [];
-  const rails = [];
-  const trees = [];
-  const memorials = [];
-  const attractions = [];
-  const stations = [];
+  let buildings = [];       // {outer, holes, tags}
+  let roads = [];
+  let areas = [];           // pedestrian areas
+  let waterPolys = [];
+  let greens = [];
+  let rails = [];
+  let trees = [];
+  let memorials = [];
+  let attractions = [];
+  let stations = [];
+  const places = [];        // place=suburb and friends, for the district's name
 
   const usedInRelation = new Set();
   for (const rel of osm.relations.values()) {
@@ -244,10 +328,93 @@ function main() {
     if (!p) continue;
     if (t.natural === 'tree') { trees.push({ p, tags: t }); continue; }
     if (t['spreefall:card'] || (t.tourism === 'attraction' && t.name)) { attractions.push({ p, tags: t }); continue; }
-    if (t.railway === 'station' || t.railway === 'subway_entrance') { stations.push({ p, tags: t }); }
+    if (t.railway === 'station' || t.railway === 'subway_entrance') { stations.push({ p, tags: t }); continue; }
+    if (t.place && t.name) { places.push({ p, tags: t, rank: PLACE_RANK[t.place] || 0 }); }
   }
 
   console.log(`features: buildings ${buildings.length}  roads ${roads.length}  areas ${areas.length}  water ${waterPolys.length}  green ${greens.length}  rails ${rails.length}  trees ${trees.length}`);
+
+  // --- the district's own share of it -------------------------------------
+  // The extract covers the district plus a margin, so that a wall standing on
+  // a boundary arrives whole. Everything is now cut down to the district
+  // itself: areas and lines are clipped to the box, and anything with a middle
+  // is kept by its middle, which is what stops two districts from both
+  // building the same house.
+  const box = { minX: world.minX, minZ: world.minZ, maxX: world.maxX, maxZ: world.maxZ };
+  const inBox = (x, z) => x >= box.minX && x < box.maxX && z >= box.minZ && z < box.maxZ;
+  const before = { buildings: buildings.length, roads: roads.length, trees: trees.length };
+  buildings = buildings.filter((b) => {
+    if (b.outer.length < 3) return false;
+    const [cx, cz] = ringCentroid(b.outer);
+    return inBox(cx, cz);
+  });
+  trees = trees.filter((t) => inBox(t.p[0], t.p[1]));
+  attractions = attractions.filter((a) => inBox(a.p[0], a.p[1]));
+  stations = stations.filter((st) => inBox(st.p[0], st.p[1]));
+  memorials = memorials.filter((m) => {
+    const [cx, cz] = ringCentroid(m.ring);
+    return inBox(cx, cz);
+  });
+  roads = clipLines(roads, box);
+  rails = clipLines(rails, box);
+  areas = clipRings(areas, box, 'ring');
+  greens = clipRings(greens, box, 'ring');
+  waterPolys = clipRings(waterPolys, box, 'ring');
+  console.log(`district share: buildings ${buildings.length} of ${before.buildings}  roads ${roads.length} of ${before.roads}  trees ${trees.length} of ${before.trees}`);
+
+  // --- what this tier leaves out ------------------------------------------
+  if (tier.minArea > 6) {
+    const kept = buildings.filter((b) => ringArea(b.outer) >= tier.minArea);
+    console.log(`tier ${district.tier}: ${buildings.length - kept.length} buildings under ${tier.minArea} m2 dropped`);
+    buildings = kept;
+  }
+  if (tier.simplify > 0) {
+    for (const b of buildings) {
+      const s2 = simplify([...b.outer, b.outer[0]], tier.simplify);
+      if (s2.length >= 4) b.outer = s2.slice(0, -1);
+      b.holes = b.holes.map((h) => {
+        const hs = simplify([...h, h[0]], tier.simplify);
+        return hs.length >= 4 ? hs.slice(0, -1) : h;
+      });
+    }
+  }
+  if (tier.driveOnly) {
+    roads = roads.filter((r) => !FOOT_CLASSES.has(r.tags.highway)
+      && (tier.service || r.tags.highway !== 'service'));
+  }
+  if (tier.roadSimplify > 0) {
+    // A ribbon costs four vertices per point of the line it follows, and a
+    // kerbside wiggle of half a metre is not worth four vertices out here.
+    for (const r of roads) {
+      const line = simplify(r.line, tier.roadSimplify);
+      if (line.length >= 2) r.line = line;
+    }
+    for (const r of rails) {
+      const line = simplify(r.line, tier.roadSimplify);
+      if (line.length >= 2) r.line = line;
+    }
+  }
+  if (tier.boxBelow > 0) {
+    let boxed = 0;
+    for (const b of buildings) {
+      if (b.holes.length || ringArea(b.outer) >= tier.boxBelow) continue;
+      const ob = orientedBox(b.outer);
+      if (!ob || !(ob.lu > 1) || !(ob.lv > 1)) continue;
+      const hu = ob.lu / 2, hv = ob.lv / 2;
+      b.outer = [[-hu, -hv], [hu, -hv], [hu, hv], [-hu, hv]].map(([u, v]) => [
+        ob.cx + u * ob.ux + v * ob.vx,
+        ob.cz + u * ob.uz + v * ob.vz,
+      ]);
+      boxed++;
+    }
+    console.log(`tier ${district.tier}: ${boxed} small buildings reduced to the box that fits them`);
+  }
+  if (tier.trees < 1) {
+    trees = trees.filter((t) => {
+      const h = hashInt(Math.round(t.p[0] * 8), Math.round(t.p[1] * 8)) & 1023;
+      return h / 1023 < tier.trees;
+    });
+  }
 
   // --- terrain ------------------------------------------------------------
   let memBox = null;
@@ -268,7 +435,7 @@ function main() {
   // road ribbons drawn a hundred millimetres below the true ground, so 12.5 m,
   // and cells that something else already covers are simply not emitted. That
   // second part removes about a third of the world's triangles.
-  const gstep = 12.5;
+  const gstep = tier.groundStep;
   const gnx = Math.ceil(world.width / gstep);
   const gnz = Math.ceil(world.depth / gstep);
   const cover = buildCoverage(world, roads, areas, greens, waterPolys, buildings, memorials);
@@ -327,7 +494,7 @@ function main() {
     const isFoot = cls === 'footway' || cls === 'path' || cls === 'cycleway' || cls === 'steps';
     const lift = isFoot ? 0.06 : 0.0;
     ribbon(mesh, r.line, width / 2, mat, yAt, { lift, flags: 0, seed: hashInt(Math.round(r.line[0][0]), Math.round(r.line[0][1])) & 255 });
-    if (!isFoot) {
+    if (!isFoot && tier.kerbs) {
       // Kerb and pavement either side.
       for (const side of [-1, 1]) {
         const off = offsetLine(r.line, (width / 2 + 1.6) * side);
@@ -384,12 +551,12 @@ function main() {
   // --- buildings ----------------------------------------------------------
   let buildingCount = 0;
   const landmarkIndex = [];
-  const palette = new Palette(BERLIN_PALETTE);
+  const palette = new Palette(BERLIN_PALETTE, { frozen: true });
   for (const b of buildings) {
     const ring = b.outer;
     if (ring.length < 3) continue;
     const area = ringArea(ring);
-    if (area < 6) continue;
+    if (area < tier.minArea) continue;
     const [cx, cz] = ringCentroid(ring);
     if (cx < world.minX - 60 || cx > world.maxX + 60 || cz < world.minZ - 60 || cz > world.maxZ + 60) continue;
     const base = yAt(cx, cz);
@@ -419,8 +586,11 @@ function main() {
     // the per building variation the window shader uses.
     const colourIdx = colour ? palette.indexOf(colour) : palette.pick(seed);
     const packedSeed = (colourIdx & 63) | ((seed & 3) << 6);
-    const roofShape = (tags['roof:shape'] || 'flat').toLowerCase();
-    const roofHeight = parseLength(tags['roof:height']);
+    // Out past the inner districts every roof is flat. A pitched roof is four
+    // more vertices and a different normal per metre of frontage, and from the
+    // next street over it reads as a flat roof anyway.
+    const roofShape = tier.roofs ? (tags['roof:shape'] || 'flat').toLowerCase() : 'flat';
+    const roofHeight = tier.roofs ? parseLength(tags['roof:height']) : 0;
     extrudeBuilding(mesh, { outer: ring, holes: b.holes }, {
       base: base + (Number.isFinite(minH) ? minH : 0),
       height: Math.max(2, height - (Number.isFinite(minH) ? minH : 0)),
@@ -430,7 +600,7 @@ function main() {
       seed: packedSeed,
       levels,
       landmark: false,
-      noWindows: wallMat === MAT.CONCRETE,
+      noWindows: wallMat === MAT.CONCRETE || !tier.windows,
     });
     pushFootprintCollision(collision, ring, base - 1, base + height, SURFACE.STONE);
     for (const h of b.holes) pushFootprintCollision(collision, h, base - 1, base + height, SURFACE.STONE);
@@ -485,31 +655,36 @@ function main() {
   console.log(`geometry: ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${buildingCount} buildings, ${stelae} stelae, ${treeList.length} trees, ${(roadMetres / 1000).toFixed(1)} km of road`);
 
   // --- surface map for footsteps -----------------------------------------
-  const surfaceGrid = buildSurfaceGrid(world, roads, areas, greens, waterPolys, memorials);
+  const surfaceGrid = buildSurfaceGrid(world, roads, areas, greens, waterPolys, memorials, tier.surfaceStep);
 
   // --- tiling and writing -------------------------------------------------
-  const bundle = tileAndPack(mesh, collision, treeList, world, terrain, surfaceGrid);
+  const bundle = tileAndPack(mesh, collision, treeList, world, terrain, surfaceGrid, tier.grid);
 
+  // The district's own file. Tile records carry their index in the global
+  // grid, so the runtime can drop them straight into one city wide array
+  // whatever order the districts arrive in.
+  for (let i = 0; i < bundle.tiles.length; i++) {
+    const rec = bundle.tiles[i];
+    rec.t = (district.tz + rec.tz) * cityTiles.nx + (district.tx + rec.tx);
+  }
+
+  const name = districtName(district, places);
   const manifest = {
-    version: 3,
+    version: 4,
     generator: 'spreefall build-world',
-    origin: ORIGIN,
-    bbox: BBOX,
+    district: district.id,
+    name,
+    tier: district.tier,
+    tx: district.tx,
+    tz: district.tz,
+    nx: district.nx,
+    nz: district.nz,
     world: {
       minX: round2(world.minX), minZ: round2(world.minZ),
       maxX: round2(world.maxX), maxZ: round2(world.maxZ),
     },
-    tileSize: TILE_SIZE,
-    tileCountX: bundle.tileCountX,
-    tileCountZ: bundle.tileCountZ,
-    vertexStride: VERTEX_STRIDE,
-    posScale: POS_SCALE,
-    uvScale: UV_SCALE,
-    heightScale: HEIGHT_SCALE,
-    groundScale: GROUND_SCALE,
-    collisionGrid: COLLISION_GRID,
+    collisionGrid: tier.grid,
     waterLevel,
-    materials: MATERIAL_NAMES,
     facadePalette: palette.list.map((c) => c.map((v) => Math.round(v * 255))),
     landmarks: buildLandmarkCards(attractions, landmarkIndex),
     stations: stations.map((s) => ({ name: s.tags.name || '', x: round2(s.p[0]), z: round2(s.p[1]), kind: s.tags.railway })),
@@ -533,22 +708,298 @@ function main() {
   };
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(path.join(OUT_DIR, 'world.bin'), bundle.buffer);
-  fs.writeFileSync(path.join(OUT_DIR, 'world.json'), JSON.stringify(manifest));
+  const binName = `world-${district.id}.bin`;
+  const jsonName = `world-${district.id}.json`;
+  fs.writeFileSync(path.join(OUT_DIR, binName), bundle.buffer);
+  fs.writeFileSync(path.join(OUT_DIR, jsonName), JSON.stringify(manifest));
 
-  const binMB = bundle.buffer.length / 1e6;
-  const jsonMB = fs.statSync(path.join(OUT_DIR, 'world.json')).size / 1e6;
+  const binBytes = bundle.buffer.length;
+  const jsonBytes = fs.statSync(path.join(OUT_DIR, jsonName)).size;
+  const gz = gzipSize(path.join(OUT_DIR, binName)) + gzipSize(path.join(OUT_DIR, jsonName));
+  updateIndex(district, {
+    name, tier: district.tier,
+    bin: binName, json: jsonName,
+    bytes: binBytes + jsonBytes, gzip: gz,
+    tiles: bundle.tiles.length, nonEmpty: bundle.nonEmpty,
+    triangles: mesh.triangleCount,
+    buildings: buildingCount,
+    trees: treeList.length,
+    roadKm: Math.round(roadMetres / 100) / 10,
+    tallest: Math.round(bundle.tallest * 10) / 10,
+    waterLevel,
+    landmarks: manifest.landmarks.length,
+    builtAt: new Date().toISOString(),
+  });
+
+  const binMB = binBytes / 1e6;
+  const jsonMB = jsonBytes / 1e6;
   console.log('');
+  console.log(`name            ${name}`);
   console.log(`tiles           ${bundle.tiles.length} of ${bundle.tileCountX} by ${bundle.tileCountZ} (${bundle.nonEmpty} non empty)`);
   console.log(`triangles       ${mesh.triangleCount}`);
   console.log(`vertices        ${mesh.vertexCount}`);
   console.log(`collision segs  ${collision.length}`);
-  console.log(`world.bin       ${binMB.toFixed(2)} MB`);
-  console.log(`world.json      ${jsonMB.toFixed(2)} MB`);
-  console.log(`total payload   ${(binMB + jsonMB).toFixed(2)} MB`);
+  console.log(`${binName.padEnd(16)}${binMB.toFixed(2)} MB`);
+  console.log(`${jsonName.padEnd(16)}${jsonMB.toFixed(2)} MB`);
+  console.log(`over the wire   ${(gz / 1e6).toFixed(2)} MB gzipped`);
+  const sp = bundle.spend;
+  const kb = (v) => `${(v / 1024).toFixed(0)} kB`;
+  console.log(`bytes           vertices ${kb(sp.vertices)}, indices ${kb(sp.indices)}, `
+    + `height fields ${kb(sp.grids)}, walls ${kb(sp.segments)}, trees ${kb(sp.trees)}, `
+    + `footsteps ${kb(sp.surface)}`);
   console.log(`max tile        ${bundle.maxTileKB.toFixed(1)} kB, ${bundle.maxTileTris} triangles`);
   console.log(`mean tile       ${bundle.meanTileKB.toFixed(1)} kB`);
   console.log(`built in        ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+}
+
+// ---------------------------------------------------------------------------
+// Districts: the index, the names, and cutting the extract down to one box.
+
+const cityTiles = cityGrid(TILE_SIZE);
+
+// Which place tag wins when a district has several in it.
+const PLACE_RANK = {
+  borough: 5, suburb: 4, quarter: 3, neighbourhood: 2, city_block: 1,
+  town: 5, village: 3, hamlet: 1, city: 6,
+};
+
+const FOOT_CLASSES = new Set(['footway', 'path', 'cycleway', 'steps', 'bridleway']);
+
+/**
+ * What to call a district. Taken from the place nodes in its own extract, the
+ * highest ranking one nearest the middle, so a box over Prenzlauer Berg is
+ * called Prenzlauer Berg because OpenStreetMap says a node in the middle of it
+ * is. Nothing here guesses: with no place node the district keeps its grid
+ * name, which is what the offline fallback produces.
+ */
+function districtName(district, places) {
+  // The middle district is the brief's own box, drawn round the Gate, and the
+  // project has called it Mitte since the first commit.
+  const fallback = district.core ? 'Mitte' : `Ring ${district.col + 1}-${district.row + 1}`;
+  if (!places.length) return fallback;
+  const cx = (district.bounds.minX + district.bounds.maxX) / 2;
+  const cz = (district.bounds.minZ + district.bounds.maxZ) / 2;
+  const span = Math.max(district.bounds.width, district.bounds.depth);
+  let best = null, bestScore = -Infinity;
+  for (const p of places) {
+    const away = Math.hypot(p.p[0] - cx, p.p[1] - cz);
+    const score = p.rank * 2 - (away / span) * 3;
+    if (score > bestScore) { bestScore = score; best = p; }
+  }
+  return best ? best.tags.name : fallback;
+}
+
+function gzipSize(file) {
+  return zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
+}
+
+function readIndex() {
+  if (!fs.existsSync(INDEX_FILE)) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8'));
+    return j && j.districts ? j : null;
+  } catch { return null; }
+}
+
+/**
+ * The index is written after every district, so a build that is interrupted
+ * leaves behind a city of the districts that finished rather than nothing.
+ */
+function updateIndex(district, entry) {
+  const previous = readIndex();
+  // The header is written fresh every time and the district list is carried
+  // over, so a change to anything city wide, the palette for instance, reaches
+  // the index on the next district built rather than on the next clean build.
+  const index = {
+    version: 4,
+    generator: 'spreefall build-world',
+    origin: ORIGIN,
+    city: CITY,
+    bbox: BBOX,
+    tileSize: TILE_SIZE,
+    tileCountX: cityTiles.nx,
+    tileCountZ: cityTiles.nz,
+    world: {
+      minX: round2(cityTiles.minX), minZ: round2(cityTiles.minZ),
+      maxX: round2(cityTiles.maxX), maxZ: round2(cityTiles.maxZ),
+    },
+    vertexStride: VERTEX_STRIDE,
+    posScale: POS_SCALE,
+    uvScale: UV_SCALE,
+    heightScale: HEIGHT_SCALE,
+    groundScale: GROUND_SCALE,
+    collisionGrid: COLLISION_GRID,
+    materials: MATERIAL_NAMES,
+    facadePalette: BERLIN_PALETTE.map((c) => c.map((v) => Math.round(v * 255))),
+    waterLevel: -0.9,
+    home: CORE_ID,
+    districts: previous ? previous.districts : [],
+  };
+  index.districts = index.districts.filter((d) => d.id !== district.id);
+  index.districts.push({
+    id: district.id,
+    tier: district.tier,
+    col: district.col, row: district.row,
+    tx: district.tx, tz: district.tz, nx: district.nx, nz: district.nz,
+    bounds: {
+      minX: round2(district.bounds.minX), minZ: round2(district.bounds.minZ),
+      maxX: round2(district.bounds.maxX), maxZ: round2(district.bounds.maxZ),
+    },
+    bbox: district.bbox,
+    ...entry,
+  });
+  index.districts.sort((a, b) => (a.row - b.row) || (a.col - b.col));
+  index.builtAt = new Date().toISOString();
+  fs.writeFileSync(INDEX_FILE, JSON.stringify(index));
+}
+
+/** The budget table: what the whole city costs, district by district. */
+function writeIndexSummary() {
+  const index = readIndex();
+  if (!index) return;
+  const rows = index.districts;
+  let bytes = 0, gz = 0, tris = 0, buildings = 0, trees = 0, road = 0;
+  console.log('');
+  console.log('district  tier  name                       MB     gz MB   triangles  buildings');
+  for (const d of rows) {
+    bytes += d.bytes; gz += d.gzip; tris += d.triangles;
+    buildings += d.buildings; trees += d.trees; road += d.roadKm;
+    console.log(`${d.id.padEnd(9)} ${String(d.tier).padEnd(5)} ${String(d.name).slice(0, 24).padEnd(25)}`
+      + `${(d.bytes / 1e6).toFixed(2).padStart(6)} ${(d.gzip / 1e6).toFixed(2).padStart(7)}  `
+      + `${String(d.triangles).padStart(9)}  ${String(d.buildings).padStart(9)}`);
+  }
+  const indexGz = gzipSize(INDEX_FILE);
+  const total = gz + indexGz;
+  console.log('');
+  console.log(`${rows.length} of ${DISTRICTS.length} districts built`);
+  console.log(`triangles       ${tris}`);
+  console.log(`buildings       ${buildings}`);
+  console.log(`trees           ${trees}`);
+  console.log(`road            ${road.toFixed(1)} km`);
+  console.log(`index           ${(fs.statSync(INDEX_FILE).size / 1e6).toFixed(2)} MB, ${(indexGz / 1e6).toFixed(2)} MB gzipped`);
+  console.log(`deployed        ${(bytes / 1e6).toFixed(2)} MB`);
+  console.log(`download        ${(total / 1e6).toFixed(2)} MB gzipped, against a 25 MB budget`
+    + `${total > 25e6 ? '  OVER' : ''}`);
+}
+
+/**
+ * Clip polylines to a box. A road that leaves the district is cut at the edge
+ * and comes back as a separate piece, so the neighbour draws its own half and
+ * neither of them draws the other's.
+ */
+function clipLines(list, box) {
+  const out = [];
+  for (const item of list) {
+    for (const piece of clipPolyline(item.line, box)) {
+      if (piece.length >= 2) out.push({ ...item, line: piece });
+    }
+  }
+  return out;
+}
+
+function clipPolyline(line, box) {
+  // Liang Barsky per segment, pieces joined while they stay inside. Testing
+  // the points alone misses the case that caught me out: a two point street
+  // whose ends are both outside the district and which crosses the whole of
+  // it, which is most of the streets in most districts.
+  const pieces = [];
+  let current = [];
+  const push = (p) => {
+    const last = current[current.length - 1];
+    if (!last || Math.hypot(last[0] - p[0], last[1] - p[1]) > 1e-6) current.push(p);
+  };
+  for (let i = 1; i < line.length; i++) {
+    const seg = clipSegment(line[i - 1], line[i], box);
+    if (!seg) {
+      if (current.length >= 2) pieces.push(current);
+      current = [];
+      continue;
+    }
+    push(seg.a);
+    push(seg.b);
+    // The segment left the box part way along, so the piece ends here.
+    if (seg.exits) {
+      if (current.length >= 2) pieces.push(current);
+      current = [];
+    }
+  }
+  if (current.length >= 2) pieces.push(current);
+  return pieces;
+}
+
+/**
+ * The part of one segment that is inside the box.
+ *
+ * @returns {{a,b,exits}|null} the clipped ends, and whether the segment leaves
+ *   the box before its own end, which is what breaks a piece in two
+ */
+function clipSegment(p0, p1, box) {
+  const dx = p1[0] - p0[0], dz = p1[1] - p0[1];
+  let t0 = 0, t1 = 1;
+  const edges = [
+    [-dx, p0[0] - box.minX],
+    [dx, box.maxX - p0[0]],
+    [-dz, p0[1] - box.minZ],
+    [dz, box.maxZ - p0[1]],
+  ];
+  for (const [p, q] of edges) {
+    if (Math.abs(p) < 1e-12) {
+      if (q < 0) return null;            // parallel to this edge and outside
+      continue;
+    }
+    const r = q / p;
+    if (p < 0) { if (r > t1) return null; if (r > t0) t0 = r; }
+    else { if (r < t0) return null; if (r < t1) t1 = r; }
+  }
+  return {
+    a: [p0[0] + dx * t0, p0[1] + dz * t0],
+    b: [p0[0] + dx * t1, p0[1] + dz * t1],
+    exits: t1 < 1 - 1e-9,
+  };
+}
+
+/** Sutherland Hodgman against the four edges of the box. */
+function clipRings(list, box, key) {
+  const out = [];
+  for (const item of list) {
+    const ring = clipRing(item[key], box);
+    if (ring.length < 3) continue;
+    const holes = (item.holes || []).map((h) => clipRing(h, box)).filter((h) => h.length >= 3);
+    out.push({ ...item, [key]: ring, holes });
+  }
+  return out;
+}
+
+function clipRing(ring, box) {
+  let poly = ring;
+  const edges = [
+    (p) => p[0] >= box.minX, (p) => p[0] <= box.maxX,
+    (p) => p[1] >= box.minZ, (p) => p[1] <= box.maxZ,
+  ];
+  const at = [
+    (a, b) => lerpTo(a, b, (box.minX - a[0]) / (b[0] - a[0])),
+    (a, b) => lerpTo(a, b, (box.maxX - a[0]) / (b[0] - a[0])),
+    (a, b) => lerpTo(a, b, (box.minZ - a[1]) / (b[1] - a[1])),
+    (a, b) => lerpTo(a, b, (box.maxZ - a[1]) / (b[1] - a[1])),
+  ];
+  for (let e = 0; e < 4 && poly.length; e++) {
+    const keep = edges[e];
+    const next = [];
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[j], b = poly[i];
+      const ina = keep(a), inb = keep(b);
+      if (ina && inb) next.push(b);
+      else if (ina && !inb) next.push(at[e](a, b));
+      else if (!ina && inb) { next.push(at[e](a, b)); next.push(b); }
+    }
+    poly = next;
+  }
+  return poly;
+}
+
+function lerpTo(a, b, t) {
+  const k = Math.max(0, Math.min(1, t));
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
 }
 
 // ---------------------------------------------------------------------------
@@ -646,11 +1097,21 @@ function flatRing(ring) {
  * cap snaps to the nearest entry, so a building:colour from OSM always shows up
  * as itself or as the closest thing the palette has.
  */
+/**
+ * The facade palette. Vertices carry an index into it, and the renderer
+ * uploads one palette for the whole city, so every district has to agree on
+ * what index seven means. It is therefore frozen: the Berlin tones are the
+ * palette, and a building that gives its own colour in the data is snapped to
+ * the nearest tone rather than appended, which is what used to happen and
+ * would have had the same index mean two colours in two districts.
+ */
 class Palette {
-  constructor(seedColours) {
+  constructor(seedColours, { frozen = false } = {}) {
     this.list = [];
     this.byKey = new Map();
+    this.frozen = false;
     for (const c of seedColours) this.indexOf(c);
+    this.frozen = frozen;
   }
   key(c) {
     return `${Math.round(c[0] * 31)}_${Math.round(c[1] * 31)}_${Math.round(c[2] * 31)}`;
@@ -659,7 +1120,7 @@ class Palette {
     const k = this.key(c);
     const hit = this.byKey.get(k);
     if (hit !== undefined) return hit;
-    if (this.list.length < 64) {
+    if (!this.frozen && this.list.length < 64) {
       this.list.push(c);
       this.byKey.set(k, this.list.length - 1);
       return this.list.length - 1;
@@ -810,8 +1271,7 @@ function buildStelae(mesh, collision, memorial, terrain) {
 
 // A coarse raster of what the player is standing on, for footstep sounds and
 // for the ground shader to blend surfaces.
-function buildSurfaceGrid(world, roads, areas, greens, waterPolys, memorials) {
-  const step = 2.5;
+function buildSurfaceGrid(world, roads, areas, greens, waterPolys, memorials, step = 2.5) {
   const nx = Math.ceil(world.width / step) + 1;
   const nz = Math.ceil(world.depth / step) + 1;
   const data = new Uint8Array(nx * nz).fill(SURFACE.ASPHALT);
@@ -874,7 +1334,7 @@ function buildLandmarkCards(attractions, landmarkIndex) {
 // ---------------------------------------------------------------------------
 // Tiling and binary packing
 
-function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid) {
+function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid, grid = COLLISION_GRID) {
   const tileCountX = Math.ceil(world.width / TILE_SIZE);
   const tileCountZ = Math.ceil(world.depth / TILE_SIZE);
   const tileOf = (x, z) => {
@@ -923,8 +1383,10 @@ function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid) {
   const chunks = [];
   let offset = 0;
   const tiles = [];
+  const spend = { vertices: 0, indices: 0, grids: 0, segments: 0, trees: 0, surface: 0 };
   let nonEmpty = 0;
   let maxTileBytes = 0, maxTileTris = 0, totalTileBytes = 0;
+  let tallest = 0;
 
   for (let tz = 0; tz < tileCountZ; tz++) {
     for (let tx = 0; tx < tileCountX; tx++) {
@@ -985,11 +1447,14 @@ function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid) {
         }
         rec.vOff = offset; rec.vCount = vcount;
         chunks.push(vbuf); offset += vbuf.length;
+        spend.vertices += vbuf.length;
         rec.iOff = offset; rec.iCount = list.length * 3; rec.i32 = use32 ? 1 : 0;
         chunks.push(ibuf); offset += ibuf.length;
+        spend.indices += ibuf.length;
         rec.tris = list.length;
         rec.min = [round2(minX), round2(minY), round2(minZ)];
         rec.max = [round2(maxX), round2(maxY), round2(maxZ)];
+        if (maxY > tallest) tallest = maxY;
         bytesThisTile += vbuf.length + ibuf.length;
         if (list.length > maxTileTris) maxTileTris = list.length;
       } else {
@@ -999,9 +1464,9 @@ function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid) {
 
       // Collision blob.
       const segs = colBuckets[t] || [];
-      const cbuf = Buffer.alloc(4 + segs.length * 12 + COLLISION_GRID * COLLISION_GRID * 2);
+      const cbuf = Buffer.alloc(4 + segs.length * 12 + grid * grid * 2);
       cbuf.writeUInt16LE(segs.length, 0);
-      cbuf.writeUInt16LE(COLLISION_GRID, 2);
+      cbuf.writeUInt16LE(grid, 2);
       let cp = 4;
       for (const s of segs) {
         cbuf.writeInt16LE(clampI16(Math.round((s.x1 - originX) * 64)), cp);
@@ -1012,10 +1477,10 @@ function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid) {
         cbuf.writeInt16LE(clampI16(Math.round(s.top * 32)), cp + 10);
         cp += 12;
       }
-      for (let gz = 0; gz < COLLISION_GRID; gz++) {
-        for (let gx = 0; gx < COLLISION_GRID; gx++) {
-          const x = originX + (gx / (COLLISION_GRID - 1)) * TILE_SIZE;
-          const z = originZ + (gz / (COLLISION_GRID - 1)) * TILE_SIZE;
+      for (let gz = 0; gz < grid; gz++) {
+        for (let gx = 0; gx < grid; gx++) {
+          const x = originX + (gx / (grid - 1)) * TILE_SIZE;
+          const z = originZ + (gz / (grid - 1)) * TILE_SIZE;
           cbuf.writeInt16LE(clampI16(Math.round(terrain.height(x, z) * GROUND_SCALE)), cp);
           cp += 2;
         }
@@ -1023,11 +1488,14 @@ function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid) {
       rec.cOff = offset; rec.cLen = cbuf.length; rec.segs = segs.length;
       chunks.push(cbuf); offset += cbuf.length;
       bytesThisTile += cbuf.length;
+      spend.grids += grid * grid * 2;
+      spend.segments += 4 + segs.length * 12;
 
       // Trees, packed as 8 bytes each.
       const tl = treeBuckets[t] || [];
       if (tl.length) {
         const tbuf = Buffer.alloc(tl.length * 8);
+        spend.trees += tl.length * 8;
         for (let k = 0; k < tl.length; k++) {
           const o = k * 8;
           tbuf.writeInt16LE(clampI16(Math.round((tl[k].x - originX) * 64)), o);
@@ -1049,6 +1517,7 @@ function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid) {
     }
   }
 
+  spend.surface = surfaceGrid.data.length;
   const surfaceOffset = offset;
   chunks.push(Buffer.from(surfaceGrid.data.buffer, surfaceGrid.data.byteOffset, surfaceGrid.data.length));
   offset += surfaceGrid.data.length;
@@ -1059,7 +1528,7 @@ function tileAndPack(mesh, collision, trees, world, terrain, surfaceGrid) {
     surfaceOffset,
     maxTileKB: maxTileBytes / 1024,
     meanTileKB: totalTileBytes / Math.max(1, tiles.length) / 1024,
-    maxTileTris,
+    maxTileTris, tallest, spend,
   };
 }
 

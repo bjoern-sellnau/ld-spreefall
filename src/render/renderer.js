@@ -7,7 +7,7 @@ import {
 import { mat4, vec3, Frustum, clamp } from '../engine/math.js';
 import { SKY_VS, SKY_FS } from '../shaders/sky.js';
 import { WORLD_VS, WORLD_FS, SHADOW_VS, SHADOW_FS, MAX_COLLAPSE } from '../shaders/world.js';
-import { TREE_VS, TREE_FS, TREE_SHADOW_VS, TREE_SHADOW_FS } from '../shaders/trees.js';
+import { TREE_VS, TREE_FS, TREE_SHADOW_VS, TREE_SHADOW_FS, MAX_FIRES } from '../shaders/trees.js';
 import { FULLSCREEN_VS, BRIGHT_FS, BLUR_FS, COMPOSITE_FS } from '../shaders/post.js';
 import { sunDirection, sunColour, berlinDate } from './sun.js';
 import { Actors } from './actors.js';
@@ -84,6 +84,12 @@ export class Renderer {
     this.collapse = new Float32Array(MAX_COLLAPSE * 4);
     this.collapseInfo = new Float32Array(MAX_COLLAPSE * 4);
     this.collapseCount = 0;
+    // Trees on fire. Two small arrays, uploaded to the tree pass and its
+    // shadow, and only when something is actually alight.
+    this.MAX_FIRES = MAX_FIRES;
+    this.fires = new Float32Array(MAX_FIRES * 4);
+    this.fireInfo = new Float32Array(MAX_FIRES * 2);
+    this.fireCount = 0;
     this.MAX_SCARS = 16;
     this.scars = new Float32Array(this.MAX_SCARS * 4);
     this.scarInfo = new Float32Array(this.MAX_SCARS * 4);
@@ -220,12 +226,48 @@ export class Renderer {
       this.collapse[i * 4 + 1] = s.y;
       this.collapse[i * 4 + 2] = s.z;
       this.collapse[i * 4 + 3] = s.radius;
-      this.collapseInfo[i * 4] = s.progress;
+      this.collapseInfo[i * 4] = s.shown;
       this.collapseInfo[i * 4 + 1] = s.depth;
-      this.collapseInfo[i * 4 + 2] = s.rubble;
-      this.collapseInfo[i * 4 + 3] = 0;
+      this.collapseInfo[i * 4 + 2] = s.craterRadius;
+      this.collapseInfo[i * 4 + 3] = s.rubble;
     }
     this.collapseCount = n;
+  }
+
+  /**
+   * Takes the live fires. Called every frame while anything is burning; an
+   * unburnt city leaves the count at zero and the tree shader skips the loop.
+   *
+   * @param {Array} sites entries from the fire layer
+   */
+  setFires(sites) {
+    const n = Math.min(this.MAX_FIRES, sites.length);
+    for (let i = 0; i < n; i++) {
+      const s = sites[i];
+      this.fires[i * 4] = s.x;
+      this.fires[i * 4 + 1] = s.y;
+      this.fires[i * 4 + 2] = s.z;
+      this.fires[i * 4 + 3] = s.radius;
+      this.fireInfo[i * 2] = s.age;
+      this.fireInfo[i * 2 + 1] = s.strength;
+    }
+    this.fireCount = n;
+  }
+
+  clearFires() {
+    this.fireCount = 0;
+    this.fires.fill(0);
+    this.fireInfo.fill(0);
+  }
+
+  _uploadFires(prog) {
+    const gl = this.gl;
+    prog.int('uFireCount', this.fireCount);
+    if (!this.fireCount) return;
+    const a = prog.loc('uFires');
+    const b = prog.loc('uFireInfo');
+    if (a) gl.uniform4fv(a, this.fires);
+    if (b) gl.uniform2fv(b, this.fireInfo);
   }
 
   clearCollapses() {
@@ -429,6 +471,7 @@ export class Renderer {
 
       if (i === 0) {
         this.progTreeShadow.use().mat4('uLightViewProj', this.lightVp[i]);
+        this._uploadFires(this.progTreeShadow);
         for (const tile of this.tiles.resident.values()) {
           if (!tile.treeVao) continue;
           if (tile.maxX < cx - pad || tile.minX > cx + pad || tile.maxZ < cz - pad || tile.minZ > cz + pad) continue;
@@ -488,6 +531,7 @@ export class Renderer {
     // Trees. Two sided, so culling off.
     gl.disable(gl.CULL_FACE);
     this.progTree.use();
+    this._uploadFires(this.progTree);
     const td = this.q.treeDist;
     for (const tile of visible) {
       if (!tile.treeVao || tile.dist > td) continue;
@@ -510,6 +554,11 @@ export class Renderer {
       draws += this.actors.drawProjectiles();
       for (const kind in this.actors.props) {
         const mesh = this.actors.props[kind];
+        tris += mesh.instanceCount * (mesh.count / 3);
+      }
+      draws += this.actors.drawVehicles();
+      for (const type in this.actors.vehicles) {
+        const mesh = this.actors.vehicles[type];
         tris += mesh.instanceCount * (mesh.count / 3);
       }
       draws += this.actors.drawGibs();

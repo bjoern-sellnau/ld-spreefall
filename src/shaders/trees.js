@@ -9,6 +9,69 @@ float hash11(float p) {
 }
 `;
 
+// What a blast does to a tree. A fire is a circle on the ground with an age,
+// and every tree inside it runs the same timeline off its own seed: it
+// catches, it burns, and then it either bursts or goes over. The timings are
+// pure functions of the seed so that the JavaScript side can put flames and a
+// crack on exactly the tree the shader is burning, without any per tree state
+// being stored or uploaded anywhere.
+
+export const MAX_FIRES = 8;
+
+export const TREE_FIRE = `
+uniform vec4 uFires[${8}];      // xyz centre, w radius
+uniform vec2 uFireInfo[${8}];   // x age in seconds, y strength 0..1
+uniform int uFireCount;
+
+// When this tree gives up, in seconds after it catches, and which way it goes.
+// Both come out of the seed, so every tree in a fire is on its own clock.
+float treeDoomAt(float s) { return 3.2 + hash11(s * 0.613 + 4.1) * 5.5; }
+float treeBursts(float s) { return step(0.62, hash11(s * 0.911 + 2.3)); }
+float treeFallAngle(float s) { return hash11(s * 0.377 + 9.7) * 6.2832; }
+
+/**
+ * How far through burning this tree is.
+ * x: caught, 0 to 1, how charred it is
+ * y: over, 0 to 1, how far it has toppled
+ * z: 1 if it burst rather than fell
+ */
+vec3 treeFireState(vec3 base, float s) {
+  vec3 state = vec3(0.0);
+  for (int i = 0; i < ${8}; i++) {
+    if (i >= uFireCount) break;
+    vec4 f = uFires[i];
+    if (f.w <= 0.0) continue;
+    float d = length(base.xz - f.xz);
+    if (d > f.w) continue;
+    // The edge of a fire catches later than the middle of it.
+    float reach = 1.0 - d / f.w;
+    float age = uFireInfo[i].x - (1.0 - reach) * 2.2;
+    if (age <= 0.0) continue;
+    float caught = clamp(age / 2.0, 0.0, 1.0) * uFireInfo[i].y;
+    float doom = treeDoomAt(s);
+    float over = clamp((age - doom) / 1.4, 0.0, 1.0);
+    state.x = max(state.x, caught);
+    state.y = max(state.y, over);
+    state.z = max(state.z, treeBursts(s) * step(doom, age));
+  }
+  return state;
+}
+
+/** Lays a tree over about its base, in the direction its seed picked. */
+vec3 treeTopple(vec3 p, vec3 base, float s, float over) {
+  if (over <= 0.0) return p;
+  float a = treeFallAngle(s);
+  vec3 axis = vec3(cos(a), 0.0, sin(a));
+  // Accelerating rather than linear: a tree goes slowly and then all at once.
+  float ang = over * over * 1.5708;
+  vec3 r = p - base;
+  float ca = cos(ang), sa = sin(ang);
+  // Rodrigues about a horizontal axis through the base.
+  vec3 rot = r * ca + cross(axis, r) * sa + axis * dot(axis, r) * (1.0 - ca);
+  return base + rot;
+}
+`;
+
 // Trees are instanced: a trunk drawn as two crossed quads and a crown drawn as
 // three camera facing billboards, all generated from gl_VertexID so no mesh
 // data is ever downloaded.
@@ -17,6 +80,7 @@ export const TREE_VS = `${VERSION}
 precision highp float;
 ${CAMERA_BLOCK}
 ${HASH11}
+${TREE_FIRE}
 layout(location = 5) in vec4 iPos;    // xyz base, w height
 layout(location = 6) in float iSeed;  // low 7 bits seed, bit 7 marks a lime
 
@@ -26,6 +90,7 @@ out vec3 vNormal;
 out vec3 vTangent;
 flat out float vSeed;
 flat out float vPart;   // 0 trunk, 1 crown
+flat out vec3 vFire;    // charred, toppled, burst
 
 uniform float uShadowPass;
 
@@ -49,6 +114,10 @@ void main() {
   float crownR = h * mix(0.34, 0.44, rnd2) * mix(1.0, 1.10, isLime);
 
   vec3 base = iPos.xyz;
+  vFire = uFireCount > 0 ? treeFireState(base, s) : vec3(0.0);
+  // A crown that is burning shrinks as the leaves go, and one that bursts is
+  // simply not there any more: what is left is a black stick.
+  crownR *= (1.0 - vFire.x * 0.45) * (1.0 - vFire.z);
   vec3 pos;
   vec3 nrm;
 
@@ -88,6 +157,7 @@ void main() {
     vPart = 1.0;
   }
 
+  if (vFire.y > 0.0) pos = treeTopple(pos, base, s, vFire.y);
   vWorld = pos;
   vNormal = nrm;
   vSeed = seed;
@@ -107,6 +177,7 @@ in vec3 vNormal;
 in vec3 vTangent;
 flat in float vSeed;
 flat in float vPart;
+flat in vec3 vFire;
 float vViewDist;
 layout(location = 0) out vec4 fragColour;
 
@@ -157,6 +228,29 @@ void main() {
   float domeLum = dot(dome, vec3(0.2126, 0.7152, 0.0722));
   vec3 ambient = mix(dome, vec3(domeLum), 0.42) * 2.00 * (0.34 + 0.66 * upness);
   vec3 colour = albedo * (uSunColour.rgb * (ndl * shadow + back * shadow) + ambient);
+
+  // On fire. The leaves go from green to brown to black, and while they are
+  // going the edges of the crown glow: a burning canopy is lit from inside,
+  // and the one place that reads from a distance is its outline.
+  if (vFire.x > 0.001) {
+    float char = vFire.x;
+    vec3 burnt = vec3(0.030, 0.024, 0.020);
+    vec3 scorched = mix(vec3(0.170, 0.075, 0.022), burnt, smoothstep(0.45, 1.0, char));
+    colour = mix(colour, colour * 0.25 + scorched, smoothstep(0.0, 0.8, char));
+    if (vPart > 0.5) {
+      // The edge of the leaf mask is where it is actually alight.
+      float rim = smoothstep(0.26, 0.5, length(vUv - 0.5));
+      float flicker = 0.55 + 0.45 * sin(uCamPos.w * 11.0 + s * 3.0 + vUv.x * 9.0);
+      float alive = char * (1.0 - smoothstep(0.55, 1.0, char));
+      colour += vec3(1.0, 0.36, 0.06) * rim * flicker * alive * 2.6;
+    } else {
+      // Embers in the bark, low down and dying out.
+      float ember = smoothstep(0.55, 1.0, fbm(vec2(vUv.x * 7.0, vUv.y * 18.0) + s * 2.0));
+      float alive = char * (1.0 - smoothstep(0.6, 1.0, char));
+      colour += vec3(1.0, 0.28, 0.05) * ember * alive * 1.4;
+    }
+  }
+
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
                     uSkyHorizon.rgb, uSkyZenith.rgb, uFog, uSkyZenith.w);
   fragColour = vec4(colour, 1.0);
@@ -172,6 +266,7 @@ out vec2 vUv;
 flat out float vSeed;
 flat out float vPart;
 ${HASH11}
+${TREE_FIRE}
 void main() {
   int vid = gl_VertexID;
   int quad = vid / 6;
@@ -187,6 +282,8 @@ void main() {
   float trunkH = h * mix(0.24, 0.32, rnd);
   float crownR = h * mix(0.34, 0.44, rnd2);
   vec3 base = iPos.xyz;
+  vec3 fire = uFireCount > 0 ? treeFireState(base, s) : vec3(0.0);
+  crownR *= (1.0 - fire.x * 0.45) * (1.0 - fire.z);
   vec3 pos;
   if (quad < 2) {
     float ang = float(quad) * 1.5708 + rnd * 3.14159;
@@ -204,6 +301,7 @@ void main() {
                  + vec3(0.0, (c.y - 0.5) * 2.0 * crownR, 0.0);
     vPart = 1.0;
   }
+  if (fire.y > 0.0) pos = treeTopple(pos, base, s, fire.y);
   gl_Position = uLightViewProj * vec4(pos, 1.0);
 }
 `;

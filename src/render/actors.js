@@ -6,7 +6,7 @@ import { createProgram } from '../engine/gl.js';
 import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
-  SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_SHADOW_VS,
+  SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_FS, SOLDIER_SHADOW_VS,
   PICKUP_VS, GIB_VS,
 } from '../shaders/actors.js';
 
@@ -15,6 +15,7 @@ const MAX_SPARKS = 512;
 const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
+const MAX_VEHICLES = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 96;
 // Past this there is no point drawing a pad: the fog has it anyway.
@@ -487,6 +488,84 @@ export function buildJetMesh() {
 }
 
 /**
+ * A jeep, about four and a half metres long, nose towards -z like everything
+ * else here. Parts: 0 hull, 2 arms for the frame, 6 webbing for the canvas,
+ * 8 ordnance steel for the gun, 24 glass.
+ */
+export function buildJeepMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.75, -0.1, 1.95, 0.55, 4.10, 0);          // body
+  m.box(0, 1.08, 0.75, 1.80, 0.45, 1.70, 0);          // rear deck
+  m.box(0, 1.20, -1.05, 1.70, 0.35, 1.40, 24);        // windscreen and cab
+  m.box(0, 0.52, -1.95, 1.90, 0.40, 0.30, 0);         // front bumper
+  m.box(0, 1.15, -2.05, 1.60, 0.45, 0.14, 24);        // grille
+  for (const side of [-1, 1]) {
+    // Wheels, as short cylinders lying on their side.
+    for (const z of [-1.35, 1.25]) {
+      m.cylinder(side * 0.98, 0.45, z, 0.45, 0.45, side * 0.26, 10, 2, 'y');
+    }
+    m.box(side * 0.92, 1.35, 0.55, 0.10, 0.90, 0.10, 2);   // roll bar
+  }
+  m.box(0, 1.82, 0.55, 1.90, 0.10, 0.10, 2);
+  // The mounted gun on the back.
+  m.cylinder(0, 1.95, 0.30, 0.10, 0.10, 0.55, 8, 8, 'y');
+  m.box(0, 2.30, -0.20, 0.16, 0.16, 1.40, 8);
+  m.box(0, 2.30, 0.45, 0.34, 0.26, 0.40, 8);
+  return m;
+}
+
+/**
+ * A tank, seven and a half metres long with the gun over the front. Parts:
+ * 0 hull, 2 track steel, 8 the barrel.
+ */
+export function buildTankMesh() {
+  const m = new MeshBuild();
+  m.box(0, 1.15, 0, 3.10, 0.80, 6.40, 0);             // hull
+  m.box(0, 1.70, 0.10, 2.70, 0.40, 4.60, 0);          // glacis
+  m.box(0, 2.15, 0.40, 2.10, 0.60, 2.60, 0);          // turret
+  m.box(0, 2.55, 0.80, 1.10, 0.30, 1.20, 0);          // cupola
+  m.cylinder(0, 2.30, -0.85, 0.17, 0.14, -3.60, 10, 8, 'z');   // barrel
+  m.box(0, 2.30, -1.20, 0.46, 0.46, 0.55, 8);         // mantlet
+  for (const side of [-1, 1]) {
+    m.box(side * 1.62, 0.70, 0, 0.55, 1.10, 6.60, 2);      // track
+    for (let i = 0; i < 5; i++) {
+      m.cylinder(side * 1.62, 0.62, -2.4 + i * 1.2, 0.46, 0.46, side * 0.1, 8, 2, 'y');
+    }
+  }
+  return m;
+}
+
+/**
+ * A helicopter: a bulbous cab, a tail boom, and two rotor discs. Parts:
+ * 0 hull, 24 glass, 3 the blurred rotor, 8 the skids and the gun.
+ */
+export function buildHeliMesh() {
+  const m = new MeshBuild();
+  m.box(0, 1.60, -0.40, 2.00, 1.70, 3.60, 0);         // cab
+  m.box(0, 1.85, -2.10, 1.50, 1.20, 1.10, 24);        // canopy
+  m.box(0, 1.90, 1.90, 0.80, 0.70, 3.40, 0);          // tail boom
+  m.box(0, 2.35, 3.45, 0.22, 1.30, 0.80, 0);          // fin
+  m.box(0, 1.95, 3.30, 1.40, 0.16, 0.60, 0);          // tailplane
+  // Main rotor: a mast and a wide thin disc.
+  m.cylinder(0, 2.45, -0.40, 0.14, 0.12, 0.60, 8, 8, 'y');
+  m.ring(0, 3.10, -0.40, 0.25, 5.40, 18, 3);
+  // Tail rotor, standing on its side.
+  for (let i = 0; i < 14; i++) {
+    const a0 = (i / 14) * Math.PI * 2, a1 = ((i + 1) / 14) * Math.PI * 2;
+    const at = (a, r) => [0.42, 2.30 + Math.sin(a) * r, 3.45 + Math.cos(a) * r];
+    m.quad([at(a0, 0.2), at(a1, 0.2), at(a1, 1.1), at(a0, 1.1)], [1, 0, 0], 3);
+    m.quad([at(a0, 1.1), at(a1, 1.1), at(a1, 0.2), at(a0, 0.2)], [-1, 0, 0], 3);
+  }
+  for (const side of [-1, 1]) {
+    m.box(side * 1.05, 0.12, -0.30, 0.14, 0.14, 3.20, 8);   // skid
+    m.box(side * 0.70, 0.65, -0.90, 0.10, 1.05, 0.10, 8);
+    m.box(side * 0.70, 0.65, 0.70, 0.10, 1.05, 0.10, 8);
+  }
+  m.box(0, 0.95, -2.30, 0.40, 0.34, 0.90, 8);         // chin gun
+  return m;
+}
+
+/**
  * A soldier. Built standing at the origin with their feet on the ground and
  * facing -z, the same way the weapon points, so one yaw puts them anywhere.
  * Parts: 4 cloth, 5 helmet, 6 webbing, 7 the rifle.
@@ -521,6 +600,27 @@ export function buildSoldierMesh() {
   // The rifle, carried across the body.
   m.box(0.18, 1.14, -0.30, 0.06, 0.09, 0.52, 7);
   m.box(0.18, 1.08, -0.16, 0.05, 0.14, 0.10, 7);
+
+  // What is left when the cloth has gone. These are inside the body and
+  // scaled away to nothing by the vertex shader unless this one has been
+  // burnt, at which point the cloth and the webbing go instead and this is
+  // all that is standing. Part 8, which the shader renders as charred bone.
+  m.box(0, 1.16, 0, 0.055, 0.60, 0.055, 23);            // spine
+  for (let i = 0; i < 5; i++) {
+    const y = 1.00 + i * 0.105;
+    const w = 0.30 - Math.abs(i - 2) * 0.03;
+    m.box(0, y, 0, w, 0.035, 0.17, 23);                 // ribs
+  }
+  m.box(0, 0.88, 0, 0.26, 0.10, 0.16, 23);              // pelvis
+  m.box(0, 1.47, 0, 0.075, 0.10, 0.075, 23);            // neck
+  m.box(0, 1.60, 0, 0.19, 0.20, 0.20, 23);              // skull
+  m.box(0, 1.56, -0.10, 0.13, 0.06, 0.04, 23);          // jaw
+  for (const side of [-1, 1]) {
+    m.box(side * 0.11, 0.42, 0, 0.065, 0.84, 0.065, 23);     // leg
+    m.box(side * 0.11, 0.05, -0.04, 0.09, 0.07, 0.22, 23);   // foot
+    m.box(side * 0.30, 1.16, -0.05, 0.055, 0.54, 0.055, 23); // arm
+    m.box(side * 0.22, 1.42, 0, 0.17, 0.05, 0.05, 23);       // collarbone
+  }
   return m;
 }
 
@@ -541,7 +641,7 @@ export class Actors {
     // sampler2DShadow from a unit holding an ordinary texture, and every draw
     // fails with INVALID_OPERATION and renders nothing at all.
     this.progDrone.use().int('uShadow0', 4).int('uShadow1', 5);
-    this.progSoldier = createProgram(gl, SOLDIER_VS, DRONE_FS, 'soldier');
+    this.progSoldier = createProgram(gl, SOLDIER_VS, SOLDIER_FS, 'soldier');
     this.progSoldierShadow = createProgram(gl, SOLDIER_SHADOW_VS, DRONE_SHADOW_FS, 'soldierShadow');
     this.progSoldier.use().int('uShadow0', 4).int('uShadow1', 5);
     this.progPickup = createProgram(gl, PICKUP_VS, DRONE_FS, 'pickup');
@@ -550,8 +650,18 @@ export class Actors {
     this.progGib.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
-    this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 2);
+    // Three vec4s rather than two: the third carries how burnt they are,
+    // which the walk and the fall had no room left for.
+    this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 3);
     this.jet = this._uploadMesh(buildJetMesh(), MAX_JETS, 2);
+    // What you can get into. The fighter you can fly is the same mesh as the
+    // ones that come after you, because it is the same aircraft.
+    this.vehicles = {
+      jeep: this._uploadMesh(buildJeepMesh(), MAX_VEHICLES, 2),
+      tank: this._uploadMesh(buildTankMesh(), MAX_VEHICLES, 2),
+      heli: this._uploadMesh(buildHeliMesh(), MAX_VEHICLES, 2),
+      jet: this._uploadMesh(buildJetMesh(), MAX_VEHICLES, 2),
+    };
     // Every viewmodel is uploaded once. They are a few hundred triangles each,
     // so carrying all six costs less than switching would.
     this.weapons = {
@@ -724,18 +834,19 @@ export class Actors {
     let n = 0;
     for (const s of list) {
       if (!s.alive || n >= MAX_SOLDIERS) continue;
-      const o = n * 8;
+      const o = n * 12;
       data[o] = s.x; data[o + 1] = s.y; data[o + 2] = s.z; data[o + 3] = s.yaw;
       // x carries the fall, which is both death and a banana, y the roll a
       // ragdoll picks up from the hit, w the walk phase.
       data[o + 4] = s.lean; data[o + 5] = s.roll || 0;
       data[o + 6] = s.hitFlash; data[o + 7] = s.walk;
+      data[o + 8] = s.charred || 0; data[o + 9] = 0; data[o + 10] = 0; data[o + 11] = 0;
       n++;
     }
     this.soldier.instanceCount = n;
     if (n > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.soldier.instVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 12);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
     }
   }
@@ -859,6 +970,46 @@ export class Actors {
       this.gib.instanceCount);
     gl.bindVertexArray(null);
     return 1;
+  }
+
+  updateVehicles(list) {
+    const gl = this.gl;
+    const counts = { jeep: 0, tank: 0, heli: 0, jet: 0 };
+    for (const v of list) {
+      const mesh = this.vehicles[v.type];
+      if (!v.alive || !mesh || counts[v.type] >= MAX_VEHICLES) continue;
+      const o = counts[v.type] * 8;
+      const d = mesh.instData;
+      d[o] = v.x; d[o + 1] = v.y; d[o + 2] = v.z; d[o + 3] = v.yaw;
+      d[o + 4] = v.pitch; d[o + 5] = v.roll; d[o + 6] = v.hitFlash; d[o + 7] = v.rotor;
+      counts[v.type]++;
+    }
+    for (const type in this.vehicles) {
+      const mesh = this.vehicles[type];
+      mesh.instanceCount = counts[type];
+      if (counts[type] > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.instData, 0, counts[type] * 8);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
+    }
+  }
+
+  drawVehicles() {
+    const gl = this.gl;
+    let draws = 0;
+    // They ride the drone transform, which already does yaw, then roll, then
+    // pitch, and spins anything with part three as a rotor.
+    this.progDrone.use();
+    for (const type in this.vehicles) {
+      const mesh = this.vehicles[type];
+      if (!mesh.instanceCount) continue;
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
+    gl.bindVertexArray(null);
+    return draws;
   }
 
   drawProjectiles() {
@@ -1000,7 +1151,8 @@ export class Actors {
     const gl = this.gl;
     for (const mesh of [this.drone, this.soldier, this.jet, this.gib,
       ...Object.values(this.weapons),
-      ...Object.values(this.props), ...Object.values(this.pickups)]) {
+      ...Object.values(this.props), ...Object.values(this.pickups),
+      ...Object.values(this.vehicles)]) {
       gl.deleteVertexArray(mesh.vao);
       gl.deleteBuffer(mesh.vbo);
       gl.deleteBuffer(mesh.ibo);

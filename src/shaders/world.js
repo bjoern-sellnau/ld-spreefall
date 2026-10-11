@@ -15,9 +15,18 @@ import { MAT, POS_SCALE, UV_SCALE, HEIGHT_SCALE } from '../shared/constants.js';
 export const MAX_COLLAPSE = 16;
 
 export const COLLAPSE = `
-uniform vec4 uCollapse[${16}];      // xyz centre at ground level, w radius
-uniform vec4 uCollapseInfo[${16}];  // x progress, y crater depth, z rubble height
+uniform vec4 uCollapse[${16}];      // xyz centre at ground level, w collapse radius
+uniform vec4 uCollapseInfo[${16}];  // x level, y crater depth, z crater radius, w heap
 uniform int uCollapseCount;
+
+// How far the fall runs ahead of itself at the middle of a site. A whole
+// district does not come down in one piece: the centre goes first and the
+// edge follows a beat later.
+const float COLLAPSE_WAVE = 0.7;
+// The ejecta ring around a crater, as a share of its depth, and how far out
+// it reaches as a multiple of its radius.
+const float CRATER_RIM = 0.18;
+const float CRATER_RIM_OUT = 1.75;
 
 // A cheap deterministic value in 0..1 from a position, so two vertices in the
 // same place agree and a wall does not tear as it comes down.
@@ -31,11 +40,43 @@ float collapseBite(vec3 p, vec4 site) {
   return 1.0 - smoothstep(site.w * 0.30, site.w, d);
 }
 
+// The level this particular point has reached. The middle of a site is ahead
+// of the edge, so a big collapse rolls outward instead of dropping flat.
+float collapseLocal(float level, float bite) {
+  return clamp(level * (1.0 + COLLAPSE_WAVE) - COLLAPSE_WAVE * (1.0 - bite), 0.0, 1.0) * bite;
+}
+
+/**
+ * What the ground does: a bowl inside the crater radius and a raised ring of
+ * thrown up earth just outside it. Everything beyond that is untouched, which
+ * is the point. A warhead with a blast radius of a hundred and seventy metres
+ * does not leave a hundred and seventy metre hole; it knocks a district down
+ * and digs a crater a fraction of that across in the middle of it.
+ */
+float craterAt(vec2 p, vec4 site, float depth, float craterRadius, float level) {
+  if (craterRadius <= 0.0 || depth <= 0.0) return 0.0;
+  float r = length(p - site.xz);
+  // Not named out: that is a reserved word in GLSL and the compiler says so
+  // in a way that takes a minute to read.
+  float outer = craterRadius * CRATER_RIM_OUT;
+  if (r >= outer) return 0.0;
+  if (r < craterRadius) {
+    float k = 1.0 - smoothstep(0.0, craterRadius, r);
+    return -depth * k * k * level;
+  }
+  float t = (r - craterRadius) / (outer - craterRadius);
+  return depth * CRATER_RIM * sin(3.14159265 * t) * level;
+}
+
 /**
  * Moves one vertex. Returns how far gone it is, 0 to 1, which the colour pass
- * uses to turn a facade into rubble.
+ * uses to turn a facade into rubble. A vertex below the line the building has
+ * been cut back to does not move and does not get marked, so a block that has
+ * lost its top two storeys is still a block for the two below them.
+ *
+ * @param height the building's own height, from the vertex attribute
  */
-float applyCollapse(inout vec3 p, inout vec3 n, bool isGround) {
+float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
   float worst = 0.0;
   for (int i = 0; i < ${16}; i++) {
     if (i >= uCollapseCount) break;
@@ -43,27 +84,37 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround) {
     if (site.w <= 0.0) continue;
     float bite = collapseBite(p, site);
     if (bite <= 0.0) continue;
-    float fall = bite * uCollapseInfo[i].x;
-    if (fall <= 0.0) continue;
-    worst = max(worst, fall);
+    float level = collapseLocal(uCollapseInfo[i].x, bite);
+    if (level <= 0.0) continue;
+
     if (isGround) {
-      // A bowl. The rim does not move, the middle drops the full depth.
-      p.y -= uCollapseInfo[i].y * fall * bite;
-    } else {
-      // Everything above the blast comes down to about the rubble height,
-      // spreading outward as it goes, with a little scatter so the result is
-      // a heap rather than a squashed box.
-      float above = max(0.0, p.y - site.y);
-      if (above <= 0.001) continue;
-      float jitter = collapseHash(p);
-      float drop = (above - uCollapseInfo[i].z * (0.4 + jitter * 0.9)) * fall;
-      p.y -= max(0.0, drop);
-      vec2 away = p.xz - site.xz;
-      float l = max(0.001, length(away));
-      p.xz += (away / l) * above * fall * (0.10 + jitter * 0.14);
-      p.x += (jitter - 0.5) * above * fall * 0.25;
-      p.z += (collapseHash(p.zyx) - 0.5) * above * fall * 0.25;
+      p.y += craterAt(p.xz, site, uCollapseInfo[i].y, uCollapseInfo[i].z,
+                      min(1.0, uCollapseInfo[i].x));
+      continue;
     }
+
+    // Where this building has been cut back to. At a quarter gone it is the
+    // top quarter that is missing; at one it is the whole thing.
+    float above = p.y - site.y;
+    if (above <= 0.001) continue;
+    float full = max(height, above);
+    float cut = full * (1.0 - level);
+    if (above <= cut) continue;
+
+    float jitter = collapseHash(p);
+    float heap = uCollapseInfo[i].w * (0.3 + jitter * 0.8) * bite;
+    float landed = min(above, cut + heap);
+    float fell = above - landed;
+    p.y -= fell;
+    // What fell spreads out as it lands, by how far it fell rather than by
+    // how tall the building was, so a top storey coming off scatters and a
+    // whole block folding in piles up.
+    vec2 away = p.xz - site.xz;
+    float l = max(0.001, length(away));
+    p.xz += (away / l) * fell * (0.09 + jitter * 0.13);
+    p.x += (jitter - 0.5) * fell * 0.30;
+    p.z += (collapseHash(p.zyx) - 0.5) * fell * 0.30;
+    worst = max(worst, clamp(fell / max(1.0, above), 0.0, 1.0));
   }
   // Rubble has no walls left in it: the normals go flat as the fall completes,
   // or a collapsed facade lights like a facade lying down.
@@ -99,8 +150,9 @@ out float vFall;
 void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
   vec3 nrm = normalize(aNormal.xyz);
+  float bHeight = float(aHeight) * ${(1 / HEIGHT_SCALE).toFixed(8)};
   vFall = uCollapseCount > 0
-    ? applyCollapse(p, nrm, (aPacked.w & 1u) != 0u)
+    ? applyCollapse(p, nrm, (aPacked.w & 1u) != 0u, bHeight)
     : 0.0;
   vWorld = p;
   vNormal = nrm;
@@ -110,7 +162,7 @@ void main() {
   vSeed = aPacked.y;
   vLevels = aPacked.z;
   vFlags = aPacked.w;
-  vHeight = float(aHeight) * ${(1 / HEIGHT_SCALE).toFixed(8)};
+  vHeight = bHeight;
   gl_Position = uViewProj * vec4(p, 1.0);
 }
 `;
@@ -758,13 +810,17 @@ precision highp float;
 precision highp int;
 layout(location = 0) in ivec3 aPos;
 layout(location = 3) in uvec4 aPacked;
+layout(location = 4) in uint aHeight;
 uniform mat4 uLightViewProj;
 uniform vec3 uTileOrigin;
 ${COLLAPSE}
 void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
   vec3 nrm = vec3(0.0, 1.0, 0.0);
-  if (uCollapseCount > 0) applyCollapse(p, nrm, (aPacked.w & 1u) != 0u);
+  if (uCollapseCount > 0) {
+    applyCollapse(p, nrm, (aPacked.w & 1u) != 0u,
+      float(aHeight) * ${(1 / HEIGHT_SCALE).toFixed(8)});
+  }
   gl_Position = uLightViewProj * vec4(p, 1.0);
 }
 `;

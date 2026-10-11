@@ -24,10 +24,14 @@ import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
-import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS } from './game/cheats.js';
+import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES } from './game/cheats.js';
 import { Gibs } from './game/gibs.js';
-import { Demolition, DEMO, bite } from './game/demolition.js';
+import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
+import { Cinema, CINEMA } from './game/cinema.js';
+import { Fires } from './game/fires.js';
+import { Ion, ION, ION_STATE } from './game/ion.js';
+import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -35,7 +39,7 @@ const el = {
   canvas: $('view'), loading: $('loading'), loadbar: $('loadbar'), loadnote: $('loadnote'),
   title: $('title'), play: $('playbtn'), hud: $('hud'), minimap: $('minimap'),
   compass: $('compasslabel'), cards: $('cardhost'), toast: $('toast'), debug: $('debug'),
-  found: $('found'), total: $('total'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
+  found: $('found'), total: $('total'), district: $('district'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
@@ -51,10 +55,12 @@ const el = {
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
   sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
-  cheatSpawns: $('cheatspawns'),
+  cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
+  vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
-  targetHint: $('targethint'), targetIn: $('targetin'), targetOut: $('targetout'),
+  targetHint: $('targethint'), cinemaHint: $('cinemahint'),
+  targetIn: $('targetin'), targetOut: $('targetout'),
   targetFit: $('targetfit'), targetZoom: $('targetzoom'),
   targetConfirm: $('targetconfirm'), confirmWhere: $('confirmwhere'),
   confirmSelf: $('confirmself'), confirmFire: $('confirmfire'),
@@ -155,6 +161,14 @@ async function main() {
   let wanted = 'normal';
   try { wanted = localStorage.getItem('spreefall.difficulty') || 'normal'; } catch { /* private mode */ }
   const combat = new Combat(m, wanted);
+  // Districts arrive and leave while you walk, and two things took a copy of
+  // the city's landmarks when they were built: the cards and the weapons free
+  // zone. Both are taken again whenever the city changes shape, so the
+  // memorial is still a sanctuary after Mitte has been dropped and reloaded.
+  world.onManifest = (manifest) => {
+    landmarks.refresh(manifest);
+    combat.refreshSanctuaries(manifest);
+  };
   const drones = new Drones(world, (x, y, z) => combat.isSanctuary(x, y, z));
   // Filled in by the soldier layer below, and referenced by the blast handler
   // before it exists, which is why it is a binding rather than a constant.
@@ -172,12 +186,17 @@ async function main() {
   const gibs = new Gibs(world);
   const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const travel = new Travel();
+  const cinema = new Cinema();
+  const fires = new Fires(world);
+  const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
   projectiles.hitActors = (x, y, z, dx, dy, dz, maxT) => {
-    const d = drones.raycast(x, y, z, dx, dy, dz, maxT);
-    const sHit = soldiers.raycast(x, y, z, dx, dy, dz, d ? d.t : maxT);
+    const vHit = vehicles.raycast(x, y, z, dx, dy, dz, maxT);
+    const d = drones.raycast(x, y, z, dx, dy, dz, vHit ? vHit.t : maxT);
+    const sHit = soldiers.raycast(x, y, z, dx, dy, dz, d ? d.t : (vHit ? vHit.t : maxT));
     const jHit = jets.raycast(x, y, z, dx, dy, dz, sHit ? sHit.t : (d ? d.t : maxT));
     if (jHit) return { t: jHit.t, target: jHit.jet };
     if (sHit) return { t: sHit.t, target: sHit.soldier };
@@ -224,6 +243,23 @@ async function main() {
   const deepLink = !!fromUrl;
   if (fromUrl) spawn = { ...spawn, ...fromUrl };
 
+  // A link can point anywhere in the city, including a district that is not
+  // the one the game loads first. Whichever it is, it is on the ground before
+  // the walk starts rather than a hole you fall through.
+  if (!world.isLoaded(spawn.x, spawn.z)) {
+    const entry = world.entryAt(spawn.x, spawn.z);
+    if (entry) {
+      el.loadnote.textContent = `loading ${entry.name}`;
+      try {
+        await world.loadDistrict(entry.id, (p) => {
+          el.loadbar.style.width = `${Math.round(p * 100)}%`;
+        });
+      } catch (err) {
+        toast(`${entry.name} could not be loaded`);
+      }
+    }
+  }
+
   renderer.timeOfDay = spawn.tod;
   renderer.dayOfYear = spawn.doy;
   el.tod.value = String(spawn.tod);
@@ -245,6 +281,7 @@ async function main() {
   // The pads are scattered once, around wherever you came in, so a deep link
   // into Museum Island gets a map laid out around Museum Island.
   pickups.place(spawn.x, spawn.z);
+  parkVehicles();
 
   const intro = new Intro(spawn.x, spawn.z, world.groundHeight(spawn.x, spawn.z));
 
@@ -272,6 +309,7 @@ async function main() {
     bob: 0,
     inSanctuary: false,
     targeting: false,
+    blastSlow: 0,
     mapMode: 'nuke',
     pendingNuke: null,
     travelTo: null,
@@ -397,6 +435,11 @@ async function main() {
       // the city a quarter of a kilometre across.
       audio.nuke(dist);
       effects.nuke(x, y, z, splash.radius);
+      cinema.detonated(x, y, z);
+      // A warhead going off in slow motion, if that is switched on. It runs
+      // on its own clock rather than out of the reflex meter, because this
+      // is a thing to watch rather than a thing to fight through.
+      if (cheats.slowBlast) state.blastSlow = 3.2;
       // The flash is as bright as the distance allows, falling off smoothly
       // rather than over a cliff. Standing on top of one takes the whole
       // frame; watching from half a kilometre away is a glare you can see
@@ -429,6 +472,10 @@ async function main() {
     // bring a frontage down when they have done enough; a warhead takes its
     // whole radius at once.
     demolition.blast(x, y, z, splash.radius, splash.damage);
+    // Anything that leaves a mark sets light to the trees in it. The radius
+    // is wider than the blast, because fire spreads and a blast does not.
+    fires.ignite(x, y, z, splash.radius * (splash.nuke ? 1.15 : 1.9),
+      Math.min(1, 0.5 + splash.damage / 400));
 
     // Where the damage radiates from, which is not always where the mark is.
     // A grenade goes off at the point it stopped. A warhead's fireball is tens
@@ -531,16 +578,262 @@ async function main() {
   };
   // Coming apart. The soldier is already off the active list by the time this
   // runs, so everything here is about what is left behind.
-  // A building coming down: the dust first, then the pieces, and the deep end
-  // of the explosion sound under both.
-  demolition.onCollapse = (site) => {
-    effects.dust(site.x, site.y, site.z, site.radius);
-    gibs.rubble(site.x, site.y, site.z, site.radius,
-      Math.min(40, 10 + Math.round(site.radius * 0.6)));
-    audio.collapse(Math.hypot(player.x - site.x, player.z - site.z), site.radius);
+  // Each stage of a building coming apart: the dust and the pieces come off
+  // the line it has been cut back to, not out of the ground, so a top storey
+  // going is a top storey going and not a puff at your feet.
+  demolition.onStage = (site, level, was) => {
+    const share = level - was;
+    // How tall whatever is in the site still was before this stage. The
+    // tallest wall inside it is the best answer available without asking the
+    // geometry, and asking the geometry would mean a raycast per stage.
+    const standing = Math.max(4, world.tallestNear(site.x, site.z, site.radius));
+    const breakAt = site.y + standing * (1 - was);
+    effects.dust(site.x, breakAt, site.z, site.radius * (0.5 + share * 0.6));
+    gibs.rubble(site.x, breakAt, site.z, site.radius,
+      Math.min(40, 6 + Math.round(site.radius * share * 1.4)),
+      standing * share);
     const away = Math.round(Math.hypot(player.x - site.x, player.z - site.z));
-    feed(`<i>collapse</i> ${Math.round(site.radius * 2)} m across, ${away} m away`);
+    audio.collapse(away, site.radius * (0.4 + share));
+    feed(level >= 1
+      ? `<i>collapsed</i> ${Math.round(site.radius * 2)} m across, ${away} m away`
+      : `<i>caving in</i> ${Math.round(level * 100)}%, ${away} m away`);
   };
+
+  fires.onFlame = (tree, strength) => effects.flame(tree.x, tree.y, tree.z, tree.height, strength);
+  fires.onBurst = (tree) => {
+    effects.treeBurst(tree.x, tree.y, tree.z, tree.height);
+    // Burning wood, thrown about. The same chunks the buildings use, in the
+    // charred part of the palette.
+    gibs.rubble(tree.x, tree.y + tree.height * 0.5, tree.z, tree.height * 0.4, 7, tree.height * 0.3);
+    audio.treeBurst(Math.hypot(player.x - tree.x, player.z - tree.z));
+  };
+  fires.onTopple = (tree) => {
+    audio.treeFall(Math.hypot(player.x - tree.x, player.z - tree.z));
+  };
+
+  // --- vehicles -------------------------------------------------------------
+  // The gun on whatever you are driving. It goes through the same hitscan and
+  // the same projectiles everything else uses; the only thing a vehicle gun
+  // has that a rifle does not is a muzzle that is four metres in front of
+  // your face.
+  vehicles.onFire = (v, gun) => {
+    const m = vehicles.muzzle(v);
+    const dir = {
+      x: camera.forward[0], y: camera.forward[1], z: camera.forward[2],
+    };
+    if (gun.kind === 'shell') {
+      projectiles.launch('rocket', {
+        x: m.x, y: m.y, z: m.z,
+        vx: dir.x * gun.speed, vy: dir.y * gun.speed, vz: dir.z * gun.speed,
+        splash: gun.splash, weapon: 'tank',
+      });
+      audio.gunshot('launcher');
+      effects.shake = Math.min(1.4, effects.shake + 0.45);
+      effects.flash(m.x, m.y, m.z, 2.2, 1.0, 0.7, 0.3, 0.12);
+      return;
+    }
+    const spread = gun.spread;
+    const d = {
+      x: dir.x + (Math.random() - 0.5) * spread,
+      y: dir.y + (Math.random() - 0.5) * spread,
+      z: dir.z + (Math.random() - 0.5) * spread,
+    };
+    const l = Math.hypot(d.x, d.y, d.z) || 1;
+    d.x /= l; d.y /= l; d.z /= l;
+    const wall = world.raycast(m.x, m.y, m.z, d.x, d.y, d.z, 420);
+    const actor = projectiles.hitActors(m.x, m.y, m.z, d.x, d.y, d.z,
+      wall ? wall.t : 420);
+    const t = actor ? actor.t : (wall ? wall.t : 420);
+    const end = { x: m.x + d.x * t, y: m.y + d.y * t, z: m.z + d.z * t };
+    effects.tracer(m.x, m.y, m.z, end.x, end.y, end.z, true);
+    if (actor) {
+      const target = actor.target;
+      if (actor.kind === 'soldier') {
+        if (soldiers.damage(target, gun.damage, d)) creditTarget(target, false, 'soldier');
+        if (cheats.bleeding) {
+          effects.blood(end.x, end.y, end.z, -d.x, 0.4, -d.z, cheats.goreScale);
+        }
+      } else if (actor.kind === 'drone') {
+        if (drones.damage(target, gun.damage)) creditTarget(target, false, 'drone');
+      } else if (actor.kind === 'jet') {
+        jets.damage(target, gun.damage);
+      } else if (actor.kind === 'vehicle') {
+        vehicles.damage(target, gun.damage);
+      }
+      audio.hitMarker(false);
+      showHitmarker('');
+    } else if (wall) {
+      effects.impact(end.x, end.y, end.z, wall.nx, wall.ny, wall.nz, wall.kind);
+    }
+    audio.gunshot('rifle');
+    state.muzzle = 1;
+    effects.shake = Math.min(1, effects.shake + 0.03);
+  };
+
+  vehicles.onLaunch = (v, rocket) => {
+    const m = vehicles.muzzle(v);
+    const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+    projectiles.launch('rocket', {
+      x: m.x, y: m.y - 0.6, z: m.z,
+      vx: dir.x * rocket.speed, vy: dir.y * rocket.speed, vz: dir.z * rocket.speed,
+      splash: rocket.splash, weapon: v.type,
+    });
+    audio.gunshot('launcher');
+    effects.shake = Math.min(1.2, effects.shake + 0.2);
+  };
+
+  vehicles.onDestroyed = (v) => {
+    explode(v.x, v.y + 1.2, v.z, { radius: 16, damage: 300 });
+    gibs.rubble(v.x, v.y + 1, v.z, 6, 12, 2);
+    feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
+    if (state.inVehicle === v) leaveVehicle(true);
+  };
+
+  vehicles.onBump = (v, speed) => {
+    if (speed < 4) return;
+    effects.impact(v.x, v.y + 1, v.z, 0, 1, 0, 'wall');
+    if (v === state.inVehicle) {
+      effects.shake = Math.min(1, effects.shake + Math.min(0.4, speed * 0.02));
+    }
+  };
+
+  /** Into the nearest one, or out of the one you are in. */
+  function toggleVehicle() {
+    if (state.mode !== 'walk') return;
+    if (state.inVehicle) { leaveVehicle(false); return; }
+    const near = vehicles.nearest(player.x, player.z, 7);
+    if (!near) { toast('nothing to get into'); return; }
+    if (!vehicles.enter(near)) return;
+    state.inVehicle = near;
+    state.holstered = true;
+    el.hud.classList.add('driving');
+    el.vehiclePanel.classList.remove('hidden');
+    el.vehicleName.textContent = near.spec.name;
+    audio.swap();
+    toast(`${near.spec.name}. F to get out.`);
+  }
+
+  function leaveVehicle(thrown) {
+    const v = state.inVehicle;
+    if (!v) return;
+    const out = vehicles.leave() || { x: v.x, z: v.z, y: v.y };
+    state.inVehicle = null;
+    state.holstered = false;
+    el.hud.classList.remove('driving');
+    el.vehiclePanel.classList.add('hidden');
+    player.teleport(out.x, out.z);
+    state.prev = { x: out.x, y: player.y, z: out.z };
+    state.curr = { x: out.x, y: player.y, z: out.z };
+    if (thrown) {
+      combat.hurt(22, v.x, v.z, out.x, out.z);
+      toast('thrown clear');
+    }
+  }
+
+  /**
+   * One of whatever you asked for, parked a few metres away on the first
+   * clear spot going round you.
+   */
+  function dropRide(type) {
+    if (state.mode !== 'walk') return null;
+    cheats.used = true;
+    applyCheats();
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const x = player.x + Math.cos(a) * 9;
+      const z = player.z + Math.sin(a) * 9;
+      let boxed = false;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (world.raycast(x, world.groundHeight(x, z) + 1.2, z, dx, 0, dz, 5)) {
+          boxed = true; break;
+        }
+      }
+      if (boxed) continue;
+      const v = vehicles.spawn(type, x, z, a + Math.PI);
+      if (v) return v;
+    }
+    return null;
+  }
+
+  /** Puts a few where you can find them, once, after the world loads. */
+  function parkVehicles() {
+    const kinds = ['jeep', 'jeep', 'tank', 'heli', 'jet'];
+    let placed = 0;
+    for (let i = 0; i < kinds.length; i++) {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 30 + Math.random() * 110;
+        const x = spawn.x + Math.cos(a) * r;
+        const z = spawn.z + Math.sin(a) * r;
+        if (combat.isSanctuary(x, 0, z)) continue;
+        // Somewhere a vehicle could actually sit: nothing within its own
+        // length in four directions.
+        let boxed = false;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (world.raycast(x, world.groundHeight(x, z) + 1.2, z, dx, 0, dz, 6)) {
+            boxed = true; break;
+          }
+        }
+        if (boxed) continue;
+        const air = kinds[i] === 'heli' || kinds[i] === 'jet';
+        if (vehicles.spawn(kinds[i], x, z, a, air ? 0 : 0)) { placed++; break; }
+      }
+    }
+    return placed;
+  }
+
+  // --- the ion cannon -------------------------------------------------------
+  // What is under a beam. Soldiers burn down to the bone, drones and jets
+  // come apart, and you are not exempt.
+  ion.onSweep = (x, z, radius, dt) => {
+    const burn = dt * 2.6;
+    for (const sd of [...soldiers.active]) {
+      if (Math.hypot(sd.x - x, sd.z - z) > radius) continue;
+      sd.charred = Math.min(1, (sd.charred || 0) + burn);
+      if (soldiers.damage(sd, 220 * dt, { x: 0, y: 0, z: 0 })) {
+        // Burnt rather than blown apart: whatever is left stays standing
+        // until the ground takes it.
+        sd.charred = 1;
+        creditTarget(sd, false, 'soldier');
+      }
+      if (Math.random() < dt * 6) {
+        effects.flame(sd.x, sd.y, sd.z, 2.0, 0.5);
+      }
+    }
+    for (const d of [...drones.active]) {
+      if (Math.hypot(d.x - x, d.z - z) > radius + 3) continue;
+      if (drones.damage(d, 400 * dt)) creditTarget(d, false, 'drone');
+    }
+    for (const j of [...jets.active]) {
+      if (Math.hypot(j.x - x, j.z - z) > radius + 10) continue;
+      jets.damage(j, 400 * dt);
+    }
+    if (Math.hypot(player.x - x, player.z - z) < radius && combat.health > 0) {
+      combat.hurt(260 * dt, x, z, player.x, player.z);
+    }
+    // And it sets light to whatever it is standing on.
+    if (Math.random() < dt * 1.4) fires.ignite(x, 0, z, radius * 2.2, 0.8);
+  };
+
+  ion.onCharge = () => {
+    audio.ionCharge();
+    toast('ion cannon, charging');
+    feed('<i>ion cannon</i> charging');
+  };
+
+  ion.onMain = (x, y, z) => {
+    audio.ionFire();
+    if (cheats.slowBlast) state.blastSlow = 6.0;
+    // One blast, bigger than a warhead, straight through the normal path so
+    // the buildings, the trees and the collision all hear about it the same
+    // way they would from anything else.
+    explode(x, y + 40, z, {
+      radius: ION.blast, damage: ION.damage, burst: 40, nuke: true,
+    });
+    state.flash = Math.max(state.flash, 1.1);
+  };
+
+  ion.onDone = () => { feed('<i>ion cannon</i> spent'); };
 
   gibs.onDrip = (x, y, z) => { if (cheats.bleeding) effects.drip(x, y, z); };
   gibs.onPool = (x, y, z, size) => { if (cheats.bleeding) effects.stain(x, y, z, size); };
@@ -630,6 +923,12 @@ async function main() {
     combat.godmode = cheats.godmode;
     combat.cheated = cheats.used;
     weapon.infiniteAmmo = cheats.infiniteAmmo;
+    // Switching the drones off stops them coming and takes down whatever is
+    // already up, because an enemy frozen in the air is worse than no enemy.
+    if (drones.enabled === cheats.noDrones) {
+      drones.enabled = !cheats.noDrones;
+      if (cheats.noDrones) drones.reset();
+    }
     soldiers.gore.gib = cheats.gibbing;
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;
@@ -646,6 +945,17 @@ async function main() {
       b.innerHTML = `<b>${a.label}</b><i>${a.note}</i>`;
       b.addEventListener('click', () => runCheatAction(a.id));
       el.cheatActions.appendChild(b);
+    }
+    for (const ride of RIDES) {
+      const b = document.createElement('button');
+      b.className = 'act';
+      b.dataset.ride = ride.id;
+      b.innerHTML = `<b>${ride.label}</b><i>${ride.note}</i>`;
+      b.addEventListener('click', () => {
+        const v = dropRide(ride.id);
+        toast(v ? `${v.spec.name} outside. F to get in.` : 'no room for one here');
+      });
+      el.cheatRides.appendChild(b);
     }
     for (const sp of SPAWNS) {
       const b = document.createElement('button');
@@ -720,6 +1030,9 @@ async function main() {
     } else if (id === 'nuke') {
       openTargeting();
       return;
+    } else if (id === 'ion') {
+      openMap('ion');
+      return;
     }
     applyCheats();
   }
@@ -778,6 +1091,12 @@ async function main() {
       armed: 'Enter to go, Esc to cancel.',
       button: 'Fly there',
     },
+    ion: {
+      hint: 'Click the city to put the ion cannon on it. '
+        + 'Wheel zooms, drag moves. Esc to think better of it.',
+      armed: 'Enter to open fire, Esc to cancel.',
+      button: 'Open fire',
+    },
   };
 
   function openMap(mode) {
@@ -791,9 +1110,7 @@ async function main() {
     state.mapMode = mode;
     state.pendingNuke = null;
     targetMap.resetView();
-    targetMap.aim = {
-      x: player.x, z: player.z, radius: mode === 'nuke' ? NUKE.radius : 14, allowed: true,
-    };
+    targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true };
     el.nukeTarget.classList.toggle('travel', mode === 'travel');
     el.nukeTarget.classList.remove('hidden');
     el.targetConfirm.classList.add('hidden');
@@ -855,23 +1172,26 @@ async function main() {
       el.targetHint.textContent = MAP_MODE.travel.armed;
       return true;
     }
-    if (sanctuaryWithin(x, z, NUKE.radius)) {
+    const radius = aimRadius(state.mapMode);
+    if (sanctuaryWithin(x, z, radius)) {
       el.targetHint.textContent = 'not there: the memorial is a weapons free zone';
       el.targetConfirm.classList.add('hidden');
       state.pendingNuke = null;
       return false;
     }
     state.pendingNuke = { x, z };
-    const inside = countInside(x, z, NUKE.radius);
-    el.confirmWhere.textContent =
-      `${away} m away, ${NUKE.radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
-    const self = away < NUKE.radius;
+    const inside = countInside(x, z, radius);
+    el.confirmWhere.textContent = state.mapMode === 'ion'
+      ? `${away} m away. Three beams for ${Math.round(ION.charge)} seconds, `
+        + `then ${radius} m of everything. ${inside} target${inside === 1 ? '' : 's'} inside.`
+      : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
+    const self = away < radius;
     el.confirmSelf.classList.toggle('hidden', !self);
     el.confirmSelf.textContent = combat.godmode
       ? 'You are inside it. God mode is on.'
       : 'You are inside it. This will kill you.';
     el.targetConfirm.classList.remove('hidden');
-    el.targetHint.textContent = MAP_MODE.nuke.armed;
+    el.targetHint.textContent = MAP_MODE[state.mapMode].armed;
     return true;
   }
 
@@ -888,6 +1208,18 @@ async function main() {
     if (state.mapMode === 'travel') {
       closeTargeting();
       beginTravel(at.x, at.z);
+      return true;
+    }
+    if (state.mapMode === 'ion') {
+      if (!ion.fire(at.x, at.z)) {
+        el.targetHint.textContent = ion.firing
+          ? 'the cannon is already firing'
+          : 'not there: the memorial is a weapons free zone';
+        return false;
+      }
+      cheats.used = true;
+      applyCheats();
+      closeTargeting();
       return true;
     }
     if (!dropNuke(at.x, at.z)) {
@@ -915,16 +1247,60 @@ async function main() {
     });
     state.travelTo = { x: tx, z: tz };
     state.mode = 'travel';
-    // Bring the tiles in along the way rather than at the far end, so the
-    // city is there when you arrive instead of popping in around you.
+    // The place you are flying to may be in a district that is not in memory,
+    // and the flight is seven seconds of warning that you are coming. Start
+    // fetching it now and bring the tiles in along the way, so the city is
+    // there when you arrive rather than appearing around you afterwards.
+    const far = world.entryAt(tx, tz);
+    if (far && !world.loaded(far.id)) {
+      world.loadDistrict(far.id).then(() => {
+        tiles.updateResidency(tx, tz, loop.frame);
+      }).catch(() => toast(`${far.name} could not be loaded`));
+    }
     tiles.updateResidency(tx, tz, loop.frame);
     return true;
   }
 
+  /**
+   * The district streamer. One district is in front of you, the next is on its
+   * way, and the ones behind are let go: the whole city is a hundred and six
+   * square kilometres and about twenty five megabytes, which is the budget for
+   * the lot, but only a few square kilometres of it is ever in memory.
+   */
+  function streamCity(x, z) {
+    const ride = state.inVehicle;
+    const flying = state.mode === 'travel' || state.mode === 'cinema'
+      || (ride && (ride.kind === 'jet' || ride.kind === 'heli'));
+    // From the air you see further and you get there faster, so the reach goes
+    // out and nothing is dropped while a flight is in progress.
+    const reach = flying ? 2200 : 1100;
+    const drop = flying ? 7000 : 3000;
+    const fetching = world.keepAround(x, z, reach, drop, flying ? 12 : 9);
+    const names = fetching.map((id) => {
+      const e = world.entryFor(id);
+      return e ? e.name : id;
+    });
+    if (names.length) {
+      el.district.textContent = `${world.nameAt(x, z) || 'Berlin'}  loading ${names.join(', ')}`;
+      el.district.classList.add('loading');
+    } else {
+      el.district.textContent = world.nameAt(x, z) || 'Berlin';
+      el.district.classList.remove('loading');
+    }
+  }
+
+  /** How big the circle on the map is, which is what each mode is about. */
+  function aimRadius(mode) {
+    if (mode === 'travel') return 14;
+    if (mode === 'ion') return ION.blast;
+    return NUKE.radius;
+  }
+
   function aimAt(x, z) {
+    const r = aimRadius(state.mapMode);
     targetMap.aim = {
-      x, z, radius: NUKE.radius,
-      allowed: !sanctuaryWithin(x, z, NUKE.radius),
+      x, z, radius: r,
+      allowed: state.mapMode === 'travel' || !sanctuaryWithin(x, z, r),
     };
   }
 
@@ -1010,13 +1386,39 @@ async function main() {
     cheats.used = true;
     applyCheats();
     const ground = world.groundHeight(x, z);
-    projectiles.launch('nuke', {
+    const body = projectiles.launch('nuke', {
       x, y: ground + NUKE.drop, z,
       vx: 0, vy: -NUKE.speed, vz: 0,
       splash: { radius: NUKE.radius, damage: NUKE.damage, burst: NUKE.burst, nuke: true },
     });
     audio.incoming(NUKE.fall);
+    if (cheats.cinematic && state.mode === 'walk') startCinema(body, x, z);
     return true;
+  }
+
+  /**
+   * Hands the camera to the warhead. The player stays exactly where they
+   * were and the world keeps running underneath, slowed; nothing about this
+   * is a cutaway to somewhere else.
+   */
+  function startCinema(body, x, z) {
+    cinema.start({
+      x: player.x, y: player.y + PLAYER.eye, z: player.z,
+      yaw: camera.yaw, pitch: camera.pitch,
+    }, body, { x, z, y: world.groundHeight(x, z) });
+    state.mode = 'cinema';
+    el.hud.classList.add('flying');
+    el.cinemaHint.classList.remove('hidden');
+    input.exitLock();
+  }
+
+  function endCinema() {
+    if (state.mode !== 'cinema') return;
+    cinema.stop();
+    state.mode = 'walk';
+    el.hud.classList.remove('flying');
+    el.cinemaHint.classList.add('hidden');
+    relock();
   }
 
   /** True when a circle of this radius would reach into a weapons free zone. */
@@ -1046,6 +1448,7 @@ async function main() {
       const z = player.z + Math.sin(a) * far;
       if (x < world.minX + 60 || x > world.maxX - 60) continue;
       if (z < world.minZ + 60 || z > world.maxZ - 60) continue;
+      if (!world.isLoaded(x, z)) continue;
       if (dropNuke(x, z)) return;
     }
   }
@@ -1195,7 +1598,9 @@ async function main() {
     pickups.reset();
     gibs.clear();
     demolition.reset();
+    fires.reset();
     renderer.clearCollapses();
+    renderer.clearFires();
     effects.clear();
     audio.start();
     el.btnSound.textContent = 'sound on';
@@ -1235,7 +1640,7 @@ async function main() {
     state.landFrom = { ...state.dronePose };
   }
 
-  el.btnMap.addEventListener('click', () => minimap.toggle());
+  el.btnMap.addEventListener('click', () => minimap.toggle({ x: player.x, z: player.z }));
   el.btnTravel.addEventListener('click', () => openTravel());
   el.btnHelp.addEventListener('click', () => el.help.classList.toggle('hidden'));
   el.helpClose.addEventListener('click', () => el.help.classList.add('hidden'));
@@ -1294,6 +1699,11 @@ async function main() {
       toggleCheatMenu(false);
       return;
     }
+    if (state.mode === 'cinema') {
+      // Anything gets you out, but space is what the screen says.
+      if (code === 'Space' || code === 'Escape' || code === 'Enter') endCinema();
+      return;
+    }
     if (state.targeting && (code === 'Enter' || code === 'NumpadEnter')) {
       releaseNuke();
       return;
@@ -1302,7 +1712,7 @@ async function main() {
     if (state.mode === 'intro') { skipIntro(); return; }
     switch (code) {
       case 'KeyP': togglePhoto(); break;
-      case 'KeyM': minimap.toggle(); break;
+      case 'KeyM': minimap.toggle({ x: player.x, z: player.z }); break;
       case 'KeyH': el.help.classList.toggle('hidden'); break;
       case 'KeyN': {
         const on = audio.toggle();
@@ -1314,7 +1724,8 @@ async function main() {
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
-      case 'KeyF': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
+      case 'KeyF': toggleVehicle(); break;
+      case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(); else openTravel(); break;
       case 'KeyQ': weapon.select(state.lastWeapon || 'm16'); break;
@@ -1379,7 +1790,18 @@ async function main() {
   function fixed(dt) {
     // dt is a slice of real time. The reflex decides how much of it the world
     // gets: you keep all of it, which is the whole trick.
-    const scale = reflex.update(dt);
+    let scale = reflex.update(dt);
+    // Two other things can slow the world down: a cinematic warhead for as
+    // long as it is running, and the slow motion switch for a few seconds
+    // after anything large goes off. Whichever is slowest wins, so they do
+    // not multiply into a standstill.
+    if (state.blastSlow > 0) {
+      state.blastSlow = Math.max(0, state.blastSlow - dt);
+      scale = Math.min(scale, 0.18);
+    }
+    if (state.mode === 'cinema') {
+      scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
+    }
     const worldDt = dt * scale;
     // You slow down too, but nothing like as much, so you can walk out of a
     // burst that is hanging in the air.
@@ -1393,9 +1815,56 @@ async function main() {
     const [lx, ly] = input.takeLook();
     if (state.mode === 'walk' && !photo.active) camera.rotate(lx, ly);
 
+    // While the camera is off following a warhead the city keeps running,
+    // because the whole point of the shot is watching what happens to it.
+    // The player does not: they are standing where you left them, and the
+    // controls are not theirs for the moment.
+    if (state.mode === 'cinema') {
+      const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z, alive: combat.health > 0 };
+      combat.update(worldDt);
+      projectiles.update(worldDt);
+      gibs.update(worldDt);
+      demolition.update(worldDt);
+      fires.update(worldDt, player);
+      ion.update(worldDt);
+      drones.update(worldDt, eye, state.time);
+      soldiers.update(worldDt, eye, state.time);
+      jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
+      audio.setTimeScale(scale);
+      return;
+    }
+
     if (state.mode !== 'walk') return;
 
     state.prev.x = player.x; state.prev.y = player.y; state.prev.z = player.z;
+
+    // Driving. The controls go to the vehicle instead of to your legs, and
+    // you go wherever it goes.
+    if (state.inVehicle) {
+      const v = state.inVehicle;
+      const air = v.spec.kind === 'air';
+      const controls = {
+        throttle: photo.active ? 0 : input.moveZ,
+        steer: photo.active ? 0 : (air ? input.moveX : -input.moveX),
+        // In the air the mouse flies it: looking up pitches up and the roll
+        // comes off the same stick as the yaw.
+        pitch: air && !photo.active ? clamp(-camera.pitch * 1.6, -1, 1) : 0,
+        roll: air && !photo.active ? clamp(input.moveX * -1, -1, 1) : 0,
+        lift: air && !photo.active ? (input.run ? 1 : (input.jumpHeld ? 1 : (input.secondary ? -1 : 0))) : 0,
+        brake: !air && input.run,
+        fire: input.fire && !photo.active,
+        secondary: false,
+      };
+      vehicles.update(selfDt, controls, state.time);
+      // Dead or alive, you are where it is.
+      player.teleport(v.x, v.z);
+      state.curr.x = v.x; state.curr.y = v.y; state.curr.z = v.z;
+      state.prev.x = v.x; state.prev.y = v.y; state.prev.z = v.z;
+      player.vx = 0; player.vz = 0;
+      landmarks.update(v.x, v.z, dt, player.distanceWalked);
+      runCombatWorld(dt, worldDt, scale);
+      return;
+    }
 
     let wishX = 0, wishZ = 0;
     if (!photo.active) {
@@ -1450,7 +1919,19 @@ async function main() {
     // in the sky the way the first version did.
     applyRecoil();
 
-    // The world runs on the slowed clock. The weapon above does not, which is
+    runCombatWorld(dt, worldDt, scale);
+  }
+
+  /**
+   * Everything in the city that keeps happening whether you are walking,
+   * driving or being carried along by a cinematic. The one thing it does not
+   * do is move you: that belongs to whoever is at the controls.
+   */
+  function runCombatWorld(dt, worldDt, scale) {
+    const eye = {
+      x: player.x, y: player.y + PLAYER.eye, z: player.z, alive: combat.health > 0,
+    };
+    // The world runs on the slowed clock. The weapon does not, which is
     // why a magazine goes further in here than it does outside.
     combat.update(worldDt);
     // What you are carrying scales what the weapon does. Read every step rather
@@ -1464,12 +1945,14 @@ async function main() {
     projectiles.update(worldDt);
     gibs.update(worldDt);
     demolition.update(worldDt);
+    fires.update(worldDt, player);
+    ion.update(worldDt);
+    // The ones nobody is in still sit there and still burn.
+    if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     rainTick(worldDt);
     drones.update(worldDt, eye, state.time);
-    soldiers.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
-      alive: combat.health > 0 }, state.time);
-    jets.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
-      vx: player.vx, vz: player.vz, alive: combat.health > 0 }, state.time);
+    soldiers.update(worldDt, eye, state.time);
+    jets.update(worldDt, { ...eye, vx: player.vx, vz: player.vz }, state.time);
 
     audio.update(dt, player, camera);
     audio.setTimeScale(scale);
@@ -1502,11 +1985,19 @@ async function main() {
     if (state.mode === 'intro') {
       state.dronePose = intro.sample(wall);
       if (intro.t > 13.5) skipIntro();
+    } else if (state.mode === 'cinema') {
+      const p = cinema.sample(wall);
+      if (p) state.dronePose = p;
     } else if (state.mode === 'travel') {
       const p = travel.sample(wall);
       state.dronePose = p;
       el.hud.classList.add('flying');
-      if (p.finished) {
+      // Nobody is put down on ground that has not arrived. The flight holds
+      // its last frame, a few hundred metres up, until the district is in.
+      if (p.finished && state.travelTo && !world.isLoaded(state.travelTo.x, state.travelTo.z)) {
+        el.district.textContent = `landing in ${world.nameAt(state.travelTo.x, state.travelTo.z) || 'Berlin'}`;
+        el.district.classList.add('loading');
+      } else if (p.finished) {
         const at = state.travelTo;
         player.teleport(at.x, at.z);
         state.prev = { x: at.x, y: player.y, z: at.z };
@@ -1534,13 +2025,40 @@ async function main() {
       camera.position[1] = player.y + PLAYER.eye;
       camera.position[2] = player.z;
     } else if (state.mode === 'title' || state.mode === 'intro'
-      || state.mode === 'landing' || state.mode === 'travel') {
+      || state.mode === 'landing' || state.mode === 'travel'
+      || state.mode === 'cinema') {
       const p = state.dronePose || intro.sample(performance.now() / 1000);
       camera.position[0] = p.x;
       camera.position[1] = p.y;
       camera.position[2] = p.z;
       camera.yaw = p.yaw;
       camera.pitch = p.pitch;
+    } else if (state.inVehicle) {
+      // A chase camera, hung behind and above whatever you are in, with the
+      // look you are holding. Third person because the inside of a tank is
+      // not a thing this project is going to model.
+      const v = state.inVehicle;
+      const s = v.spec;
+      const back = s.chase;
+      camera.position[0] = v.x - camera.forward[0] * back;
+      camera.position[1] = v.y + s.chaseUp - camera.forward[1] * back;
+      camera.position[2] = v.z - camera.forward[2] * back;
+      // Never through a wall: pull in until the shot is clear.
+      const toCam = {
+        x: camera.position[0] - v.x, y: camera.position[1] - (v.y + s.chaseUp),
+        z: camera.position[2] - v.z,
+      };
+      const l = Math.hypot(toCam.x, toCam.y, toCam.z) || 1;
+      const blocked = world.raycast(v.x, v.y + s.chaseUp, v.z,
+        toCam.x / l, toCam.y / l, toCam.z / l, l);
+      if (blocked) {
+        const t = Math.max(1.5, blocked.t - 0.6);
+        camera.position[0] = v.x + (toCam.x / l) * t;
+        camera.position[1] = v.y + s.chaseUp + (toCam.y / l) * t;
+        camera.position[2] = v.z + (toCam.z / l) * t;
+      }
+      const floor = world.groundHeight(camera.position[0], camera.position[2]) + 0.9;
+      if (camera.position[1] < floor) camera.position[1] = floor;
     } else {
       camera.position[0] = state.prev.x + (state.curr.x - state.prev.x) * alpha;
       camera.position[1] = state.prev.y + (state.curr.y - state.prev.y) * alpha + PLAYER.eye;
@@ -1556,6 +2074,25 @@ async function main() {
     // Screen shake from firing and from explosions, applied to the eye rather
     // than to the aim, so it never moves where your shots go.
     effects.update(elapsed);
+    // The beams are redrawn every frame rather than left to decay, because
+    // unlike a spark a beam is a thing that is there until it is not.
+    if (ion.firing) {
+      for (const b of ion.beams) {
+        const g = world.groundHeight(b.x, b.z);
+        const hot = b.main ? 1 : 0;
+        effects.beam(b.x, g, b.z, ION.height, b.radius,
+          0.55 + hot * 0.45, 0.85 + hot * 0.15, 1.0, b.x * 0.37 + b.z * 0.11);
+        // A second, wider and dimmer, so the column has an atmosphere round
+        // it rather than an edge.
+        effects.beam(b.x, g, b.z, ION.height * 0.75, b.radius * 2.6,
+          0.10 + hot * 0.2, 0.22 + hot * 0.2, 0.34, b.x * 0.19);
+        // And where it is standing.
+        if (Math.random() < 0.6) {
+          effects.flash(b.x, g + 1.5, b.z, b.radius * (b.main ? 2.6 : 1.5),
+            0.6, 0.9, 1.0, 0.1);
+        }
+      }
+    }
     // The muzzle flash fades over about seventy milliseconds, but the decay is
     // capped per frame so that a long frame cannot swallow it whole: a flash
     // that never renders at all is worse than one that lingers on a hitch.
@@ -1579,7 +2116,7 @@ async function main() {
     camera.update(w / Math.max(1, h));
 
     // --- the weapon in your hands ---
-    if (state.mode === 'walk' && !photo.active) {
+    if (state.mode === 'walk' && !photo.active && !state.inVehicle) {
       const speed = Math.hypot(player.vx || 0, player.vz || 0);
       state.bob += elapsed * (speed > 4 ? 11.5 : 7.4) * Math.min(1, speed / 2.6);
       // Sway lags the look, which is what makes a viewmodel feel like a weight.
@@ -1631,13 +2168,15 @@ async function main() {
       renderer.actors.updateSparks(effects.list);
       renderer.actors.updatePickups(pickups.live, camera.position);
       renderer.actors.updateGibs(gibs.active);
+      renderer.actors.updateVehicles(vehicles.active);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
       // In the air on the way somewhere the city is still the city: the
       // drones are still up, the pads still glow and the rubble is still
       // where it fell. Only the weapon goes away.
-      const live = state.mode === 'walk' || state.mode === 'travel';
+      const live = state.mode === 'walk' || state.mode === 'travel'
+        || state.mode === 'cinema';
       renderer.actors.updateDrones(live ? drones.active : []);
       renderer.actors.updateSoldiers(live ? soldiers.active : []);
       renderer.actors.updateJets(live ? jets.active : []);
@@ -1645,14 +2184,20 @@ async function main() {
       renderer.actors.updateSparks(live ? effects.list : []);
       renderer.actors.updatePickups(live ? pickups.live : [], camera.position);
       renderer.actors.updateGibs(live ? gibs.active : []);
+      renderer.actors.updateVehicles(live ? vehicles.active : []);
       renderer.drawActors = live;
     }
 
+    // Keep the city around whoever is being followed: the district they are
+    // in, the ones within reach, and nothing beyond the drop distance. This
+    // starts fetches and returns at once; tiles appear as the bytes land.
+    streamCity(camera.position[0], camera.position[2]);
     tiles.updateResidency(camera.position[0], camera.position[2], loop.frame);
     // Dynamic resolution, fed the real cost of the last frame. When it decides
     // to move, the scene target is rebuilt at the new size; the page and the
     // interface never change.
     renderer.setCollapses(demolition.sites);
+    renderer.setFires(fires.sites);
     if (renderer.updateDynamicScale(loop.stats.intervalMs)) resize();
     renderer.render(camera, state.time, w, h);
 
@@ -1709,10 +2254,11 @@ async function main() {
       }
     }
 
-    if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel') {
+    if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
+      || state.mode === 'cinema') {
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live);
-      el.found.textContent = String(landmarks.found.size);
+      el.found.textContent = String(landmarks.foundInGoal);
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
       const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
       el.compass.textContent = `${names[Math.round(deg / 45) % 8]} ${Math.round(deg)}`;
@@ -1763,15 +2309,24 @@ async function main() {
 
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
-    world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
+    world, renderer, tiles, camera, player, loop, state, landmarks, audio, input, minimap,
     combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs,
-    demolition, demoSpec: DEMO, demoBite: bite, travelSpec: TRAVEL,
+    demolition, demoSpec: DEMO, demoBite: bite, demoCrater: craterAt, travelSpec: TRAVEL,
+    fires,
+    explode(x, y, z, splash) { return explode(x, y, z, splash, null); },
     pickupSpecs: PICKUP,
     nukeSpec: NUKE,
     targetMap,
     dropNuke(x, z) { return dropNuke(x, z); },
     openTargeting() { openTargeting(); },
     openTravel() { openTravel(); },
+    cinema, cinemaSpec: CINEMA,
+    ion, ionSpec: ION, ionState: ION_STATE,
+    vehicles, vehicleSpec: VEHICLE,
+    toggleVehicle() { toggleVehicle(); },
+    dropRide(type) { return dropRide(type); },
+    parkVehicles() { return parkVehicles(); },
+    endCinema() { endCinema(); },
     travel,
     beginTravel(x, z) { return beginTravel(x, z); },
     armNuke(x, z) { return armNuke(x, z); },

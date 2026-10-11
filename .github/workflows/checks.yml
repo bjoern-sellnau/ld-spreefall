@@ -61,8 +61,16 @@ jobs:
           else
             node --max-old-space-size=6144 tools/fetch-osm.mjs --force
           fi
-      - name: Build the world bundle
-        run: node --max-old-space-size=6144 tools/build-world.mjs
+      - name: Fetch the two districts either side of it
+        # The streaming checks need somewhere to stream to. Two neighbours is
+        # two more Overpass queries and about a minute; the whole city, all
+        # twenty four of them, is built by the city workflow instead.
+        continue-on-error: true
+        run: |
+          node --max-old-space-size=6144 tools/fetch-osm.mjs --district=c2r1
+          node --max-old-space-size=6144 tools/fetch-osm.mjs --district=c4r1
+      - name: Build every district that has an extract
+        run: node --max-old-space-size=6144 tools/build-world.mjs --all
       - name: Serve
         run: node tools/serve.mjs & sleep 2
       - name: Render the fixed viewpoints and fail on any console error
@@ -83,6 +91,8 @@ jobs:
         run: node tools/test-cheats.mjs
       - name: Knock the city down and fly across it
         run: node tools/test-city.mjs
+      - name: Walk from one district into the next
+        run: node tools/test-districts.mjs
       - name: Drive the interface
         run: node tools/test-ui.mjs
       - name: Keep the screenshots

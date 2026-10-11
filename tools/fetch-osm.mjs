@@ -1,8 +1,16 @@
-// Overpass client. Downloads the playable box, caches the raw XML, prints counts.
+// Overpass client. Downloads a district, caches the raw XML, prints counts.
 //
-//   node tools/fetch-osm.mjs            fetch if the cache is missing
-//   node tools/fetch-osm.mjs --force    always refetch
-//   node tools/fetch-osm.mjs --offline  skip the network, synthesise instead
+//   node tools/fetch-osm.mjs                     the middle district only
+//   node tools/fetch-osm.mjs --district=c2r1     one named district
+//   node tools/fetch-osm.mjs --all               every district, in order
+//   node tools/fetch-osm.mjs --force             always refetch
+//   node tools/fetch-osm.mjs --offline           skip the network, synthesise
+//
+// Each district is one query over its own box plus a margin, because one query
+// for all of Berlin is a few hundred megabytes that no mirror wants to serve
+// and this machine would struggle to parse. The margin is there so a building
+// sitting on a district boundary arrives whole in both of them; which of the
+// two actually builds it is decided by its middle, in build-world.
 //
 // If every mirror is unreachable the script falls back to tools/synth-osm.mjs so
 // the rest of the build still has an input. That fallback is announced loudly.
@@ -10,12 +18,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { BBOX } from './geo.mjs';
+import { DISTRICTS, CORE_ID, districtById, fetchBbox, extent } from './districts.mjs';
 import { parseOsmXml, counts } from './osm-xml.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const RAW_DIR = path.join(ROOT, 'data', 'raw');
-const RAW_FILE = path.join(RAW_DIR, 'berlin-center.osm');
-const META_FILE = path.join(RAW_DIR, 'source.json');
+
+/**
+ * Where a district's extract lives. The middle one keeps the name it has
+ * always had, so a cache built before the city had districts is still a hit.
+ */
+export function rawFile(id) {
+  return path.join(RAW_DIR, id === CORE_ID ? 'berlin-center.osm' : `district-${id}.osm`);
+}
+
+export function metaFile(id) {
+  return path.join(RAW_DIR, id === CORE_ID ? 'source.json' : `district-${id}.json`);
+}
 
 const MIRRORS = [
   'https://overpass-api.de/api/interpreter',
@@ -24,8 +43,39 @@ const MIRRORS = [
   'https://overpass.openstreetmap.ru/api/interpreter',
 ];
 
-export function overpassQuery(bbox = BBOX) {
+/**
+ * The query for one box. Outer districts ask for less, because what they do
+ * not build they should not download: a tier two district is blocks, roads,
+ * water and parks, and the amenity, historic and tourism tags that drive the
+ * landmark cards in the middle of town are left on the server.
+ *
+ * @param {object} bbox the box to ask for
+ * @param {number} tier 0 is the middle of town, 2 is out by the ring
+ */
+export function overpassQuery(bbox = BBOX, tier = 0) {
   const b = `${bbox.south},${bbox.west},${bbox.north},${bbox.east}`;
+  if (tier >= 2) {
+    return `[out:xml][timeout:180][bbox:${b}];
+(
+  way["building"];
+  relation["building"];
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|pedestrian)$"];
+  way["railway"];
+  way["waterway"];
+  way["natural"];
+  relation["natural"];
+  way["landuse"];
+  relation["landuse"];
+  way["leisure"];
+  relation["leisure"];
+  way["man_made"];
+  node["natural"="tree"];
+  node["railway"="station"];
+  node["place"];
+);
+(._;>;);
+out body;`;
+  }
   return `[out:xml][timeout:180][bbox:${b}];
 (
   way["building"];
@@ -53,6 +103,7 @@ export function overpassQuery(bbox = BBOX) {
   node["historic"];
   node["tourism"];
   node["amenity"];
+  node["place"];
 );
 (._;>;);
 out body;`;
@@ -118,21 +169,42 @@ export async function fetchOverpass(query, { attempts = 4, deadlineMs = 600000 }
 async function main() {
   const force = process.argv.includes('--force');
   const offline = process.argv.includes('--offline');
+  const all = process.argv.includes('--all');
+  const named = process.argv.find((a) => a.startsWith('--district='));
   fs.mkdirSync(RAW_DIR, { recursive: true });
 
-  if (!force && fs.existsSync(RAW_FILE)) {
-    const meta = fs.existsSync(META_FILE) ? JSON.parse(fs.readFileSync(META_FILE, 'utf8')) : {};
-    console.log(`cache hit: ${RAW_FILE} (${(fs.statSync(RAW_FILE).size / 1e6).toFixed(2)} MB, source ${meta.source || 'unknown'})`);
-    report();
+  let wanted;
+  if (all) wanted = DISTRICTS;
+  else if (named) {
+    const d = districtById(named.slice('--district='.length));
+    if (!d) { console.error(`no such district: ${named}`); process.exit(1); }
+    wanted = [d];
+  } else wanted = [districtById(CORE_ID)];
+
+  for (const district of wanted) {
+    await fetchDistrict(district, { force, offline });
+  }
+}
+
+async function fetchDistrict(district, { force, offline }) {
+  const file = rawFile(district.id);
+  const meta = metaFile(district.id);
+  const e = extent(district.bbox);
+  const label = `${district.id} (tier ${district.tier}, ${e.area.toFixed(1)} km2)`;
+
+  if (!force && fs.existsSync(file)) {
+    const m = fs.existsSync(meta) ? JSON.parse(fs.readFileSync(meta, 'utf8')) : {};
+    console.log(`cache hit: ${label} ${(fs.statSync(file).size / 1e6).toFixed(2)} MB, source ${m.source || 'unknown'}`);
+    report(file);
     return;
   }
 
   let text = null;
   let source = 'synthetic';
   if (!offline) {
-    console.log('fetching the playable box from Overpass');
+    console.log(`fetching ${label} from Overpass`);
     try {
-      const got = await fetchOverpass(overpassQuery());
+      const got = await fetchOverpass(overpassQuery(fetchBbox(district), district.tier));
       text = got.text;
       source = got.source;
     } catch (err) {
@@ -141,22 +213,23 @@ async function main() {
   }
 
   if (text === null) {
-    console.error('falling back to the synthesised dataset, see docs/PLAN.md section 7\n');
+    console.error(`falling back to the synthesised dataset for ${district.id}, see docs/PLAN.md section 7\n`);
     const { buildSyntheticOsm } = await import('./synth-osm.mjs');
-    text = buildSyntheticOsm();
+    text = buildSyntheticOsm(district);
     source = 'synthetic';
   }
 
-  fs.writeFileSync(RAW_FILE, text);
-  fs.writeFileSync(META_FILE, JSON.stringify({
-    source, bbox: BBOX, fetchedAt: new Date().toISOString(), bytes: text.length,
+  fs.writeFileSync(file, text);
+  fs.writeFileSync(meta, JSON.stringify({
+    source, district: district.id, tier: district.tier, bbox: district.bbox,
+    fetchedAt: new Date().toISOString(), bytes: text.length,
   }, null, 2));
-  console.log(`wrote ${RAW_FILE}, ${(text.length / 1e6).toFixed(2)} MB, source ${source}`);
-  report();
+  console.log(`wrote ${file}, ${(text.length / 1e6).toFixed(2)} MB, source ${source}`);
+  report(file);
 }
 
-function report() {
-  const data = parseOsmXml(fs.readFileSync(RAW_FILE, 'utf8'));
+function report(file) {
+  const data = parseOsmXml(fs.readFileSync(file, 'utf8'));
   const c = counts(data);
   console.log(`nodes ${c.nodes}  ways ${c.ways}  relations ${c.relations}`);
   let buildings = 0, highways = 0, water = 0, trees = 0;

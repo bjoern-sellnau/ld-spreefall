@@ -13,9 +13,17 @@ const DIST = path.join(ROOT, 'dist');
 const COPY = [
   'index.html',
   'src',
-  'public/world.bin',
   'public/world.json',
 ];
+
+/** Every district bundle that was built, whichever ones those are. */
+function districtFiles() {
+  const dir = path.join(ROOT, 'public');
+  return fs.readdirSync(dir)
+    .filter((n) => /^world-[a-z0-9]+\.(bin|json)$/.test(n))
+    .sort()
+    .map((n) => `public/${n}`);
+}
 
 function rmrf(p) { fs.rmSync(p, { recursive: true, force: true }); }
 
@@ -119,10 +127,16 @@ function copyInto(src, dest) {
 }
 
 function main() {
-  if (!fs.existsSync(path.join(ROOT, 'public', 'world.bin'))) {
-    console.error('public/world.bin is missing. Run: npm run world');
+  if (!fs.existsSync(path.join(ROOT, 'public', 'world.json'))) {
+    console.error('public/world.json is missing. Run: npm run world');
     process.exit(1);
   }
+  const districts = districtFiles();
+  if (!districts.length) {
+    console.error('no district bundles in public/. Run: npm run world');
+    process.exit(1);
+  }
+  COPY.push(...districts);
   rmrf(DIST);
   fs.mkdirSync(DIST, { recursive: true });
   for (const rel of COPY) {

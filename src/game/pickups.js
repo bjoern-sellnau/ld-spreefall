@@ -71,6 +71,7 @@ export class Pickups {
         const z = seedZ + Math.sin(a) * far;
         if (x < w.minX + 25 || x > w.maxX - 25) continue;
         if (z < w.minZ + 25 || z > w.maxZ - 25) continue;
+        if (w.isLoaded && !w.isLoaded(x, z)) continue;
         if (this.isSanctuary(x, 0, z)) continue;
         const g = w.groundHeight(x, z);
         // Somewhere a person could stand: nothing within arm's reach, and not

@@ -224,6 +224,108 @@ export class Effects {
   }
 
   /**
+   * One tick of a tree burning: a tongue of flame out of the crown and a
+   * thread of smoke off the top of it. Called a few times a second per tree
+   * rather than every frame, so the look does not change with the frame rate.
+   *
+   * @param {number} height the tree's height, so the flame sits in the crown
+   * @param {number} strength 0 to 1, how hard it is going
+   */
+  flame(x, y, z, height, strength = 1) {
+    const crown = y + height * 0.55;
+    const spread = height * 0.22;
+    const s = this._get();
+    s.alive = true;
+    s.kind = 1;
+    s.ax = x + (Math.random() - 0.5) * spread;
+    s.ay = crown + (Math.random() - 0.5) * spread;
+    s.az = z + (Math.random() - 0.5) * spread;
+    s.vx = (Math.random() - 0.5) * 1.2;
+    s.vy = 2.6 + Math.random() * 3.4;
+    s.vz = (Math.random() - 0.5) * 1.2;
+    s.gravity = -1.6;
+    s.maxLife = 0.5 + Math.random() * 0.6;
+    s.life = s.maxLife;
+    const heat = Math.random();
+    s.r = 1.0; s.g = 0.30 + heat * 0.45; s.b = 0.06 + heat * 0.1;
+    s.size = (0.5 + Math.random() * 0.9) * strength;
+    s.bx = 0; s.by = 0; s.bz = 0;
+
+    // Smoke off the top, which is what you see from the far end of a street.
+    if (Math.random() < 0.45) {
+      const m = this._get();
+      m.alive = true;
+      m.kind = 1;
+      m.ax = x + (Math.random() - 0.5) * spread;
+      m.ay = crown + height * 0.3;
+      m.az = z + (Math.random() - 0.5) * spread;
+      m.vx = (Math.random() - 0.5) * 1.6;
+      m.vy = 3.5 + Math.random() * 2.5;
+      m.vz = (Math.random() - 0.5) * 1.6;
+      m.gravity = -1.0;
+      m.maxLife = 2.4 + Math.random() * 2.2;
+      m.life = m.maxLife;
+      m.r = 0.26; m.g = 0.23; m.b = 0.21;
+      m.size = 0.9 + Math.random() * 1.6;
+      m.bx = 0; m.by = 0; m.bz = 0;
+    }
+  }
+
+  /**
+   * A column of light standing on the street. Rewritten every frame rather
+   * than left to decay, because unlike everything else in this pool a beam
+   * is a thing that is there until it is not.
+   *
+   * @param {number} height how far up it goes
+   * @param {number} width its radius at the bottom
+   */
+  beam(x, y, z, height, width, r, g, b, seed = 0) {
+    const s = this._get();
+    s.alive = true;
+    s.kind = 5;
+    s.ax = x; s.ay = y; s.az = z;
+    s.bx = height; s.by = 0; s.bz = seed;
+    // Long enough to survive a slow frame, short enough that a beam nobody
+    // re-emits is gone before anybody notices it is still there.
+    s.maxLife = 0.2;
+    s.life = s.maxLife;
+    s.r = r; s.g = g; s.b = b;
+    s.size = width;
+    s.gravity = 0;
+    s.vx = 0; s.vy = 0; s.vz = 0;
+    return s;
+  }
+
+  /**
+   * A tree going up. Not an explosion: what happens is the sap boils and the
+   * crown comes apart all at once, so it is a sphere of fire and a shower of
+   * burning leaves rather than a shockwave.
+   */
+  treeBurst(x, y, z, height) {
+    const crown = y + height * 0.6;
+    this.flash(x, crown, z, height * 0.5, 1.0, 0.52, 0.16, 0.28);
+    for (let i = 0; i < 26; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = Math.random() * Math.PI * 2;
+      const b = Math.acos(2 * Math.random() - 1);
+      const speed = 4 + Math.random() * 11;
+      s.ax = x; s.ay = crown; s.az = z;
+      s.vx = Math.sin(b) * Math.cos(a) * speed;
+      s.vy = Math.cos(b) * speed * 0.8 + 3;
+      s.vz = Math.sin(b) * Math.sin(a) * speed;
+      s.gravity = 7;
+      s.maxLife = 0.7 + Math.random() * 1.3;
+      s.life = s.maxLife;
+      s.r = 1.0; s.g = 0.34 + Math.random() * 0.35; s.b = 0.10;
+      s.size = 0.16 + Math.random() * 0.3;
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    this.shake = Math.min(1.2, this.shake + 0.18);
+  }
+
+  /**
    * The dust off a building coming down. Pale and bright rather than dark,
    * because these are additive billboards and dark smoke added to a daylight
    * street is nothing at all. It rolls outward along the ground first and
@@ -417,6 +519,8 @@ export class Effects {
         s.az += s.vz * dt;
         s.vx *= Math.max(0, 1 - 2.2 * dt);
         s.vz *= Math.max(0, 1 - 2.2 * dt);
+      } else if (s.kind === 5) {
+        // A beam is redrawn by whoever owns it; it does not drift.
       } else if (s.kind === 4) {
         // A pool opens out and then stops. bx carries how far it has got.
         s.bx = Math.min(1, s.bx + dt * 1.6);

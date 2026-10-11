@@ -59,8 +59,18 @@ export class Minimap {
     }
   }
 
-  toggle() {
+  /**
+   * @param {{x:number,z:number}|null} at where to open it, usually the player.
+   *   The city is twelve kilometres across and a map of all of it at once is a
+   *   diagram, not a map, so it opens on a few streets around you and zooms
+   *   out from there.
+   */
+  toggle(at = null) {
     this.big = !this.big;
+    if (this.big && at) {
+      this.centre = { x: at.x, z: at.z };
+      if (this.zoom <= 1) this.zoom = 5;
+    }
     this.canvas.classList.toggle('big', this.big);
     requestAnimationFrame(() => this._sizeCanvas());
   }
@@ -104,6 +114,11 @@ export class Minimap {
     ctx.translate(-originX, -originZ);
 
     const m = this.world.manifest;
+
+    // The districts, under everything, on the big map only. Berlin inside the
+    // Ring is twenty four of them and only a few are ever in memory, so the
+    // ones that are not say so rather than reading as empty ground.
+    if (this.big) this.drawDistricts(ctx, scale);
 
     // Water first.
     ctx.fillStyle = '#16303c';
@@ -185,7 +200,10 @@ export class Minimap {
       ctx.beginPath();
       ctx.arc(l.x, l.z, (this.big ? 3.6 : 4.5) / scale * this.dpr * 0.5, 0, Math.PI * 2);
       ctx.fill();
-      if (this.big) {
+      // Zoomed out to the whole city the names of eleven landmarks within a
+      // kilometre of each other are one illegible blob, so below about a
+      // pixel every fifteen metres they are left as dots.
+      if (this.big && scale > 0.065 * this.dpr) {
         ctx.save();
         ctx.translate(l.x, l.z);
         ctx.scale(1 / scale, 1 / scale);
@@ -283,6 +301,48 @@ export class Minimap {
       : Math.min(midX + roomX, Math.max(midX - roomX, this.centre.x));
     this.centre.z = roomZ <= 0 ? midZ
       : Math.min(midZ + roomZ, Math.max(midZ - roomZ, this.centre.z));
+  }
+
+  /**
+   * The district boxes, their names, and which of them are in memory.
+   *
+   * @param {CanvasRenderingContext2D} ctx in world space already
+   * @param {number} scale canvas pixels per metre, for hairlines and text
+   */
+  drawDistricts(ctx, scale) {
+    const list = this.world.catalogue || [];
+    if (!list.length) return;
+    ctx.save();
+    ctx.lineWidth = 1 / scale;
+    for (const d of list) {
+      const b = d.bounds;
+      const here = this.world.loaded(d.id);
+      ctx.fillStyle = here ? 'rgba(26,32,38,0.55)' : 'rgba(16,18,21,0.75)';
+      ctx.fillRect(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
+      ctx.strokeStyle = here ? 'rgba(120,150,170,0.35)' : 'rgba(90,96,104,0.22)';
+      ctx.strokeRect(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
+    }
+    ctx.restore();
+    // Names, upright and at a readable size whatever the zoom is.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const W = this.canvas.width, H = this.canvas.height;
+    const cx = W / 2, cy = H / 2;
+    const originX = this.centre ? this.centre.x : (this.world.minX + this.world.maxX) / 2;
+    const originZ = this.centre ? this.centre.z : (this.world.minZ + this.world.maxZ) / 2;
+    ctx.font = `${Math.round(11 * this.dpr)}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const d of list) {
+      const b = d.bounds;
+      const mx = cx + ((b.minX + b.maxX) / 2 - originX) * scale;
+      const mz = cy + ((b.minZ + b.maxZ) / 2 - originZ) * scale;
+      if (mx < -60 || mz < -20 || mx > W + 60 || mz > H + 20) continue;
+      const here = this.world.loaded(d.id);
+      ctx.fillStyle = here ? 'rgba(206,214,222,0.72)' : 'rgba(150,156,164,0.40)';
+      ctx.fillText(String(d.name || d.id).toUpperCase(), mx, mz);
+    }
+    ctx.restore();
   }
 
   /**

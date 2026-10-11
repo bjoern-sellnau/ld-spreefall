@@ -148,14 +148,22 @@ export class Audio {
     for (const p of bed.parts) p.gain.gain.setTargetAtTime(p.target * level, t, 0.6);
   }
 
-  /** Distance from the player to the nearest road, cheaply, from the surface map. */
+  /**
+   * Distance from the player to the nearest road, cheaply, from the surface
+   * map. The map belongs to the district you are standing in, and how fine it
+   * is depends on that district's tier, so both come from there rather than
+   * from the city.
+   */
   _proximity(x, z, want, radius) {
-    const s = this.world.surface;
+    const index = this.world.tileIndex(x, z);
+    const rec = index >= 0 ? this.world.tiles[index] : null;
+    if (!rec) return Infinity;
+    const s = rec.d.surface;
     const step = s.step;
     const r = Math.ceil(radius / step);
     let best = Infinity;
-    const ix0 = Math.round((x - this.world.minX) / step);
-    const iz0 = Math.round((z - this.world.minZ) / step);
+    const ix0 = Math.round((x - s.minX) / step);
+    const iz0 = Math.round((z - s.minZ) / step);
     for (let dz = -r; dz <= r; dz += 2) {
       for (let dx = -r; dx <= r; dx += 2) {
         const ix = ix0 + dx, iz = iz0 + dz;
@@ -451,6 +459,147 @@ export class Audio {
     sub.connect(sg).connect(this.master);
     sub.start(t);
     sub.stop(t + 2.7);
+  }
+
+  /**
+   * A tree going up. Sap boiling rather than ordnance: a wet crack with a
+   * rush of air after it and no bass at all, which is what separates it from
+   * every other bang in this game.
+   */
+  treeBurst(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + Math.min(1, distance / 340);
+    const near = Math.max(0.08, 1 - distance / 220);
+    if (near < 0.1) return;
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = this._noiseBuffer;
+    crack.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(1900, t);
+    bp.frequency.exponentialRampToValueAtTime(420, t + 0.25);
+    bp.Q.value = 1.3;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.26 * near, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    crack.connect(bp).connect(g).connect(this.master);
+    crack.start(t, Math.random() * 3, 0.6);
+    crack.stop(t + 0.6);
+  }
+
+  /** A tree going over: a long tearing creak and then a soft heavy landing. */
+  treeFall(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + Math.min(1, distance / 340);
+    const near = Math.max(0.06, 1 - distance / 200);
+    if (near < 0.1) return;
+
+    // The creak: a narrow band wandering down, which is fibres letting go.
+    const creak = ctx.createOscillator();
+    creak.type = 'sawtooth';
+    creak.frequency.setValueAtTime(240, t);
+    creak.frequency.exponentialRampToValueAtTime(90, t + 1.1);
+    const cf = ctx.createBiquadFilter();
+    cf.type = 'bandpass';
+    cf.frequency.value = 500;
+    cf.Q.value = 5;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, t);
+    cg.gain.exponentialRampToValueAtTime(0.055 * near, t + 0.2);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+    creak.connect(cf).connect(cg).connect(this.master);
+    creak.start(t);
+    creak.stop(t + 1.25);
+
+    // And the landing, a second later.
+    const land = ctx.createBufferSource();
+    land.buffer = this._noiseBuffer;
+    land.loop = true;
+    const lf = ctx.createBiquadFilter();
+    lf.type = 'lowpass';
+    lf.frequency.setValueAtTime(900, t + 1.1);
+    lf.frequency.exponentialRampToValueAtTime(160, t + 1.7);
+    const lg = ctx.createGain();
+    lg.gain.setValueAtTime(0.0001, t + 1.1);
+    lg.gain.exponentialRampToValueAtTime(0.2 * near, t + 1.14);
+    lg.gain.exponentialRampToValueAtTime(0.0001, t + 1.9);
+    land.connect(lf).connect(lg).connect(this.master);
+    land.start(t + 1.1, Math.random() * 2, 0.85);
+    land.stop(t + 1.95);
+  }
+
+  /**
+   * The ion cannon charging: a tone that rises for eight seconds and a
+   * shimmer over it that gets faster with the ring. Nothing in this game is
+   * allowed to sound mechanical, so it is two detuned saws through a filter
+   * that opens rather than a sample of anything.
+   */
+  ionCharge() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const seconds = 8.9;
+    this._ionNodes = [];
+    for (const detune of [-7, 0, 7]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.detune.value = detune;
+      o.frequency.setValueAtTime(70, t);
+      o.frequency.exponentialRampToValueAtTime(520, t + seconds);
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.setValueAtTime(220, t);
+      f.frequency.exponentialRampToValueAtTime(2400, t + seconds);
+      f.Q.value = 4;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.10, t + 1.2);
+      g.gain.exponentialRampToValueAtTime(0.22, t + seconds);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.25);
+      o.connect(f).connect(g).connect(this.master);
+      o.start(t);
+      o.stop(t + seconds + 0.3);
+      this._ionNodes.push(o);
+    }
+  }
+
+  /** And the middle beam: a crack with a very long tail of pressure. */
+  ionFire() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(2200, t);
+    hp.frequency.exponentialRampToValueAtTime(220, t + 2.4);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.55, t + 0.01);
+    g.gain.setValueAtTime(0.42, t + 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.4);
+    src.connect(hp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 2, 3.6);
+    src.stop(t + 3.6);
+
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(130, t);
+    sub.frequency.exponentialRampToValueAtTime(18, t + 2.8);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(0.75, t + 0.02);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 3.0);
+    sub.connect(sg).connect(this.master);
+    sub.start(t);
+    sub.stop(t + 3.1);
   }
 
   /** A warhead on its way down: a falling whistle that arrives with it. */

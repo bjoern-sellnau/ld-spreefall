@@ -472,3 +472,208 @@ Recorded here as they happen, per the working style.
   it. The test now drains the accumulator across three frames before setting
   the view, and waits for the heading it asked for rather than for any URL at
   all, so a write from before the view was set cannot be read as the answer.
+
+- 2026-10-11: destruction, second pass, after it was correctly called too
+  coarse. Three things were wrong and each had the same shape: the model was
+  binary where the thing it describes is graded.
+
+  A building either stood or was a heap. It now carries a level from zero to
+  one and the shader cuts it back to that share of its own height, which it
+  gets from the vertex attribute that was already there for the window
+  pattern. A quarter gone means the top quarter is missing and the three
+  storeys under it are still a facade. Five rockets take a frontage from
+  standing to rubble in four visible steps.
+
+  A crater was the size of the blast. A hundred and seventy metre warhead was
+  digging a hundred and seventy metre bowl, which is not what one does: the
+  crater is a fraction of the damage radius. It is now thirty six metres
+  across inside a hundred and forty six metre collapse, with a ring of thrown
+  up ground around the lip, and the street is flat again well inside the area
+  where the buildings came down.
+
+  And a wall either opened up or did not. Collision walls are one quad per
+  building edge, and an edge can be thirty metres long, so whether a facade
+  became walkable depended on which side of the blast its midpoint happened
+  to fall, while the picture showed the blast cutting across the middle of
+  it. The first time a collapse touches a tile, its long walls are now cut
+  into five metre pieces and the cached array is replaced. It costs more
+  segments in the tiles you have blown up and nothing anywhere else.
+
+  One smaller thing worth keeping: damage was measured from the blast to the
+  centre of each grid cell, which made how fast a building came down depend on
+  where the invisible grid happened to be. It is measured to the cell now, so
+  the cell the rocket landed in takes all of it.
+
+- 2026-10-11: `out` is a reserved word in GLSL, and the compiler's message for
+  using it as a local float is a syntax error on the line after the one you
+  wrote. Worth an entry only because the whole page fails to boot and the
+  console error is the one place it says why.
+
+- 2026-10-11: the cinematic warhead camera does not cut. The temptation with
+  a shot like this is to teleport the camera somewhere good and then teleport
+  it back, and the reason not to is that a cut throws away the one thing
+  worth showing: that the place the bomb lands is a real place a measurable
+  distance from where you are standing. So it leaves the eye and arrives at
+  its station in one move, and the station is beside the fall line rather
+  than behind the bomb, because a camera chasing a falling object from above
+  shows an empty sky.
+
+  The slow motion is not constant either. Three seconds of fall held at a
+  fifth of speed is fifteen seconds of an object getting smaller, so the shot
+  runs at most of real time and eases down over the last half of the descent.
+  The world comes back up to speed under the orbit rather than snapping,
+  which is the same trick the other way round.
+
+  The simulation keeps running the whole time. `fixed` refuses to step
+  anything outside walking mode, which is right for the title screen and
+  wrong here: the point of the shot is what happens to the city, so this mode
+  steps the world and nothing else, with the controls disconnected and the
+  player standing exactly where they were left.
+
+- 2026-10-11: burning trees are a uniform array, not a list of objects. Trees
+  are drawn from one instanced call per tile with five floats each and no
+  mesh data at all, which is why three thousand seven hundred of them cost
+  nothing; making each one burn separately would have meant a per tree state
+  buffer uploaded every frame, and that throws the whole design away for an
+  effect that only ever touches a few dozen of them at once.
+
+  So a fire is a circle with an age, eight of them, and every tree inside one
+  derives its own timeline from its own seed. The cost is that the two sides
+  have to agree: the shader decides when a tree bursts, and JavaScript has to
+  decide the same thing at the same moment so the flash goes off on the tree
+  that burst. Both run the same hash and the same two lines of arithmetic,
+  written out twice, and the test checks that the number of trees the game
+  saw burst is exactly the number the seeds said would.
+
+- 2026-10-11: the skeletons are the same mesh as the soldiers. A separate
+  skeleton model would be a second mesh, a second upload and a second draw
+  call for something only a handful of bodies are ever in; instead the
+  soldier carries its own bones inside itself and the vertex shader collapses
+  whichever set is not wanted to a point. Cloth, webbing and helmet shrink
+  towards the body's own centre line as the charring rises and the bones come
+  out of the same place. It costs about forty triangles per soldier and
+  nothing else at all.
+
+  One thing that had to be split for it: the fragment shader is shared by the
+  drones, the projectiles, the pickups, the gibs and the soldiers, and only
+  the soldiers can be burnt. Rather than have everything read a varying that
+  nothing writes, the shader is now built twice from one template, once with
+  the charring compiled out as a constant and once with the real input.
+
+- 2026-10-11: the vehicles are two kinds, not four. A tank is a jeep that is
+  slow, heavy, turns badly and hits very hard; a fighter is a helicopter that
+  cannot hover and falls below its stall speed. Writing them as four classes
+  would have been four sets of the same bugs, so there are two update
+  functions and one table of numbers, the same shape as the arsenal.
+
+  Two things the first version got wrong, both the same mistake. An aircraft
+  sitting on the ground was pressed into it by its own weight every frame,
+  and the landing code counted that as an impact, so a parked fighter
+  destroyed itself in four frames and took a building with it. And the
+  forward wall check fired on a stationary aircraft with a building beside
+  it. Both are now gated on actually having been moving: a parked aircraft is
+  parked, not crashing.
+
+  The simulation also had to be split. `fixed` walked the player and then ran
+  the world, and driving is the same world with somebody else at the
+  controls, so everything from the combat clock down is now one function that
+  the walking path, the driving path and the cinematic camera all call. The
+  one thing it does not do is move you.
+
+- 2026-10-11: a rocket was reaching forty five metres. The damage grid is
+  twenty two metre cells, a nine metre blast touches up to four of them, and
+  every cell that took a step was opening a site with the full cell radius.
+  Four full sites round one hit reached across the street and took a slice
+  out of the buildings either side of what was aimed at. The radius now
+  grows with the damage instead: one step is a dent in a frontage, four steps
+  is the frontage gone. A warhead is unchanged, because a warhead is supposed
+  to take the whole circle at once.
+
+  The check that caught it was also claiming more than the game can give.
+  It read the tallest thing within eighteen metres of the hit and asked for
+  it to be untouched, but eighteen metres of a frontage is inside the
+  footprint of what a rocket legitimately damages. It now reads two things:
+  the block the hit is in, which must keep nearly all of its height, and a
+  second building more than forty five metres away, found by the same scan,
+  which must not move at all. The second one is the real claim, and it is
+  measured on something that was never in reach.
+
+## 18. Berlin inside the Ring, as districts
+
+The brief asks for a walkable Berlin under twenty five megabytes of download.
+Mitte is 6.5 square kilometres and 2.2 MB over the wire. Inside the Ringbahn is
+106, and at Mitte's detail that is about a hundred and thirty megabytes. The
+question the city had to answer was therefore not "can the whole of Berlin be
+built" but "what does the whole of Berlin have to give up to fit", and the only
+honest way to answer that is to build it and weigh it.
+
+- 2026-10-11: the box is the Ringbahn's bounding box, and it is taken from the
+  four stations at its corners rather than from a round number: Westkreuz
+  52.5010 N 13.2840 E, Ostkreuz 52.5031 N 13.4689 E, Gesundbrunnen 52.5486 N
+  13.3894 E, Suedkreuz 52.4720 N 13.3670 E. Sources: the Wikipedia station
+  articles for the first three, and latitude.to for Suedkreuz, which is the
+  weakest of the four and is the one to check again if the south edge ever
+  matters. The ring encloses about 88 square kilometres of the 106 in the box;
+  the corners fall outside it, which is why they are built at the cheapest
+  tier.
+
+- 2026-10-11: the districts are cut in tiles, not in degrees. The first version
+  snapped each district's lat lon box outward onto the global grid, which gave
+  twenty four districts whose tile ranges added up to eight hundred more tiles
+  than the grid has: every boundary was claimed by both sides. Cutting the grid
+  first and deriving each district's box from its own tiles means the city
+  partitions exactly, and the test counts it.
+
+- 2026-10-11: the projection is unchanged, and over twelve and a half
+  kilometres it is wrong by about fifteen metres at the far corners, because it
+  uses one metres per degree of longitude for the whole city rather than
+  recomputing it per latitude. That is deliberate. Everything is projected with
+  the same two constants, so the city is consistently stretched rather than
+  torn; nothing lines up against an external map and nothing has a seam.
+
+- 2026-10-11: the palette had to be frozen. A vertex carries a six bit index
+  into the facade palette and the renderer uploads one palette for the whole
+  city, but the build grew its palette as the data asked for colours. With one
+  district that was fine. With two it would have meant index seven being
+  sandstone in Mitte and brick in Wedding. The palette is now computed, sixty
+  four fixed shades of the twelve Berlin tones, identical in every district,
+  and a building that states its own colour is snapped to the nearest one.
+
+- 2026-10-11: two bugs the clipping found, both of which would have shipped
+  silently. The first: `annotate` attaches the surveyed facts, and with no box
+  to check against it put the Brandenburg Gate, the Reichstag and the stelae
+  field into every district that was built, out by the ring included. It now
+  takes the district's own metres and only adds what stands inside them. The
+  second: the first road clipper tested the points of a line and cut where one
+  went outside, which silently dropped every street whose two ends are both
+  outside the district and which crosses the whole of it. That is most of the
+  streets in most districts, and the build cheerfully reported sixty roads and
+  nought kilometres of road. It is Liang Barsky per segment now.
+
+- 2026-10-11: what the tiers actually save, measured on the offline city rather
+  than guessed. The footstep surface map was a tenth of a district at 2.5 m
+  across the whole box, so it goes to 5 m and then 10 m. The base ground grid
+  at 12.5 m is four thousand cells a square kilometre, so it goes to 25 m and
+  then 100. A pitched roof is four more vertices per metre of frontage and
+  reads as flat from the next street, so out past the inner districts every
+  roof is flat. A small building becomes the box that fits it. The height
+  field, 2 kB a tile whichever tier it is in, drops from thirty three points
+  across to seventeen, nine and five. What none of that touches is the thing
+  that actually dominates, which is the walls: about two thirds of an outer
+  district is building vertices, and the only way to spend less there is to
+  have fewer buildings, which is what the minimum area does.
+
+- 2026-10-11: the streaming is deliberately boring. One tile array over the
+  whole city, sparse, with each record carrying a reference to the district
+  buffer its offsets point into. Everything downstream kept working unchanged
+  because everything downstream addresses the city by tile index. The three
+  things that did have to change are the three that had assumed one buffer: the
+  height field, which now reads its own size out of the blob, the surface map,
+  which belongs to a district rather than to the world, and the facade palette.
+
+- 2026-10-11: the budget is enforced by a tool rather than by a promise.
+  `npm run weigh` prints every district's deployed and gzipped bytes, the code
+  and the page, and the total against the twenty five megabyte line, and exits
+  non zero when a complete city is over it. The workflow that builds all
+  twenty four districts from the live extract runs it, so the answer to "does
+  all of Berlin fit" is a number in a log rather than an opinion.

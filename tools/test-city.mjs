@@ -56,18 +56,27 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
     const x = s.player.x - 40, z = s.player.z + 10;
     const y = s.world.groundHeight(x, z);
-    const steps = [];
-    for (let i = 0; i < 8; i++) steps.push(s.demolition.blast(x, y, z, 9, 150).length);
-    const first = steps.indexOf(1);
+    const levels = [];
+    for (let i = 0; i < 7; i++) {
+      s.demolition.blast(x, y, z, 9, 150);
+      const site = s.demolition.sites.find((v) => Math.hypot(v.x - x, v.z - z) < 20);
+      levels.push(site ? site.level : 0);
+    }
     s.demolition.reset(); s.renderer.clearCollapses();
-    // One of the same is not enough on its own.
     const one = s.demolition.blast(x, y, z, 9, 150).length;
+    const afterOne = s.demolition.sites.length ? s.demolition.sites[0].level : 0;
     s.demolition.reset(); s.renderer.clearCollapses();
-    return { steps, first, one, threshold: s.demoSpec.threshold };
+    return { levels, one, afterOne, stages: s.demoSpec.stages };
   });
-  check('one rocket does not bring a building down', adds.one === 0);
-  check('but several into the same frontage do', adds.first > 1 && adds.first < 8,
-    `the ${adds.first + 1}th of them, at ${adds.threshold} damage`);
+  check('one rocket does not bring anything down', adds.one === 0 && adds.afterOne === 0);
+  check('and a frontage comes apart a piece at a time rather than at once',
+    new Set(adds.levels).size >= 4 && adds.levels[adds.levels.length - 1] === 1
+    && adds.levels[1] > 0 && adds.levels[1] < 1,
+    adds.levels.join(' '));
+  check('every step is a fraction of the building, not all of it',
+    adds.levels.every((v, i) => i === 0 || v >= adds.levels[i - 1])
+    && adds.levels.filter((v) => v > 0 && v < 1).length >= 2,
+    `${adds.stages} steps from standing to a heap`);
 
   // --- what comes down stops being there -----------------------------------
   const walls = await page.evaluate(() => {
@@ -100,6 +109,65 @@ async function run() {
   });
   check('a square with buildings round it has walls in it', walls.before >= 6,
     `${walls.before} of 24 rays hit one`);
+
+  // The heights come down in steps, and only where the damage landed.
+  const bySteps = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.demolition.reset(); s.renderer.clearCollapses();
+    // Somewhere with a real building on it, found by asking rather than by
+    // picking a coordinate that might be an empty square.
+    let at = null;
+    for (let d = 20; d <= 90 && !at; d += 4) {
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * Math.PI * 2;
+        const x = s.player.x + Math.cos(a) * d, z = s.player.z + Math.sin(a) * d;
+        if (s.world.tallestNear(x, z, 6) > 14) { at = { x, z }; break; }
+      }
+    }
+    if (!at) return { skip: true };
+    // And a second building well clear of the first, so the claim that the
+    // damage stayed where it landed is measured on something that was never
+    // in reach of it rather than on a circle drawn round the hit.
+    let away = null;
+    for (let d = 46; d <= 150 && !away; d += 4) {
+      for (let i = 0; i < 64; i++) {
+        const a = (i / 64) * Math.PI * 2;
+        const x = at.x + Math.cos(a) * d, z = at.z + Math.sin(a) * d;
+        if (s.world.tallestNear(x, z, 6) > 14) { away = { x, z }; break; }
+      }
+    }
+    const y = s.world.groundHeight(at.x, at.z);
+    // The same reach the search used, or the point it found may have
+    // nothing inside a tighter circle and every reading comes back zero.
+    const here = () => Math.round(s.world.tallestNear(at.x, at.z, 6) * 10) / 10;
+    // A rocket touches up to four cells of the damage grid, so a site can
+    // reach the far side of the frontage it hit. What it must not do is take
+    // the neighbours with it, which is what these two read.
+    const near = () => Math.round(s.world.tallestNear(at.x, at.z, 22) * 10) / 10;
+    const other = () => (away
+      ? Math.round(s.world.tallestNear(away.x, away.z, 6) * 10) / 10 : 0);
+    const steps = [{ hit: here(), rest: near(), other: other() }];
+    for (let i = 0; i < 5; i++) {
+      s.demolition.blast(at.x, y + 6, at.z, 9, 150);
+      for (let k = 0; k < 400; k++) s.demolition.update(1 / 60);
+      steps.push({ hit: here(), rest: near(), other: other() });
+    }
+    s.demolition.reset(); s.renderer.clearCollapses();
+    return { steps, away: !!away, apart: away
+      ? Math.round(Math.hypot(away.x - at.x, away.z - at.z)) : 0 };
+  });
+  check('a facade loses its height in steps rather than in one go',
+    !bySteps.skip && bySteps.steps.filter((v, i) => i > 0
+      && v.hit < bySteps.steps[i - 1].hit).length >= 3,
+    bySteps.skip ? 'no building found' : bySteps.steps.map((v) => v.hit).join(' to '));
+  const last = bySteps.skip ? null : bySteps.steps[bySteps.steps.length - 1];
+  check('and the rest of the block keeps nearly all of its height',
+    !bySteps.skip && last.rest >= bySteps.steps[0].rest - 2,
+    bySteps.skip ? '' : `${bySteps.steps[0].rest} m at 22 m, still ${last.rest} m`);
+  check('while the building up the road is not touched at all',
+    !bySteps.skip && (!bySteps.away || last.other >= bySteps.steps[0].other - 0.1),
+    bySteps.skip || !bySteps.away ? 'no second building found'
+      : `${bySteps.steps[0].other} m, still ${last.other} m, ${bySteps.apart} m away`);
   check('the walls are still there while it is falling', walls.halfway === walls.before);
   check('and gone at head height in the middle of it once it has fallen',
     walls.inner === 0, `${walls.before} to ${walls.inner} within 32 m`);
@@ -114,37 +182,46 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
     const x = s.player.x + 400, z = s.player.z + 40;
     const before = s.world.groundHeight(x, z);
-    const rimBefore = s.world.groundHeight(x + 150, z);
     s.demolition.blast(x, before, z, 170, 4000);
     const site = s.demolition.sites[0];
-    for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
-    const after = s.world.groundHeight(x, z);
-    const rimAfter = s.world.groundHeight(x + 150, z);
-    // The collision profile and the one the shader draws have to be the same
-    // function. Sampled at a few radii, the measured drop must match
-    // depth * bite squared.
-    const errs = [];
-    for (const f of [0.1, 0.3, 0.5, 0.7, 0.9]) {
-      const px = x + site.radius * f;
-      const k = s.demoBite(px, z, site);
-      const want = site.depth * k * k;
-      const got = s.world.groundHeight(px, z);
-      const base = before;      // flat enough over this square to compare
-      errs.push(Math.abs((base - got) - want));
+    for (let i = 0; i < 400; i++) s.demolition.update(1 / 60);
+    // Walk out along one radius and record what the ground did.
+    const profile = [];
+    for (let d = 0; d <= site.radius; d += 4) {
+      profile.push({ d, moved: Number((s.world.groundHeight(x + d, z) - before).toFixed(2)) });
+    }
+    // The collision and the shape the shader draws are the same function,
+    // compared number for number rather than by eye.
+    let worst = 0;
+    for (const f of [0.05, 0.2, 0.4, 0.6, 0.85, 1.2, 1.6, 2.4]) {
+      const px = x + site.craterRadius * f;
+      const want = s.demoCrater(px, z, site);
+      const got = s.world.groundHeight(px, z) - before;
+      worst = Math.max(worst, Math.abs(got - want));
     }
     return {
+      collapse: Math.round(site.radius),
+      craterRadius: Math.round(site.craterRadius),
       depth: Number(site.depth.toFixed(2)),
-      dropped: Number((before - after).toFixed(2)),
-      rim: Number((rimBefore - rimAfter).toFixed(2)),
-      worstErr: Number(Math.max(...errs).toFixed(2)),
+      deepest: Math.min(...profile.map((p) => p.moved)),
+      highest: Math.max(...profile.map((p) => p.moved)),
+      flatFrom: (profile.find((p) => p.d > site.craterRadius * 2 && Math.abs(p.moved) < 0.1)
+        || { d: -1 }).d,
+      worst: Number(worst.toFixed(2)),
     };
   });
-  check('a warhead digs a hole you can walk into',
-    crater.dropped > 5 && Math.abs(crater.dropped - crater.depth) < 0.05,
-    `${crater.dropped} m deep`);
-  check('and the rim of it does not move', Math.abs(crater.rim) < 0.05);
+  check('a warhead digs a hole you can walk into', crater.deepest < -5,
+    `${(-crater.deepest).toFixed(1)} m deep`);
+  check('and the hole is a fraction of the blast, not all of it',
+    crater.craterRadius < crater.collapse * 0.35,
+    `${crater.craterRadius} m of crater inside a ${crater.collapse} m collapse`);
+  check('with a ring of thrown up ground round the lip', crater.highest > 0.5,
+    `${crater.highest.toFixed(1)} m proud`);
+  check('and flat street again well inside the collapse',
+    crater.flatFrom > 0 && crater.flatFrom < crater.collapse,
+    `level again ${crater.flatFrom} m out`);
   check('and the collision agrees with the shape the shader draws',
-    crater.worstErr < 1.2, `worst ${crater.worstErr} m out over five radii`);
+    crater.worst < 1.2, `worst ${crater.worst} m out over eight radii`);
 
   // --- small blasts leave the ground alone ---------------------------------
   const small = await page.evaluate(() => {
@@ -155,9 +232,10 @@ async function run() {
     for (let i = 0; i < 8; i++) s.demolition.blast(x, y, z, 9, 150);
     for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
     const site = s.demolition.sites[0];
-    return { crater: site ? site.crater : null, moved: Number((y - s.world.groundHeight(x, z)).toFixed(3)) };
+    return { crater: site ? site.craterRadius : null,
+      moved: Number((y - s.world.groundHeight(x, z)).toFixed(3)) };
   });
-  check('a rocket does not crater the street', small.crater === false && small.moved === 0,
+  check('a rocket does not crater the street', small.crater === 0 && small.moved === 0,
     'the ground mesh is a 12.5 m grid, so a small hole would be invisible');
 
   // --- the memorial ---------------------------------------------------------
@@ -206,6 +284,99 @@ async function run() {
   check('sixty blasts never ask for more slots than there are',
     uniforms.many.sites <= uniforms.max && uniforms.many.uniforms <= uniforms.max,
     `${uniforms.many.sites} sites, ${uniforms.max} slots`);
+
+  // --- trees that burn ------------------------------------------------------
+  const fire = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.fires.reset(); s.renderer.clearFires();
+    // Where the trees actually are, rather than a coordinate that might be a
+    // square with nothing on it.
+    const w = s.world;
+    let best = null;
+    for (let tz = 0; tz < w.nz; tz++) {
+      for (let tx = 0; tx < w.nx; tx++) {
+        const d = w.trees(tz * w.nx + tx);
+        if (!d || d.length < 5 * 8) continue;
+        let mx = 0, mz = 0;
+        const n = d.length / 5;
+        for (let i = 0; i < d.length; i += 5) { mx += d[i]; mz += d[i + 2]; }
+        if (!best || n > best.n) best = { x: mx / n, z: mz / n, n };
+      }
+    }
+    if (!best) return { skip: true };
+    const quiet = s.renderer.fireCount;
+    const site = s.fires.ignite(best.x, 0, best.z, 70, 1);
+    if (!site) return { skip: true };
+    const caught = site.trees.length;
+    const willBurst = site.trees.filter((t) => t.bursts).length;
+    // Nobody has given up yet.
+    const early = site.trees.filter((t) => t.done).length;
+    // Run the fire out, on this file's clock rather than the game's, so the
+    // test does not depend on how fast the machine is.
+    const seen = { burst: 0, topple: 0, flames: 0 };
+    s.fires.onBurst = () => { seen.burst++; };
+    s.fires.onTopple = () => { seen.topple++; };
+    const realFlame = s.fires.onFlame;
+    s.fires.onFlame = () => { seen.flames++; };
+    const me = { x: best.x, z: best.z };
+    for (let i = 0; i < 60 * 14; i++) s.fires.update(1 / 60, me);
+    s.renderer.setFires(s.fires.sites);
+    const uniforms = s.renderer.fireCount;
+    const gone = site.trees.filter((t) => t.gone).length;
+    const done = site.trees.filter((t) => t.done).length;
+    // And the edge of a fire catches after the middle of it.
+    const byDistance = site.trees
+      .map((t) => ({ d: Math.hypot(t.x - best.x, t.z - best.z), at: t.caughtAt }))
+      .sort((a, b) => a.d - b.d);
+    const ordered = byDistance.every((t, i) =>
+      i === 0 || t.at >= byDistance[i - 1].at - 1e-6);
+    s.fires.onFlame = realFlame;
+    s.fires.reset(); s.renderer.clearFires();
+    return { quiet, caught, willBurst, early, seen, uniforms, gone, done, ordered,
+      total: site.trees.length };
+  });
+  check('a fire takes hold of the trees that are really there',
+    !fire.skip && fire.caught > 10, fire.skip ? 'no trees found' : `${fire.caught} of them`);
+  check('and none of them is alight the instant it starts', fire.early === 0);
+  check('they catch from the middle of the fire outward', fire.ordered);
+  check('some burn until they burst and the rest go over',
+    fire.seen.burst > 0 && fire.seen.topple > 0
+    && fire.seen.burst + fire.seen.topple === fire.total,
+    `${fire.seen.burst} burst, ${fire.seen.topple} fell, out of ${fire.total}`);
+  check('and which it is was decided by the tree, not by a dice',
+    fire.seen.burst === fire.willBurst,
+    'the same seed the shader reads picks it');
+  check('a burning tree makes flames while it burns', fire.seen.flames > 50,
+    `${fire.seen.flames} over fourteen seconds`);
+  check('an unburnt city costs the tree shader nothing', fire.quiet === 0);
+  check('and a fire reaches it', fire.uniforms === 1);
+
+  const lit = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.fires.reset(); s.renderer.clearFires();
+    const w = s.world;
+    let at = null;
+    for (let tz = 0; tz < w.nz && !at; tz++) {
+      for (let tx = 0; tx < w.nx; tx++) {
+        const d = w.trees(tz * w.nx + tx);
+        if (!d || d.length < 5 * 8) continue;
+        at = { x: d[0], z: d[2] };
+        break;
+      }
+    }
+    if (!at) return { skip: true };
+    s.projectiles.clear();
+    // A rocket into the trees, through the real blast path.
+    s.explode(at.x, s.world.groundHeight(at.x, at.z) + 1, at.z,
+      { radius: 9, damage: 150 });
+    const n = s.fires.count;
+    const trees = n ? s.fires.sites[0].trees.length : 0;
+    s.fires.reset(); s.renderer.clearFires();
+    return { n, trees };
+  });
+  check('a rocket into a row of trees sets them alight',
+    !lit.skip && lit.n === 1 && lit.trees > 0,
+    lit.skip ? 'no trees found' : `${lit.trees} caught`);
 
   // --- free travel ----------------------------------------------------------
   const flight = await page.evaluate(() => {
@@ -288,6 +459,102 @@ async function run() {
   });
   check('and you may still travel into the memorial', intoMemorial.ok, intoMemorial.name);
 
+  // --- things you can get into ----------------------------------------------
+  const rides = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.teleport(81, 0);
+    const made = ['jeep', 'tank', 'heli', 'jet']
+      .map((t) => s.vehicles.spawn(t, s.player.x - 14 - Math.random() * 20,
+        s.player.z + (Math.random() - 0.5) * 20, 1.4));
+    return { n: s.vehicles.count, types: made.map((v) => v && v.type).join(' ') };
+  });
+  check('all four of them can be put in the street', rides.n === 4, rides.types);
+
+  const parked = await page.evaluate(async () => {
+    const s = window.spreefall;
+    // Left alone, nothing happens to any of them.
+    const before = s.vehicles.active.map((v) => v.health);
+    for (let i = 0; i < 60 * 6; i++) s.vehicles.update(1 / 60, null, i / 60);
+    const after = s.vehicles.active.map((v) => v.health);
+    return { same: before.every((h, i) => after[i] === h), count: s.vehicles.count };
+  });
+  check('and parked ones are still parked six seconds later', parked.same,
+    'an aircraft on the ground is not crashing');
+
+  const drive = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const jeep = s.vehicles.active.find((v) => v.type === 'jeep');
+    s.teleport(jeep.x + 2, jeep.z);
+    const tooFar = s.vehicles.nearest(jeep.x + 300, jeep.z, 7);
+    s.toggleVehicle();
+    const inIt = s.state.inVehicle === jeep;
+    const was = { x: jeep.x, z: jeep.z };
+    // Through the real fixed step with the real throttle, so this is the
+    // path a player's key press takes and not a shortcut past it.
+    s.input.keys.add('KeyW');
+    for (let i = 0; i < 150; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('KeyW');
+    const moved = Math.hypot(jeep.x - was.x, jeep.z - was.z);
+    const rode = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
+    s.toggleVehicle();
+    const out = s.state.inVehicle === null;
+    const dropped = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
+    return { inIt, tooFar: tooFar === null, moved: Math.round(moved),
+      rode: Math.round(rode), out, dropped: Math.round(dropped) };
+  });
+  check('you can only get into one you are standing next to', drive.tooFar);
+  check('and then it drives', drive.inIt && drive.moved > 15, `${drive.moved} m`);
+  check('with you in it', drive.rode === 0);
+  check('and getting out puts you beside it', drive.out && drive.dropped <= 4,
+    `${drive.dropped} m away`);
+
+  const fly = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const heli = s.vehicles.active.find((v) => v.type === 'heli');
+    const jet = s.vehicles.active.find((v) => v.type === 'jet');
+    s.teleport(heli.x + 2, heli.z);
+    s.toggleVehicle();
+    const y0 = heli.y;
+    s.input.keys.add('Space');
+    s.input.jumpHeld = true;
+    for (let i = 0; i < 180; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('Space');
+    s.input.jumpHeld = false;
+    const climbed = heli.y - y0;
+    s.toggleVehicle();
+
+    // A fighter that is not going fast enough does not fly.
+    jet.y = s.world.groundHeight(jet.x, jet.z) + 200;
+    jet.grounded = false;
+    jet.speed = 5;
+    jet.pitch = 0.3;
+    const high = jet.y;
+    for (let i = 0; i < 90; i++) s.vehicles.update(1 / 60, null, i / 60);
+    const stalled = high - jet.y;
+    return { climbed: Math.round(climbed), stalled: Math.round(stalled),
+      stall: s.vehicleSpec.jet.stall };
+  });
+  check('a helicopter climbs when you hold space', fly.climbed > 20, `${fly.climbed} m`);
+  check('and a fighter below its stall speed falls out of the sky',
+    fly.stalled > 20, `${fly.stalled} m in a second and a half, under ${fly.stall} m/s`);
+
+  const shot = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    const tank = s.vehicles.spawn('tank', s.player.x - 20, s.player.z, 0);
+    const before = tank.health;
+    // Everything that can shoot at anything else can shoot at these too.
+    const hit = s.vehicles.raycast(s.player.x, s.player.y + 1.7, s.player.z,
+      (tank.x - s.player.x) / 20, 0, (tank.z - s.player.z) / 20, 60);
+    if (hit) s.vehicles.damage(hit.target, 3000);
+    const out = { found: !!hit, before, after: tank.health, dead: tank.health === 0 };
+    s.vehicles.reset();
+    return out;
+  });
+  check('and they can be shot at like anything else',
+    shot.found && shot.dead, `${shot.before} to ${shot.after}`);
+
   // --- the pictures ---------------------------------------------------------
   await page.evaluate(() => {
     const s = window.spreefall;
@@ -297,11 +564,27 @@ async function run() {
     s.teleport(81, 0); s.look(90, -2); s.setTime(15.9);
     const x = s.player.x - 70, z = s.player.z;
     const y = s.world.groundHeight(x, z);
-    s.demolition.blast(x, y, z, 90, 3000);
-    for (let i = 0; i < 240; i++) { s.demolition.update(1 / 60); s.gibs.update(1 / 60); }
+    // Two rounds, so the picture is a building half down rather than a heap:
+    // half down is the thing worth showing.
+    for (let i = 0; i < 2; i++) {
+      s.demolition.blast(x, y + 8, z, 40, 500);
+      for (let k = 0; k < 160; k++) { s.demolition.update(1 / 60); s.gibs.update(1 / 60); }
+    }
   });
-  await page.waitForTimeout(1600);
+  await page.waitForTimeout(1800);
   await page.screenshot({ path: path.join(SHOTS, 'city-01-collapse.png') });
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const x = s.player.x - 70, z = s.player.z;
+    const y = s.world.groundHeight(x, z);
+    for (let i = 0; i < 3; i++) {
+      s.demolition.blast(x, y + 8, z, 40, 500);
+      for (let k = 0; k < 160; k++) { s.demolition.update(1 / 60); s.gibs.update(1 / 60); }
+    }
+  });
+  await page.waitForTimeout(1800);
+  await page.screenshot({ path: path.join(SHOTS, 'city-04-flattened.png') });
 
   await page.evaluate(() => {
     const s = window.spreefall;
@@ -320,6 +603,19 @@ async function run() {
     s.cheats.reset();
     s.demolition.reset(); s.renderer.clearCollapses(); s.renderer.clearScars();
     s.gibs.clear(); s.effects.clear(); s.state.flash = 0;
+    s.vehicles.reset();
+    s.teleport(81, 0); s.look(96, -4); s.setTime(16.6);
+    s.vehicles.spawn('jeep', s.player.x - 16, s.player.z + 5, 1.1);
+    s.vehicles.spawn('tank', s.player.x - 27, s.player.z - 5, 1.9);
+    s.vehicles.spawn('heli', s.player.x - 44, s.player.z + 12, 0.7);
+    s.vehicles.spawn('jet', s.player.x - 62, s.player.z - 12, 1.5);
+  });
+  await page.waitForTimeout(1400);
+  await page.screenshot({ path: path.join(SHOTS, 'city-05-vehicles.png') });
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
     s.teleport(81, 0);
     s.beginTravel(s.player.x + 1200, s.player.z - 200);
   });

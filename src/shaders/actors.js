@@ -51,7 +51,7 @@ void main() {
 }
 `;
 
-export const DRONE_FS = `${VERSION}
+const bodyFS = (charred) => `${VERSION}
 precision highp float;
 ${CAMERA_BLOCK}
 ${NOISE}
@@ -63,6 +63,7 @@ flat in float vPart;
 flat in float vFlash;
 in float vViewDist;
 layout(location = 0) out vec4 fragColour;
+${charred}
 
 void main() {
   vec3 n = normalize(vNormal);
@@ -205,12 +206,23 @@ void main() {
     albedo = vec3(0.30, 0.285, 0.262) * (0.6 + 0.7 * v);
     rough = 0.96;
     metal = 0.0;
-  } else {
+  } else if (vPart < 22.5) {
     // Brick out of the same wall.
     float v = hash11(floor(vWorld.x * 3.0) + floor(vWorld.y * 7.0));
     albedo = vec3(0.26, 0.115, 0.082) * (0.7 + 0.6 * v);
     rough = 0.93;
     metal = 0.0;
+  } else if (vPart < 23.5) {
+    // Bone. Only ever visible on somebody who has been burnt down to it, and
+    // the charring above takes it the rest of the way to black.
+    albedo = vec3(0.50, 0.47, 0.41);
+    rough = 0.72;
+    metal = 0.0;
+  } else {
+    // Glass, in a windscreen or a canopy. Dark and sharp, with the sky in it.
+    albedo = vec3(0.022, 0.030, 0.038);
+    rough = 0.06;
+    metal = 0.85;
   }
 
   vec3 L = uSunDir.xyz;
@@ -230,6 +242,13 @@ void main() {
   vec3 colour = albedo * (uSunColour.rgb * ndl * shadow + ambient)
               + uSunColour.rgb * spec * mix(0.08, 1.2, metal)
               + emissive;
+  // Burnt. Everything goes to charcoal and what little light is left in it
+  // comes out of the cracks rather than off the surface.
+  if (vCharred > 0.001) {
+    float crack = hash11(floor(vWorld.y * 14.0) + floor(vWorld.x * 9.0) * 7.0);
+    colour = mix(colour, vec3(0.020, 0.017, 0.015), vCharred);
+    colour += vec3(1.0, 0.22, 0.03) * step(0.88, crack) * vCharred * 0.9;
+  }
   // A white flash on the frame it takes a hit, so a connect is unmistakable.
   colour = mix(colour, vec3(3.0, 2.4, 1.6), vFlash * 0.75);
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
@@ -322,6 +341,12 @@ void main() {
 }
 `;
 
+// The drones and everything else that is not a soldier can never be charred,
+// so their build of the shader has the term compiled out rather than reading
+// a varying nothing writes.
+export const DRONE_FS = bodyFS('#define vCharred 0.0');
+export const SOLDIER_FS = bodyFS('flat in float vCharred;');
+
 // Soldiers share the drone's fragment shader and its instance layout, and
 // differ only in what the vertex stage does with the transform: a walk cycle
 // that swings the limbs, and a fall that lays the whole body down. The limbs
@@ -335,11 +360,13 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aInfo;     // x part id
 layout(location = 5) in vec4 iPosYaw;   // xyz feet position, w yaw
 layout(location = 6) in vec4 iState;    // x fall, y roll, z hit flash, w walk phase
+layout(location = 7) in vec4 iExtra;    // x charred 0..1
 
 out vec3 vWorld;
 out vec3 vNormal;
 flat out float vPart;
 flat out float vFlash;
+flat out float vCharred;
 out float vViewDist;
 
 mat3 rotY(float a) {
@@ -359,6 +386,23 @@ void main() {
   vec3 p = aPos;
   vec3 n = aNormal;
   float walk = iState.w;
+  float charred = iExtra.x;
+  vCharred = charred;
+
+  // Burnt to the bone. The cloth, the webbing and the helmet shrink into
+  // nothing and the skeleton inside them comes out. Both sets of parts are in
+  // the one mesh and one of them is always collapsed to a point, which costs
+  // a few dozen triangles and no draw calls at all.
+  bool bone = aInfo.x > 22.5;
+  float keep = bone ? charred : 1.0 - charred;
+  if (keep < 0.999) {
+    // Collapse towards the body's own centre line rather than towards the
+    // origin, so what shrinks goes into the figure instead of into its feet.
+    vec3 core = vec3(0.0, p.y, 0.0);
+    p = core + (p - core) * keep;
+    p.y = mix(p.y, 0.0, (1.0 - keep) * 0.0);
+  }
+  if (keep <= 0.001) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
 
   // Legs swing about the hip, arms about the shoulder, in opposition. Anything
   // above the belt and inboard of the shoulders is the trunk and stays put.
@@ -445,8 +489,9 @@ layout(location = 5) in vec4 iA;    // xyz start, w kind
 layout(location = 6) in vec4 iB;    // xyz end or spread, w life 0..1
 layout(location = 7) in vec4 iC;    // rgb colour, w width
 // Kinds: 0 tracer, 1 spark, 2 muzzle or blast flash, 3 blood, 4 a pool of it
-// on the ground. Three and four are drawn in a second pass with an ordinary
-// alpha blend; the rest are additive.
+// on the ground, 5 a column of light standing on the street. Three and four
+// are drawn in a second pass with an ordinary alpha blend; the rest are
+// additive.
 
 out vec2 vUv;
 flat out float vKind;
@@ -473,6 +518,16 @@ void main() {
     vec3 toEye = normalize(uCamPos.xyz - mid);
     vec3 side = normalize(cross(normalize(axis), toEye)) * iC.w;
     pos = a + axis * c.x + side * (c.y - 0.5) * 2.0;
+  } else if (iA.w > 4.5) {
+    // A column standing on the ground, turned to face the eye. iB.x is how
+    // tall it is and iC.w how wide.
+    vec3 base = iA.xyz;
+    vec3 toEye = uCamPos.xyz - base;
+    toEye.y = 0.0;
+    float l = length(toEye);
+    vec3 fwd = l > 0.001 ? toEye / l : vec3(0.0, 0.0, 1.0);
+    vec3 right = normalize(vec3(fwd.z, 0.0, -fwd.x));
+    pos = base + right * (c.x - 0.5) * 2.0 * iC.w + vec3(0.0, c.y * iB.x, 0.0);
   } else if (iA.w > 3.5) {
     // A pool on the pavement: flat, not turned to face anybody, growing to its
     // full size over the first second.
@@ -508,6 +563,19 @@ void main() {
     // Tracer: bright core with a soft edge, fading towards the tail.
     float across = 1.0 - abs(vUv.y - 0.5) * 2.0;
     a = pow(across, 2.2) * mix(0.15, 1.0, vUv.x);
+  } else if (vKind > 4.5) {
+    // A column. Hard bright core, soft shoulders, and it thins as it goes up
+    // so the top of it disappears into the sky rather than being cut off.
+    float across = abs(vUv.x - 0.5) * 2.0;
+    float core = pow(max(0.0, 1.0 - across), 7.0);
+    float glow = pow(max(0.0, 1.0 - across), 1.6) * 0.42;
+    float up = 1.0 - smoothstep(0.35, 1.0, vUv.y) * 0.75;
+    float pulse = 0.88 + 0.12 * sin(vSeed * 40.0 + vUv.y * 24.0);
+    // Not faded by its life: a beam is on or it is not.
+    float a = (core + glow) * up * pulse;
+    if (a < 0.004) discard;
+    fragColour = vec4(vColour * a, a);
+    return;
   } else if (vKind > 3.5) {
     // A pool. A disc with a ragged edge, because a round one looks painted on.
     vec2 d = vUv - 0.5;

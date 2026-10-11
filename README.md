@@ -21,7 +21,8 @@ the sound and the data pipeline are all written from scratch.
 | Combat | own hitscan raycasting against the same world, own flight AI |
 | Audio | raw Web Audio API, every sound synthesised at run time |
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
-| Shipped as | one HTML file, JS modules, one binary bundle, no backend |
+| Shipped as | one HTML file, JS modules, one bundle per district, no backend |
+| Extent | Berlin inside the Ringbahn, 106 km2, 24 districts streamed as you walk |
 | Payload | 21.33 MB deployed, 7.90 MB over the wire with gzip, against a 25 MB budget |
 | Difficulty | easy, normal and hard, with shields that come back |
 | Third party code at run time | none |
@@ -62,6 +63,8 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
+| F | get into the nearest vehicle, or out of the one you are in |
+| F4 | debug overlay |
 | V | free travel: pick a place on the map and fly there |
 | Q | back to the weapon you had before |
 | T | blow the C4 you have put down |
@@ -69,7 +72,7 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | Right mouse, or LT on a pad | aim down the sight |
 | R | reload |
 | G | holster the weapon, for walking and for photographs |
-| F | debug overlay |
+
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | F1 F2 F3 | quality tier: low, medium, high |
 
@@ -210,10 +213,14 @@ between visits.
 | All weapons | every magazine and every reserve in the loadout, full |
 | Reload everything | tops up what you are carrying |
 | Drop a nuke | opens a map of the city; click where you want it, then confirm |
+| Ion cannon | three beams in a ring, then the middle one |
 | Soldiers, Drones, Jets | brings a section, a flight or a pair out around you |
 | God mode | nothing hurts you, though you are still told which way it came from |
 | Infinite ammunition | the magazine never reaches the bottom |
 | Nuke rain | one falls somewhere in the city every few seconds |
+| No drones | they stop coming, and whatever is up leaves |
+| Cinematic warheads | the camera follows one down and circles the hole |
+| Slow motion blasts | the world drops to a crawl for a few seconds after anything large |
 | Tear enemies apart | a killing hit takes them to pieces instead of laying them down |
 | Ragdoll | they fall with the momentum of the shot rather than on a timer |
 | Blood | hits spray |
@@ -273,6 +280,63 @@ And the warhead:
   rather than a message you get after clicking. This is the one line in the
   project that no switch in this menu moves.
 
+**Cinematic warheads.** With that switch on, releasing one hands the camera
+over. It leaves you where you are standing, takes a station beside the fall
+line a hundred and fifty metres to one side, and tracks the thing down; the
+world starts near real time and eases to a fifth of it as the bomb comes in,
+because holding a three second fall at a fifth of speed for all of it is
+fifteen seconds of watching an object get smaller. When it goes off, the
+camera circles the impact and climbs away from it, and the city comes back up
+to speed underneath. Space gives you back the controls. The simulation runs
+throughout: the drones are still flying and the buildings still come down,
+you are simply not the one looking.
+
+**The ion cannon.** Picked on the same map. Three columns of light come down
+in a ring fifty eight metres across and walk round the target for eight
+seconds, speeding up the whole time, and anything they pass over burns: a
+soldier caught by one loses the cloth and the webbing and what is left
+standing is a blackened skeleton with the embers still in it. Then the ring
+stops, holds for a second, and the middle fires: two hundred and ten metres
+of everything, which is bigger than a warhead and the largest thing in the
+game. It goes through the same blast path as everything else, so the
+buildings come down, the trees catch and the collision opens up the way they
+would from a grenade.
+
+The skeleton is real geometry rather than a texture. The soldier mesh carries
+a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
+vertex shader collapses one set of parts or the other to nothing depending on
+how burnt they are, so a person and a skeleton are the same mesh and the same
+draw call.
+
+## Vehicles
+
+Four of them stand near the spawn when the city loads, and the cheat menu
+will park one wherever you are. **F** gets you into the nearest, and out of
+the one you are in. The camera goes to a chase view behind it, because the
+inside of a tank is not a thing this project is going to model, and the gun
+fires wherever you are looking.
+
+| | |
+|---|---|
+| Jeep | 24 m/s, light, a mounted gun on the back |
+| Tank | 12 m/s, two and a half thousand health, one shell every two and a half seconds |
+| Helicopter | hovers; space climbs, right mouse holds the rockets |
+| Fighter | 180 m/s, and it stops flying below 38 |
+
+They divide into two kinds rather than four. Something with wheels follows
+the ground, refuses a kerb taller than it can climb, leans into a slope, and
+loses its steering as it speeds up, so a jeep at full throttle cannot turn on
+the spot. Something with rotors or wings does not: the helicopter's thrust is
+up out of its own rotor disc so pitching forward is what makes it go forward,
+and the fighter's lift comes out of going fast, which is why below its stall
+speed it falls instead. Everything else between the four of them is numbers
+in one table.
+
+Both kinds collide against the same world as everything else: the ground
+height field under the wheels and the collision segments in front of the
+bumper, from the same raycast the bullets use. They can be shot at, they
+catch fire and they go up.
+
 ## Free travel
 
 Press **V**, or the travel button. The same map comes up, you pick a place,
@@ -296,26 +360,42 @@ vertex buffers at build time, and nothing here rebuilds geometry in the middle
 of a frame. What happens instead is that the vertex shader bends the city
 around a short list of collapse sites.
 
-- **Damage accumulates.** A rocket into a wall marks it. The fifth one into
-  the same frontage brings that part of the building down. Damage is kept on a
-  22 m grid, about the width of one Berlin apartment block, which is the unit
-  that should fall.
-- **A collapse pulls everything above the street down towards it** and pushes
-  it outward, with a per vertex scatter, so a facade folds into a heap rather
-  than squashing flat. The normals go to vertical as it falls, the render goes
-  to broken concrete and brick dust, and the lit windows go out. The shadow
-  pass runs the same displacement, or a flattened building would go on casting
-  a standing shadow.
+- **A building comes apart in stages, from the top.** Damage accumulates on a
+  22 m grid, about the width of one Berlin apartment block. Each step takes
+  another quarter off: the shader cuts the building back to the share of its
+  own height that is left, so at a quarter gone it is the top quarter that is
+  missing and the storeys below it are still a building with windows in them.
+  Five rockets into the same frontage take it from standing to a heap, one
+  piece at a time, and each step throws its own rubble off the line it broke
+  at and makes its own noise.
+- **A collapse pulls what is above the cut down onto what is below it** and
+  pushes it outward, with a per vertex scatter, so a facade folds into a heap
+  rather than squashing flat. The normals go to vertical, the render goes to
+  broken concrete and brick dust, and the lit windows go out, but only for the
+  part that moved. The shadow pass runs the same displacement, or a flattened
+  building would go on casting a standing shadow. A big collapse rolls
+  outward from its middle rather than dropping flat.
 - **The collision follows, partway through the fall rather than at the end**,
-  so you are never stopped by a wall that is visibly no longer there. Every
-  wall inside the site drops to the height of the heap: head height is clear
-  in the middle, the rim keeps most of its height, and at knee height the
-  rubble still stops you.
-- **A warhead craters the ground.** The collision height field is dug into a
-  bowl with the same profile the vertex shader draws, so a crater you can see
-  is a crater you can walk into. Small blasts do not crater at all: the ground
-  mesh is a 12.5 m grid, so a hole eight metres across would have no vertices
-  to move and would be an invisible trap in the collision.
+  so you are never stopped by a wall that is visibly no longer there. Walls
+  are stored as one quad per building edge and an edge can be thirty metres
+  long, so the first time a collapse touches a tile its long walls are cut
+  into five metre pieces; otherwise a whole facade would open up or not
+  depending on which side of the blast its midpoint happened to be. Each piece
+  then loses its own height, measured from what it was before any of this
+  started.
+- **A warhead craters the ground, and the crater is nothing like the size of
+  the blast.** A hundred and seventy metres of blast digs a hole thirty six
+  metres across and eleven deep, with a ring of thrown up ground around the
+  lip and flat street again well inside the collapse. The collision height
+  field is dug with the same profile the vertex shader draws, so a crater you
+  can see is a crater you can walk into. Small blasts do not crater at all:
+  the ground mesh is a 12.5 m grid, so a hole eight metres across would have
+  no vertices to move and would be an invisible trap in the collision.
+- **The rubble has weight.** A lump of concrete lands once and stays where it
+  fell; a lighter piece skips. Whatever is still sliding rolls as it goes, and
+  the roll is what takes the last of the speed out of it. Pieces come off the
+  line the building broke at rather than out of the ground, and they pile up
+  towards the middle of a collapse rather than lying flat across it.
 - **Sixteen sites at once.** A new collapse that overlaps an old one grows it
   rather than taking a slot, and when all sixteen are taken the nearest one
   swallows the new one. Nothing is ever evicted, because evicting a site would
@@ -323,6 +403,78 @@ around a short list of collapse sites.
   zero and the vertex shader skips the loop entirely, so nobody pays for this
   until they have knocked something down.
 - The memorial does not come down, by the same rule as everything else.
+
+## Trees burn
+
+Anything that goes off sets light to the trees around it, over a radius
+getting on for twice the blast, because fire spreads and a blast does not.
+A tree that catches browns, then blackens, then either bursts or goes over,
+and which of those it does is decided by the tree.
+
+All three thousand seven hundred trees are drawn from one instanced call with
+no mesh data and no per tree storage, so a fire cannot be a list of burning
+trees in a buffer somewhere. It is a circle on the ground with an age: eight
+of them, as eight vec4s. Every tree inside one runs the same timeline off its
+own seed, so one goes up at three seconds and its neighbour stands for eight,
+and the edge of a fire catches about two seconds after the middle. The crown
+shrinks as the leaves go and glows at its edges while they are going, because
+a burning canopy is lit from the inside and the outline is the part that
+reads at a distance. A tree that topples rotates about its base in the
+direction its own seed picked, accelerating, and the shadow goes over with
+it.
+
+The JavaScript side runs the same seed arithmetic, so the flames come off
+real trunks and the crack of one going over happens on the tree that is going
+over. The two sets of timings are written out twice and have to agree; that
+is the price of not uploading anything.
+
+## The city is twenty four districts
+
+The brief asks for a walkable Berlin under 25 MB of download. Mitte at full
+detail is 2.2 MB over the wire and 6.5 square kilometres; the area inside the
+Ringbahn is 106 square kilometres, and at Mitte's detail that would be about
+130 MB. So the city is cut into districts, built one at a time, streamed as you
+walk, and thinned with distance from the middle.
+
+**The box.** The playable area is the bounding box of the Ringbahn, taken from
+the four stations at its corners rather than from a round number: Westkreuz at
+52.5010 N, 13.2840 E, Ostkreuz at 52.5031 N, 13.4689 E, Gesundbrunnen at
+52.5486 N, 13.3894 E and Suedkreuz at 52.4720 N, 13.3670 E. That is 12.5 km by
+8.5 km. The ring itself encloses about 88 square kilometres of the 106; the
+difference is the corners of the box, which fall outside it.
+
+**The cut.** One tile grid, 126 by 85 tiles of 100 m, covers the whole thing. A
+district is a rectangle of that grid, anchored so the original playable box,
+the one with the Gate and the memorial in it, is exactly one district. Nothing
+overlaps: a building belongs to the district its middle is in and is built
+once, and roads, parks and water are clipped at the boundary so neither side
+draws the other's half. Each district is fetched from Overpass with a margin
+around it, so a wall standing on a boundary arrives whole in both.
+
+**The tiers.** Detail falls off with distance from the middle.
+
+| tier | where | what it carries |
+|---|---|---|
+| full | Mitte | every building, landmark models, stelae, windows, 33 point height field |
+| near | next door | buildings over 24 m2, simplified footprints, windows, 17 point field |
+| block | out to the ring | buildings over 80 m2, flat roofs, no windows, small ones become the box that fits them, 9 point field |
+| outline | the corners outside the ring | buildings over 150 m2, driving roads only, 5 point field |
+
+**The streaming.** `World` holds an index and however many districts are in
+memory. Tile records carry their index in the global grid and a reference to
+the district buffer their offsets point into, so the collision, the height
+field, the raycasts and the renderer all carry on addressing the city by tile
+index and do not know the bytes came from eight files. Walking towards a
+boundary starts the fetch a kilometre out; a district more than three
+kilometres behind you is let go, its tiles leave the card with it, and the
+edge of what is loaded holds you the way a wall does if you somehow get there
+first. Free travel across the city loads the destination during the flight and
+will not put you down until the ground is there.
+
+What it costs is measured, not estimated: `npm run weigh` prints the table of
+districts with deployed and gzipped bytes and fails if the whole city is over
+the 25 MB budget. The workflow in `.github/workflows/city.yml` builds all
+twenty four from the live extract and publishes that table.
 
 ## Two cities, and which one you are looking at
 
@@ -436,7 +588,9 @@ src/
 
 The world is cut into 100 m by 100 m tiles. Each tile carries an interleaved
 vertex buffer at 20 bytes a vertex, an index buffer, a collision blob and a tree
-instance list, all inside one `world.bin`, with `world.json` listing the offsets.
+instance list, all inside one `world-<district>.bin`, with
+`world-<district>.json` listing the offsets and `world.json` indexing the
+districts.
 
 ```
 offset  type        meaning
@@ -450,10 +604,12 @@ offset  type        meaning
 18      uint16      building height in 1/16 m
 ```
 
-The collision blob per tile is a list of 2D segments with a vertical span, plus a
-33 by 33 ground height field. The character controller only ever tests a capsule
-against 2D segments, which is why it is both cheap and impossible to tunnel
-through at a run.
+The collision blob per tile is a list of 2D segments with a vertical span, plus
+a ground height field whose size is written in the blob: 33 by 33 in the middle
+of town, down to 5 by 5 out at the edge, because Berlin is flat and a height
+field is 2 kB a tile whether anything in it varies or not. The character
+controller only ever tests a capsule against 2D segments, which is why it is
+both cheap and impossible to tunnel through at a run.
 
 Full architecture notes, including every deviation from the original brief and
 why, are in [docs/PLAN.md](docs/PLAN.md).
@@ -574,9 +730,16 @@ is where the blast may not reach, and the red circle is the blast itself.*
 ![A warhead down Unter den Linden](docs/screenshots/cheat-03-warhead.png)
 *Half a kilometre east, a few seconds after.*
 
-![The Gate, flattened](docs/screenshots/city-01-collapse.png)
-*A ninety metre collapse on Pariser Platz. The Gate is a heap, the buildings
-round it are partly down, and the dust is still up.*
+![The Gate, half down](docs/screenshots/city-01-collapse.png)
+*Two rounds into the Gate. The colonnade has gone and the quadriga is on the
+cobbles, the blocks either side have lost their upper storeys, and the rest of
+the square is untouched.*
+
+![The Gate, flattened](docs/screenshots/city-04-flattened.png)
+*Three more rounds into the same place.*
+
+![Vehicles on Pariser Platz](docs/screenshots/city-05-vehicles.png)
+*A jeep, a tank, a helicopter and a fighter, parked on the square.*
 
 ![Flying across the city](docs/screenshots/city-03-travel.png)
 *Free travel, halfway across: three hundred metres up over the roofs of Mitte,

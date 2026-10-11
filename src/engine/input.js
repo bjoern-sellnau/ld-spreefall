@@ -12,6 +12,7 @@ export class Input {
     this.lookY = 0;          // accumulated pitch delta, radians
     this.run = false;
     this.jumpQueued = false;
+    this.jumpHeld = false;   // held, for anything that climbs rather than hops
     this.pointerLocked = false;
     this.sensitivity = 0.0022;
     this.touchSensitivity = 0.0042;
@@ -35,10 +36,13 @@ export class Input {
       if (this.onKeyPress) this.onKeyPress(e.code, e);
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab',
         'F1', 'F2', 'F3'].includes(e.code)) e.preventDefault();
-      if (e.code === 'Space') this.jumpQueued = true;
+      if (e.code === 'Space') { this.jumpQueued = true; this.jumpHeld = true; }
     });
-    doc.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    doc.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      if (e.code === 'Space') this.jumpHeld = false;
+    });
+    window.addEventListener('blur', () => { this.keys.clear(); this.jumpHeld = false; });
 
     doc.addEventListener('pointerlockchange', () => {
       this.pointerLocked = doc.pointerLockElement === this.canvas;
