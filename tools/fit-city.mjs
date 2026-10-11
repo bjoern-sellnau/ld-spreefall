@@ -74,16 +74,30 @@ function main() {
     return a.gzip - b.gzip;
   });
 
+  // Greedy outward, but only into a district that touches one already being
+  // shipped. Without that rule the budget could be spent on a cheap district
+  // across the city from everything else, and the player would be able to see
+  // it on the map and never walk to it.
+  const touching = (a, b) => {
+    const near = (p, q) => Math.abs(p - q) < 1;
+    const overlapX = Math.min(a.bounds.maxX, b.bounds.maxX) - Math.max(a.bounds.minX, b.bounds.minX) > 1;
+    const overlapZ = Math.min(a.bounds.maxZ, b.bounds.maxZ) - Math.max(a.bounds.minZ, b.bounds.minZ) > 1;
+    return (overlapZ && (near(a.bounds.maxX, b.bounds.minX) || near(a.bounds.minX, b.bounds.maxX)))
+      || (overlapX && (near(a.bounds.maxZ, b.bounds.minZ) || near(a.bounds.minZ, b.bounds.maxZ)));
+  };
   const keep = [];
   const drop = [];
-  for (const d of order) {
-    if (spent + d.gzip <= budget) {
-      keep.push(d);
-      spent += d.gzip;
-    } else {
-      drop.push(d);
-    }
+  const pending = [...order];
+  for (;;) {
+    const at = pending.findIndex((d) => (keep.length === 0 ? d.id === CORE_ID : keep.some((k) => touching(k, d)))
+      && spent + d.gzip <= budget);
+    if (at < 0) break;
+    const [d] = pending.splice(at, 1);
+    keep.push(d);
+    spent += d.gzip;
   }
+  drop.push(...pending);
+  drop.sort((a, b) => order.indexOf(a) - order.indexOf(b));
 
   console.log(`budget          ${(budget / 1e6).toFixed(2)} MB of download`);
   console.log(`code and page   ${(code / 1e6).toFixed(2)} MB gzipped`);
@@ -98,8 +112,19 @@ function main() {
   console.log(`download        ${(spent / 1e6).toFixed(2)} MB, `
     + `${((budget - spent) / 1e6).toFixed(2)} MB of the budget unspent`);
   if (drop.length) {
-    console.log(`left out        ${drop.map((d) => d.id).join(', ')}, `
-      + `${(drop.reduce((a, d) => a + d.gzip, 0) / 1e6).toFixed(2)} MB more than there is room for`);
+    // Two different reasons, and they mean different things: one is the
+    // budget, the other is a district with nothing shipped between it and
+    // Mitte, which you could see on the map and never walk to.
+    const noRoom = drop.filter((d) => spent + d.gzip > budget);
+    const cutOff = drop.filter((d) => spent + d.gzip <= budget);
+    if (noRoom.length) {
+      console.log(`no room for     ${noRoom.map((d) => d.id).join(', ')}, `
+        + `${(noRoom.reduce((a, d) => a + d.gzip, 0) / 1e6).toFixed(2)} MB more than the budget has left`);
+    }
+    if (cutOff.length) {
+      console.log(`cut off         ${cutOff.map((d) => d.id).join(', ')}, `
+        + 'nothing shipped between them and the middle');
+    }
   }
 
   if (dry) return;
