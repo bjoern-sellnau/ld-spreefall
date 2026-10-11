@@ -329,7 +329,12 @@ function buildDistrict(district) {
     if (t.natural === 'tree') { trees.push({ p, tags: t }); continue; }
     if (t['spreefall:card'] || (t.tourism === 'attraction' && t.name)) { attractions.push({ p, tags: t }); continue; }
     if (t.railway === 'station' || t.railway === 'subway_entrance') { stations.push({ p, tags: t }); continue; }
-    if (t.place && t.name) { places.push({ p, tags: t, rank: PLACE_RANK[t.place] || 0 }); }
+    // Only the kinds of place a district can be named after, so a city node
+    // alone in a district leaves it with its grid name rather than calling it
+    // Berlin.
+    if (t.place && t.name && PLACE_RANK[t.place]) {
+      places.push({ p, tags: t, rank: PLACE_RANK[t.place] });
+    }
   }
 
   console.log(`features: buildings ${buildings.length}  roads ${roads.length}  areas ${areas.length}  water ${waterPolys.length}  green ${greens.length}  rails ${rails.length}  trees ${trees.length}`);
@@ -777,9 +782,15 @@ function buildDistrict(district) {
 const cityTiles = cityGrid(TILE_SIZE);
 
 // Which place tag wins when a district has several in it.
+//
+// A city node is not a district name. The first live build of the whole city
+// called the middle district Berlin, because OpenStreetMap puts a
+// place=city node for Berlin in the middle of Mitte and it outranked
+// everything else; a district two kilometres across wants the name of the
+// quarter it covers, so city and town are not names a district can take.
 const PLACE_RANK = {
-  borough: 5, suburb: 4, quarter: 3, neighbourhood: 2, city_block: 1,
-  town: 5, village: 3, hamlet: 1, city: 6,
+  suburb: 5, quarter: 4, neighbourhood: 3, village: 3, borough: 2,
+  city_block: 1, hamlet: 1,
 };
 
 const FOOT_CLASSES = new Set(['footway', 'path', 'cycleway', 'steps', 'bridleway']);
