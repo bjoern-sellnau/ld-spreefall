@@ -61,6 +61,7 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | E, or right Shift | reflexes: the city slows and you do not |
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
+| C | the cheat menu |
 | Q | back to the weapon you had before |
 | T | blow the C4 you have put down |
 | Left mouse, or RT on a pad | fire |
@@ -200,6 +201,74 @@ What is under the hood:
 - Every sound is synthesised: a noise burst through a swept bandpass for the shot,
   a rotor bed whose level and pitch follow the nearest drone, and two different
   confirms for a hull hit and a core hit.
+
+## Cheats
+
+Press **C**. Nothing in here is on by default and all of it is remembered
+between visits.
+
+| | |
+|---|---|
+| All weapons | every magazine and every reserve in the loadout, full |
+| Reload everything | tops up what you are carrying |
+| Drop a nuke | opens a map of the city; click where you want it |
+| God mode | nothing hurts you, though you are still told which way it came from |
+| Infinite ammunition | the magazine never reaches the bottom |
+| Nuke rain | one falls somewhere in the city every few seconds |
+| Tear enemies apart | a killing hit takes them to pieces instead of laying them down |
+| Ragdoll | they fall with the momentum of the shot rather than on a timer |
+| Blood | hits spray |
+| Ultra gore | the three above, considerably more of it |
+
+A run with any of them on is marked `cheated` on the interface, and the end
+screen says so. Switching them off again does not clear the mark.
+
+What the four gore switches actually are:
+
+- **Tearing apart** replaces the death animation with its absence. There is no
+  body to fall, so the soldier leaves the fight at once and a dozen chunks
+  arrive in their place. Each chunk is a rigid body with a spin, built from one
+  mesh drawn instanced, with its size and what it is made of carried per
+  instance; that is why twelve different looking pieces are still one draw
+  call. They collide against the real walls while they are moving fast and
+  against the ground height field once they are not, which is a deliberate
+  trade: a raycast per chunk per frame with forty in the air is half a
+  millisecond nobody here has.
+- **Ragdoll** is a rigid body, not a jointed one, and the README says so rather
+  than implying a solver that is not there. The whole figure takes the angular
+  momentum of the shot, tumbles about its feet, leaves the ground, lands and
+  slides to a stop. Which way it turns comes from where the hit landed relative
+  to the way they were facing. It settles onto its back or its face, because
+  those are the two stable ways to lie.
+- **Blood** is dark and heavy and gone in half a second, with a mist that hangs
+  for a moment. It is nearly black rather than bright red, because blood on a
+  grey street at four in the afternoon is, and the bright version looks like
+  paint.
+- **Ultra gore** is a multiplier over the other three rather than a fourth
+  effect, which is both what it means and the only way to make it feel like
+  more rather than different.
+
+And the warhead:
+
+- It is dropped, not fired. You pick the target on a map of the whole city,
+  with the blast radius drawn at its real size so you can see what is inside
+  it before you commit. It comes in from four hundred and thirty metres up and
+  takes about three seconds, so you hear it coming and you can watch it arrive.
+- The blast is a hundred and seventy metres and everything in it that the
+  fireball can see takes four thousand damage falling off with distance,
+  including you. The fireball is fifty five metres above the crater and that
+  matters: a blast centred on the cobbles has line of sight to nothing at all,
+  because the first thing the ray meets is the street it started on. A building
+  between you and it is still a building.
+- The sound is three things in sequence and arrives late, at a third of a
+  kilometre a second: the crack, a sub tone falling for most of a second, and a
+  roll of noise that takes eight seconds to go away. The roll is the part that
+  sells the size.
+- **The memorial cannot be targeted, and neither can anywhere within a hundred
+  and seventy metres of it.** The map draws the weapons free zone and the ring
+  the blast may not cross, so a refused target is something you can see coming
+  rather than a message you get after clicking. This is the one line in the
+  project that no switch in this menu moves.
 
 ## Two cities, and which one you are looking at
 
@@ -440,6 +509,16 @@ worth naming because each of them was invisible until something was checked:
 ![Pickups on Pariser Platz](docs/screenshots/combat-06-pickups.png)
 *All five pads on the square: ammunition, a medical kit, quad damage,
 ultrashield and overload, with two of them running on the chips bottom left.*
+
+![The cheat menu](docs/screenshots/cheat-01-menu.png)
+*The cheat menu, with the run already marked bottom right.*
+
+![Putting a warhead somewhere](docs/screenshots/cheat-02-targeting.png)
+*Picking a target. The gold circle is the memorial, the dashed ring around it
+is where the blast may not reach, and the red circle is the blast itself.*
+
+![A warhead down Unter den Linden](docs/screenshots/cheat-03-warhead.png)
+*Half a kilometre east, a few seconds after.*
 
 The rest are in [docs/screenshots](docs/screenshots), and
 [docs/media/gate-to-tower.webm](docs/media/gate-to-tower.webm) is the eleven

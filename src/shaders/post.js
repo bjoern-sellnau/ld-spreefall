@@ -51,6 +51,7 @@ uniform float uVignette;
 uniform float uFxaa;
 uniform float uRaw;      // 1 while a debug view is up, so nothing is graded
 uniform float uSlow;     // 0 to 1, how far into the slowed world we are
+uniform float uFlash;    // 0 to 1, a detonation washing the frame out
 layout(location = 0) out vec4 fragColour;
 
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -103,6 +104,14 @@ void main() {
     // A faint scan of brightness across the frame, so the still world still
     // has something moving in it.
     c *= 1.0 + uSlow * 0.05 * sin(vUv.y * 140.0);
+  }
+  // A warhead going off does not tint the frame, it takes it away: everything
+  // washes to white from the centre out, then comes back. The ramp is squared
+  // so that the tail is long and the peak is short, which is the shape of a
+  // flash you have actually seen rather than a cross fade.
+  if (uFlash > 0.001) {
+    float fall = 1.0 - dot(d, d) * 0.9;
+    c = mix(c, vec3(1.0, 0.985, 0.94), clamp(uFlash * fall, 0.0, 1.0));
   }
   fragColour = vec4(linearToSrgb(c), 1.0);
 }

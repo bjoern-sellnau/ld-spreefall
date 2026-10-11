@@ -342,6 +342,91 @@ export class Audio {
   }
 
   /**
+   * A warhead. Three things in sequence, because that is what one sounds like
+   * from any distance worth surviving: the crack, then a sub tone that falls
+   * for most of a second, then a long roll of noise that takes eight seconds
+   * to go away. The roll is the part that sells the size.
+   *
+   * @param {number} distance metres from you, which only sets how long the
+   *   sound takes to arrive and how much of the top end is left on it
+   */
+  nuke(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    // Sound travels. At six hundred metres that is most of two seconds, and
+    // seeing the flash before you hear it is most of the effect.
+    const delay = Math.min(3.0, distance / 340);
+    const t = ctx.currentTime + delay;
+    const near = Math.max(0.12, 1 - distance / 900);
+
+    // The crack, which only exists up close.
+    const crack = ctx.createBufferSource();
+    crack.buffer = this._noiseBuffer;
+    crack.loop = true;
+    const ch = ctx.createBiquadFilter();
+    ch.type = 'highpass';
+    ch.frequency.value = 400 + near * 1400;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, t);
+    cg.gain.exponentialRampToValueAtTime(0.5 * near + 0.0002, t + 0.004);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    crack.connect(ch).connect(cg).connect(this.master);
+    crack.start(t, Math.random() * 3, 0.4);
+    crack.stop(t + 0.4);
+
+    // The sub, falling out of hearing.
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(70, t);
+    sub.frequency.exponentialRampToValueAtTime(14, t + 1.5);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(0.72, t + 0.03);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
+    sub.connect(sg).connect(this.master);
+    sub.start(t);
+    sub.stop(t + 2.5);
+
+    // The roll, which is the one that lasts. A lowpass closing slowly over
+    // eight seconds of noise is exactly the sound of something very large a
+    // long way away, and it is the same trick whatever the distance.
+    const roll = ctx.createBufferSource();
+    roll.buffer = this._noiseBuffer;
+    roll.loop = true;
+    const rf = ctx.createBiquadFilter();
+    rf.type = 'lowpass';
+    rf.frequency.setValueAtTime(900 + near * 1600, t);
+    rf.frequency.exponentialRampToValueAtTime(90, t + 7.5);
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t);
+    rg.gain.exponentialRampToValueAtTime(0.42, t + 0.12);
+    rg.gain.setValueAtTime(0.42, t + 1.4);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + 8.0);
+    roll.connect(rf).connect(rg).connect(this.master);
+    roll.start(t, Math.random() * 2, 8.2);
+    roll.stop(t + 8.2);
+  }
+
+  /** A warhead on its way down: a falling whistle that arrives with it. */
+  incoming(seconds = 3.2) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(1150, t);
+    o.frequency.exponentialRampToValueAtTime(240, t + seconds);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 0.4);
+    g.gain.exponentialRampToValueAtTime(0.12, t + seconds * 0.92);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.08);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + seconds + 0.1);
+  }
+
+  /**
    * The shield going down: a hard electrical crack with a falling tone under
    * it. It has to be unmistakable, because it is the only warning you get that
    * the next hit is the one that hurts.

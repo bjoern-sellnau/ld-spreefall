@@ -352,3 +352,50 @@ Recorded here as they happen, per the working style.
   The second thing: five emissive colours all came out white. An emissive that
   is bright in all three channels is white after the tone map whatever colour
   it started as, so the five tints are near zero in two channels each.
+
+- 2026-10-11: a cheat menu, including the gore switches, with two lines held.
+  The first is the memorial. A warhead with a blast radius of a hundred and
+  seventy metres cannot be aimed at the Memorial to the Murdered Jews of
+  Europe, nor within a hundred and seventy metres of its edge, and the target
+  map draws both circles so that the refusal is something you can see before
+  you click rather than a message afterwards. Every other cheat in the menu is
+  off limits there too, because they all run through systems that already
+  check the zone. The second line is that the run is marked: `cheated` sits
+  with the threat readout from the moment anything is switched on and does not
+  go away when it is switched off again, and the end screen leads with it.
+  Neither of these is a setting.
+
+  The gore is all off by default and stays off unless somebody goes and turns
+  it on, so the game anyone arrives at has no blood in it. Ultra gore is a
+  multiplier over the other three rather than a fourth effect.
+
+- 2026-10-11: three things the warhead cost, all of them worth writing down.
+
+  A blast at ground level has line of sight to nothing. `explode` tests every
+  target against `world.lineOfSight` from the detonation point, and for a
+  grenade resting on the cobbles that is fine because its radius is eight
+  metres and the ray barely leaves the ground. At a hundred and seventy metres
+  every ray scrapes the street it started on and the nuke killed nobody at
+  all. The fix is the physical one: the damage radiates from the fireball,
+  fifty five metres up, and the mark stays on the ground where the crater is.
+
+  A full screen whiteout must not use the per frame cap. The muzzle flash
+  decays by `min(elapsed, 1/45)` so that a long frame cannot swallow it whole,
+  which is right for something that has to be seen at all. Copying that onto
+  the detonation flash meant a machine running at four frames a second sat in
+  a white screen for fifteen seconds, because the cap limited the decay rather
+  than the flash. It decays on the real clock.
+
+  Additive billboards cannot draw dark smoke. The first mushroom cloud was
+  grey, and grey added to a bright sky is nothing: the blend is `ONE, ONE`, so
+  what reads is a warm colour going dark, not a dark colour going transparent.
+  The stem now runs hot at the bottom and cools going up, and the cap is lit
+  rather than shadowed, which is also what one looks like.
+
+- 2026-10-11: the gibs ask the world less often than anything else here does.
+  A projectile raycasts every frame it is in the air; a chunk of somebody
+  raycasts only while it is moving faster than six metres a second, and lives
+  on the ground height field after that. Forty chunks at one ray each per
+  frame is about half a millisecond, and the visible difference is that a
+  chunk already at rest will not be stopped by a wall it is sliding into. That
+  is a trade rather than an oversight, and this is where it is recorded.

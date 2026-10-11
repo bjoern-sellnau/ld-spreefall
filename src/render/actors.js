@@ -7,15 +7,16 @@ import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
   SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_SHADOW_VS,
-  PICKUP_VS,
+  PICKUP_VS, GIB_VS,
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
-const MAX_SPARKS = 256;
+const MAX_SPARKS = 384;
 const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
 const MAX_PICKUPS = 16;
+const MAX_GIBS = 96;
 // Past this there is no point drawing a pad: the fog has it anyway.
 const PICKUP_RANGE = 260;
 
@@ -285,6 +286,25 @@ export function buildProjectileMesh(kind) {
   } else if (kind === 'splinter') {
     m.box(0, 0, 0.06, 0.030, 0.030, 0.22, 11);
     m.box(0, 0, -0.10, 0.012, 0.012, 0.10, 8);
+  } else if (kind === 'nuke') {
+    // A free fall bomb, about two and a half metres long: a fat body, a
+    // rounded nose and four tail fins in a box. Nose towards -z like
+    // everything else that flies here.
+    m.cylinder(0, 0, 0.6, 0.34, 0.34, -1.5, 12, 8, 'z');
+    m.cylinder(0, 0, -0.9, 0.34, 0.10, -0.45, 12, 8, 'z');
+    m.cylinder(0, 0, 0.6, 0.34, 0.26, 0.30, 12, 8, 'z');
+    // The band round the middle, in the warning colour.
+    m.cylinder(0, 0, -0.25, 0.355, 0.355, -0.22, 12, 18, 'z');
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      m.box(Math.cos(a) * 0.36, Math.sin(a) * 0.36, 0.78, 0.44, 0.04, 0.54, 0, a);
+    }
+    // The box the fins sit in, which is the shape that makes it read as a bomb
+    // rather than as a rocket.
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.40, Math.sin(a) * 0.40, 0.90, 0.80, 0.03, 0.34, 0, a);
+    }
   } else {
     // The banana, which is the same arc as the one in your hand, lying down.
     const R = 0.16;
@@ -420,6 +440,20 @@ export function buildPickupMesh(kind) {
 }
 
 /**
+ * One chunk, built about its own centre at roughly twenty centimetres across.
+ * It is three overlapping boxes rather than one, because a single box tumbling
+ * reads as a crate and three offset ones read as a piece of something. The
+ * part id in the mesh is ignored: the shader takes it from the instance.
+ */
+export function buildGibMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0, 0, 0.17, 0.13, 0.15, 0);
+  m.box(0.06, 0.04, -0.03, 0.11, 0.10, 0.09, 0, 0.7);
+  m.box(-0.05, -0.04, 0.04, 0.09, 0.08, 0.12, 0, -0.5);
+  return m;
+}
+
+/**
  * A fighter jet, built nose towards -z like everything else here, about
  * fourteen metres long. Parts: 0 airframe, 5 canopy, 8 intakes and nozzles,
  * 11 the afterburner glow.
@@ -512,6 +546,8 @@ export class Actors {
     this.progSoldier.use().int('uShadow0', 4).int('uShadow1', 5);
     this.progPickup = createProgram(gl, PICKUP_VS, DRONE_FS, 'pickup');
     this.progPickup.use().int('uShadow0', 4).int('uShadow1', 5);
+    this.progGib = createProgram(gl, GIB_VS, DRONE_FS, 'gib');
+    this.progGib.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
     this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 2);
@@ -532,6 +568,8 @@ export class Actors {
     };
     this.weapon = this.weapons.m16;
 
+    this.gib = this._uploadMesh(buildGibMesh(), MAX_GIBS, 2);
+
     // The pads. One instanced mesh per kind, drawn only for what is near you.
     this.pickups = {};
     for (const kind of ['ammo', 'health', 'quad', 'ultra', 'overload']) {
@@ -548,6 +586,7 @@ export class Actors {
       flak: this._uploadMesh(buildProjectileMesh('flak'), MAX_PROPS, 2),
       splinter: this._uploadMesh(buildProjectileMesh('splinter'), MAX_PROPS, 2),
       banana: this._uploadMesh(buildProjectileMesh('banana'), MAX_PROPS, 2),
+      nuke: this._uploadMesh(buildProjectileMesh('nuke'), 8, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -643,14 +682,16 @@ export class Actors {
   /** Sorts what is in the air into its per kind instance buffers. */
   updateProjectiles(list) {
     const gl = this.gl;
-    const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0, splinter: 0 };
+    const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
+      splinter: 0, nuke: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
-      if (!mesh || counts[b.kind] >= MAX_PROPS) continue;
+      if (!mesh || counts[b.kind] === undefined) continue;
+      if (counts[b.kind] >= (b.kind === 'nuke' ? 8 : MAX_PROPS)) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
-      const flying = b.kind === 'rocket' || b.kind === 'splinter';
+      const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke';
       const yaw = flying ? Math.atan2(-b.vx, -b.vz) : b.spin * 0.7;
       const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, b.vy
         / (Math.hypot(b.vx, b.vy, b.vz) || 1)))) : b.spin;
@@ -677,8 +718,10 @@ export class Actors {
       if (!s.alive || n >= MAX_SOLDIERS) continue;
       const o = n * 8;
       data[o] = s.x; data[o + 1] = s.y; data[o + 2] = s.z; data[o + 3] = s.yaw;
-      // x carries the fall, which is both death and a banana, y the walk phase.
-      data[o + 4] = s.lean; data[o + 5] = 0; data[o + 6] = s.hitFlash; data[o + 7] = s.walk;
+      // x carries the fall, which is both death and a banana, y the roll a
+      // ragdoll picks up from the hit, w the walk phase.
+      data[o + 4] = s.lean; data[o + 5] = s.roll || 0;
+      data[o + 6] = s.hitFlash; data[o + 7] = s.walk;
       n++;
     }
     this.soldier.instanceCount = n;
@@ -778,6 +821,36 @@ export class Actors {
     }
     gl.bindVertexArray(null);
     return draws;
+  }
+
+  updateGibs(list) {
+    const gl = this.gl;
+    const data = this.gib.instData;
+    let n = 0;
+    for (const g of list) {
+      if (!g.alive || n >= MAX_GIBS) continue;
+      const o = n * 8;
+      data[o] = g.x; data[o + 1] = g.y; data[o + 2] = g.z; data[o + 3] = g.yaw;
+      data[o + 4] = g.pitch; data[o + 5] = g.roll; data[o + 6] = g.scale; data[o + 7] = g.part;
+      n++;
+    }
+    this.gib.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.gib.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  drawGibs() {
+    if (!this.gib.instanceCount) return 0;
+    const gl = this.gl;
+    this.progGib.use();
+    gl.bindVertexArray(this.gib.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, this.gib.count, this.gib.indexType, 0,
+      this.gib.instanceCount);
+    gl.bindVertexArray(null);
+    return 1;
   }
 
   drawProjectiles() {
@@ -899,7 +972,8 @@ export class Actors {
 
   dispose() {
     const gl = this.gl;
-    for (const mesh of [this.drone, this.soldier, this.jet, ...Object.values(this.weapons),
+    for (const mesh of [this.drone, this.soldier, this.jet, this.gib,
+      ...Object.values(this.weapons),
       ...Object.values(this.props), ...Object.values(this.pickups)]) {
       gl.deleteVertexArray(mesh.vao);
       gl.deleteBuffer(mesh.vbo);

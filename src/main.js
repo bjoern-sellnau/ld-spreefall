@@ -24,6 +24,8 @@ import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
+import { Cheats, SWITCHES, GORE, ACTIONS } from './game/cheats.js';
+import { Gibs } from './game/gibs.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -45,6 +47,10 @@ const el = {
   weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
   sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
+  cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
+  cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
+  cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
+  targetHint: $('targethint'),
   down: $('down'), downText: $('downtext'), downBtn: $('downbtn'),
   touchui: $('touchui'), stick: $('stick'), knob: $('stickknob'),
   btnJump: $('btnjump'), btnRun: $('btnrun'), source: $('datasource'),
@@ -154,6 +160,8 @@ async function main() {
   const jets = new Jets(world, (x, y, z) => combat.isSanctuary(x, y, z));
   jets.accuracyScale = combat.rules.enemyAccuracy;
   const pickups = new Pickups(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const cheats = new Cheats();
+  const gibs = new Gibs(world);
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
@@ -253,6 +261,10 @@ async function main() {
     recoilApplied: { pitch: 0, yaw: 0 },
     bob: 0,
     inSanctuary: false,
+    targeting: false,
+    lockWanted: false,
+    nukeRainTimer: 4,
+    flash: 0,
     autoQualityDone: false,
     frameSamples: [],
     lastGround: true,
@@ -332,8 +344,15 @@ async function main() {
     const m = muzzlePoint(shot.from);
     if (shot.end) {
       effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
-      effects.impact(shot.end.x, shot.end.y, shot.end.z,
-        shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
+      // A round into a man sprays rather than sparks, and only when the cheat
+      // menu says so. Everything else in the city still throws grit.
+      if (shot.surface === 'soldier' && cheats.bleeding) {
+        effects.blood(shot.end.x, shot.end.y, shot.end.z,
+          shot.end.nx, shot.end.ny, shot.end.nz, cheats.goreScale);
+      } else {
+        effects.impact(shot.end.x, shot.end.y, shot.end.z,
+          shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
+      }
     }
     if (shot.target) {
       audio.hitMarker(shot.core);
@@ -348,46 +367,82 @@ async function main() {
    * own rocket is a choice with consequences.
    */
   function explode(x, y, z, splash, body) {
-    audio.explosion();
-    effects.explode(x, y, z);
-    effects.blast(x, y, z, splash.radius);
-    // Mark whatever it went off against. The soot reaches further than the
-    // damage does, which is how a blast looks on a wall.
-    renderer.addScar(x, y, z, splash.radius * 1.5,
-      Math.min(1, splash.damage / 180));
-    debris(x, y, z, splash.radius);
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
-    effects.shake = Math.min(1.4, effects.shake
-      + Math.max(0, 1 - dist / (splash.radius * 3)) * 0.9);
+    if (splash.nuke) {
+      // A warhead is the same code path as a grenade with different numbers,
+      // which is the point of having the numbers in one place. What it gets of
+      // its own is the look: a white frame, a column of fire, and a mark on
+      // the city a quarter of a kilometre across.
+      audio.nuke(dist);
+      effects.nuke(x, y, z, splash.radius);
+      // The flash is as bright as the distance allows, falling off smoothly
+      // rather than over a cliff. Standing on top of one takes the whole
+      // frame; watching from half a kilometre away is a glare you can see
+      // past; from the far side of the city it is a flicker.
+      state.flash = Math.min(1.1, 0.18 + 1.25 * Math.exp(-dist / 300));
+      // Four marks across the blast rather than one, because a single scar
+      // that wide reads as a circle painted on the ground.
+      renderer.addScar(x, y, z, splash.radius * 1.1, 1);
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + Math.random();
+        const r = splash.radius * 0.55;
+        renderer.addScar(x + Math.cos(a) * r, y, z + Math.sin(a) * r,
+          splash.radius * 0.8, 0.9);
+      }
+      debris(x, y, z, splash.radius * 0.35);
+    } else {
+      audio.explosion();
+      effects.explode(x, y, z);
+      effects.blast(x, y, z, splash.radius);
+      // Mark whatever it went off against. The soot reaches further than the
+      // damage does, which is how a blast looks on a wall.
+      renderer.addScar(x, y, z, splash.radius * 1.5,
+        Math.min(1, splash.damage / 180));
+      debris(x, y, z, splash.radius);
+    }
+    effects.shake = Math.min(splash.nuke ? 2.6 : 1.4, effects.shake
+      + Math.max(0, 1 - dist / (splash.radius * 3)) * (splash.nuke ? 2.2 : 0.9));
+
+    // Where the damage radiates from, which is not always where the mark is.
+    // A grenade goes off at the point it stopped. A warhead's fireball is tens
+    // of metres above the crater, and that matters: a blast centred on the
+    // cobbles has no line of sight to anything at all, because the first thing
+    // the ray meets is the street it started on.
+    const by = y + (splash.burst || 0);
+    const reach = (ax, ay, az) => world.lineOfSight(x, by, z, ax, ay, az);
 
     let killed = 0;
     for (const d of [...drones.active]) {
-      const r = Math.hypot(d.x - x, d.y - y, d.z - z);
+      const r = Math.hypot(d.x - x, d.y - by, d.z - z);
       if (r > splash.radius) continue;
       // Line of sight, so a wall between the grenade and the target is a wall.
-      if (!world.lineOfSight(x, y, z, d.x, d.y, d.z)) continue;
+      if (!reach(d.x, d.y, d.z)) continue;
       const dmg = splash.damage * (1 - r / splash.radius);
       if (drones.damage(d, dmg)) { creditTarget(d, false, 'drone'); killed++; }
     }
     if (soldiers) {
       for (const sd of [...soldiers.active]) {
-        const r = Math.hypot(sd.x - x, sd.y + 0.9 - y, sd.z - z);
+        const r = Math.hypot(sd.x - x, sd.y + 0.9 - by, sd.z - z);
         if (r > splash.radius) continue;
-        if (!world.lineOfSight(x, y, z, sd.x, sd.y + 0.9, sd.z)) continue;
+        if (!reach(sd.x, sd.y + 0.9, sd.z)) continue;
         const dmg = splash.damage * (1 - r / splash.radius);
-        if (soldiers.damage(sd, dmg, { x: 0, y: 0, z: 0 })) {
+        // A warhead throws what is left of them away from it.
+        const away = { x: (sd.x - x) / (r || 1), y: 0, z: (sd.z - z) / (r || 1) };
+        if (soldiers.damage(sd, dmg, away)) {
           creditTarget(sd, false, 'soldier'); killed++;
         }
       }
     }
     for (const j of [...jets.active]) {
-      const r = Math.hypot(j.x - x, j.y - y, j.z - z);
+      const r = Math.hypot(j.x - x, j.y - by, j.z - z);
       if (r > splash.radius * 1.6) continue;      // a jet is a big thing to miss
       if (jets.damage(j, splash.damage * (1 - r / (splash.radius * 1.6)))) killed++;
     }
-    if (dist < splash.radius
-      && world.lineOfSight(x, y, z, player.x, player.y + PLAYER.eye, player.z)) {
-      combat.hurt(splash.damage * 0.55 * (1 - dist / splash.radius), x, z, player.x, player.z);
+    const toPlayer = Math.hypot(player.x - x, player.y + PLAYER.eye - by, player.z - z);
+    if (toPlayer < splash.radius
+      && reach(player.x, player.y + PLAYER.eye, player.z)) {
+      combat.hurt(splash.damage * 0.55 * (1 - toPlayer / splash.radius),
+        x, z, player.x, player.z);
     }
     if (killed > 1) toast(`${killed} at once`);
     return killed;
@@ -412,7 +467,8 @@ async function main() {
   function creditTarget(target, core, kind) {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
-    effects.explode(target.x, target.y, target.z);
+    // A body that came apart does not also catch fire.
+    if (!target.gibbed) effects.explode(target.x, target.y, target.z);
     audio.droneDown();
     const name = kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
     feed(`<b>${name} down</b> ${Math.round(dist)} m${core ? ' <i>core</i>' : ''}`);
@@ -446,6 +502,18 @@ async function main() {
       camera.position[0], camera.position[1], camera.position[2], false);
     if (damage > 0 && combat.health > 0) combat.hurt(damage, s.x, s.z, player.x, player.z);
   };
+  // Coming apart. The soldier is already off the active list by the time this
+  // runs, so everything here is about what is left behind.
+  soldiers.onGib = (s, dir) => {
+    const n = gibs.burst(s.x, s.y, s.z, dir, cheats.goreScale);
+    if (cheats.bleeding) {
+      effects.blood(s.x, s.y + 1.0, s.z, 0, 1, 0, cheats.goreScale * 3);
+    }
+    effects.shake = Math.min(1, effects.shake + 0.12);
+    // The kill itself is credited by whoever made it, the same as any other,
+    // because a gib is still one dead soldier and not two.
+    return n;
+  };
   soldiers.onSlip = (s) => {
     toast('down he goes');
     feed('<b>slipped</b> on a banana');
@@ -478,6 +546,226 @@ async function main() {
     toast(spec.name);
   };
   combat.onPowerEnd = () => audio.powerEnd();
+
+  // --- cheats -------------------------------------------------------------
+  // The menu is built from the tables in cheats.js rather than written out in
+  // the HTML, so adding a switch is adding a row there and nothing else.
+
+  const NUKE = {
+    // The numbers a warhead is made of. The radius is the one that matters:
+    // everything else here is set so that it reads at that size.
+    // burst is how far above the crater the fireball sits. Everything within
+    // the radius of that point and in sight of it is inside the blast.
+    radius: 170, damage: 4000, drop: 430, speed: 105, fall: 3.2, burst: 55,
+  };
+
+  /** Everything that reads a cheat, told what the cheats now say. */
+  function applyCheats() {
+    combat.godmode = cheats.godmode;
+    combat.cheated = cheats.used;
+    weapon.infiniteAmmo = cheats.infiniteAmmo;
+    soldiers.gore.gib = cheats.gibbing;
+    soldiers.gore.ragdoll = cheats.tumbling;
+    soldiers.gore.scale = cheats.goreScale;
+    el.cheatMark.classList.toggle('hidden', !cheats.used);
+    for (const sw of cheatRows) sw.el.classList.toggle('on', !!cheats[sw.id]);
+  }
+
+  const cheatRows = [];
+  function buildCheatMenu() {
+    for (const a of ACTIONS) {
+      const b = document.createElement('button');
+      b.className = 'act';
+      b.dataset.action = a.id;
+      b.innerHTML = `<b>${a.label}</b><i>${a.note}</i>`;
+      b.addEventListener('click', () => runCheatAction(a.id));
+      el.cheatActions.appendChild(b);
+    }
+    for (const [list, host, gore] of [[SWITCHES, el.cheatSwitches, false],
+      [GORE, el.cheatGore, true]]) {
+      for (const sw of list) {
+        const b = document.createElement('button');
+        b.className = gore ? 'sw gore' : 'sw';
+        b.dataset.cheat = sw.id;
+        b.innerHTML = `<span class="box"></span><span>${sw.label}<i>${sw.note}</i></span>`;
+        b.addEventListener('click', () => {
+          cheats.toggle(sw.id);
+          applyCheats();
+          toast(`${sw.label}: ${cheats[sw.id] ? 'on' : 'off'}`);
+        });
+        host.appendChild(b);
+        cheatRows.push({ id: sw.id, el: b });
+      }
+    }
+  }
+  buildCheatMenu();
+
+  function runCheatAction(id) {
+    if (id === 'allWeapons') {
+      cheats.used = true;
+      const n = weapon.giveAll();
+      toast(`every weapon loaded, ${n} rounds`);
+      feed('<i>cheat</i> all weapons');
+    } else if (id === 'refill') {
+      cheats.used = true;
+      const n = weapon.resupply(1, 1);
+      toast(n > 0 ? `${n} rounds` : 'already full');
+    } else if (id === 'nuke') {
+      openTargeting();
+      return;
+    }
+    applyCheats();
+  }
+
+  function toggleCheatMenu(show) {
+    const on = show === undefined ? el.cheats.classList.contains('hidden') : show;
+    el.cheats.classList.toggle('hidden', !on);
+    if (on) {
+      // Remember whether the mouse was actually captured, so that closing the
+      // menu gives it back only to somebody who had it. Asking for a lock
+      // nobody asked for is both rude and, if one is already pending, an
+      // exception.
+      state.lockWanted = input.pointerLocked;
+      input.exitLock();
+      applyCheats();
+    } else {
+      relock();
+    }
+  }
+
+  /** The pointer, back to where it was before a panel took it. */
+  function relock() {
+    if (isTouch || state.mode !== 'walk') return;
+    if (!state.lockWanted || input.pointerLocked) return;
+    state.lockWanted = false;
+    input.requestLock();
+  }
+  el.cheatsClose.addEventListener('click', () => toggleCheatMenu(false));
+  el.cheatsReset.addEventListener('click', () => { cheats.reset(); applyCheats(); });
+
+  // --- putting a warhead somewhere ----------------------------------------
+  // The target is picked on a map rather than down the sight, because the
+  // thing has a radius of a hundred and seventy metres and you want to see
+  // what is inside it before you commit.
+
+  const targetMap = new Minimap(el.targetMap, world, landmarks);
+  targetMap.big = true;
+  targetMap.sanctuaries = combat.sanctuaries;
+  // The enlarged map shows the zone too, because it is a fact about the city
+  // and not only about warheads.
+  minimap.sanctuaries = combat.sanctuaries;
+
+  function openTargeting() {
+    if (state.mode !== 'walk') return;
+    // Hide the menu without going through the toggle, which would ask for the
+    // pointer back on the way out and then have it taken away again one line
+    // later. Asking for a lock you are about to drop throws in Chrome.
+    el.cheats.classList.add('hidden');
+    state.lockWanted = state.lockWanted || input.pointerLocked;
+    state.targeting = true;
+    targetMap.aim = { x: player.x, z: player.z, radius: NUKE.radius, allowed: true };
+    el.nukeTarget.classList.remove('hidden');
+    el.targetHint.textContent =
+      'Click the city to put a warhead on it. Esc to think better of it.';
+    input.exitLock();
+    drawTargetMap();
+  }
+
+  function closeTargeting() {
+    if (!state.targeting) return;
+    state.targeting = false;
+    targetMap.aim = null;
+    el.nukeTarget.classList.add('hidden');
+    relock();
+  }
+
+  function drawTargetMap() {
+    targetMap.draw(player.x, player.z, camera.yaw, landmarks.found, pickups.live);
+  }
+
+  el.targetMap.addEventListener('mousemove', (ev) => {
+    if (!state.targeting) return;
+    const at = targetMap.worldAt(ev.clientX, ev.clientY);
+    if (!at) return;
+    targetMap.aim = {
+      x: at.x, z: at.z, radius: NUKE.radius,
+      allowed: !sanctuaryWithin(at.x, at.z, NUKE.radius),
+    };
+    el.targetHint.textContent = targetMap.aim.allowed
+      ? `${Math.round(Math.hypot(at.x - player.x, at.z - player.z))} m away`
+      : 'not there: that is the memorial';
+    drawTargetMap();
+  });
+
+  el.targetMap.addEventListener('click', (ev) => {
+    if (!state.targeting) return;
+    const at = targetMap.worldAt(ev.clientX, ev.clientY);
+    if (!at) return;
+    if (!dropNuke(at.x, at.z)) {
+      el.targetHint.textContent = 'not there: the memorial is a weapons free zone';
+      return;
+    }
+    closeTargeting();
+  });
+
+  /**
+   * A warhead comes in from four hundred metres up and takes about three
+   * seconds to arrive, so you get to watch it come down and hear it before it
+   * lands. It refuses to be aimed at the memorial, and the circle on the map
+   * goes grey rather than red when you hold the cursor over it.
+   *
+   * @returns {boolean} false when the target was refused
+   */
+  function dropNuke(x, z) {
+    if (sanctuaryWithin(x, z, NUKE.radius)) return false;
+    cheats.used = true;
+    applyCheats();
+    const ground = world.groundHeight(x, z);
+    projectiles.launch('nuke', {
+      x, y: ground + NUKE.drop, z,
+      vx: 0, vy: -NUKE.speed, vz: 0,
+      splash: { radius: NUKE.radius, damage: NUKE.damage, burst: NUKE.burst, nuke: true },
+    });
+    audio.incoming(NUKE.fall);
+    return true;
+  }
+
+  /** True when a circle of this radius would reach into a weapons free zone. */
+  function sanctuaryWithin(x, z, radius) {
+    for (const sanctuary of combat.sanctuaries) {
+      const dx = x - sanctuary.x, dz = z - sanctuary.z;
+      if (Math.hypot(dx, dz) < sanctuary.radius + radius) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Nuke rain. One warhead every few seconds, somewhere you can see but not
+   * where you are standing, and never into the memorial. Because it has to
+   * pick a point that is allowed, it tries a handful and gives this tick up
+   * rather than looping until it finds one.
+   */
+  function rainTick(dt) {
+    if (!cheats.nukeRain || state.mode !== 'walk') return;
+    state.nukeRainTimer -= dt;
+    if (state.nukeRainTimer > 0) return;
+    state.nukeRainTimer = 5.5 + Math.random() * 4;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const a = Math.random() * Math.PI * 2;
+      const far = 260 + Math.random() * 520;
+      const x = player.x + Math.cos(a) * far;
+      const z = player.z + Math.sin(a) * far;
+      if (x < world.minX + 60 || x > world.maxX - 60) continue;
+      if (z < world.minZ + 60 || z > world.maxZ - 60) continue;
+      if (dropNuke(x, z)) return;
+    }
+  }
+
+  // Any change at all, including the all off button and anything a test does
+  // straight to the object, goes back out to the systems that read it. Without
+  // this, switching a cheat off would leave it on everywhere that matters.
+  cheats.onChange = () => applyCheats();
+  applyCheats();
 
   reflex.onStart = () => { audio.reflex(true); el.hud.classList.add('slow'); };
   reflex.onStop = () => { audio.reflex(false); el.hud.classList.remove('slow'); };
@@ -531,7 +819,8 @@ async function main() {
   combat.onDown = () => {
     input.exitLock();
     el.downText.textContent =
-      `You held out for ${formatClock(combat.elapsed)} at threat level ${combat.tier + 1}, `
+      (cheats.used ? 'With cheats on, so this one does not count for much. ' : '')
+      + `You held out for ${formatClock(combat.elapsed)} at threat level ${combat.tier + 1}, `
       + `took down ${combat.kills} drone${combat.kills === 1 ? '' : 's'} `
       + `and scored ${combat.score.toLocaleString()}. Nothing here is permanent.`;
     el.down.classList.remove('hidden');
@@ -556,6 +845,7 @@ async function main() {
     projectiles.clear();
     reflex.reset();
     pickups.reset();
+    gibs.clear();
     renderer.clearScars();
     drones.setTier(Math.max(0, combat.tier - 1));
     effects.clear();
@@ -613,6 +903,7 @@ async function main() {
     drones.reset();
     weapon.reset();
     pickups.reset();
+    gibs.clear();
     effects.clear();
     audio.start();
     el.btnSound.textContent = 'sound on';
@@ -696,7 +987,12 @@ async function main() {
   });
 
   input.onKeyPress = (code) => {
-    if (code === 'Escape') { el.help.classList.add('hidden'); return; }
+    if (code === 'Escape') {
+      el.help.classList.add('hidden');
+      closeTargeting();
+      toggleCheatMenu(false);
+      return;
+    }
     if (state.mode === 'title') { if (code === 'Enter' || code === 'Space') beginWalk(); return; }
     if (state.mode === 'intro') { skipIntro(); return; }
     switch (code) {
@@ -714,6 +1010,7 @@ async function main() {
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
       case 'KeyF': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
+      case 'KeyC': toggleCheatMenu(); break;
       case 'KeyQ': weapon.select(state.lastWeapon || 'm16'); break;
       case 'KeyE': case 'ShiftRight': reflex.toggle(); break;
       case 'KeyT': {
@@ -826,14 +1123,18 @@ async function main() {
       alive: combat.health > 0,
     };
     state.inSanctuary = combat.isSanctuary(eye.x, eye.y, eye.z);
-    const holstered = state.holstered || photo.active || state.inSanctuary || combat.health <= 0;
+    // The cheat menu and the target map are both modal: the mouse belongs to
+    // them, so nothing fires while either is up.
+    const paused = state.targeting || !el.cheats.classList.contains('hidden');
+    const holstered = state.holstered || photo.active || state.inSanctuary
+      || combat.health <= 0 || paused;
     weapon.setHolstered(holstered);
     weapon.aiming = input.secondary && !holstered;
 
     const dir = {
       x: camera.forward[0], y: camera.forward[1], z: camera.forward[2],
     };
-    const wantFire = input.fire && !photo.active && combat.health > 0;
+    const wantFire = input.fire && !photo.active && combat.health > 0 && !paused;
     weapon.update(dt, wantFire, eye, dir);
     // Recoil composes with looking around here, in one place. It is carried as
     // an offset: whatever the last frame added is taken back before this
@@ -855,6 +1156,8 @@ async function main() {
     // walking over one in the slow still picks it up.
     pickups.update(worldDt, { x: player.x, y: player.y, z: player.z });
     projectiles.update(worldDt);
+    gibs.update(worldDt);
+    rainTick(worldDt);
     drones.update(worldDt, eye, state.time);
     soldiers.update(worldDt, { x: player.x, y: player.y + PLAYER.eye, z: player.z,
       alive: combat.health > 0 }, state.time);
@@ -932,6 +1235,14 @@ async function main() {
     // capped per frame so that a long frame cannot swallow it whole: a flash
     // that never renders at all is worse than one that lingers on a hitch.
     state.muzzle = Math.max(0, state.muzzle - Math.min(elapsed, 1 / 45) * 14);
+    // The whiteout from a warhead. Squared on the way out, so it holds for a
+    // moment at full and then lets go quickly rather than cross fading. The
+    // per frame cap the muzzle flash uses is deliberately not applied here:
+    // that cap guarantees a flash is seen at all, and applying it to a full
+    // screen whiteout means a machine running at four frames a second sits in
+    // white for fifteen seconds. This one decays on the real clock.
+    state.flash = Math.max(0, state.flash - elapsed * 1.3);
+    renderer.flash = state.flash * state.flash;
     if (effects.shake > 0.001) {
       const k = effects.shake * effects.shake * 0.09;
       const t = state.time * 47;
@@ -994,6 +1305,7 @@ async function main() {
       renderer.actors.updateProjectiles(projectiles.active);
       renderer.actors.updateSparks(effects.list);
       renderer.actors.updatePickups(pickups.live, camera.position);
+      renderer.actors.updateGibs(gibs.active);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -1003,6 +1315,7 @@ async function main() {
       renderer.actors.updateProjectiles(state.mode === 'walk' ? projectiles.active : []);
       renderer.actors.updateSparks(state.mode === 'walk' ? effects.list : []);
       renderer.actors.updatePickups(state.mode === 'walk' ? pickups.live : [], camera.position);
+      renderer.actors.updateGibs(state.mode === 'walk' ? gibs.active : []);
       renderer.drawActors = state.mode === 'walk';
     }
 
@@ -1121,8 +1434,18 @@ async function main() {
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
-    combat, drones, weapon, effects, projectiles, reflex, jets, pickups,
+    combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs,
     pickupSpecs: PICKUP,
+    nukeSpec: NUKE,
+    targetMap,
+    dropNuke(x, z) { return dropNuke(x, z); },
+    openTargeting() { openTargeting(); },
+    closeTargeting() { closeTargeting(); },
+    cheatMenu(on) { toggleCheatMenu(on); },
+    setCheat(id, on) { const ok = cheats.set(id, on); applyCheats(); return ok; },
+    cheatAction(id) { runCheatAction(id); },
+    rainTick(dt) { rainTick(dt); },
+    fixedForTest(dt) { fixed(dt); },
     get soldiers() { return soldiers; },
     spawnJet(dx, dz, height = 80) {
       const j = jets.free();

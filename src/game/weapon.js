@@ -67,6 +67,9 @@ export class Weapon {
     this.damageScale = 1;
     this.rateScale = 1;
     this.reloadScale = 1;
+    // From the cheat menu. The magazine still counts down on the interface so
+    // you can see the rate of fire, it just never reaches the bottom.
+    this.infiniteAmmo = false;
     this.onSwap = null;
     this.onSwapFrom = null;
     this.onPlace = null;
@@ -348,7 +351,7 @@ export class Weapon {
 
   fire(eye, dir) {
     const spec = this.spec;
-    this.ammo--;
+    if (!this.infiniteAmmo) this.ammo--;
     this.cooldown = spec.fireInterval * this.rateScale;
     this.shotsFired++;
 
@@ -364,7 +367,22 @@ export class Weapon {
     this.climb += spec.recoilKick * spec.recoilRetain * aimScale;
     this.kick = 1;
 
-    if (this.ammo === 0 && this.reserve > 0) this.startReload();
+    if (!this.infiniteAmmo && this.ammo === 0 && this.reserve > 0) this.startReload();
+  }
+
+  /** Every magazine and every reserve, full. The cheat menu's first button. */
+  giveAll() {
+    let given = 0;
+    for (const id of LOADOUT) {
+      const spec = WEAPONS[id];
+      const slot = this.carried[id];
+      given += (spec.magazine - slot.ammo) + (spec.reserve - slot.reserve);
+      slot.ammo = spec.magazine;
+      slot.reserve = spec.reserve;
+    }
+    // Whatever was mid reload is now loaded.
+    if (this.state === STATE.RELOADING) { this.state = STATE.READY; this.reloadLeft = 0; }
+    return given;
   }
 
   /**

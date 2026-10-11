@@ -79,6 +79,8 @@ jobs:
         run: node tools/test-combat.mjs
       - name: Fight soldiers in it, with everything you can carry
         run: node tools/test-arsenal.mjs
+      - name: Work the cheat menu, up to and including a warhead
+        run: node tools/test-cheats.mjs
       - name: Drive the interface
         run: node tools/test-ui.mjs
       - name: Keep the screenshots

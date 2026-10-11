@@ -73,6 +73,7 @@ export class Renderer {
     this.drawActors = true;
     this.viewmodel = null;      // set by the game layer each frame, or null
     this.reflex = 0;            // 0 to 1, how far into slowed time we are
+    this.flash = 0;             // 0 to 1, a detonation washing the frame out
 
     // Blast marks on the city. A fixed ring: the sixteen most recent, oldest
     // overwritten, because the alternative is a city that accumulates damage
@@ -464,6 +465,8 @@ export class Renderer {
         const mesh = this.actors.props[kind];
         tris += mesh.instanceCount * (mesh.count / 3);
       }
+      draws += this.actors.drawGibs();
+      tris += this.actors.gib.instanceCount * (this.actors.gib.count / 3);
       draws += this.actors.drawPickups();
       for (const kind in this.actors.pickups) {
         const mesh = this.actors.pickups[kind];
@@ -533,6 +536,7 @@ export class Renderer {
       .vec2('uTexel', 1 / this.width, 1 / this.height)
       .float('uExposure', this.exposure)
       .float('uSlow', this.reflex || 0)
+      .float('uFlash', this.flash || 0)
       .float('uBloomAmount', this.q.bloom ? 0.62 : 0)
       .float('uVignette', 0.34)
       .float('uFxaa', this.q.fxaa && !this.debugMode ? 1 : 0)

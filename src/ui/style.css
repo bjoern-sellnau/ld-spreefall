@@ -714,6 +714,142 @@ html, body {
   cursor: pointer;
 }
 
+/* --- the cheat menu --- */
+
+#cheats {
+  width: min(620px, 92vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 18px 22px;
+}
+#cheats .warn {
+  margin: 0 0 13px;
+  padding: 7px 10px;
+  border-left: 2px solid #e2705a;
+  background: rgba(226, 112, 90, 0.08);
+  color: #d8bdb4;
+}
+#cheats .group { margin-top: 13px; }
+#cheats .grouplabel {
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 7px;
+}
+#cheats .row { display: flex; flex-wrap: wrap; gap: 8px; }
+/* The one shot buttons at the top. They do a thing and the menu stays open,
+   because you almost always want two of them in a row. */
+#cheats .act {
+  margin: 0;
+  padding: 7px 13px;
+  text-align: left;
+  line-height: 1.35;
+}
+#cheats .act b { display: block; font-weight: 600; }
+#cheats .act i {
+  display: block;
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  opacity: 0.68;
+}
+/* A switch is a whole row you can click, because a 12 pixel checkbox in a
+   first person game is a thing you miss. */
+#cheats .sw {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 11px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #cfcabf;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font: 12.5px/1.4 ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+#cheats .sw + .sw { margin-top: 4px; }
+#cheats .sw:hover { background: rgba(255, 255, 255, 0.07); }
+#cheats .sw .box {
+  flex: 0 0 auto;
+  width: 30px; height: 16px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  position: relative;
+  transition: background 0.15s ease;
+}
+#cheats .sw .box::after {
+  content: '';
+  position: absolute;
+  left: 2px; top: 2px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #cfcabf;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+#cheats .sw.on { color: var(--ink); border-color: var(--edge); }
+#cheats .sw.on .box { background: var(--accent); }
+#cheats .sw.on .box::after { transform: translateX(14px); background: #15171b; }
+/* Gore switches run red rather than gold, because they are a different kind of
+   decision from infinite ammunition. */
+#cheats .sw.gore.on .box { background: #d2574a; }
+#cheats .sw i {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--dim);
+}
+#cheats button.ghost {
+  margin-left: 8px;
+  color: var(--dim);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+
+/* The mark on a run. Sits with the threat readout, in red, and does not go
+   away when the cheats are switched off again. */
+#cheatmark {
+  color: #e2705a;
+  letter-spacing: 0.18em;
+}
+
+/* --- picking a target for a warhead --- */
+
+#nuketarget {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(6, 7, 9, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: crosshair;
+}
+#targetmap {
+  width: min(86vh, 92vw);
+  height: min(86vh, 92vw);
+  background: rgba(10, 12, 15, 0.9);
+  box-shadow: 0 0 0 1px var(--edge), 0 24px 80px rgba(0, 0, 0, 0.7);
+}
+#targethint {
+  position: absolute;
+  left: 50%; bottom: 5vh;
+  transform: translateX(-50%);
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: 0 1px 6px #000;
+  white-space: nowrap;
+}
+
 #attribution {
   position: fixed;
   left: 12px; bottom: 8px;
