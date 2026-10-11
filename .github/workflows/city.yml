@@ -1,0 +1,66 @@
+name: Build the whole city and weigh it
+
+# Berlin inside the Ring is twenty four districts and twenty four Overpass
+# queries, which is far too much to do on every push. This builds the lot from
+# the live extract, prints what each district costs in bytes over the wire, and
+# fails if the download for the whole city is over the twenty five megabyte
+# budget the brief sets. It runs on demand, and once a week so that a drift in
+# the data is noticed before a release rather than after one.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: city-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  city:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: The day, so a rerun on the same day reuses the extracts
+        run: echo "OSM_DAY=$(date -u +%F)" >> "$GITHUB_ENV"
+      - name: Cache the OSM extracts
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: osm-city-${{ env.OSM_DAY }}
+          restore-keys: osm-city-
+      - name: Fetch every district
+        # One query per district, in order, with the client's own backoff
+        # between mirrors. A district that cannot be fetched is skipped and the
+        # build goes on without it, which is better than no city at all.
+        run: node --max-old-space-size=6144 tools/fetch-osm.mjs --all
+      - name: Build every district
+        run: node --max-old-space-size=6144 tools/build-world.mjs --all | tee city-build.log
+      - name: The budget
+        run: |
+          node tools/weigh-city.mjs | tee city-budget.txt
+      - name: Serve
+        run: node tools/serve.mjs & sleep 2
+      - name: Walk from one district into the next, in the real city
+        env:
+          SPREEFALL_QUALITY: low
+        run: node tools/test-districts.mjs
+      - name: Keep the index and the numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: city-budget
+          path: |
+            city-build.log
+            city-budget.txt
+            public/world.json
+          retention-days: 30

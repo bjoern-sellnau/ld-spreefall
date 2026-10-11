@@ -21,7 +21,8 @@ the sound and the data pipeline are all written from scratch.
 | Combat | own hitscan raycasting against the same world, own flight AI |
 | Audio | raw Web Audio API, every sound synthesised at run time |
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
-| Shipped as | one HTML file, JS modules, one binary bundle, no backend |
+| Shipped as | one HTML file, JS modules, one bundle per district, no backend |
+| Extent | Berlin inside the Ringbahn, 106 km2, 24 districts streamed as you walk |
 | Payload | 21.33 MB deployed, 7.90 MB over the wire with gzip, against a 25 MB budget |
 | Difficulty | easy, normal and hard, with shields that come back |
 | Third party code at run time | none |
@@ -427,6 +428,54 @@ real trunks and the crack of one going over happens on the tree that is going
 over. The two sets of timings are written out twice and have to agree; that
 is the price of not uploading anything.
 
+## The city is twenty four districts
+
+The brief asks for a walkable Berlin under 25 MB of download. Mitte at full
+detail is 2.2 MB over the wire and 6.5 square kilometres; the area inside the
+Ringbahn is 106 square kilometres, and at Mitte's detail that would be about
+130 MB. So the city is cut into districts, built one at a time, streamed as you
+walk, and thinned with distance from the middle.
+
+**The box.** The playable area is the bounding box of the Ringbahn, taken from
+the four stations at its corners rather than from a round number: Westkreuz at
+52.5010 N, 13.2840 E, Ostkreuz at 52.5031 N, 13.4689 E, Gesundbrunnen at
+52.5486 N, 13.3894 E and Suedkreuz at 52.4720 N, 13.3670 E. That is 12.5 km by
+8.5 km. The ring itself encloses about 88 square kilometres of the 106; the
+difference is the corners of the box, which fall outside it.
+
+**The cut.** One tile grid, 126 by 85 tiles of 100 m, covers the whole thing. A
+district is a rectangle of that grid, anchored so the original playable box,
+the one with the Gate and the memorial in it, is exactly one district. Nothing
+overlaps: a building belongs to the district its middle is in and is built
+once, and roads, parks and water are clipped at the boundary so neither side
+draws the other's half. Each district is fetched from Overpass with a margin
+around it, so a wall standing on a boundary arrives whole in both.
+
+**The tiers.** Detail falls off with distance from the middle.
+
+| tier | where | what it carries |
+|---|---|---|
+| full | Mitte | every building, landmark models, stelae, windows, 33 point height field |
+| near | next door | buildings over 24 m2, simplified footprints, windows, 17 point field |
+| block | out to the ring | buildings over 80 m2, flat roofs, no windows, small ones become the box that fits them, 9 point field |
+| outline | the corners outside the ring | buildings over 150 m2, driving roads only, 5 point field |
+
+**The streaming.** `World` holds an index and however many districts are in
+memory. Tile records carry their index in the global grid and a reference to
+the district buffer their offsets point into, so the collision, the height
+field, the raycasts and the renderer all carry on addressing the city by tile
+index and do not know the bytes came from eight files. Walking towards a
+boundary starts the fetch a kilometre out; a district more than three
+kilometres behind you is let go, its tiles leave the card with it, and the
+edge of what is loaded holds you the way a wall does if you somehow get there
+first. Free travel across the city loads the destination during the flight and
+will not put you down until the ground is there.
+
+What it costs is measured, not estimated: `npm run weigh` prints the table of
+districts with deployed and gzipped bytes and fails if the whole city is over
+the 25 MB budget. The workflow in `.github/workflows/city.yml` builds all
+twenty four from the live extract and publishes that table.
+
 ## Two cities, and which one you are looking at
 
 The sandbox this was built in denies every OpenStreetMap host, so the local
@@ -539,7 +588,9 @@ src/
 
 The world is cut into 100 m by 100 m tiles. Each tile carries an interleaved
 vertex buffer at 20 bytes a vertex, an index buffer, a collision blob and a tree
-instance list, all inside one `world.bin`, with `world.json` listing the offsets.
+instance list, all inside one `world-<district>.bin`, with
+`world-<district>.json` listing the offsets and `world.json` indexing the
+districts.
 
 ```
 offset  type        meaning
@@ -553,10 +604,12 @@ offset  type        meaning
 18      uint16      building height in 1/16 m
 ```
 
-The collision blob per tile is a list of 2D segments with a vertical span, plus a
-33 by 33 ground height field. The character controller only ever tests a capsule
-against 2D segments, which is why it is both cheap and impossible to tunnel
-through at a run.
+The collision blob per tile is a list of 2D segments with a vertical span, plus
+a ground height field whose size is written in the blob: 33 by 33 in the middle
+of town, down to 5 by 5 out at the edge, because Berlin is flat and a height
+field is 2 kB a tile whether anything in it varies or not. The character
+controller only ever tests a capsule against 2D segments, which is why it is
+both cheap and impossible to tunnel through at a run.
 
 Full architecture notes, including every deviation from the original brief and
 why, are in [docs/PLAN.md](docs/PLAN.md).

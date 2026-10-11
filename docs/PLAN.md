@@ -597,3 +597,83 @@ Recorded here as they happen, per the working style.
   second building more than forty five metres away, found by the same scan,
   which must not move at all. The second one is the real claim, and it is
   measured on something that was never in reach.
+
+## 18. Berlin inside the Ring, as districts
+
+The brief asks for a walkable Berlin under twenty five megabytes of download.
+Mitte is 6.5 square kilometres and 2.2 MB over the wire. Inside the Ringbahn is
+106, and at Mitte's detail that is about a hundred and thirty megabytes. The
+question the city had to answer was therefore not "can the whole of Berlin be
+built" but "what does the whole of Berlin have to give up to fit", and the only
+honest way to answer that is to build it and weigh it.
+
+- 2026-10-11: the box is the Ringbahn's bounding box, and it is taken from the
+  four stations at its corners rather than from a round number: Westkreuz
+  52.5010 N 13.2840 E, Ostkreuz 52.5031 N 13.4689 E, Gesundbrunnen 52.5486 N
+  13.3894 E, Suedkreuz 52.4720 N 13.3670 E. Sources: the Wikipedia station
+  articles for the first three, and latitude.to for Suedkreuz, which is the
+  weakest of the four and is the one to check again if the south edge ever
+  matters. The ring encloses about 88 square kilometres of the 106 in the box;
+  the corners fall outside it, which is why they are built at the cheapest
+  tier.
+
+- 2026-10-11: the districts are cut in tiles, not in degrees. The first version
+  snapped each district's lat lon box outward onto the global grid, which gave
+  twenty four districts whose tile ranges added up to eight hundred more tiles
+  than the grid has: every boundary was claimed by both sides. Cutting the grid
+  first and deriving each district's box from its own tiles means the city
+  partitions exactly, and the test counts it.
+
+- 2026-10-11: the projection is unchanged, and over twelve and a half
+  kilometres it is wrong by about fifteen metres at the far corners, because it
+  uses one metres per degree of longitude for the whole city rather than
+  recomputing it per latitude. That is deliberate. Everything is projected with
+  the same two constants, so the city is consistently stretched rather than
+  torn; nothing lines up against an external map and nothing has a seam.
+
+- 2026-10-11: the palette had to be frozen. A vertex carries a six bit index
+  into the facade palette and the renderer uploads one palette for the whole
+  city, but the build grew its palette as the data asked for colours. With one
+  district that was fine. With two it would have meant index seven being
+  sandstone in Mitte and brick in Wedding. The palette is now computed, sixty
+  four fixed shades of the twelve Berlin tones, identical in every district,
+  and a building that states its own colour is snapped to the nearest one.
+
+- 2026-10-11: two bugs the clipping found, both of which would have shipped
+  silently. The first: `annotate` attaches the surveyed facts, and with no box
+  to check against it put the Brandenburg Gate, the Reichstag and the stelae
+  field into every district that was built, out by the ring included. It now
+  takes the district's own metres and only adds what stands inside them. The
+  second: the first road clipper tested the points of a line and cut where one
+  went outside, which silently dropped every street whose two ends are both
+  outside the district and which crosses the whole of it. That is most of the
+  streets in most districts, and the build cheerfully reported sixty roads and
+  nought kilometres of road. It is Liang Barsky per segment now.
+
+- 2026-10-11: what the tiers actually save, measured on the offline city rather
+  than guessed. The footstep surface map was a tenth of a district at 2.5 m
+  across the whole box, so it goes to 5 m and then 10 m. The base ground grid
+  at 12.5 m is four thousand cells a square kilometre, so it goes to 25 m and
+  then 100. A pitched roof is four more vertices per metre of frontage and
+  reads as flat from the next street, so out past the inner districts every
+  roof is flat. A small building becomes the box that fits it. The height
+  field, 2 kB a tile whichever tier it is in, drops from thirty three points
+  across to seventeen, nine and five. What none of that touches is the thing
+  that actually dominates, which is the walls: about two thirds of an outer
+  district is building vertices, and the only way to spend less there is to
+  have fewer buildings, which is what the minimum area does.
+
+- 2026-10-11: the streaming is deliberately boring. One tile array over the
+  whole city, sparse, with each record carrying a reference to the district
+  buffer its offsets point into. Everything downstream kept working unchanged
+  because everything downstream addresses the city by tile index. The three
+  things that did have to change are the three that had assumed one buffer: the
+  height field, which now reads its own size out of the blob, the surface map,
+  which belongs to a district rather than to the world, and the facade palette.
+
+- 2026-10-11: the budget is enforced by a tool rather than by a promise.
+  `npm run weigh` prints every district's deployed and gzipped bytes, the code
+  and the page, and the total against the twenty five megabyte line, and exits
+  non zero when a complete city is over it. The workflow that builds all
+  twenty four districts from the live extract runs it, so the answer to "does
+  all of Berlin fit" is a number in a log rather than an opinion.

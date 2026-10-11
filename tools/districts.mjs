@@ -59,8 +59,8 @@ export const TIERS = [
   },
   {
     // The rest of the way out to the ring. Blocks: every building still solid
-    // and still climbable, but roofs flattened, no window detail, half the
-    // trees, no kerbs, only the roads you can drive on, and a nine point
+    // and still climbable, but roofs flattened, no window detail, a third of
+    // the trees, no kerbs, only the roads you can drive on, and a nine point
     // height field.
     name: 'block',
     minArea: 80, simplify: 2.2, roofs: false, windows: false, landmarks: true,
@@ -69,6 +69,18 @@ export const TIERS = [
     // instead of nine, which halves what the far half of the city costs. The
     // big ones, the ones that give a street its shape, keep their footprint.
     boxBelow: 450, service: false, surfaceStep: 5.0, roadSimplify: 3.0,
+  },
+  {
+    // The corners of the box, which are the bits outside the ring: Westend,
+    // the far side of the Spree, the fields south of Tempelhof. You can still
+    // walk and drive in them and everything in them is solid, but they are
+    // built as an outline of a city rather than a city, because the budget
+    // for the whole place is twenty five megabytes and the middle of town is
+    // worth more of it than the edge of the map.
+    name: 'outline',
+    minArea: 150, simplify: 3.0, roofs: false, windows: false, landmarks: true,
+    trees: 0.15, driveOnly: true, grid: 5, kerbs: false, groundStep: 100,
+    boxBelow: 1200, service: false, surfaceStep: 10.0, roadSimplify: 6.0,
   },
 ];
 
