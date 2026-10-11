@@ -33,6 +33,13 @@ export const ACTIONS = [
   { id: 'nuke', label: 'Drop a nuke', note: 'pick the target on the map' },
 ];
 
+/** Bringing more of them out. Each button is one squad, flight or section. */
+export const SPAWNS = [
+  { id: 'soldiers', label: 'Soldiers', note: 'a section of six, in the streets around you', count: 6 },
+  { id: 'drones', label: 'Drones', note: 'four, overhead', count: 4 },
+  { id: 'jets', label: 'Jets', note: 'two, running in from half a kilometre', count: 2 },
+];
+
 export class Cheats {
   constructor() {
     this.godmode = false;
@@ -60,7 +67,7 @@ export class Cheats {
    * fourth effect, it is a multiplier over the other three, which is both what
    * it means and the only way to make it feel like more rather than different.
    */
-  get goreScale() { return this.ultraGore ? 3.2 : 1; }
+  get goreScale() { return this.ultraGore ? 4.2 : 1; }
 
   /** True when a kill should come apart rather than fall over. */
   get gibbing() { return this.gib || this.ultraGore; }

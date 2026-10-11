@@ -244,8 +244,10 @@ async function run() {
 
   const blood = await page.evaluate(() => {
     const s = window.spreefall;
-    const red = () => s.effects.list.filter((p) =>
-      p.alive && p.kind === 1 && p.r > 0.25 && p.r < 0.5 && p.g < 0.06).length;
+    // Kind three is blood. Counting by kind rather than by colour, because
+    // the colour is tuned by eye and a test that breaks every time somebody
+    // darkens it is a test nobody keeps.
+    const red = () => s.effects.list.filter((p) => p.alive && p.kind === 3).length;
     const hit = () => {
       s.effects.clear(); s.soldiers.reset(); s.combat.reset();
       const v = s.spawnSoldier(-20, 1);
@@ -269,9 +271,73 @@ async function run() {
     return { off, on, ultra };
   });
   check('a hit throws no blood with the switch off', blood.off === 0);
-  check('and does with it on', blood.on > 3, `${blood.on} drops`);
+  check('and does with it on', blood.on > 14, `${blood.on} drops`);
   check('and ultra gore throws considerably more of it', blood.ultra > blood.on * 1.8,
     `${blood.on} to ${blood.ultra}`);
+
+  // Blood is drawn over the frame rather than added to it, which is the whole
+  // reason it reads as blood and not as embers, and it leaves the street
+  // marked afterwards.
+  const stains = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.pads = null;
+    s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
+    s.setCheat('gib', true); s.setCheat('blood', true); s.setCheat('ultraGore', true);
+    for (const [dx, dz] of [[-9, -1], [-12, 4], [-15, -5]]) {
+      const v = s.spawnSoldier(dx, dz);
+      s.soldiers.damage(v, 9999, { x: -1, y: 0, z: 0.2 });
+    }
+    for (let i = 0; i < 180; i++) { s.gibs.update(1 / 60); s.effects.update(1 / 60); }
+    const live = s.effects.list.filter((p) => p.alive);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const pools = live.filter((p) => p.kind === 4);
+    // A pool lies flat at the surface clearance rather than at the wound.
+    const flat = pools.every((p) => Math.abs(p.ay - (s.world.groundHeight(p.ax, p.az) + 0.14)) < 0.01);
+    // Something additive as well, so the two passes can be told apart: at
+    // this moment there is nothing but blood in the air otherwise.
+    s.effects.blast(s.player.x - 12, s.player.y + 1, s.player.z, 6);
+    s.renderer.actors.updateSparks(s.effects.list);
+    const out = {
+      chunks: s.gibs.count,
+      pools: pools.length,
+      flat,
+      additive: s.renderer.actors.sparks.count,
+      alpha: s.renderer.actors.blood.count,
+    };
+    s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
+    return out;
+  });
+  check('ultra gore takes three of them to forty odd pieces', stains.chunks > 40,
+    `${stains.chunks} chunks`);
+  check('and leaves the street marked', stains.pools > 5 && stains.flat,
+    `${stains.pools} stains, all lying flat on the surface`);
+  check('with the blood on its own alpha blended pass',
+    stains.alpha > 0 && stains.additive > 0,
+    `${stains.additive} additive, ${stains.alpha} alpha`);
+
+  // --- more of them, on demand ---------------------------------------------
+  const waves = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset();
+    const made = {
+      soldiers: s.spawnWave('soldiers', 6),
+      drones: s.spawnWave('drones', 4),
+      jets: s.spawnWave('jets', 2),
+    };
+    const live = {
+      soldiers: s.soldiers.active.length,
+      drones: s.drones.active.length,
+      jets: s.jets.active.length,
+    };
+    const inZone = [...s.soldiers.active, ...s.drones.active]
+      .filter((a) => s.combat.isSanctuary(a.x, 0, a.z)).length;
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset();
+    return { made, live, inZone };
+  });
+  check('the menu brings a section, a flight and a pair out',
+    waves.made.soldiers === 6 && waves.made.drones === 4 && waves.made.jets === 2,
+    `${waves.live.soldiers} soldiers, ${waves.live.drones} drones, ${waves.live.jets} jets`);
+  check('and none of them in the weapons free zone', waves.inZone === 0);
 
   // --- warheads ------------------------------------------------------------
   const refused = await page.evaluate(() => {
@@ -381,6 +447,75 @@ async function run() {
       quarterErr: Math.round(Math.abs((mid.x - quarter.x) / (span * 0.25) - 1) * 100),
     };
   });
+  const zoomed = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.openTargeting();
+    const c = document.getElementById('targetmap');
+    const r = c.getBoundingClientRect();
+    // Near the middle, where the window is free to move. Zooming at the very
+    // edge of the city is clamped, which is checked separately below.
+    const px = r.left + r.width * 0.45, py = r.top + r.height * 0.5;
+    const before = s.targetMap.worldAt(px, py);
+    const wide = Math.abs(s.targetMap.worldAt(r.left + r.width * 0.8, py).x
+      - s.targetMap.worldAt(r.left + r.width * 0.3, py).x);
+    s.targetMap.zoomAt(px, py, 4);
+    s.targetMap.draw(s.player.x, s.player.z, s.camera.yaw, new Set(), []);
+    const after = s.targetMap.worldAt(px, py);
+    const held = Math.hypot(after.x - before.x, after.z - before.z);
+    // The same half of the canvas now covers a quarter of the ground.
+    const close = Math.abs(s.targetMap.worldAt(r.left + r.width * 0.8, py).x
+      - s.targetMap.worldAt(r.left + r.width * 0.3, py).x);
+    const ratio = wide / close;
+    // Pan, then ask for the whole city back.
+    const centreBefore = { ...s.targetMap.centre };
+    s.targetMap.panBy(120, -60);
+    s.targetMap.draw(s.player.x, s.player.z, s.camera.yaw, new Set(), []);
+    const panned = Math.hypot(s.targetMap.centre.x - centreBefore.x,
+      s.targetMap.centre.z - centreBefore.z);
+    s.targetMap.resetView();
+    s.targetMap.draw(s.player.x, s.player.z, s.camera.yaw, new Set(), []);
+    const reset = s.targetMap.zoom;
+    // And it will not be pushed off the edge of the city.
+    s.targetMap.zoomAt(px, py, 3);
+    s.targetMap.panBy(-99999, -99999);
+    s.targetMap.draw(s.player.x, s.player.z, s.camera.yaw, new Set(), []);
+    const inside = s.targetMap.centre.x > s.world.minX && s.targetMap.centre.x < s.world.maxX;
+    s.targetMap.resetView();
+    s.closeTargeting();
+    return { held: Number(held.toFixed(2)), ratio: Number(ratio.toFixed(2)),
+      wide: Math.round(wide), close: Math.round(close),
+      panned: Math.round(panned), reset, inside };
+  });
+  check('zooming holds whatever is under the cursor', zoomed.held < 1.5,
+    `${zoomed.held} m of drift at four times`);
+  check('and four times really is four times', Math.abs(zoomed.ratio - 4) < 0.1,
+    `${zoomed.wide} m of city becomes ${zoomed.close} m across the same pixels`);
+  check('the map can be pushed about and put back', zoomed.panned > 10 && zoomed.reset === 1);
+  check('and it will not be pushed off the edge of the city', zoomed.inside);
+
+  const twoStep = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.projectiles.clear();
+    s.openTargeting();
+    const armed = s.armNuke(s.player.x + 800, s.player.z);
+    const beforeRelease = s.projectiles.active.filter((b) => b.kind === 'nuke').length;
+    const says = document.getElementById('confirmwhere').textContent;
+    // Cancelling really cancels.
+    document.getElementById('confirmcancel').click();
+    const cancelled = document.getElementById('targetconfirm').classList.contains('hidden');
+    const afterCancel = s.releaseNuke();
+    s.armNuke(s.player.x + 800, s.player.z);
+    s.releaseNuke();
+    const flying = s.projectiles.active.filter((b) => b.kind === 'nuke').length;
+    s.projectiles.clear();
+    s.closeTargeting();
+    return { armed, beforeRelease, says, cancelled, afterCancel, flying };
+  });
+  check('picking a target does not release anything', twoStep.armed && twoStep.beforeRelease === 0,
+    twoStep.says);
+  check('and picking again takes it back', twoStep.cancelled && twoStep.afterCancel === false);
+  check('and confirming is what sends it', twoStep.flying === 1);
+
   check('the target map opens and closes', map.open && map.closed);
   check('and a click on it lands where you clicked', map.midErr <= 2,
     `${map.midErr} m out at the centre`);

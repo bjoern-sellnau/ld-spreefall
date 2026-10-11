@@ -193,12 +193,24 @@ void main() {
     albedo = vec3(0.19, 0.030, 0.028) * (0.7 + 0.6 * v);
     rough = 0.32;
     metal = 0.0;
-  } else {
+  } else if (vPart < 20.5) {
     // Bone and torn webbing, the pale pieces, so a burst of gibs is not one
     // uniform colour.
     albedo = vec3(0.56, 0.52, 0.45);
     rough = 0.8;
     metal = 0.02;
+  } else if (vPart < 21.5) {
+    // Broken render and concrete, off a building that came down.
+    float v = hash11(floor(vWorld.x * 3.0) + floor(vWorld.z * 3.0) * 23.0);
+    albedo = vec3(0.30, 0.285, 0.262) * (0.6 + 0.7 * v);
+    rough = 0.96;
+    metal = 0.0;
+  } else {
+    // Brick out of the same wall.
+    float v = hash11(floor(vWorld.x * 3.0) + floor(vWorld.y * 7.0));
+    albedo = vec3(0.26, 0.115, 0.082) * (0.7 + 0.6 * v);
+    rough = 0.93;
+    metal = 0.0;
   }
 
   vec3 L = uSunDir.xyz;
@@ -429,13 +441,17 @@ void main() {
 export const SPARK_VS = `${VERSION}
 precision highp float;
 ${CAMERA_BLOCK}
-layout(location = 5) in vec4 iA;    // xyz start, w kind (0 tracer, 1 spark, 2 flash)
-layout(location = 6) in vec4 iB;    // xyz end or velocity, w life 0..1
+layout(location = 5) in vec4 iA;    // xyz start, w kind
+layout(location = 6) in vec4 iB;    // xyz end or spread, w life 0..1
 layout(location = 7) in vec4 iC;    // rgb colour, w width
+// Kinds: 0 tracer, 1 spark, 2 muzzle or blast flash, 3 blood, 4 a pool of it
+// on the ground. Three and four are drawn in a second pass with an ordinary
+// alpha blend; the rest are additive.
 
 out vec2 vUv;
 flat out float vKind;
 flat out float vLife;
+flat out float vSeed;
 flat out vec3 vColour;
 
 void main() {
@@ -445,6 +461,7 @@ void main() {
   vUv = c;
   vKind = iA.w;
   vLife = iB.w;
+  vSeed = iB.z;
   vColour = iC.rgb;
 
   vec3 pos;
@@ -456,8 +473,14 @@ void main() {
     vec3 toEye = normalize(uCamPos.xyz - mid);
     vec3 side = normalize(cross(normalize(axis), toEye)) * iC.w;
     pos = a + axis * c.x + side * (c.y - 0.5) * 2.0;
+  } else if (iA.w > 3.5) {
+    // A pool on the pavement: flat, not turned to face anybody, growing to its
+    // full size over the first second.
+    vec3 centre = iA.xyz;
+    float s = iC.w * mix(0.35, 1.0, iB.x);
+    pos = centre + vec3((c.x - 0.5) * 2.0 * s, 0.0, (c.y - 0.5) * 2.0 * s);
   } else {
-    // Spark or muzzle flash: a billboard at a point.
+    // Spark, flash or a drop of blood: a billboard at a point.
     vec3 centre = iA.xyz;
     vec3 fwd = normalize(uCamPos.xyz - centre);
     vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
@@ -475,6 +498,7 @@ ${CAMERA_BLOCK}
 in vec2 vUv;
 flat in float vKind;
 flat in float vLife;
+flat in float vSeed;
 flat in vec3 vColour;
 layout(location = 0) out vec4 fragColour;
 
@@ -484,6 +508,18 @@ void main() {
     // Tracer: bright core with a soft edge, fading towards the tail.
     float across = 1.0 - abs(vUv.y - 0.5) * 2.0;
     a = pow(across, 2.2) * mix(0.15, 1.0, vUv.x);
+  } else if (vKind > 3.5) {
+    // A pool. A disc with a ragged edge, because a round one looks painted on.
+    vec2 d = vUv - 0.5;
+    float ang = atan(d.y, d.x);
+    float edge = 0.46 + 0.045 * sin(ang * 5.0 + vSeed) + 0.03 * sin(ang * 9.0 - vSeed * 2.0);
+    a = smoothstep(edge, edge - 0.09, length(d));
+    // It dries from the rim inward over the last few seconds rather than
+    // fading out as a whole, which is what a drying stain does.
+    a *= smoothstep(0.0, 0.12, vLife);
+    if (a < 0.01) discard;
+    fragColour = vec4(vColour, a * 0.88);
+    return;
   } else {
     vec2 d = vUv - 0.5;
     float r = length(d) * 2.0;
@@ -491,6 +527,9 @@ void main() {
   }
   a *= vLife;
   if (a < 0.004) discard;
+  // Blood is the one thing here that is darker than what is behind it, so it
+  // is written as a colour with an alpha rather than as light to be added.
+  if (vKind > 2.5) { fragColour = vec4(vColour, a); return; }
   fragColour = vec4(vColour * a, a);
 }
 `;

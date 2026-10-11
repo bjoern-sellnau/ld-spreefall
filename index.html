@@ -94,6 +94,7 @@
   </div>
   <div id="controls">
     <button id="btnmap" title="Map (M)">map</button>
+    <button id="btntravel" title="Fly somewhere (V)">travel</button>
     <button id="btnphoto" title="Photo mode (P)">photo</button>
     <button id="btnsound" title="Sound (N)">sound off</button>
     <button id="btnhelp" title="Help (H)">help</button>
@@ -136,6 +137,7 @@
     <tr><td>R</td><td>reload</td></tr>
     <tr><td>G</td><td>holster the weapon, for walking and for photographs</td></tr>
     <tr><td>C</td><td>cheats</td></tr>
+    <tr><td>V</td><td>free travel: pick a place on the map and fly there</td></tr>
     <tr><td>Esc</td><td>release the mouse</td></tr>
   </table>
   <p>A gamepad works too: left stick walks, right stick looks, A jumps, L3 runs,
@@ -148,6 +150,10 @@
   <p class="warn">A run with any of these on is marked as such, here and on the
   end screen. The memorial stays a weapons free zone whatever is switched on.</p>
   <div class="row" id="cheatactions"></div>
+  <div class="group">
+    <div class="grouplabel">bring more of them out</div>
+    <div class="row" id="cheatspawns"></div>
+  </div>
   <div class="group">
     <div class="grouplabel">switches</div>
     <div id="cheatswitches"></div>
@@ -162,7 +168,21 @@
 
 <div id="nuketarget" class="hidden">
   <canvas id="targetmap"></canvas>
-  <div id="targethint">Click the city to put a warhead on it. Esc to think better of it.</div>
+  <div id="targettools">
+    <button id="targetin" title="Zoom in">+</button>
+    <button id="targetout" title="Zoom out">&minus;</button>
+    <button id="targetfit" title="The whole city">fit</button>
+    <span id="targetzoom">1.0x</span>
+  </div>
+  <div id="targethint">Click the city to put a warhead on it. Wheel zooms, drag moves. Esc to think better of it.</div>
+  <div id="targetconfirm" class="hidden">
+    <div class="line" id="confirmwhere"></div>
+    <div class="line warn hidden" id="confirmself"></div>
+    <div class="row">
+      <button id="confirmfire">Release</button>
+      <button id="confirmcancel" class="ghost">Pick again</button>
+    </div>
+  </div>
 </div>
 
 <div id="down" class="overlay hidden">

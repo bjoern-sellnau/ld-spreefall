@@ -34,6 +34,11 @@ export class Gibs {
     this.pool = [];
     for (let i = 0; i < MAX; i++) this.pool.push(new Gib());
     this.active = [];
+    // Set by the game layer when blood is switched on: fn(x, y, z) for a drop
+    // coming off something in flight, and fn(x, y, z, size) for what is left
+    // where one of them stops.
+    this.onDrip = null;
+    this.onPool = null;
   }
 
   clear() {
@@ -66,9 +71,49 @@ export class Gibs {
    * @param {number} scale the gore multiplier: how many pieces, how far
    * @returns {number} how many chunks it actually made
    */
+  /**
+   * A building coming down. The same chunks, made of concrete and brick
+   * instead, thrown outward along the ground rather than up: a wall falls
+   * into the street, it does not go into the air.
+   *
+   * @param {number} radius the collapse radius, which sets how far they go
+   * @returns {number} how many chunks it made
+   */
+  rubble(x, y, z, radius, count = 22) {
+    const n = Math.min(MAX, count);
+    for (let i = 0; i < n; i++) {
+      const g = this._free();
+      g.alive = true;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.75;
+      g.x = x + Math.cos(a) * r;
+      g.z = z + Math.sin(a) * r;
+      g.y = y + 1 + Math.random() * Math.min(26, radius * 0.9);
+      const out = 2 + Math.random() * 7;
+      g.vx = Math.cos(a) * out;
+      g.vy = 1 + Math.random() * 5;
+      g.vz = Math.sin(a) * out;
+      g.yaw = Math.random() * 6.28;
+      g.pitch = Math.random() * 6.28;
+      g.roll = Math.random() * 6.28;
+      g.spinY = (Math.random() - 0.5) * 9;
+      g.spinX = (Math.random() - 0.5) * 9;
+      g.spinZ = (Math.random() - 0.5) * 9;
+      g.scale = 1.1 + Math.random() * 2.6;
+      g.part = Math.random() < 0.72 ? 21 : 22;
+      g.maxLife = 20 + Math.random() * 16;
+      g.life = g.maxLife;
+      g.resting = false;
+      g.dripAt = 0;
+      g.wet = false;
+      this.active.push(g);
+    }
+    return n;
+  }
+
   burst(x, y, z, dir, scale = 1) {
-    const n = Math.min(MAX, Math.round(11 * Math.min(3.4, scale)));
-    const push = 1 + 0.35 * Math.min(3.4, scale);
+    const n = Math.min(MAX, Math.round(16 * Math.min(4.2, scale)));
+    const push = 1 + 0.35 * Math.min(4.2, scale);
     for (let i = 0; i < n; i++) {
       const g = this._free();
       g.alive = true;
@@ -92,9 +137,11 @@ export class Gibs {
       g.spinZ = (Math.random() - 0.5) * 22;
       g.scale = 0.55 + Math.random() * 0.85;
       g.part = PARTS[(Math.random() * PARTS.length) | 0];
-      g.maxLife = 7 + Math.random() * 4;
+      g.maxLife = 9 + Math.random() * 5;
       g.life = g.maxLife;
       g.resting = false;
+      g.dripAt = 0;
+      g.wet = g.part === 19 || g.part === 20;
       this.active.push(g);
     }
     return n;
@@ -112,6 +159,16 @@ export class Gibs {
       g.yaw += g.spinY * dt;
       g.pitch += g.spinX * dt;
       g.roll += g.spinZ * dt;
+
+      // A wet piece leaves a trail behind it, on a timer rather than every
+      // frame, so the rate does not change with the frame rate.
+      if (g.wet && this.onDrip) {
+        g.dripAt -= dt;
+        if (g.dripAt <= 0) {
+          g.dripAt = 0.035 + Math.random() * 0.05;
+          this.onDrip(g.x, g.y, g.z);
+        }
+      }
 
       const speed = Math.hypot(g.vx, g.vy, g.vz);
       // Walls, but only while it is still worth asking. Below six metres a
@@ -157,6 +214,11 @@ export class Gibs {
             g.resting = true;
             g.pitch = 0;
             g.roll = 0;
+            // Not every piece leaves one, or a burst paints the whole
+            // square rather than marking where the pieces came to rest.
+            if (g.wet && this.onPool && Math.random() < 0.34) {
+              this.onPool(g.x, ground - 0.08 * g.scale, g.z, 0.16 + g.scale * 0.2);
+            }
           }
         }
       }

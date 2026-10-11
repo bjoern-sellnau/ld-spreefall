@@ -6,7 +6,7 @@ import {
 } from '../engine/gl.js';
 import { mat4, vec3, Frustum, clamp } from '../engine/math.js';
 import { SKY_VS, SKY_FS } from '../shaders/sky.js';
-import { WORLD_VS, WORLD_FS, SHADOW_VS, SHADOW_FS } from '../shaders/world.js';
+import { WORLD_VS, WORLD_FS, SHADOW_VS, SHADOW_FS, MAX_COLLAPSE } from '../shaders/world.js';
 import { TREE_VS, TREE_FS, TREE_SHADOW_VS, TREE_SHADOW_FS } from '../shaders/trees.js';
 import { FULLSCREEN_VS, BRIGHT_FS, BLUR_FS, COMPOSITE_FS } from '../shaders/post.js';
 import { sunDirection, sunColour, berlinDate } from './sun.js';
@@ -78,6 +78,12 @@ export class Renderer {
     // Blast marks on the city. A fixed ring: the sixteen most recent, oldest
     // overwritten, because the alternative is a city that accumulates damage
     // for an hour and a fragment shader that loops over all of it.
+    // What has come down. Two vec4s a site, uploaded to both the colour pass
+    // and the shadow pass, and only when there is something to say.
+    this.MAX_COLLAPSE = MAX_COLLAPSE;
+    this.collapse = new Float32Array(MAX_COLLAPSE * 4);
+    this.collapseInfo = new Float32Array(MAX_COLLAPSE * 4);
+    this.collapseCount = 0;
     this.MAX_SCARS = 16;
     this.scars = new Float32Array(this.MAX_SCARS * 4);
     this.scarInfo = new Float32Array(this.MAX_SCARS * 4);
@@ -197,6 +203,45 @@ export class Renderer {
     this.scarInfo[i * 4 + 1] = 0;
     this._scarNext = (i + 1) % this.MAX_SCARS;
     this.scarCount = Math.min(this.MAX_SCARS, this.scarCount + 1);
+  }
+
+  /**
+   * Takes the live collapse sites. Called every frame while anything is
+   * falling; a city nobody has knocked down leaves the count at zero and the
+   * vertex shader skips the loop entirely.
+   *
+   * @param {Array} sites entries from the demolition layer
+   */
+  setCollapses(sites) {
+    const n = Math.min(this.MAX_COLLAPSE, sites.length);
+    for (let i = 0; i < n; i++) {
+      const s = sites[i];
+      this.collapse[i * 4] = s.x;
+      this.collapse[i * 4 + 1] = s.y;
+      this.collapse[i * 4 + 2] = s.z;
+      this.collapse[i * 4 + 3] = s.radius;
+      this.collapseInfo[i * 4] = s.progress;
+      this.collapseInfo[i * 4 + 1] = s.depth;
+      this.collapseInfo[i * 4 + 2] = s.rubble;
+      this.collapseInfo[i * 4 + 3] = 0;
+    }
+    this.collapseCount = n;
+  }
+
+  clearCollapses() {
+    this.collapseCount = 0;
+    this.collapse.fill(0);
+    this.collapseInfo.fill(0);
+  }
+
+  _uploadCollapses(prog) {
+    const gl = this.gl;
+    prog.int('uCollapseCount', this.collapseCount);
+    if (!this.collapseCount) return;
+    const a = prog.loc('uCollapse');
+    const b = prog.loc('uCollapseInfo');
+    if (a) gl.uniform4fv(a, this.collapse);
+    if (b) gl.uniform4fv(b, this.collapseInfo);
   }
 
   clearScars() {
@@ -368,6 +413,7 @@ export class Renderer {
       const list = this.tiles.collectBox(cx - pad, cz - pad, cx + pad, cz + pad, this._boxTiles);
 
       this.progShadow.use().mat4('uLightViewProj', this.lightVp[i]);
+      this._uploadCollapses(this.progShadow);
       for (const tile of list) {
         if (!tile.vao) continue;
         this.progShadow.vec3('uTileOrigin', tile.ox, 0, tile.oz);
@@ -429,6 +475,7 @@ export class Renderer {
     this.progWorld.use();
     this.progWorld.int('uDebugMode', this.debugMode);
     this._uploadScars();
+    this._uploadCollapses(this.progWorld);
     for (const tile of visible) {
       if (!tile.vao) continue;
       this.progWorld.vec3('uTileOrigin', tile.ox, 0, tile.oz);
