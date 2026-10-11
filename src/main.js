@@ -26,7 +26,7 @@ import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS } from './game/cheats.js';
 import { Gibs } from './game/gibs.js';
-import { Demolition, DEMO, bite } from './game/demolition.js';
+import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
@@ -531,15 +531,25 @@ async function main() {
   };
   // Coming apart. The soldier is already off the active list by the time this
   // runs, so everything here is about what is left behind.
-  // A building coming down: the dust first, then the pieces, and the deep end
-  // of the explosion sound under both.
-  demolition.onCollapse = (site) => {
-    effects.dust(site.x, site.y, site.z, site.radius);
-    gibs.rubble(site.x, site.y, site.z, site.radius,
-      Math.min(40, 10 + Math.round(site.radius * 0.6)));
-    audio.collapse(Math.hypot(player.x - site.x, player.z - site.z), site.radius);
+  // Each stage of a building coming apart: the dust and the pieces come off
+  // the line it has been cut back to, not out of the ground, so a top storey
+  // going is a top storey going and not a puff at your feet.
+  demolition.onStage = (site, level, was) => {
+    const share = level - was;
+    // How tall whatever is in the site still was before this stage. The
+    // tallest wall inside it is the best answer available without asking the
+    // geometry, and asking the geometry would mean a raycast per stage.
+    const standing = Math.max(4, world.tallestNear(site.x, site.z, site.radius));
+    const breakAt = site.y + standing * (1 - was);
+    effects.dust(site.x, breakAt, site.z, site.radius * (0.5 + share * 0.6));
+    gibs.rubble(site.x, breakAt, site.z, site.radius,
+      Math.min(40, 6 + Math.round(site.radius * share * 1.4)),
+      standing * share);
     const away = Math.round(Math.hypot(player.x - site.x, player.z - site.z));
-    feed(`<i>collapse</i> ${Math.round(site.radius * 2)} m across, ${away} m away`);
+    audio.collapse(away, site.radius * (0.4 + share));
+    feed(level >= 1
+      ? `<i>collapsed</i> ${Math.round(site.radius * 2)} m across, ${away} m away`
+      : `<i>caving in</i> ${Math.round(level * 100)}%, ${away} m away`);
   };
 
   gibs.onDrip = (x, y, z) => { if (cheats.bleeding) effects.drip(x, y, z); };
@@ -1765,7 +1775,7 @@ async function main() {
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input,
     combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs,
-    demolition, demoSpec: DEMO, demoBite: bite, travelSpec: TRAVEL,
+    demolition, demoSpec: DEMO, demoBite: bite, demoCrater: craterAt, travelSpec: TRAVEL,
     pickupSpecs: PICKUP,
     nukeSpec: NUKE,
     targetMap,

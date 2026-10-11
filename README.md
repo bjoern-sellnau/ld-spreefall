@@ -296,26 +296,42 @@ vertex buffers at build time, and nothing here rebuilds geometry in the middle
 of a frame. What happens instead is that the vertex shader bends the city
 around a short list of collapse sites.
 
-- **Damage accumulates.** A rocket into a wall marks it. The fifth one into
-  the same frontage brings that part of the building down. Damage is kept on a
-  22 m grid, about the width of one Berlin apartment block, which is the unit
-  that should fall.
-- **A collapse pulls everything above the street down towards it** and pushes
-  it outward, with a per vertex scatter, so a facade folds into a heap rather
-  than squashing flat. The normals go to vertical as it falls, the render goes
-  to broken concrete and brick dust, and the lit windows go out. The shadow
-  pass runs the same displacement, or a flattened building would go on casting
-  a standing shadow.
+- **A building comes apart in stages, from the top.** Damage accumulates on a
+  22 m grid, about the width of one Berlin apartment block. Each step takes
+  another quarter off: the shader cuts the building back to the share of its
+  own height that is left, so at a quarter gone it is the top quarter that is
+  missing and the storeys below it are still a building with windows in them.
+  Five rockets into the same frontage take it from standing to a heap, one
+  piece at a time, and each step throws its own rubble off the line it broke
+  at and makes its own noise.
+- **A collapse pulls what is above the cut down onto what is below it** and
+  pushes it outward, with a per vertex scatter, so a facade folds into a heap
+  rather than squashing flat. The normals go to vertical, the render goes to
+  broken concrete and brick dust, and the lit windows go out, but only for the
+  part that moved. The shadow pass runs the same displacement, or a flattened
+  building would go on casting a standing shadow. A big collapse rolls
+  outward from its middle rather than dropping flat.
 - **The collision follows, partway through the fall rather than at the end**,
-  so you are never stopped by a wall that is visibly no longer there. Every
-  wall inside the site drops to the height of the heap: head height is clear
-  in the middle, the rim keeps most of its height, and at knee height the
-  rubble still stops you.
-- **A warhead craters the ground.** The collision height field is dug into a
-  bowl with the same profile the vertex shader draws, so a crater you can see
-  is a crater you can walk into. Small blasts do not crater at all: the ground
-  mesh is a 12.5 m grid, so a hole eight metres across would have no vertices
-  to move and would be an invisible trap in the collision.
+  so you are never stopped by a wall that is visibly no longer there. Walls
+  are stored as one quad per building edge and an edge can be thirty metres
+  long, so the first time a collapse touches a tile its long walls are cut
+  into five metre pieces; otherwise a whole facade would open up or not
+  depending on which side of the blast its midpoint happened to be. Each piece
+  then loses its own height, measured from what it was before any of this
+  started.
+- **A warhead craters the ground, and the crater is nothing like the size of
+  the blast.** A hundred and seventy metres of blast digs a hole thirty six
+  metres across and eleven deep, with a ring of thrown up ground around the
+  lip and flat street again well inside the collapse. The collision height
+  field is dug with the same profile the vertex shader draws, so a crater you
+  can see is a crater you can walk into. Small blasts do not crater at all:
+  the ground mesh is a 12.5 m grid, so a hole eight metres across would have
+  no vertices to move and would be an invisible trap in the collision.
+- **The rubble has weight.** A lump of concrete lands once and stays where it
+  fell; a lighter piece skips. Whatever is still sliding rolls as it goes, and
+  the roll is what takes the last of the speed out of it. Pieces come off the
+  line the building broke at rather than out of the ground, and they pile up
+  towards the middle of a collapse rather than lying flat across it.
 - **Sixteen sites at once.** A new collapse that overlaps an old one grows it
   rather than taking a slot, and when all sixteen are taken the nearest one
   swallows the new one. Nothing is ever evicted, because evicting a site would
@@ -574,9 +590,13 @@ is where the blast may not reach, and the red circle is the blast itself.*
 ![A warhead down Unter den Linden](docs/screenshots/cheat-03-warhead.png)
 *Half a kilometre east, a few seconds after.*
 
-![The Gate, flattened](docs/screenshots/city-01-collapse.png)
-*A ninety metre collapse on Pariser Platz. The Gate is a heap, the buildings
-round it are partly down, and the dust is still up.*
+![The Gate, half down](docs/screenshots/city-01-collapse.png)
+*Two rounds into the Gate. The colonnade has gone and the quadriga is on the
+cobbles, the blocks either side have lost their upper storeys, and the rest of
+the square is untouched.*
+
+![The Gate, flattened](docs/screenshots/city-04-flattened.png)
+*Three more rounds into the same place.*
 
 ![Flying across the city](docs/screenshots/city-03-travel.png)
 *Free travel, halfway across: three hundred metres up over the roofs of Mitte,

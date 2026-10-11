@@ -472,3 +472,39 @@ Recorded here as they happen, per the working style.
   it. The test now drains the accumulator across three frames before setting
   the view, and waits for the heading it asked for rather than for any URL at
   all, so a write from before the view was set cannot be read as the answer.
+
+- 2026-10-11: destruction, second pass, after it was correctly called too
+  coarse. Three things were wrong and each had the same shape: the model was
+  binary where the thing it describes is graded.
+
+  A building either stood or was a heap. It now carries a level from zero to
+  one and the shader cuts it back to that share of its own height, which it
+  gets from the vertex attribute that was already there for the window
+  pattern. A quarter gone means the top quarter is missing and the three
+  storeys under it are still a facade. Five rockets take a frontage from
+  standing to rubble in four visible steps.
+
+  A crater was the size of the blast. A hundred and seventy metre warhead was
+  digging a hundred and seventy metre bowl, which is not what one does: the
+  crater is a fraction of the damage radius. It is now thirty six metres
+  across inside a hundred and forty six metre collapse, with a ring of thrown
+  up ground around the lip, and the street is flat again well inside the area
+  where the buildings came down.
+
+  And a wall either opened up or did not. Collision walls are one quad per
+  building edge, and an edge can be thirty metres long, so whether a facade
+  became walkable depended on which side of the blast its midpoint happened
+  to fall, while the picture showed the blast cutting across the middle of
+  it. The first time a collapse touches a tile, its long walls are now cut
+  into five metre pieces and the cached array is replaced. It costs more
+  segments in the tiles you have blown up and nothing anywhere else.
+
+  One smaller thing worth keeping: damage was measured from the blast to the
+  centre of each grid cell, which made how fast a building came down depend on
+  where the invisible grid happened to be. It is measured to the cell now, so
+  the cell the rocket landed in takes all of it.
+
+- 2026-10-11: `out` is a reserved word in GLSL, and the compiler's message for
+  using it as a local float is a syntax error on the line after the one you
+  wrote. Worth an entry only because the whole page fails to boot and the
+  console error is the one place it says why.

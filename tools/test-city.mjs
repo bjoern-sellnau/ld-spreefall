@@ -56,18 +56,27 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
     const x = s.player.x - 40, z = s.player.z + 10;
     const y = s.world.groundHeight(x, z);
-    const steps = [];
-    for (let i = 0; i < 8; i++) steps.push(s.demolition.blast(x, y, z, 9, 150).length);
-    const first = steps.indexOf(1);
+    const levels = [];
+    for (let i = 0; i < 7; i++) {
+      s.demolition.blast(x, y, z, 9, 150);
+      const site = s.demolition.sites.find((v) => Math.hypot(v.x - x, v.z - z) < 20);
+      levels.push(site ? site.level : 0);
+    }
     s.demolition.reset(); s.renderer.clearCollapses();
-    // One of the same is not enough on its own.
     const one = s.demolition.blast(x, y, z, 9, 150).length;
+    const afterOne = s.demolition.sites.length ? s.demolition.sites[0].level : 0;
     s.demolition.reset(); s.renderer.clearCollapses();
-    return { steps, first, one, threshold: s.demoSpec.threshold };
+    return { levels, one, afterOne, stages: s.demoSpec.stages };
   });
-  check('one rocket does not bring a building down', adds.one === 0);
-  check('but several into the same frontage do', adds.first > 1 && adds.first < 8,
-    `the ${adds.first + 1}th of them, at ${adds.threshold} damage`);
+  check('one rocket does not bring anything down', adds.one === 0 && adds.afterOne === 0);
+  check('and a frontage comes apart a piece at a time rather than at once',
+    new Set(adds.levels).size >= 4 && adds.levels[adds.levels.length - 1] === 1
+    && adds.levels[1] > 0 && adds.levels[1] < 1,
+    adds.levels.join(' '));
+  check('every step is a fraction of the building, not all of it',
+    adds.levels.every((v, i) => i === 0 || v >= adds.levels[i - 1])
+    && adds.levels.filter((v) => v > 0 && v < 1).length >= 2,
+    `${adds.stages} steps from standing to a heap`);
 
   // --- what comes down stops being there -----------------------------------
   const walls = await page.evaluate(() => {
@@ -100,6 +109,44 @@ async function run() {
   });
   check('a square with buildings round it has walls in it', walls.before >= 6,
     `${walls.before} of 24 rays hit one`);
+
+  // The heights come down in steps, and only where the damage landed.
+  const bySteps = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.demolition.reset(); s.renderer.clearCollapses();
+    // Somewhere with a real building on it, found by asking rather than by
+    // picking a coordinate that might be an empty square.
+    let at = null;
+    for (let d = 20; d <= 90 && !at; d += 4) {
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * Math.PI * 2;
+        const x = s.player.x + Math.cos(a) * d, z = s.player.z + Math.sin(a) * d;
+        if (s.world.tallestNear(x, z, 6) > 14) { at = { x, z }; break; }
+      }
+    }
+    if (!at) return { skip: true };
+    const y = s.world.groundHeight(at.x, at.z);
+    // The same reach the search used, or the point it found may have
+    // nothing inside a tighter circle and every reading comes back zero.
+    const here = () => Math.round(s.world.tallestNear(at.x, at.z, 6) * 10) / 10;
+    const near = () => Math.round(s.world.tallestNear(at.x, at.z, 18) * 10) / 10;
+    const steps = [{ hit: here(), rest: near() }];
+    for (let i = 0; i < 5; i++) {
+      s.demolition.blast(at.x, y + 6, at.z, 9, 150);
+      for (let k = 0; k < 400; k++) s.demolition.update(1 / 60);
+      steps.push({ hit: here(), rest: near() });
+    }
+    s.demolition.reset(); s.renderer.clearCollapses();
+    return { steps };
+  });
+  check('a facade loses its height in steps rather than in one go',
+    !bySteps.skip && bySteps.steps.filter((v, i) => i > 0
+      && v.hit < bySteps.steps[i - 1].hit).length >= 3,
+    bySteps.skip ? 'no building found' : bySteps.steps.map((v) => v.hit).join(' to '));
+  check('and the rest of the block is left standing',
+    !bySteps.skip && bySteps.steps[bySteps.steps.length - 1].rest
+      >= bySteps.steps[0].rest - 0.2,
+    bySteps.skip ? '' : `${bySteps.steps[0].rest} m, still ${bySteps.steps[bySteps.steps.length - 1].rest} m`);
   check('the walls are still there while it is falling', walls.halfway === walls.before);
   check('and gone at head height in the middle of it once it has fallen',
     walls.inner === 0, `${walls.before} to ${walls.inner} within 32 m`);
@@ -114,37 +161,46 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
     const x = s.player.x + 400, z = s.player.z + 40;
     const before = s.world.groundHeight(x, z);
-    const rimBefore = s.world.groundHeight(x + 150, z);
     s.demolition.blast(x, before, z, 170, 4000);
     const site = s.demolition.sites[0];
-    for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
-    const after = s.world.groundHeight(x, z);
-    const rimAfter = s.world.groundHeight(x + 150, z);
-    // The collision profile and the one the shader draws have to be the same
-    // function. Sampled at a few radii, the measured drop must match
-    // depth * bite squared.
-    const errs = [];
-    for (const f of [0.1, 0.3, 0.5, 0.7, 0.9]) {
-      const px = x + site.radius * f;
-      const k = s.demoBite(px, z, site);
-      const want = site.depth * k * k;
-      const got = s.world.groundHeight(px, z);
-      const base = before;      // flat enough over this square to compare
-      errs.push(Math.abs((base - got) - want));
+    for (let i = 0; i < 400; i++) s.demolition.update(1 / 60);
+    // Walk out along one radius and record what the ground did.
+    const profile = [];
+    for (let d = 0; d <= site.radius; d += 4) {
+      profile.push({ d, moved: Number((s.world.groundHeight(x + d, z) - before).toFixed(2)) });
+    }
+    // The collision and the shape the shader draws are the same function,
+    // compared number for number rather than by eye.
+    let worst = 0;
+    for (const f of [0.05, 0.2, 0.4, 0.6, 0.85, 1.2, 1.6, 2.4]) {
+      const px = x + site.craterRadius * f;
+      const want = s.demoCrater(px, z, site);
+      const got = s.world.groundHeight(px, z) - before;
+      worst = Math.max(worst, Math.abs(got - want));
     }
     return {
+      collapse: Math.round(site.radius),
+      craterRadius: Math.round(site.craterRadius),
       depth: Number(site.depth.toFixed(2)),
-      dropped: Number((before - after).toFixed(2)),
-      rim: Number((rimBefore - rimAfter).toFixed(2)),
-      worstErr: Number(Math.max(...errs).toFixed(2)),
+      deepest: Math.min(...profile.map((p) => p.moved)),
+      highest: Math.max(...profile.map((p) => p.moved)),
+      flatFrom: (profile.find((p) => p.d > site.craterRadius * 2 && Math.abs(p.moved) < 0.1)
+        || { d: -1 }).d,
+      worst: Number(worst.toFixed(2)),
     };
   });
-  check('a warhead digs a hole you can walk into',
-    crater.dropped > 5 && Math.abs(crater.dropped - crater.depth) < 0.05,
-    `${crater.dropped} m deep`);
-  check('and the rim of it does not move', Math.abs(crater.rim) < 0.05);
+  check('a warhead digs a hole you can walk into', crater.deepest < -5,
+    `${(-crater.deepest).toFixed(1)} m deep`);
+  check('and the hole is a fraction of the blast, not all of it',
+    crater.craterRadius < crater.collapse * 0.35,
+    `${crater.craterRadius} m of crater inside a ${crater.collapse} m collapse`);
+  check('with a ring of thrown up ground round the lip', crater.highest > 0.5,
+    `${crater.highest.toFixed(1)} m proud`);
+  check('and flat street again well inside the collapse',
+    crater.flatFrom > 0 && crater.flatFrom < crater.collapse,
+    `level again ${crater.flatFrom} m out`);
   check('and the collision agrees with the shape the shader draws',
-    crater.worstErr < 1.2, `worst ${crater.worstErr} m out over five radii`);
+    crater.worst < 1.2, `worst ${crater.worst} m out over eight radii`);
 
   // --- small blasts leave the ground alone ---------------------------------
   const small = await page.evaluate(() => {
@@ -155,9 +211,10 @@ async function run() {
     for (let i = 0; i < 8; i++) s.demolition.blast(x, y, z, 9, 150);
     for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
     const site = s.demolition.sites[0];
-    return { crater: site ? site.crater : null, moved: Number((y - s.world.groundHeight(x, z)).toFixed(3)) };
+    return { crater: site ? site.craterRadius : null,
+      moved: Number((y - s.world.groundHeight(x, z)).toFixed(3)) };
   });
-  check('a rocket does not crater the street', small.crater === false && small.moved === 0,
+  check('a rocket does not crater the street', small.crater === 0 && small.moved === 0,
     'the ground mesh is a 12.5 m grid, so a small hole would be invisible');
 
   // --- the memorial ---------------------------------------------------------
@@ -297,11 +354,27 @@ async function run() {
     s.teleport(81, 0); s.look(90, -2); s.setTime(15.9);
     const x = s.player.x - 70, z = s.player.z;
     const y = s.world.groundHeight(x, z);
-    s.demolition.blast(x, y, z, 90, 3000);
-    for (let i = 0; i < 240; i++) { s.demolition.update(1 / 60); s.gibs.update(1 / 60); }
+    // Two rounds, so the picture is a building half down rather than a heap:
+    // half down is the thing worth showing.
+    for (let i = 0; i < 2; i++) {
+      s.demolition.blast(x, y + 8, z, 40, 500);
+      for (let k = 0; k < 160; k++) { s.demolition.update(1 / 60); s.gibs.update(1 / 60); }
+    }
   });
-  await page.waitForTimeout(1600);
+  await page.waitForTimeout(1800);
   await page.screenshot({ path: path.join(SHOTS, 'city-01-collapse.png') });
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const x = s.player.x - 70, z = s.player.z;
+    const y = s.world.groundHeight(x, z);
+    for (let i = 0; i < 3; i++) {
+      s.demolition.blast(x, y + 8, z, 40, 500);
+      for (let k = 0; k < 160; k++) { s.demolition.update(1 / 60); s.gibs.update(1 / 60); }
+    }
+  });
+  await page.waitForTimeout(1800);
+  await page.screenshot({ path: path.join(SHOTS, 'city-04-flattened.png') });
 
   await page.evaluate(() => {
     const s = window.spreefall;

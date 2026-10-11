@@ -220,10 +220,10 @@ export class Renderer {
       this.collapse[i * 4 + 1] = s.y;
       this.collapse[i * 4 + 2] = s.z;
       this.collapse[i * 4 + 3] = s.radius;
-      this.collapseInfo[i * 4] = s.progress;
+      this.collapseInfo[i * 4] = s.shown;
       this.collapseInfo[i * 4 + 1] = s.depth;
-      this.collapseInfo[i * 4 + 2] = s.rubble;
-      this.collapseInfo[i * 4 + 3] = 0;
+      this.collapseInfo[i * 4 + 2] = s.craterRadius;
+      this.collapseInfo[i * 4 + 3] = s.rubble;
     }
     this.collapseCount = n;
   }

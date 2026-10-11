@@ -22,6 +22,15 @@ function rayVerticalQuad(ox, oy, oz, dx, dy, dz, ax, az, bx, bz, base, top) {
   return t;
 }
 
+/** Distance from a point to a line segment, all in the ground plane. */
+export function segmentDistance(px, pz, x1, z1, x2, z2) {
+  const ex = x2 - x1, ez = z2 - z1;
+  const len2 = ex * ex + ez * ez;
+  let t = len2 > 1e-9 ? ((px - x1) * ex + (pz - z1) * ez) / len2 : 0;
+  t = t < 0 ? 0 : (t > 1 ? 1 : t);
+  return Math.hypot(px - (x1 + ex * t), pz - (z1 + ez * t));
+}
+
 export class World {
   constructor(manifest, buffer) {
     this.manifest = manifest;
@@ -164,7 +173,7 @@ export class World {
     return segs;
   }
 
-  /** Call fn(segments, count) for every tile overlapping the box. */
+  /** Call fn(segments, count, tileIndex) for every tile overlapping the box. */
   forEachSegmentTile(minX, minZ, maxX, maxZ, fn) {
     const tx0 = Math.max(0, Math.floor((minX - this.minX) / this.tileSize));
     const tx1 = Math.min(this.nx - 1, Math.floor((maxX - this.minX) / this.tileSize));
@@ -172,10 +181,34 @@ export class World {
     const tz1 = Math.min(this.nz - 1, Math.floor((maxZ - this.minZ) / this.tileSize));
     for (let tz = tz0; tz <= tz1; tz++) {
       for (let tx = tx0; tx <= tx1; tx++) {
-        const segs = this.segments(tz * this.nx + tx);
-        if (segs.length) fn(segs, segs.length / 6);
+        const index = tz * this.nx + tx;
+        const segs = this.segments(index);
+        if (segs.length) fn(segs, segs.length / 6, index);
       }
     }
+  }
+
+  /**
+   * The tallest thing standing in a circle, in metres above the ground there.
+   * Used to decide where a collapse breaks, which wants an answer in one pass
+   * over the segments rather than a raycast.
+   */
+  tallestNear(x, z, radius) {
+    let best = 0;
+    const g = this.groundHeight(x, z);
+    this.forEachSegmentTile(x - radius, z - radius, x + radius, z + radius, (segs, count) => {
+      for (let i = 0; i < count; i++) {
+        const o = i * 6;
+        // The distance to the wall, not to the middle of it. A facade thirty
+        // metres long has its midpoint nowhere near most of itself.
+        if (segmentDistance(x, z, segs[o], segs[o + 1], segs[o + 2], segs[o + 3]) > radius) {
+          continue;
+        }
+        const h = segs[o + 5] - g;
+        if (h > best) best = h;
+      }
+    });
+    return best;
   }
 
   // --- raycasting ---------------------------------------------------------

@@ -79,7 +79,7 @@ export class Gibs {
    * @param {number} radius the collapse radius, which sets how far they go
    * @returns {number} how many chunks it made
    */
-  rubble(x, y, z, radius, count = 22) {
+  rubble(x, y, z, radius, count = 22, fallHeight = 0) {
     const n = Math.min(MAX, count);
     for (let i = 0; i < n; i++) {
       const g = this._free();
@@ -88,24 +88,33 @@ export class Gibs {
       const r = Math.random() * radius * 0.75;
       g.x = x + Math.cos(a) * r;
       g.z = z + Math.sin(a) * r;
-      g.y = y + 1 + Math.random() * Math.min(26, radius * 0.9);
-      const out = 2 + Math.random() * 7;
+      // It comes off the line the building broke at, and off a band of that
+      // line rather than a single height, so a storey coming away drops from
+      // where the storey was.
+      g.y = y - Math.random() * Math.max(1, fallHeight);
+      // Masonry does not launch. It tips off the edge and falls, so the
+      // outward speed is small and most of what happens is gravity.
+      const out = 0.8 + Math.random() * 3.4;
       g.vx = Math.cos(a) * out;
-      g.vy = 1 + Math.random() * 5;
+      g.vy = -0.5 + Math.random() * 2.0;
       g.vz = Math.sin(a) * out;
       g.yaw = Math.random() * 6.28;
       g.pitch = Math.random() * 6.28;
       g.roll = Math.random() * 6.28;
-      g.spinY = (Math.random() - 0.5) * 9;
-      g.spinX = (Math.random() - 0.5) * 9;
-      g.spinZ = (Math.random() - 0.5) * 9;
+      g.spinY = (Math.random() - 0.5) * 7;
+      g.spinX = (Math.random() - 0.5) * 7;
+      g.spinZ = (Math.random() - 0.5) * 7;
       g.scale = 1.1 + Math.random() * 2.6;
       g.part = Math.random() < 0.72 ? 21 : 22;
-      g.maxLife = 20 + Math.random() * 16;
+      g.maxLife = 26 + Math.random() * 20;
       g.life = g.maxLife;
       g.resting = false;
       g.dripAt = 0;
       g.wet = false;
+      // Heavier than a piece of somebody: it hardly bounces, it slides less,
+      // and it takes the spin out of itself the moment it lands.
+      g.mass = 2.2 + g.scale;
+      g.heap = { x, z, radius };
       this.active.push(g);
     }
     return n;
@@ -140,6 +149,8 @@ export class Gibs {
       g.maxLife = 9 + Math.random() * 5;
       g.life = g.maxLife;
       g.resting = false;
+      g.mass = 1;
+      g.heap = null;
       g.dripAt = 0;
       g.wet = g.part === 19 || g.part === 20;
       this.active.push(g);
@@ -194,22 +205,45 @@ export class Gibs {
       g.y += g.vy * dt;
       g.z += g.vz * dt;
 
-      const ground = w.groundHeight(g.x, g.z) + 0.08 * g.scale;
-      if (g.y <= ground) {
-        g.y = ground;
-        if (g.vy < -1.2) {
-          // One short bounce, then it is down.
-          g.vy = -g.vy * 0.22;
+      // What it comes to rest on. Over the middle of a collapse that is the
+      // heap, not the street: pieces pile up where the building was and thin
+      // out towards the edge of it, which is the shape rubble actually makes
+      // and the one the geometry underneath has taken too.
+      const floor = w.groundHeight(g.x, g.z);
+      let rest = floor + 0.08 * g.scale;
+      if (g.heap) {
+        const d = Math.hypot(g.x - g.heap.x, g.z - g.heap.z);
+        const k = Math.max(0, 1 - d / Math.max(1, g.heap.radius));
+        rest += Math.min(3.5, g.heap.radius * 0.07) * k * k;
+      }
+      if (g.y <= rest) {
+        g.y = rest;
+        // Restitution falls with mass: a lump of concrete lands once and
+        // stays, a piece of somebody skips.
+        const bounceAt = -1.2 * g.mass;
+        if (g.vy < bounceAt) {
+          g.vy = -g.vy * (0.22 / g.mass);
           g.vx *= 0.5; g.vz *= 0.5;
           g.spinY *= 0.5; g.spinX *= 0.3; g.spinZ *= 0.3;
         } else {
           g.vy = 0;
-          g.vx *= Math.max(0, 1 - 7 * dt);
-          g.vz *= Math.max(0, 1 - 7 * dt);
+          // Rolling, then friction: whatever is still sliding turns as it
+          // goes, and the turn is what takes the rest of the speed out.
+          const slide = Math.hypot(g.vx, g.vz);
+          if (slide > 0.4) {
+            const radius = Math.max(0.1, 0.12 * g.scale);
+            g.spinX = (g.vz / radius) * 0.35;
+            g.spinZ = (-g.vx / radius) * 0.35;
+            g.pitch += g.spinX * dt;
+            g.roll += g.spinZ * dt;
+          }
+          const drag = Math.max(0, 1 - (5 + g.mass * 2.5) * dt);
+          g.vx *= drag;
+          g.vz *= drag;
           g.spinX *= Math.max(0, 1 - 9 * dt);
           g.spinZ *= Math.max(0, 1 - 9 * dt);
           g.spinY *= Math.max(0, 1 - 6 * dt);
-          if (Math.hypot(g.vx, g.vz) < 0.25) {
+          if (slide < 0.25) {
             // Lie flat where it stopped, rather than standing on a corner.
             g.resting = true;
             g.pitch = 0;
@@ -217,7 +251,7 @@ export class Gibs {
             // Not every piece leaves one, or a burst paints the whole
             // square rather than marking where the pieces came to rest.
             if (g.wet && this.onPool && Math.random() < 0.34) {
-              this.onPool(g.x, ground - 0.08 * g.scale, g.z, 0.16 + g.scale * 0.2);
+              this.onPool(g.x, floor, g.z, 0.16 + g.scale * 0.2);
             }
           }
         }
