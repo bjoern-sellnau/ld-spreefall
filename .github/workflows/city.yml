@@ -11,6 +11,12 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '41 4 * * 1'
+  # Changing the recipe for the city is a reason to rebuild the city, and it
+  # is the only push that is: this job is two dozen Overpass queries and the
+  # best part of an hour.
+  push:
+    paths:
+      - '.github/workflows/city.yml'
 
 permissions:
   contents: read
