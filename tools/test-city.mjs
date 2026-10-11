@@ -125,28 +125,49 @@ async function run() {
       }
     }
     if (!at) return { skip: true };
+    // And a second building well clear of the first, so the claim that the
+    // damage stayed where it landed is measured on something that was never
+    // in reach of it rather than on a circle drawn round the hit.
+    let away = null;
+    for (let d = 46; d <= 150 && !away; d += 4) {
+      for (let i = 0; i < 64; i++) {
+        const a = (i / 64) * Math.PI * 2;
+        const x = at.x + Math.cos(a) * d, z = at.z + Math.sin(a) * d;
+        if (s.world.tallestNear(x, z, 6) > 14) { away = { x, z }; break; }
+      }
+    }
     const y = s.world.groundHeight(at.x, at.z);
     // The same reach the search used, or the point it found may have
     // nothing inside a tighter circle and every reading comes back zero.
     const here = () => Math.round(s.world.tallestNear(at.x, at.z, 6) * 10) / 10;
-    const near = () => Math.round(s.world.tallestNear(at.x, at.z, 18) * 10) / 10;
-    const steps = [{ hit: here(), rest: near() }];
+    // A rocket touches up to four cells of the damage grid, so a site can
+    // reach the far side of the frontage it hit. What it must not do is take
+    // the neighbours with it, which is what these two read.
+    const near = () => Math.round(s.world.tallestNear(at.x, at.z, 22) * 10) / 10;
+    const other = () => (away
+      ? Math.round(s.world.tallestNear(away.x, away.z, 6) * 10) / 10 : 0);
+    const steps = [{ hit: here(), rest: near(), other: other() }];
     for (let i = 0; i < 5; i++) {
       s.demolition.blast(at.x, y + 6, at.z, 9, 150);
       for (let k = 0; k < 400; k++) s.demolition.update(1 / 60);
-      steps.push({ hit: here(), rest: near() });
+      steps.push({ hit: here(), rest: near(), other: other() });
     }
     s.demolition.reset(); s.renderer.clearCollapses();
-    return { steps };
+    return { steps, away: !!away, apart: away
+      ? Math.round(Math.hypot(away.x - at.x, away.z - at.z)) : 0 };
   });
   check('a facade loses its height in steps rather than in one go',
     !bySteps.skip && bySteps.steps.filter((v, i) => i > 0
       && v.hit < bySteps.steps[i - 1].hit).length >= 3,
     bySteps.skip ? 'no building found' : bySteps.steps.map((v) => v.hit).join(' to '));
-  check('and the rest of the block is left standing',
-    !bySteps.skip && bySteps.steps[bySteps.steps.length - 1].rest
-      >= bySteps.steps[0].rest - 0.2,
-    bySteps.skip ? '' : `${bySteps.steps[0].rest} m, still ${bySteps.steps[bySteps.steps.length - 1].rest} m`);
+  const last = bySteps.skip ? null : bySteps.steps[bySteps.steps.length - 1];
+  check('and the rest of the block keeps nearly all of its height',
+    !bySteps.skip && last.rest >= bySteps.steps[0].rest - 2,
+    bySteps.skip ? '' : `${bySteps.steps[0].rest} m at 22 m, still ${last.rest} m`);
+  check('while the building up the road is not touched at all',
+    !bySteps.skip && (!bySteps.away || last.other >= bySteps.steps[0].other - 0.1),
+    bySteps.skip || !bySteps.away ? 'no second building found'
+      : `${bySteps.steps[0].other} m, still ${last.other} m, ${bySteps.apart} m away`);
   check('the walls are still there while it is falling', walls.halfway === walls.before);
   check('and gone at head height in the middle of it once it has fallen',
     walls.inner === 0, `${walls.before} to ${walls.inner} within 32 m`);

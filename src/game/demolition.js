@@ -33,6 +33,9 @@ export const DEMO = {
   // same frontage takes the top quarter off and the sixth finishes it.
   stages: 4,
   stageDamage: 180,
+  // How much of a cell a site covers, at the first step and at the last.
+  cellBite: 0.34,
+  cellGrow: 0.46,
   // Anything with a radius at least this big does not bother with the grid
   // and takes its whole circle at once.
   bigBlast: 60,
@@ -181,7 +184,15 @@ export class Demolition {
         const before = Math.min(DEMO.stages, Math.floor(was / DEMO.stageDamage));
         const after = Math.min(DEMO.stages, Math.floor(now / DEMO.stageDamage));
         if (after <= before) continue;
-        const site = this._open(cx, cz, c * 0.78, after / DEMO.stages, 0);
+        const level = after / DEMO.stages;
+        // The hole grows with the damage. A cell that has taken one step is
+        // a dent in a frontage; one that has taken all four is the whole
+        // frontage gone. Giving every stage the full cell radius meant a
+        // single rocket, which touches up to four cells, reached forty five
+        // metres and took a slice out of the buildings either side of what
+        // it hit.
+        const site = this._open(cx, cz, c * (DEMO.cellBite + DEMO.cellGrow * level),
+          level, 0);
         if (site) made.push(site);
       }
     }

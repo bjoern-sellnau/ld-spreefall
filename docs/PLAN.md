@@ -579,3 +579,21 @@ Recorded here as they happen, per the working style.
   controls, so everything from the combat clock down is now one function that
   the walking path, the driving path and the cinematic camera all call. The
   one thing it does not do is move you.
+
+- 2026-10-11: a rocket was reaching forty five metres. The damage grid is
+  twenty two metre cells, a nine metre blast touches up to four of them, and
+  every cell that took a step was opening a site with the full cell radius.
+  Four full sites round one hit reached across the street and took a slice
+  out of the buildings either side of what was aimed at. The radius now
+  grows with the damage instead: one step is a dent in a frontage, four steps
+  is the frontage gone. A warhead is unchanged, because a warhead is supposed
+  to take the whole circle at once.
+
+  The check that caught it was also claiming more than the game can give.
+  It read the tallest thing within eighteen metres of the hit and asked for
+  it to be untouched, but eighteen metres of a frontage is inside the
+  footprint of what a rocket legitimately damages. It now reads two things:
+  the block the hit is in, which must keep nearly all of its height, and a
+  second building more than forty five metres away, found by the same scan,
+  which must not move at all. The second one is the real claim, and it is
+  measured on something that was never in reach.
