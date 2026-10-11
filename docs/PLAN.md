@@ -457,3 +457,18 @@ Recorded here as they happen, per the working style.
   real one, and flying over it is the one moment that shows it. The move is
   three parts, timed off the wall clock like the opening shot, because a
   flight that stretches to twelve seconds on a slow machine looks broken.
+
+- 2026-10-11: a test that passed here failed on the live city, and the cause
+  was neither the city nor the change. The deep link check sets a view and
+  reads it back out of the URL, and it came back pointing almost straight up.
+  Playwright's clicks move the real mouse across the page, and while the
+  pointer is locked every one of those is a look; the deltas sit in the input
+  accumulator until a simulation step takes them. At sixty frames a second
+  that is always drained before the next line runs, and at four frames a
+  second, which is what the live city under SwiftShader gives, there can still
+  be most of a turn waiting when the view is set, landing on top of it one
+  frame later. The product is not affected: mouse movement is only
+  accumulated while the pointer is locked, and the test had already released
+  it. The test now drains the accumulator across three frames before setting
+  the view, and waits for the heading it asked for rather than for any URL at
+  all, so a write from before the view was set cannot be read as the answer.

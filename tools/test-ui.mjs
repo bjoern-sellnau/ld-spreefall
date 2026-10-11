@@ -130,10 +130,28 @@ async function run() {
   // and wrong for a test, so the lock goes before anything is clicked and the
   // view is set after.
   await page.evaluate(() => { window.spreefall.input.exitLock(); });
-  await page.waitForTimeout(200);
-  await page.evaluate(() => { const s = window.spreefall; s.teleport(420, -40); s.look(-88, 3); s.setTime(12.25); });
-  await page.waitForFunction(() => /^#4[12]\d(\.\d)?,/.test(location.hash), null, { timeout: 20000 }).catch(() => {});
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(300);
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    // Every synthetic click so far moved the mouse across the page, and while
+    // the pointer was locked each of those was a look. The deltas sit in the
+    // accumulator until a simulation step takes them, so on a machine running
+    // at four frames a second there can still be a whole screen of turn
+    // waiting when the view is set, and it lands a frame later on top of it.
+    // Three frames of draining with the lock already released empties it and
+    // nothing can arrive afterwards.
+    for (let i = 0; i < 3; i++) {
+      s.input.takeLook();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    s.input.takeLook();
+    s.teleport(420, -40); s.look(-88, 3); s.setTime(12.25);
+  });
+  // Wait for the heading that was asked for rather than for any URL at all,
+  // so a stale write from before the view was set cannot be read as the
+  // answer.
+  await page.waitForFunction(() => /^#4[12]\d(\.\d)?,-?\d+(\.\d+)?,-88,/.test(location.hash),
+    null, { timeout: 20000 }).catch(() => {});
   const hash = await page.evaluate(() => location.hash);
   check('the URL carries the position, heading and time', /^#-?\d+(\.\d+)?,/.test(hash), hash);
 
