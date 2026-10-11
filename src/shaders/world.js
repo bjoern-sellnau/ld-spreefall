@@ -1,6 +1,77 @@
 import { VERSION, CAMERA_BLOCK, NOISE, FOG, SHADOW } from './common.js';
 import { MAT, POS_SCALE, UV_SCALE, HEIGHT_SCALE } from '../shared/constants.js';
 
+// What a blast does to the shape of the city, shared by the colour pass and
+// the shadow pass so a flattened building does not go on casting a standing
+// shadow.
+//
+// A site is a circle on the ground with a progress from zero to one. Inside
+// it, anything that is not ground is pulled down towards the ground and
+// pushed outward, which is a building folding in on itself; the ground itself
+// is pulled into a bowl, which is a crater. The profile is deliberately
+// simple and is mirrored exactly in src/game/demolition.js, because the
+// collision has to agree with what you can see: if the two drift, you fall
+// through a street that looks solid or walk on air over a crater.
+export const MAX_COLLAPSE = 16;
+
+export const COLLAPSE = `
+uniform vec4 uCollapse[${16}];      // xyz centre at ground level, w radius
+uniform vec4 uCollapseInfo[${16}];  // x progress, y crater depth, z rubble height
+uniform int uCollapseCount;
+
+// A cheap deterministic value in 0..1 from a position, so two vertices in the
+// same place agree and a wall does not tear as it comes down.
+float collapseHash(vec3 p) {
+  return fract(sin(dot(floor(p * 2.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+}
+
+// How far into a site a point is: one at the middle, zero at the rim.
+float collapseBite(vec3 p, vec4 site) {
+  float d = length(p.xz - site.xz);
+  return 1.0 - smoothstep(site.w * 0.30, site.w, d);
+}
+
+/**
+ * Moves one vertex. Returns how far gone it is, 0 to 1, which the colour pass
+ * uses to turn a facade into rubble.
+ */
+float applyCollapse(inout vec3 p, inout vec3 n, bool isGround) {
+  float worst = 0.0;
+  for (int i = 0; i < ${16}; i++) {
+    if (i >= uCollapseCount) break;
+    vec4 site = uCollapse[i];
+    if (site.w <= 0.0) continue;
+    float bite = collapseBite(p, site);
+    if (bite <= 0.0) continue;
+    float fall = bite * uCollapseInfo[i].x;
+    if (fall <= 0.0) continue;
+    worst = max(worst, fall);
+    if (isGround) {
+      // A bowl. The rim does not move, the middle drops the full depth.
+      p.y -= uCollapseInfo[i].y * fall * bite;
+    } else {
+      // Everything above the blast comes down to about the rubble height,
+      // spreading outward as it goes, with a little scatter so the result is
+      // a heap rather than a squashed box.
+      float above = max(0.0, p.y - site.y);
+      if (above <= 0.001) continue;
+      float jitter = collapseHash(p);
+      float drop = (above - uCollapseInfo[i].z * (0.4 + jitter * 0.9)) * fall;
+      p.y -= max(0.0, drop);
+      vec2 away = p.xz - site.xz;
+      float l = max(0.001, length(away));
+      p.xz += (away / l) * above * fall * (0.10 + jitter * 0.14);
+      p.x += (jitter - 0.5) * above * fall * 0.25;
+      p.z += (collapseHash(p.zyx) - 0.5) * above * fall * 0.25;
+    }
+  }
+  // Rubble has no walls left in it: the normals go flat as the fall completes,
+  // or a collapsed facade lights like a facade lying down.
+  if (worst > 0.0 && !isGround) n = normalize(mix(n, vec3(0.0, 1.0, 0.0), worst * 0.8));
+  return worst;
+}
+`;
+
 export const WORLD_VS = `${VERSION}
 precision highp float;
 precision highp int;
@@ -12,6 +83,7 @@ layout(location = 3) in uvec4 aPacked;
 layout(location = 4) in uint aHeight;
 
 uniform vec3 uTileOrigin;
+${COLLAPSE}
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -22,11 +94,16 @@ flat out uint vLevels;
 flat out uint vFlags;
 flat out float vHeight;
 out float vAo;
+out float vFall;
 
 void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
+  vec3 nrm = normalize(aNormal.xyz);
+  vFall = uCollapseCount > 0
+    ? applyCollapse(p, nrm, (aPacked.w & 1u) != 0u)
+    : 0.0;
   vWorld = p;
-  vNormal = normalize(aNormal.xyz);
+  vNormal = nrm;
   vAo = clamp(aNormal.w * 2.0, 0.0, 1.0);
   vUv = vec2(aUv) * ${(1 / UV_SCALE).toFixed(8)};
   vMat = aPacked.x;
@@ -55,6 +132,7 @@ flat in uint vLevels;
 flat in uint vFlags;
 flat in float vHeight;
 in float vAo;
+in float vFall;
 
 // Distance to the eye, per fragment. It used to be a varying, which is wrong the
 // moment a triangle is large: a square the size of Pariser Platz has its corners
@@ -614,10 +692,25 @@ void main() {
   // Contact darkening near the ground so buildings sit on the street.
   ambient *= mix(0.80, 1.0, clamp(vWorld.y * 0.28, 0.0, 1.0));
 
+  // --- what came down ------------------------------------------------------
+  // A fragment that has been moved by a collapse is no longer a facade. The
+  // render goes to broken concrete and brick dust, the windows go with it, and
+  // the whole thing roughens. This is the colour half of what the vertex
+  // shader did to the shape.
+  if (vFall > 0.001) {
+    float grit = vnoise(vWorld.xz * 2.6 + vWorld.y * 1.4) * 0.5
+               + vnoise(vWorld.xz * 11.0) * 0.25;
+    vec3 rubble = vec3(0.185, 0.172, 0.158) * (0.55 + grit * 0.9);
+    s.albedo = mix(s.albedo, rubble, clamp(vFall * 1.25, 0.0, 1.0));
+    s.roughness = mix(s.roughness, 0.97, vFall);
+    s.metallic = mix(s.metallic, 0.0, vFall);
+    s.emissive *= 1.0 - clamp(vFall * 2.0, 0.0, 1.0);
+  }
+
   // --- what the explosions did ---------------------------------------------
   // Scorching, cracked render and blown out windows around each blast, falling
-  // off with distance from it. Nothing moves: the geometry is baked into the
-  // tiles, so a building here is marked rather than demolished.
+  // off with distance from it. What moves is handled above; this is the mark
+  // left on everything that is still standing.
   float scorch = 0.0;
   float shatter = 0.0;
   for (int i = 0; i < uScarCount; i++) {
@@ -664,10 +757,14 @@ export const SHADOW_VS = `${VERSION}
 precision highp float;
 precision highp int;
 layout(location = 0) in ivec3 aPos;
+layout(location = 3) in uvec4 aPacked;
 uniform mat4 uLightViewProj;
 uniform vec3 uTileOrigin;
+${COLLAPSE}
 void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
+  vec3 nrm = vec3(0.0, 1.0, 0.0);
+  if (uCollapseCount > 0) applyCollapse(p, nrm, (aPacked.w & 1u) != 0u);
   gl_Position = uLightViewProj * vec4(p, 1.0);
 }
 `;

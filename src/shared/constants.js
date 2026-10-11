@@ -8,6 +8,12 @@ export const UV_SCALE = 32;            // uint16 units per metre
 export const HEIGHT_SCALE = 16;        // uint16 units per metre
 export const COLLISION_GRID = 33;      // height field samples per tile edge
 export const GROUND_SCALE = 256;       // int16 units per metre in the height field
+// How far above the collision height field anything laid flat on the street
+// has to sit to be seen. The street that is drawn is not the height field that
+// is collided against: pavements are laid 0.12 m proud of it, plazas and grass
+// 0.05. Anything lower than this disappears under whichever surface it landed
+// on. Used by the pickup pads and by the stains on the pavement.
+export const SURFACE_CLEARANCE = 0.14;
 
 export const MAT = {
   FACADE: 0,

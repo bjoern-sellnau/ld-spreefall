@@ -407,6 +407,52 @@ export class Audio {
     roll.stop(t + 8.2);
   }
 
+  /**
+   * A building coming down. Not an explosion: there is no crack at the front
+   * of it. What you hear is a long tearing rumble that builds over about a
+   * second and then falls away over four, with the top end filtered off by
+   * however far away it is.
+   *
+   * @param {number} distance metres
+   * @param {number} radius how much came down
+   */
+  collapse(distance = 0, radius = 20) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + Math.min(1.5, distance / 340);
+    const near = Math.max(0.1, 1 - distance / 700);
+    const size = Math.min(2.2, 0.5 + radius / 60);
+
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(260 + near * 900, t);
+    lp.frequency.exponentialRampToValueAtTime(110, t + 4.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    // It builds rather than starting at full, which is the whole difference
+    // between a collapse and a bang.
+    g.gain.exponentialRampToValueAtTime(0.34 * near * size, t + 0.9);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
+    src.connect(lp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3, 4.7);
+    src.stop(t + 4.7);
+
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(48, t);
+    sub.frequency.exponentialRampToValueAtTime(21, t + 2.2);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(0.30 * near * size, t + 0.5);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+    sub.connect(sg).connect(this.master);
+    sub.start(t);
+    sub.stop(t + 2.7);
+  }
+
   /** A warhead on its way down: a falling whistle that arrives with it. */
   incoming(seconds = 3.2) {
     const ctx = this.ctx;

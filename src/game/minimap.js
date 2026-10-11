@@ -36,6 +36,11 @@ export class Minimap {
     // Set while a warhead is being aimed: where the cursor is, how far the
     // blast reaches, and whether that point is allowed.
     this.aim = null;
+    // Enlarged, the map can be zoomed and pushed about. One is the whole city
+    // fitted to the canvas; above that it is a window on it, and centre says
+    // where that window is.
+    this.zoom = 1;
+    this.centre = null;
     // The weapons free zones, so the map can show where nothing may be aimed.
     this.sanctuaries = [];
     // The transform the last draw used, so a click can be turned back into a
@@ -74,11 +79,11 @@ export class Minimap {
     const wm = this.world;
     // Enlarged, the map shows the whole playable box, north up, fitted to the
     // canvas. Small, it is a heading up window around the player.
-    const scale = this.big
-      ? Math.min(W / (wm.maxX - wm.minX), H / (wm.maxZ - wm.minZ)) * 0.94
-      : 0.16 * this.dpr;
-    const originX = this.big ? (wm.minX + wm.maxX) / 2 : px;
-    const originZ = this.big ? (wm.minZ + wm.maxZ) / 2 : pz;
+    const fit = Math.min(W / (wm.maxX - wm.minX), H / (wm.maxZ - wm.minZ)) * 0.94;
+    const scale = this.big ? fit * this.zoom : 0.16 * this.dpr;
+    if (this.big && this.centre) this.clampCentre(W, H, scale);
+    const originX = this.big ? (this.centre ? this.centre.x : (wm.minX + wm.maxX) / 2) : px;
+    const originZ = this.big ? (this.centre ? this.centre.z : (wm.minZ + wm.maxZ) / 2) : pz;
     const reach = Math.hypot(W, H) / 2 / scale;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -261,6 +266,74 @@ export class Minimap {
     ctx.restore();
 
     this._view = { cx, cy, scale, originX, originZ, big: this.big };
+  }
+
+  /**
+   * Keeps the window over the city. Zoomed out far enough to see all of it on
+   * an axis, that axis stays centred; zoomed in, the edge of the city is as
+   * far as the window may go.
+   */
+  clampCentre(W, H, scale) {
+    const wm = this.world;
+    const halfW = W / 2 / scale, halfH = H / 2 / scale;
+    const midX = (wm.minX + wm.maxX) / 2, midZ = (wm.minZ + wm.maxZ) / 2;
+    const roomX = (wm.maxX - wm.minX) / 2 - halfW;
+    const roomZ = (wm.maxZ - wm.minZ) / 2 - halfH;
+    this.centre.x = roomX <= 0 ? midX
+      : Math.min(midX + roomX, Math.max(midX - roomX, this.centre.x));
+    this.centre.z = roomZ <= 0 ? midZ
+      : Math.min(midZ + roomZ, Math.max(midZ - roomZ, this.centre.z));
+  }
+
+  /**
+   * Zooms about a point on the canvas, so whatever is under the cursor stays
+   * under it. That is the only zoom anybody can aim with.
+   *
+   * @param {number} factor multiplied into the current zoom
+   */
+  zoomAt(clientX, clientY, factor) {
+    if (!this.big || !this._view) return;
+    const before = this.worldAt(clientX, clientY);
+    this.zoom = Math.min(14, Math.max(1, this.zoom * factor));
+    if (!this.centre) {
+      this.centre = {
+        x: (this.world.minX + this.world.maxX) / 2,
+        z: (this.world.minZ + this.world.maxZ) / 2,
+      };
+    }
+    if (!before) return;
+    // Redraw with the new zoom so the transform is current, then push the
+    // window by however far the point under the cursor moved.
+    const v = this._view;
+    const fit = Math.min(this.canvas.width / (this.world.maxX - this.world.minX),
+      this.canvas.height / (this.world.maxZ - this.world.minZ)) * 0.94;
+    const scale = fit * this.zoom;
+    const rect = this.canvas.getBoundingClientRect();
+    const px = (clientX - rect.left) * (this.canvas.width / rect.width);
+    const py = (clientY - rect.top) * (this.canvas.height / rect.height);
+    this.centre.x = before.x - (px - v.cx) / scale;
+    this.centre.z = before.z - (py - v.cy) / scale;
+  }
+
+  /** Drags the window by a movement in canvas pixels. */
+  panBy(dxPixels, dyPixels) {
+    if (!this.big || !this._view) return;
+    if (!this.centre) {
+      this.centre = {
+        x: (this.world.minX + this.world.maxX) / 2,
+        z: (this.world.minZ + this.world.maxZ) / 2,
+      };
+    }
+    const rect = this.canvas.getBoundingClientRect();
+    const k = rect.width ? this.canvas.width / rect.width : 1;
+    this.centre.x -= dxPixels * k / this._view.scale;
+    this.centre.z -= dyPixels * k / this._view.scale;
+  }
+
+  /** Back to the whole city. */
+  resetView() {
+    this.zoom = 1;
+    this.centre = null;
   }
 
   /**

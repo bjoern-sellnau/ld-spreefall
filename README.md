@@ -62,6 +62,7 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
+| V | free travel: pick a place on the map and fly there |
 | Q | back to the weapon you had before |
 | T | blow the C4 you have put down |
 | Left mouse, or RT on a pad | fire |
@@ -175,16 +176,13 @@ What is under the hood:
   air at once, from six to fourteen. Integrity regenerates after a pause, and
   going down clears the sky, drops the threat by a tier and puts you back on
   your feet where you fell.
-- Buildings take damage, and it is worth being exact about what that means.
-  An explosion marks the wall it went off against: soot spreading with a ragged
-  edge, the render darkened and roughened, the specular killed, and the lit
-  windows inside the mark blown out. The blast also knocks debris off whatever
-  surfaces are close enough, found with the same raycast the bullets use. What
-  it does not do is knock the building down. The geometry is baked into the
-  tile buffers at build time, so nothing here moves a wall; the city is marked,
-  not demolished. The sixteen most recent marks are kept and the oldest is
-  overwritten, because a fragment shader that loops over an hour of accumulated
-  damage is a fragment shader nobody can afford.
+- Buildings take damage in two stages. Every explosion marks the wall it went
+  off against: soot spreading with a ragged edge, the render darkened and
+  roughened, the specular killed, and the lit windows inside the mark blown
+  out. Enough explosions in the same place and that part of the building comes
+  down, which has its own section above. The sixteen most recent marks are kept
+  and the oldest is overwritten, because a fragment shader that loops over an
+  hour of accumulated damage is a fragment shader nobody can afford.
 - The scene is drawn into a target that shrinks when frames get expensive and
   grows back when they are cheap, between roughly half and full resolution. It
   is driven by the wall clock between frames rather than by how long our own
@@ -211,7 +209,8 @@ between visits.
 |---|---|
 | All weapons | every magazine and every reserve in the loadout, full |
 | Reload everything | tops up what you are carrying |
-| Drop a nuke | opens a map of the city; click where you want it |
+| Drop a nuke | opens a map of the city; click where you want it, then confirm |
+| Soldiers, Drones, Jets | brings a section, a flight or a pair out around you |
 | God mode | nothing hurts you, though you are still told which way it came from |
 | Infinite ammunition | the magazine never reaches the bottom |
 | Nuke rain | one falls somewhere in the city every few seconds |
@@ -252,8 +251,12 @@ And the warhead:
 
 - It is dropped, not fired. You pick the target on a map of the whole city,
   with the blast radius drawn at its real size so you can see what is inside
-  it before you commit. It comes in from four hundred and thirty metres up and
-  takes about three seconds, so you hear it coming and you can watch it arrive.
+  it before you commit. The wheel zooms and holds whatever is under the
+  cursor, dragging moves the window, and the first click arms rather than
+  fires: it tells you how far away it is and how many targets are inside the
+  circle, and warns you when one of them is you. Enter releases it, Esc takes
+  it back. It comes in from four hundred and thirty metres up and takes about
+  three seconds, so you hear it coming and you can watch it arrive.
 - The blast is a hundred and seventy metres and everything in it that the
   fireball can see takes four thousand damage falling off with distance,
   including you. The fireball is fifty five metres above the crater and that
@@ -269,6 +272,57 @@ And the warhead:
   the blast may not cross, so a refused target is something you can see coming
   rather than a message you get after clicking. This is the one line in the
   project that no switch in this menu moves.
+
+## Free travel
+
+Press **V**, or the travel button. The same map comes up, you pick a place,
+and the camera takes you there: straight up off the street until the district
+is under you, across at two to four hundred metres where you can read the
+streets going by, and down on the far side. The city stays live the whole way,
+so the drones are still up and the rubble is still where it fell.
+
+A cut would be cheaper and would throw away the one thing this project has,
+which is a city laid out the way the real one is. Flying it means you arrive
+knowing roughly where you are, which is what a map on its own never tells you.
+Nothing is off limits: walking into the memorial has always been allowed, it
+is firing there that is not.
+
+## Destruction
+
+Buildings come down, and the ground craters. This section used to say the
+opposite, and the reasoning for that is still in `docs/PLAN.md`, because the
+constraint that drove it has not changed: the city is baked into per tile
+vertex buffers at build time, and nothing here rebuilds geometry in the middle
+of a frame. What happens instead is that the vertex shader bends the city
+around a short list of collapse sites.
+
+- **Damage accumulates.** A rocket into a wall marks it. The fifth one into
+  the same frontage brings that part of the building down. Damage is kept on a
+  22 m grid, about the width of one Berlin apartment block, which is the unit
+  that should fall.
+- **A collapse pulls everything above the street down towards it** and pushes
+  it outward, with a per vertex scatter, so a facade folds into a heap rather
+  than squashing flat. The normals go to vertical as it falls, the render goes
+  to broken concrete and brick dust, and the lit windows go out. The shadow
+  pass runs the same displacement, or a flattened building would go on casting
+  a standing shadow.
+- **The collision follows, partway through the fall rather than at the end**,
+  so you are never stopped by a wall that is visibly no longer there. Every
+  wall inside the site drops to the height of the heap: head height is clear
+  in the middle, the rim keeps most of its height, and at knee height the
+  rubble still stops you.
+- **A warhead craters the ground.** The collision height field is dug into a
+  bowl with the same profile the vertex shader draws, so a crater you can see
+  is a crater you can walk into. Small blasts do not crater at all: the ground
+  mesh is a 12.5 m grid, so a hole eight metres across would have no vertices
+  to move and would be an invisible trap in the collision.
+- **Sixteen sites at once.** A new collapse that overlaps an old one grows it
+  rather than taking a slot, and when all sixteen are taken the nearest one
+  swallows the new one. Nothing is ever evicted, because evicting a site would
+  stand a flattened building back up. An undamaged city leaves the count at
+  zero and the vertex shader skips the loop entirely, so nobody pays for this
+  until they have knocked something down.
+- The memorial does not come down, by the same rule as everything else.
 
 ## Two cities, and which one you are looking at
 
@@ -519,6 +573,14 @@ is where the blast may not reach, and the red circle is the blast itself.*
 
 ![A warhead down Unter den Linden](docs/screenshots/cheat-03-warhead.png)
 *Half a kilometre east, a few seconds after.*
+
+![The Gate, flattened](docs/screenshots/city-01-collapse.png)
+*A ninety metre collapse on Pariser Platz. The Gate is a heap, the buildings
+round it are partly down, and the dust is still up.*
+
+![Flying across the city](docs/screenshots/city-03-travel.png)
+*Free travel, halfway across: three hundred metres up over the roofs of Mitte,
+with Unter den Linden running through it.*
 
 The rest are in [docs/screenshots](docs/screenshots), and
 [docs/media/gate-to-tower.webm](docs/media/gate-to-tower.webm) is the eleven

@@ -1,11 +1,15 @@
 // Tracers, impact sparks and muzzle flashes. A fixed pool, updated on the render
 // clock because these are presentation rather than simulation.
 
+import { SURFACE_CLEARANCE } from '../shared/constants.js';
+
 // The sparks are additive billboards drawn in one instanced call, so the only
 // real cost of a bigger pool is the buffer. A warhead alone wants a hundred
 // and fifty of them, and starving the rest of the game of tracers while one
 // goes off would be a poor trade.
-const MAX = 384;
+const MAX = 512;
+// How many stains the street may carry at once. Past this the oldest goes.
+const MAX_POOLS = 64;
 
 class Spark {
   constructor() { this.alive = false; }
@@ -220,46 +224,163 @@ export class Effects {
   }
 
   /**
+   * The dust off a building coming down. Pale and bright rather than dark,
+   * because these are additive billboards and dark smoke added to a daylight
+   * street is nothing at all. It rolls outward along the ground first and
+   * lifts afterwards, which is what a collapse does and what distinguishes it
+   * from an explosion.
+   *
+   * @param {number} radius the collapse radius
+   */
+  dust(x, y, z, radius) {
+    const ring = Math.min(48, 16 + Math.round(radius * 0.5));
+    for (let i = 0; i < ring; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = (i / ring) * Math.PI * 2 + Math.random() * 0.4;
+      const speed = radius * (0.35 + Math.random() * 0.5);
+      s.ax = x + Math.cos(a) * radius * 0.3;
+      s.ay = y + 1 + Math.random() * radius * 0.3;
+      s.az = z + Math.sin(a) * radius * 0.3;
+      s.vx = Math.cos(a) * speed;
+      s.vy = 1.5 + Math.random() * 4;
+      s.vz = Math.sin(a) * speed;
+      s.gravity = -0.9;
+      s.maxLife = 2.6 + Math.random() * 2.6;
+      s.life = s.maxLife;
+      s.r = 0.42; s.g = 0.395; s.b = 0.355;
+      s.size = radius * (0.14 + Math.random() * 0.16);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    // The column over the middle of it.
+    for (let i = 0; i < 12; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      s.ax = x + (Math.random() - 0.5) * radius * 0.5;
+      s.ay = y + 2 + Math.random() * radius;
+      s.az = z + (Math.random() - 0.5) * radius * 0.5;
+      s.vx = (Math.random() - 0.5) * 3;
+      s.vy = 4 + Math.random() * 7;
+      s.vz = (Math.random() - 0.5) * 3;
+      s.gravity = -0.5;
+      s.maxLife = 3.4 + Math.random() * 2.6;
+      s.life = s.maxLife;
+      s.r = 0.38; s.g = 0.36; s.b = 0.33;
+      s.size = radius * (0.18 + Math.random() * 0.2);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    this.shake = Math.min(2.0, this.shake + 0.5);
+  }
+
+  /**
    * Blood off a hit. Dark, heavy, and gone quickly, with a mist that hangs for
    * a moment where the round went in.
    *
    * @param {number} amount a multiplier from the gore settings
    */
   blood(x, y, z, nx, ny, nz, amount = 1) {
-    const n = Math.min(40, Math.round(7 * amount));
+    const k = Math.min(4.2, amount);
+    const n = Math.min(90, Math.round(18 * k));
     for (let i = 0; i < n; i++) {
       const s = this._get();
       s.alive = true;
-      s.kind = 1;
+      // Kind three is blood, and the only reason it is a kind of its own is
+      // the blend. Everything else in this pool is drawn additively, which is
+      // right for fire and tracers and hopeless for blood: dark red added to a
+      // grey street comes out brighter than the street. Blood is drawn over
+      // the frame instead, which is why it looks like blood.
+      s.kind = 3;
       s.ax = x; s.ay = y; s.az = z;
-      const spread = 3.2 * Math.min(2.2, amount);
-      s.vx = nx * 4 + (Math.random() - 0.5) * spread;
-      s.vy = ny * 4 + (Math.random() - 0.5) * spread + 1.6;
-      s.vz = nz * 4 + (Math.random() - 0.5) * spread;
+      const spread = 4.6 * k;
+      s.vx = nx * 5.5 + (Math.random() - 0.5) * spread;
+      s.vy = ny * 5.5 + (Math.random() - 0.5) * spread + 2.2;
+      s.vz = nz * 5.5 + (Math.random() - 0.5) * spread;
       s.gravity = 16;
-      s.maxLife = 0.3 + Math.random() * 0.45;
+      s.maxLife = 0.45 + Math.random() * 0.7;
       s.life = s.maxLife;
-      s.r = 0.42; s.g = 0.025; s.b = 0.02;
-      s.size = 0.022 + Math.random() * 0.035;
+      s.r = 0.095; s.g = 0.009; s.b = 0.008;
+      s.size = 0.03 + Math.random() * 0.06 * k;
       s.bx = 0; s.by = 0; s.bz = 0;
     }
     // The mist, which is what reads at twenty metres when the drops do not.
-    const mist = Math.min(8, Math.round(2 * amount));
+    const mist = Math.min(26, Math.round(6 * k));
     for (let i = 0; i < mist; i++) {
       const s = this._get();
       s.alive = true;
-      s.kind = 1;
-      s.ax = x + (Math.random() - 0.5) * 0.3;
-      s.ay = y + (Math.random() - 0.5) * 0.3;
-      s.az = z + (Math.random() - 0.5) * 0.3;
-      s.vx = nx * 1.2; s.vy = ny * 1.2 + 0.4; s.vz = nz * 1.2;
-      s.gravity = 3.5;
-      s.maxLife = 0.22 + Math.random() * 0.2;
+      s.kind = 3;
+      s.ax = x + (Math.random() - 0.5) * 0.4;
+      s.ay = y + (Math.random() - 0.5) * 0.4;
+      s.az = z + (Math.random() - 0.5) * 0.4;
+      s.vx = nx * 1.6 + (Math.random() - 0.5);
+      s.vy = ny * 1.6 + 0.6;
+      s.vz = nz * 1.6 + (Math.random() - 0.5);
+      s.gravity = 3.0;
+      s.maxLife = 0.35 + Math.random() * 0.35;
       s.life = s.maxLife;
-      s.r = 0.34; s.g = 0.03; s.b = 0.03;
-      s.size = 0.12 + Math.random() * 0.16 * Math.min(2.4, amount);
+      s.r = 0.085; s.g = 0.011; s.b = 0.010;
+      s.size = (0.18 + Math.random() * 0.26) * k;
       s.bx = 0; s.by = 0; s.bz = 0;
     }
+  }
+
+  /**
+   * What is left on the pavement afterwards. Named for what it is rather than
+   * for the pool it comes out of, because this class already has a pool and it
+   * is the array of particles.
+   *
+   * What is left on the pavement afterwards. A flat disc rather than a
+   * billboard, lying where it landed, spreading a little and then staying put
+   * for half a minute. This is the part that makes a street look like
+   * something happened in it rather than like something is happening in it.
+   *
+   * @param {number} y the ground height at that point, not the wound height
+   */
+  stain(x, y, z, size = 1, seconds = 34) {
+    // Pools live for most of a minute, so left alone they would fill the pool
+    // and starve the tracers. Past a budget the oldest one is taken for the
+    // new one, which is the same ring buffer the blast marks use.
+    let live = 0;
+    let oldest = null;
+    for (const p of this.pool) {
+      if (!p.alive || p.kind !== 4) continue;
+      live++;
+      if (!oldest || p.life < oldest.life) oldest = p;
+    }
+    const s = live >= MAX_POOLS && oldest ? oldest : this._get();
+    s.alive = true;
+    s.kind = 4;
+    s.ax = x; s.ay = y + SURFACE_CLEARANCE; s.az = z;
+    s.vx = 0; s.vy = 0; s.vz = 0;
+    s.gravity = 0;
+    s.maxLife = seconds;
+    s.life = seconds;
+    s.r = 0.048; s.g = 0.0055; s.b = 0.005;
+    s.size = size;
+    // The spread, in bx, and the seed that gives it an edge, in bz. A pool
+    // opens out over the first second or so and then stops.
+    s.bx = 0;
+    s.by = 0;
+    s.bz = Math.random() * 100;
+    return s;
+  }
+
+  /** One drop falling off something in flight. */
+  drip(x, y, z) {
+    const s = this._get();
+    s.alive = true;
+    s.kind = 3;
+    s.ax = x; s.ay = y; s.az = z;
+    s.vx = (Math.random() - 0.5) * 0.8;
+    s.vy = -0.4;
+    s.vz = (Math.random() - 0.5) * 0.8;
+    s.gravity = 14;
+    s.maxLife = 0.5 + Math.random() * 0.5;
+    s.life = s.maxLife;
+    s.r = 0.09; s.g = 0.009; s.b = 0.008;
+    s.size = 0.026 + Math.random() * 0.022;
+    s.bx = 0; s.by = 0; s.bz = 0;
   }
 
   explode(x, y, z) {
@@ -289,13 +410,16 @@ export class Effects {
       if (!s.alive) continue;
       s.life -= dt;
       if (s.life <= 0) { s.alive = false; continue; }
-      if (s.kind === 1) {
+      if (s.kind === 1 || s.kind === 3) {
         s.vy -= s.gravity * dt;
         s.ax += s.vx * dt;
         s.ay += s.vy * dt;
         s.az += s.vz * dt;
         s.vx *= Math.max(0, 1 - 2.2 * dt);
         s.vz *= Math.max(0, 1 - 2.2 * dt);
+      } else if (s.kind === 4) {
+        // A pool opens out and then stops. bx carries how far it has got.
+        s.bx = Math.min(1, s.bx + dt * 1.6);
       }
     }
   }

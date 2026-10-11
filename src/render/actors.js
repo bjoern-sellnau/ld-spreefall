@@ -11,7 +11,7 @@ import {
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
-const MAX_SPARKS = 384;
+const MAX_SPARKS = 512;
 const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
@@ -590,20 +590,28 @@ export class Actors {
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
-    this.sparkData = new Float32Array(MAX_SPARKS * 12);
-    this.sparkCount = 0;
-    this.sparkVao = gl.createVertexArray();
-    this.sparkVbo = gl.createBuffer();
-    gl.bindVertexArray(this.sparkVao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.sparkVbo);
-    gl.bufferData(gl.ARRAY_BUFFER, this.sparkData.byteLength, gl.DYNAMIC_DRAW);
-    for (let k = 0; k < 3; k++) {
-      const loc = 5 + k;
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 48, k * 16);
-      gl.vertexAttribDivisor(loc, 1);
-    }
-    gl.bindVertexArray(null);
+    // Two buffers rather than one, because the two halves need different blend
+    // state: fire and tracers are added to the frame and blood is drawn over
+    // it. WebGL2 has no base instance, so a single buffer could not be drawn
+    // as two ranges without splitting the call by hand anyway.
+    const makeSparkBuffer = () => {
+      const data = new Float32Array(MAX_SPARKS * 12);
+      const vao = gl.createVertexArray();
+      const vbo = gl.createBuffer();
+      gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, data.byteLength, gl.DYNAMIC_DRAW);
+      for (let k = 0; k < 3; k++) {
+        const loc = 5 + k;
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 48, k * 16);
+        gl.vertexAttribDivisor(loc, 1);
+      }
+      gl.bindVertexArray(null);
+      return { data, vao, vbo, count: 0 };
+    };
+    this.sparks = makeSparkBuffer();
+    this.blood = makeSparkBuffer();
 
     this.viewProj = mat4.create();
     this.viewMat = mat4.create();
@@ -904,38 +912,56 @@ export class Actors {
   /** @param {Array} sparks entries from the effects pool */
   updateSparks(sparks) {
     const gl = this.gl;
-    const data = this.sparkData;
-    let n = 0;
+    this.sparks.count = 0;
+    this.blood.count = 0;
     for (const s of sparks) {
-      if (!s.alive || n >= MAX_SPARKS) continue;
-      const o = n * 12;
+      if (!s.alive) continue;
+      // Kinds three and four are blood and go in the other buffer.
+      const into = s.kind > 2.5 ? this.blood : this.sparks;
+      if (into.count >= MAX_SPARKS) continue;
+      const o = into.count * 12;
+      const data = into.data;
       data[o] = s.ax; data[o + 1] = s.ay; data[o + 2] = s.az; data[o + 3] = s.kind;
       data[o + 4] = s.bx; data[o + 5] = s.by; data[o + 6] = s.bz;
       data[o + 7] = Math.max(0, s.life / s.maxLife);
       data[o + 8] = s.r; data[o + 9] = s.g; data[o + 10] = s.b; data[o + 11] = s.size;
-      n++;
+      into.count++;
     }
-    this.sparkCount = n;
-    if (n > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.sparkVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 12);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    for (const buf of [this.sparks, this.blood]) {
+      if (!buf.count) continue;
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf.vbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, buf.data, 0, buf.count * 12);
     }
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
   }
 
+  /** How many sparks of either sort are being drawn. */
+  get sparkCount() { return this.sparks.count + this.blood.count; }
+
   drawSparks() {
-    if (!this.sparkCount) return 0;
     const gl = this.gl;
+    if (!this.sparks.count && !this.blood.count) return 0;
+    let draws = 0;
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE);
     gl.depthMask(false);
     this.progSpark.use();
-    gl.bindVertexArray(this.sparkVao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.sparkCount);
+    if (this.sparks.count) {
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.bindVertexArray(this.sparks.vao);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.sparks.count);
+      draws++;
+    }
+    if (this.blood.count) {
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.bindVertexArray(this.blood.vao);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.blood.count);
+      draws++;
+    }
     gl.bindVertexArray(null);
     gl.depthMask(true);
+    gl.blendFunc(gl.ONE, gl.ONE);
     gl.disable(gl.BLEND);
-    return 1;
+    return draws;
   }
 
   /**
@@ -980,8 +1006,10 @@ export class Actors {
       gl.deleteBuffer(mesh.ibo);
       if (mesh.instVbo) gl.deleteBuffer(mesh.instVbo);
     }
-    gl.deleteVertexArray(this.sparkVao);
-    gl.deleteBuffer(this.sparkVbo);
+    for (const buf of [this.sparks, this.blood]) {
+      gl.deleteVertexArray(buf.vao);
+      gl.deleteBuffer(buf.vbo);
+    }
   }
 }
 

@@ -399,3 +399,76 @@ Recorded here as they happen, per the working style.
   frame is about half a millisecond, and the visible difference is that a
   chunk already at rest will not be stopped by a wall it is sliding into. That
   is a trade rather than an oversight, and this is where it is recorded.
+
+- 2026-10-11: buildings come down now, and the 2026-09-24 entry above stands
+  as written. Nothing about the constraint changed: the geometry is still
+  baked into per tile vertex buffers and nothing here rebuilds a tile in the
+  middle of a frame. What changed is the approach. Instead of moving geometry,
+  the world vertex shader bends the city around a short list of collapse
+  sites, and the collision is edited in place to match. A site pulls
+  everything above the street down towards it and pushes it outward; the
+  shadow pass runs the same displacement; the collision segments inside it
+  drop to the height of the heap.
+
+  Three things make this honest rather than a trick. The collision opens up at
+  45 per cent of the fall rather than at the end, so a wall you can see has
+  gone is a wall you can walk through. The crater is dug into the real height
+  field with exactly the profile the shader draws, and the test samples five
+  radii and compares the two numbers rather than looking at a screenshot. And
+  the fall is graded: the middle of a site is flat and the rim keeps most of
+  its height, in the collision as well as in the picture.
+
+  The limit is sixteen sites, and the interesting decision is what happens at
+  the seventeenth. A ring buffer would be the obvious answer and it is the
+  wrong one: evicting a site stands a flattened building back up in front of
+  somebody who watched it fall. So a new collapse that overlaps an old one
+  grows it, and when all sixteen are taken the nearest one swallows the new
+  one. The city gets coarser as you destroy more of it, which is the right
+  direction for the error to go in.
+
+- 2026-10-11: the ground cannot crater under a small blast, and the reason is
+  worth writing down rather than quietly capping it. The ground is drawn as a
+  12.5 m grid of quads with roads and plazas laid over it as triangulated
+  rings, so a crater eight metres across has no vertices inside it to move.
+  Displacing the collision height field anyway would give an invisible hole in
+  the street. So only blasts over 55 m crater at all, and a rocket scorches
+  the road and leaves it flat. The alternative, subdividing the ground at
+  build time, would roughly double the world's triangle count for an effect
+  that almost never fires.
+
+- 2026-10-11: blood needed its own blend, not a brighter colour. Every
+  particle in this project was drawn additively, which is right for fire and
+  tracers and hopeless for blood: a dark red added to a grey street comes out
+  brighter than the street, so the first version read as glowing embers. It is
+  now a second instanced draw with an ordinary alpha blend over the same
+  shader. WebGL2 has no base instance, so one buffer could not have been drawn
+  as two ranges in any case.
+
+  The stains on the pavement cost the same lesson the pickup pads did: they
+  were invisible until they were lifted clear of the collision height field,
+  because the street that is drawn sits up to 0.12 m above it. That clearance
+  is now one named constant in src/shared/constants.js rather than two magic
+  numbers in two files.
+
+- 2026-10-11: free travel flies rather than cuts. A teleport is one line and
+  the deep link already allows arriving anywhere, so the argument for the
+  cheap version was strong. It is still the wrong call: the only thing this
+  project has that a generated city would not is a layout that matches the
+  real one, and flying over it is the one moment that shows it. The move is
+  three parts, timed off the wall clock like the opening shot, because a
+  flight that stretches to twelve seconds on a slow machine looks broken.
+
+- 2026-10-11: a test that passed here failed on the live city, and the cause
+  was neither the city nor the change. The deep link check sets a view and
+  reads it back out of the URL, and it came back pointing almost straight up.
+  Playwright's clicks move the real mouse across the page, and while the
+  pointer is locked every one of those is a look; the deltas sit in the input
+  accumulator until a simulation step takes them. At sixty frames a second
+  that is always drained before the next line runs, and at four frames a
+  second, which is what the live city under SwiftShader gives, there can still
+  be most of a turn waiting when the view is set, landing on top of it one
+  frame later. The product is not affected: mouse movement is only
+  accumulated while the pointer is locked, and the test had already released
+  it. The test now drains the accumulator across three frames before setting
+  the view, and waits for the heading it asked for rather than for any URL at
+  all, so a write from before the view was set cannot be read as the answer.
