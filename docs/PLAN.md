@@ -677,3 +677,167 @@ honest way to answer that is to build it and weigh it.
   non zero when a complete city is over it. The workflow that builds all
   twenty four districts from the live extract runs it, so the answer to "does
   all of Berlin fit" is a number in a log rather than an opinion.
+
+### What the whole city actually weighs
+
+The first complete build of all twenty four districts from the live extract,
+on 11 October 2026, is the answer to whether Berlin inside the Ring fits in
+the brief's twenty five megabytes. It does not.
+
+```
+24 of 24 districts built
+area            106.2 km2
+buildings       52806
+trees           55577
+road            2679.3 km
+deployed        193.48 MB
+download        70.61 MB gzipped, against a 25 MB budget
+per km2         0.665 MB of download
+```
+
+Every district came out with its own name from the place nodes in its own
+extract: Moabit, Gesundbrunnen, Prenzlauer Berg, Hansaviertel, Friedrichshain,
+Charlottenburg, Tiergarten, Kreuzberg, Wilmersdorf, Schoeneberg, Neukoelln,
+Alt-Treptow, Schmargendorf and the rest. The city is real and it builds. It is
+2.8 times the budget.
+
+Where the bytes were going, from the per district byte lines: in
+Gesundbrunnen, 8.8 square kilometres, the bundle was 28.7 MB of which 21 MB
+was vertices, and the district has 463 km of road in it. A ribbon costs four
+vertices per point of the line it follows and twelve with a pavement either
+side, and OpenStreetMap puts a point every few metres. Roads, not buildings,
+were the largest single thing in every outer district. That is why the build
+now prints where its vertices went, and why the tiers changed:
+
+- the four districts you can walk into directly from Mitte keep their roofs,
+  windows and trees but lose their pavements, and their centrelines are
+  simplified at 1.5 m;
+- everything else out to the ring is blocks, with only the roads you can
+  drive on, simplified at 5 m;
+- the corners outside the ring are an outline, simplified at 10 m.
+
+And because even that does not fit, what ships is decided by measurement
+rather than by hope. `tools/fit-city.mjs` takes districts outward from the
+middle until the budget is spent, drops the rest out of the index and deletes
+their bundles, and says in the log exactly which ones did not fit and by how
+much. The deploy is therefore always inside the brief's budget and always a
+contiguous city around Mitte, and the question "how much of Berlin fits in
+twenty five megabytes" has an answer that is printed on every build rather
+than argued about.
+
+### Which twenty five megabytes
+
+Rule 6 of the brief is "total download under 25 MB for the whole playable
+area". While the city was one district that sentence never had to be read
+closely, because the deployed bundle was 21.33 MB and the same thing over the
+wire was 7.90 MB, and both are under twenty five. Districts pulled those two
+numbers apart: the live Mitte alone is 20.75 MB on disk and 7.67 MB gzipped,
+so on the stricter reading the whole game is Mitte and nothing else, and on
+the other one there is room for about a dozen districts.
+
+Download is what travels. Every browser sends an Accept-Encoding header
+asking for gzip and GitHub Pages serves it compressed, so the bytes a player
+actually downloads are the gzipped ones, and that is what the budget is now
+measured against, in all three tools: the packager, the weigher and the
+fitter, which until today disagreed with each other. The deployed size is
+printed next to it everywhere it appears, because it is the honest other
+number and because choosing the more convenient of two readings without
+saying so is how a budget stops meaning anything.
+
+If the intended reading was the stricter one, the change is one line in each
+of those three tools, and the shipped city becomes Mitte plus whatever fits
+in the four megabytes left over.
+
+## 19. Fire, machines, and damage that stays done
+
+- 2026-10-12: the crater was never drawn. The vertex shader decided whether a
+  vertex was ground by testing bit one of the facade flags, and bit one is
+  GROUND_FLOOR, the shop window band at the bottom of a wall. Streets, squares
+  and parks carried no flag at all, so the collapse code treated them as
+  buildings, found they were nowhere above the site, and left them alone. The
+  collision meanwhile had a ten metre hole in it, because that is dug in
+  JavaScript against the same profile. The result was a street that looked
+  solid and was not: you walked onto it and fell, which is what "suddenly I am
+  in the air after an explosion" means. Ground now carries a flag of its own
+  and the shader reads that one.
+
+  The check that was supposed to catch this, "the collision agrees with the
+  shape the shader draws", compared the JavaScript crater profile with the
+  collision height field. Both are the collision. It never looked at what was
+  drawn, and the name of it said it did.
+
+- 2026-10-12: devastation is permanent now, and that is what makes it work
+  everywhere. There are sixteen uniform slots for collapses. The old answer to
+  the seventeenth blast was for the nearest site to swallow it: its radius
+  grew until it covered the new one, so a rocket fired across the square
+  flattened a strip between here and there and left nothing where it landed.
+  After sixteen explosions, nothing new came down anywhere.
+
+  A finished site is now written into the tile buffers: the same arithmetic
+  the shader does, run once in JavaScript over the vertices of every tile it
+  touches, with the result stored back into the district's own bytes and the
+  tile re-uploaded. The slot is then free. Rubble is marked with a flag the
+  fragment shader reads, so a baked ruin lights like rubble for ever rather
+  than for as long as it holds a slot. A reload rebuilds the city from the
+  bundle; nothing else does.
+
+- 2026-10-12: trees that burn down are struck off by tile and ordinal, which
+  means the instance buffer is rebuilt without them and their trunks stop
+  blocking. Thirty nine of thirty nine, measured, with no fires left running.
+
+- 2026-10-12: the flamethrower is the first weapon in this game that pours
+  rather than fires. It cost a new weapon kind, because every other weapon in
+  the table spends a round on a trigger pull and this one spends fuel on a
+  clock. Its second trigger throws a wall of fire that travels: a line of
+  flame that walks away from you across the ground, burning what it passes and
+  leaving the street alight behind it. The wall is not geometry, it is flame
+  particles emitted along its length, which is how every other fire here is
+  drawn and costs nothing on the card.
+
+- 2026-10-12: Rise of the Machines is a mode, not a cheat, and the score says
+  so. A machine is a soldier with a different body and a different gun: the
+  skeleton the ion cannon leaves, drawn in steel, with the skull given a part
+  id of its own so it can carry one red eye without the whole figure glowing.
+  It walks, takes cover and loses you behind a wall because the soldier
+  already knew how to do all three. An EMP stops it where it stands, and what
+  you do to it then is your business.
+
+### What it would take to build the whole of Berlin
+
+Measured rather than estimated, from the live Overpass extract, at the tiers
+as they stand after the retune:
+
+```
+tier 0  full      6.5 km2   1.18 MB of download per km2    7.6 MB
+tier 1  near     21.8 km2   0.52                          11.3 MB
+tier 2  block    60.2 km2   0.45                          27.1 MB
+tier 3  outline  17.9 km2   0.24                           4.3 MB
+                                                    about 50 MB
+```
+
+So the whole area inside the Ringbahn is about fifty megabytes of download at
+walkable quality, against a budget of twenty five. It builds: all twenty four
+districts have been built from the live extract, with 52,806 buildings and
+2,679 km of road in them, and the game streams them. What does not fit is the
+download, and nothing else: there is no limit in the engine, the tile grid or
+the memory. The city is held a few square kilometres at a time whatever its
+total size, and the only number that goes up with the whole is the index.
+
+Three ways to close the gap, in the order they cost quality:
+
+1. Ship less of it. This is what happens today: fit-city takes districts
+   outward from Mitte until the budget is spent and the rest are not deployed.
+   At the current tiers that is Mitte plus eight or nine districts, about
+   forty square kilometres.
+2. Spend the budget differently. Mitte is a third of it for six per cent of
+   the area. Dropping the middle to the near tier would free about four
+   megabytes, which is four more districts.
+3. Make the block tier cheaper. It is the biggest single line in the table and
+   it is mostly road ribbon: at ten metres of simplification and no pavements
+   it is already a third of what it was, and dropping it to a flat extrusion
+   with no roof detail at all would take it under 0.25, which would bring the
+   whole ring to about thirty five megabytes.
+
+None of those is a decision this project should take on its own, because all
+three of them trade away something the brief asks for. The numbers are here so
+the trade can be made with eyes open.

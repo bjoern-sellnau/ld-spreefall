@@ -17,6 +17,13 @@ export const PROJECTILE = {
     radius: 0.10, gravity: 19.6, drag: 0.12, bounce: 0.42, armTime: 0.25,
     detonateOnContact: false, trail: 'none', light: false, spin: 14,
   },
+  incendiary: {
+    // Heavier than a grenade and it does not bounce about: it lands where it
+    // was thrown, which is what you want from something that sets a street on
+    // fire rather than clears a room.
+    radius: 0.13, gravity: 19.6, drag: 0.1, bounce: 0.18, armTime: 0.2,
+    detonateOnContact: false, trail: 'none', light: true, spin: 9,
+  },
   c4: {
     // Sticks where it lands and waits for you.
     radius: 0.12, gravity: 19.6, drag: 0.35, bounce: 0.08, armTime: 0.2,

@@ -77,9 +77,14 @@ function main() {
   console.log('');
   console.log(`download        ${(total / 1e6).toFixed(2)} MB of the 25.00 MB budget`
     + `${total > BUDGET ? '  OVER' : `, ${((BUDGET - total) / 1e6).toFixed(2)} MB to spare`}`);
-  // Only a complete city can be over budget in a way worth failing for: a
-  // partial build is under it by not existing yet.
-  if (total > BUDGET && missing === 0) process.exit(1);
+  // This only reports. What actually ships is decided by tools/fit-city.mjs,
+  // which takes districts outward from the middle until the budget is spent,
+  // so a build that comes in over budget is a smaller city rather than a
+  // failed deploy.
+  if (total > BUDGET) {
+    console.log(`                ${((total - BUDGET) / 1e6).toFixed(2)} MB more than the budget, `
+      + 'so fit-city will ship fewer districts');
+  }
 }
 
 main();

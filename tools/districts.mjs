@@ -1,39 +1,50 @@
-// Berlin inside the Ring, cut into districts.
+// Berlin, cut into districts.
 //
-// The playable area is the bounding box of the Ringbahn, taken from the four
-// stations that sit at its corners rather than from a round number:
+// The playable area is the whole city, out to the administrative boundary: a
+// box 45.7 km across and 37.4 km down, 1,706 square kilometres of which the
+// city itself is about 891. Sources for the extent are in tools/geo.mjs.
 //
-//   west    Westkreuz      52.5010 N, 13.2840 E
-//   east    Ostkreuz       52.5031 N, 13.4689 E
-//   north   Gesundbrunnen  52.5486 N, 13.3894 E
-//   south   Suedkreuz      52.4720 N, 13.3670 E
+// The lattice is not regular, and that is deliberate. Near the middle a
+// district is small, because small districts stream in quickly and the detail
+// there is high; further out they are large, because a district is one
+// Overpass query and one build, and nobody wants four hundred of either. So
+// the city is laid out in bands:
 //
-// That box is 12.5 km by 8.5 km, about 106 square kilometres, and the ring
-// itself encloses about 88 of them; the corners of the box fall outside the
-// ring, which is what the difference is. Sources are in docs/PLAN.md.
+//   core    the original playable box, the Gate and the memorial      1 of them
+//   ring    inside the Ringbahn, about 1.7 by 1.9 km each            23
+//   inner   out to Steglitz, Lichterfelde, Treptow, 4 km cells       ~24
+//   outer   the rest of Berlin, 8 km cells                           ~19
 //
-// A district is a block of the global tile grid, anchored so that the original
-// playable box, the one with the Gate and the memorial in it, is exactly one
-// district. The cuts are made in tiles, not in degrees, so the districts
+// Every cut is made on the lines of one city wide tile grid, so the districts
 // partition the city exactly: every tile belongs to one district, and a
 // building belongs to the district its middle is in and is built once.
 //
 // Detail falls off with distance from the middle, because the whole city at
-// the detail of Mitte is about a hundred and thirty megabytes and the budget
-// is twenty five. What the tiers change is in TIERS below, and what it costs
-// is printed by the build.
+// the detail of Mitte would be hundreds of megabytes. What the tiers change is
+// in TIERS below, and what it costs is printed by the build.
 
-import { BBOX, CITY, cityGrid, boundsOf, unproject } from './geo.mjs';
+import { BBOX, CITY, RING, cityGrid, boundsOf, unproject } from './geo.mjs';
 import { TILE_SIZE } from '../src/shared/constants.js';
 
-export { CITY };
+export { CITY, RING };
 
-// Where the cuts want to be, in degrees. The middle column and the middle band
-// are the original box, so its edges appear in both lists; the rest are laid
-// out either side of it at about 1.7 km and 1.9 km. Each of these is then
-// rounded to the nearest line of the global tile grid.
-const LON_EDGES = [CITY.west, 13.3150, 13.3400, BBOX.west, BBOX.east, 13.4400, CITY.east];
-const LAT_EDGES = [CITY.south, 52.4910, BBOX.south, BBOX.north, CITY.north];
+// Where the cuts want to be inside the ring, in degrees. The middle column and
+// the middle band are the original box, so its edges appear in both lists; the
+// rest are laid out either side of it at about 1.7 km and 1.9 km. Each of
+// these is then rounded to the nearest line of the global tile grid.
+const RING_LON = [RING.west, 13.3150, 13.3400, BBOX.west, BBOX.east, 13.4400, RING.east];
+const RING_LAT = [RING.south, 52.4910, BBOX.south, BBOX.north, RING.north];
+
+// The band between the ring and the rest of the city, where Steglitz,
+// Lichterfelde, Treptow, Wedding's northern half and Charlottenburg's western
+// half are. Four kilometre cells.
+const INNER_CELL = 4000;
+// And the rest of Berlin, in eight kilometre cells.
+const OUTER_CELL = 8000;
+// How far the inner band reaches, in metres from the Gate. Twelve kilometres
+// takes in everything most people mean by Berlin before they start naming
+// outskirts.
+const INNER_REACH = { x: 13000, z: 11000 };
 
 /**
  * What each tier of detail carries. Tier 0 is the city the game shipped with.
@@ -42,45 +53,57 @@ const LAT_EDGES = [CITY.south, 52.4910, BBOX.south, BBOX.north, CITY.north];
 export const TIERS = [
   {
     // The middle. Every building, the landmark models, the stelae field, the
-    // window shader, trees from the extract, the full height field.
+    // window shader, trees from the extract, the full height field. Measured
+    // on the live extract: 7.7 MB of download for 6.5 square kilometres,
+    // which is a third of the budget for six per cent of the ring, and worth
+    // it, because this is the Berlin the brief asks for by name.
     name: 'full',
     minArea: 6, simplify: 0, roofs: true, windows: true, landmarks: true,
     trees: 1, driveOnly: false, grid: 33, kerbs: true, groundStep: 12.5,
-    boxBelow: 0, service: true, surfaceStep: 2.5, roadSimplify: 0,
+    boxBelow: 0, service: true, surfaceStep: 2.5,
+    // Even here the centrelines are simplified. OpenStreetMap puts a node
+    // every few metres round a kerb, every node is four vertices of ribbon
+    // and twelve with the pavements, and half a metre of wiggle is not
+    // visible from inside the street.
+    roadSimplify: 0.5,
   },
   {
-    // Next door. Still walkable detail, but sheds and garages go, the
-    // footprints lose their centimetre wiggles, and the height field is
-    // halved, which Berlin can afford because Berlin is flat.
+    // The four districts you walk into from the middle. Still has its roofs,
+    // its windows and its trees, but no pavements, simplified footprints and
+    // centrelines, and a coarser ground.
     name: 'near',
-    minArea: 24, simplify: 0.7, roofs: true, windows: true, landmarks: true,
-    trees: 1, driveOnly: false, grid: 17, kerbs: true, groundStep: 12.5,
-    boxBelow: 0, service: true, surfaceStep: 2.5, roadSimplify: 0,
+    minArea: 40, simplify: 1.2, roofs: true, windows: true, landmarks: true,
+    trees: 1, driveOnly: false, grid: 17, kerbs: false, groundStep: 25,
+    boxBelow: 0, service: true, surfaceStep: 5.0, roadSimplify: 1.5,
   },
   {
-    // The rest of the way out to the ring. Blocks: every building still solid
-    // and still climbable, but roofs flattened, no window detail, a third of
-    // the trees, no kerbs, only the roads you can drive on, and a nine point
-    // height field.
+    // The rest of the ring. Blocks: every building still solid and still
+    // climbable, but roofs flattened, no window detail, small ones become the
+    // box that fits them, a third of the trees, and only the roads you can
+    // drive on.
     name: 'block',
-    minArea: 80, simplify: 2.2, roofs: false, windows: false, landmarks: true,
-    trees: 0.35, driveOnly: true, grid: 9, kerbs: false, groundStep: 50,
-    // A small building out here becomes the box that fits it: four walls
-    // instead of nine, which halves what the far half of the city costs. The
-    // big ones, the ones that give a street its shape, keep their footprint.
-    boxBelow: 450, service: false, surfaceStep: 5.0, roadSimplify: 3.0,
+    minArea: 120, simplify: 2.5, roofs: false, windows: false, landmarks: true,
+    trees: 0.3, driveOnly: true, grid: 9, kerbs: false, groundStep: 50,
+    boxBelow: 700, service: false, surfaceStep: 10.0, roadSimplify: 5.0,
   },
   {
-    // The corners of the box, which are the bits outside the ring: Westend,
-    // the far side of the Spree, the fields south of Tempelhof. You can still
-    // walk and drive in them and everything in them is solid, but they are
-    // built as an outline of a city rather than a city, because the budget
-    // for the whole place is twenty five megabytes and the middle of town is
-    // worth more of it than the edge of the map.
+    // Out past the ring: Steglitz, Lichterfelde, Treptow and the rest. An
+    // outline of a city rather than a city. Everything is solid, everything
+    // can be walked on and driven through, and nothing has any detail it does
+    // not need to be those two things.
     name: 'outline',
-    minArea: 150, simplify: 3.0, roofs: false, windows: false, landmarks: true,
-    trees: 0.15, driveOnly: true, grid: 5, kerbs: false, groundStep: 100,
-    boxBelow: 1200, service: false, surfaceStep: 10.0, roadSimplify: 6.0,
+    minArea: 250, simplify: 4.0, roofs: false, windows: false, landmarks: true,
+    trees: 0, driveOnly: true, grid: 5, kerbs: false, groundStep: 100,
+    boxBelow: 2000, service: false, surfaceStep: 20.0, roadSimplify: 10.0,
+  },
+  {
+    // The edge of the box, which is mostly Brandenburg: fields, lakes, forest
+    // and the odd village. Built so the city has somewhere to end rather than
+    // a wall, and built as cheaply as this project knows how.
+    name: 'sketch',
+    minArea: 600, simplify: 8.0, roofs: false, windows: false, landmarks: false,
+    trees: 0, driveOnly: true, grid: 5, kerbs: false, groundStep: 200,
+    boxBelow: 100000, service: false, surfaceStep: 40.0, roadSimplify: 20.0,
   },
 ];
 
@@ -90,55 +113,154 @@ export const CORE_ID = 'core';
 /** Degrees of margin a fetch takes around a district, for walls on the cut. */
 export const FETCH_MARGIN = 0.0025;   // about 170 m north to south
 
-function cuts(edges, axis) {
-  const grid = cityGrid(TILE_SIZE);
-  const out = [];
-  for (const e of edges) {
+const grid = cityGrid(TILE_SIZE);
+
+/** A metre position as a column of the global tile grid. */
+function colAt(x) {
+  return Math.max(0, Math.min(grid.nx, Math.round((x - grid.minX) / TILE_SIZE)));
+}
+function rowAt(z) {
+  return Math.max(0, Math.min(grid.nz, Math.round((z - grid.minZ) / TILE_SIZE)));
+}
+
+/** Cut lines for a box in degrees, as columns of the global grid. */
+function cutsFrom(edges, axis) {
+  const out = edges.map((e) => {
     const b = boundsOf({ west: e, east: e, south: e, north: e });
-    const metres = axis === 'x' ? b.minX : b.minZ;
-    const base = axis === 'x' ? grid.minX : grid.minZ;
-    const span = axis === 'x' ? grid.nx : grid.nz;
-    out.push(Math.max(0, Math.min(span, Math.round((metres - base) / TILE_SIZE))));
-  }
-  // Latitude runs the other way from z, so the cuts come out descending.
+    return axis === 'x' ? colAt(b.minX) : rowAt(b.minZ);
+  });
   out.sort((a, b) => a - b);
   return [...new Set(out)];
 }
 
-function makeDistricts() {
-  const grid = cityGrid(TILE_SIZE);
-  const xCuts = cuts(LON_EDGES, 'x');
-  const zCuts = cuts(LAT_EDGES, 'z');
-  // The original box, in tiles, so the cell that matches it can be found.
-  const core = boundsOf(BBOX);
-  const coreTx = Math.round((core.minX - grid.minX) / TILE_SIZE);
-  const coreTz = Math.round((core.minZ - grid.minZ) / TILE_SIZE);
-  const coreCol = xCuts.indexOf(coreTx);
-  const coreRow = zCuts.indexOf(coreTz);
+/** Even cuts of about `cell` metres between two grid lines, ending on both. */
+function evenCuts(from, to, cell) {
+  const span = to - from;
+  if (span <= 0) return [from];
+  const n = Math.max(1, Math.round((span * TILE_SIZE) / cell));
   const out = [];
-  for (let row = 0; row < zCuts.length - 1; row++) {
-    for (let col = 0; col < xCuts.length - 1; col++) {
-      const tx = xCuts[col], tz = zCuts[row];
-      const nx = xCuts[col + 1] - tx, nz = zCuts[row + 1] - tz;
-      const isCore = col === coreCol && row === coreRow;
-      const ring = Math.max(Math.abs(col - coreCol), Math.abs(row - coreRow));
-      const minX = grid.minX + tx * TILE_SIZE;
-      const minZ = grid.minZ + tz * TILE_SIZE;
-      const maxX = minX + nx * TILE_SIZE;
-      const maxZ = minZ + nz * TILE_SIZE;
-      // The lat lon box of exactly those tiles, which is what gets fetched.
-      const [west, north] = unproject(minX, minZ);
-      const [east, south] = unproject(maxX, maxZ);
-      out.push({
-        id: isCore ? CORE_ID : `c${col}r${row}`,
-        col, row, core: isCore,
-        tier: Math.min(TIERS.length - 1, ring),
-        tx, tz, nx, nz,
-        bounds: { minX, minZ, maxX, maxZ, width: maxX - minX, depth: maxZ - minZ },
-        bbox: { west, east, south, north },
-      });
+  for (let i = 0; i <= n; i++) out.push(from + Math.round((span * i) / n));
+  return [...new Set(out)];
+}
+
+function cellsBetween(xCuts, zCuts, skip) {
+  const out = [];
+  for (let r = 0; r < zCuts.length - 1; r++) {
+    for (let c = 0; c < xCuts.length - 1; c++) {
+      const tx = xCuts[c], tz = zCuts[r];
+      const nx = xCuts[c + 1] - tx, nz = zCuts[r + 1] - tz;
+      if (nx <= 0 || nz <= 0) continue;
+      // A cell that is inside a finer band is left to that band.
+      if (skip && skip(tx, tz, nx, nz)) continue;
+      out.push({ tx, tz, nx, nz });
     }
   }
+  return out;
+}
+
+function withBox(cell) {
+  const minX = grid.minX + cell.tx * TILE_SIZE;
+  const minZ = grid.minZ + cell.tz * TILE_SIZE;
+  const maxX = minX + cell.nx * TILE_SIZE;
+  const maxZ = minZ + cell.nz * TILE_SIZE;
+  const [west, north] = unproject(minX, minZ);
+  const [east, south] = unproject(maxX, maxZ);
+  return {
+    ...cell,
+    bounds: { minX, minZ, maxX, maxZ, width: maxX - minX, depth: maxZ - minZ },
+    bbox: { west, east, south, north },
+  };
+}
+
+function makeDistricts() {
+  const out = [];
+
+  // --- the ring, in fine cells -------------------------------------------
+  const ringX = cutsFrom(RING_LON, 'x');
+  const ringZ = cutsFrom(RING_LAT, 'z');
+  const core = boundsOf(BBOX);
+  const coreTx = colAt(core.minX);
+  const coreTz = rowAt(core.minZ);
+  const coreCol = ringX.indexOf(coreTx);
+  const coreRow = ringZ.indexOf(coreTz);
+  for (const cell of cellsBetween(ringX, ringZ, null)) {
+    const col = ringX.indexOf(cell.tx);
+    const row = ringZ.indexOf(cell.tz);
+    const isCore = col === coreCol && row === coreRow;
+    const away = Math.max(Math.abs(col - coreCol), Math.abs(row - coreRow));
+    const edgeOn = Math.abs(col - coreCol) + Math.abs(row - coreRow) === 1;
+    out.push({
+      ...withBox(cell),
+      id: isCore ? CORE_ID : `c${col}r${row}`,
+      band: 'ring', col, row, core: isCore,
+      tier: isCore ? 0 : (away === 1 && edgeOn ? 1 : 2),
+    });
+  }
+
+  // --- the band out to Steglitz, Lichterfelde and Treptow ------------------
+  const ringBox = {
+    x0: Math.min(...ringX), x1: Math.max(...ringX),
+    z0: Math.min(...ringZ), z1: Math.max(...ringZ),
+  };
+  const innerBox = {
+    x0: colAt(-INNER_REACH.x), x1: colAt(INNER_REACH.x),
+    z0: rowAt(-INNER_REACH.z), z1: rowAt(INNER_REACH.z),
+  };
+  const insideRing = (tx, tz, nx, nz) => tx >= ringBox.x0 && tx + nx <= ringBox.x1
+    && tz >= ringBox.z0 && tz + nz <= ringBox.z1;
+  const innerX = [...new Set([
+    ...evenCuts(innerBox.x0, ringBox.x0, INNER_CELL),
+    ...evenCuts(ringBox.x0, ringBox.x1, INNER_CELL),
+    ...evenCuts(ringBox.x1, innerBox.x1, INNER_CELL),
+  ])].sort((a, b) => a - b);
+  const innerZ = [...new Set([
+    ...evenCuts(innerBox.z0, ringBox.z0, INNER_CELL),
+    ...evenCuts(ringBox.z0, ringBox.z1, INNER_CELL),
+    ...evenCuts(ringBox.z1, innerBox.z1, INNER_CELL),
+  ])].sort((a, b) => a - b);
+  let n = 0;
+  for (const cell of cellsBetween(innerX, innerZ, insideRing)) {
+    out.push({
+      ...withBox(cell),
+      id: `i${n}`, band: 'inner', col: 0, row: 0, core: false,
+      tier: 3,
+    });
+    n++;
+  }
+
+  // --- and the rest of Berlin ---------------------------------------------
+  const insideInner = (tx, tz, nx, nz) => tx >= innerBox.x0 && tx + nx <= innerBox.x1
+    && tz >= innerBox.z0 && tz + nz <= innerBox.z1;
+  const outerX = [...new Set([
+    ...evenCuts(0, innerBox.x0, OUTER_CELL),
+    ...evenCuts(innerBox.x0, innerBox.x1, OUTER_CELL),
+    ...evenCuts(innerBox.x1, grid.nx, OUTER_CELL),
+  ])].sort((a, b) => a - b);
+  const outerZ = [...new Set([
+    ...evenCuts(0, innerBox.z0, OUTER_CELL),
+    ...evenCuts(innerBox.z0, innerBox.z1, OUTER_CELL),
+    ...evenCuts(innerBox.z1, grid.nz, OUTER_CELL),
+  ])].sort((a, b) => a - b);
+  let m = 0;
+  for (const cell of cellsBetween(outerX, outerZ, insideInner)) {
+    out.push({
+      ...withBox(cell),
+      id: `o${m}`, band: 'outer', col: 0, row: 0, core: false,
+      tier: 4,
+    });
+    m++;
+  }
+
+  // Nearest the middle first, which is the order everything else wants them
+  // in: the fetcher, the builder and the thing that decides what ships.
+  const mid = { x: 0, z: 0 };
+  out.sort((a, b) => {
+    const da = Math.hypot((a.bounds.minX + a.bounds.maxX) / 2 - mid.x,
+      (a.bounds.minZ + a.bounds.maxZ) / 2 - mid.z);
+    const db = Math.hypot((b.bounds.minX + b.bounds.maxX) / 2 - mid.x,
+      (b.bounds.minZ + b.bounds.maxZ) / 2 - mid.z);
+    return da - db;
+  });
   return out;
 }
 

@@ -329,7 +329,12 @@ function buildDistrict(district) {
     if (t.natural === 'tree') { trees.push({ p, tags: t }); continue; }
     if (t['spreefall:card'] || (t.tourism === 'attraction' && t.name)) { attractions.push({ p, tags: t }); continue; }
     if (t.railway === 'station' || t.railway === 'subway_entrance') { stations.push({ p, tags: t }); continue; }
-    if (t.place && t.name) { places.push({ p, tags: t, rank: PLACE_RANK[t.place] || 0 }); }
+    // Only the kinds of place a district can be named after, so a city node
+    // alone in a district leaves it with its grid name rather than calling it
+    // Berlin.
+    if (t.place && t.name && PLACE_RANK[t.place]) {
+      places.push({ p, tags: t, rank: PLACE_RANK[t.place] });
+    }
   }
 
   console.log(`features: buildings ${buildings.length}  roads ${roads.length}  areas ${areas.length}  water ${waterPolys.length}  green ${greens.length}  rails ${rails.length}  trees ${trees.length}`);
@@ -435,6 +440,13 @@ function buildDistrict(district) {
   // road ribbons drawn a hundred millimetres below the true ground, so 12.5 m,
   // and cells that something else already covers are simply not emitted. That
   // second part removes about a third of the world's triangles.
+  // What each part of the city costs in vertices. Printed at the end,
+  // because the first real build showed the roads were two thirds of the
+  // geometry and nobody had asked where the bytes were going.
+  const spent = {};
+  let mark = 0;
+  const since = (name) => { spent[name] = (spent[name] || 0) + (mesh.vertexCount - mark); mark = mesh.vertexCount; };
+  mark = mesh.vertexCount;
   const gstep = tier.groundStep;
   const gnx = Math.ceil(world.width / gstep);
   const gnz = Math.ceil(world.depth / gstep);
@@ -455,12 +467,14 @@ function buildDistrict(district) {
     }
   }
   console.log(`ground: ${groundCells} base cells drawn, ${skippedCells} skipped as already covered`);
+  since('ground');
 
   // --- green -------------------------------------------------------------
   for (const g of greens) {
     groundPolygon(mesh, g.ring, g.holes, MAT.GRASS, yAt, { lift: 0.05, seed: 5 });
   }
 
+  since('parks');
   // --- water --------------------------------------------------------------
   const waterLevel = terrain.waterLevel;
   for (const w of waterPolys) {
@@ -483,8 +497,10 @@ function buildDistrict(district) {
     }
   }
 
+  since('water');
   // --- roads --------------------------------------------------------------
   let roadMetres = 0;
+  let roadPoints = 0;
   const roadLines = [];
   for (const r of roads) {
     const cls = r.tags.highway;
@@ -502,6 +518,7 @@ function buildDistrict(district) {
       }
     }
     roadMetres += polylineLength(r.line);
+    roadPoints += r.line.length;
     if (!isFoot) {
       roadLines.push({
         cls,
@@ -514,6 +531,7 @@ function buildDistrict(district) {
     groundPolygon(mesh, a.ring, [], roadMaterial(a.tags), yAt, { lift: 0.05, seed: 3 });
   }
 
+  since('roads');
   // --- rails --------------------------------------------------------------
   for (const r of rails) {
     const elevated = r.tags.bridge === 'yes' || r.tags.railway === 'rail';
@@ -548,6 +566,7 @@ function buildDistrict(district) {
     }
   }
 
+  since('rails');
   // --- buildings ----------------------------------------------------------
   let buildingCount = 0;
   const landmarkIndex = [];
@@ -607,6 +626,7 @@ function buildDistrict(district) {
     buildingCount++;
   }
 
+  since('buildings');
   // --- the stelae field ---------------------------------------------------
   // The memorial floor is the one place where the terrain has detail finer than
   // the base grid can carry, because the whole point of it is that the ground
@@ -630,6 +650,7 @@ function buildDistrict(district) {
     stelae += buildStelae(mesh, collision, m, terrain);
   }
 
+  since('stelae');
   // --- trees --------------------------------------------------------------
   const treeList = [];
   for (const t of trees) {
@@ -652,6 +673,9 @@ function buildDistrict(district) {
     collision.push({ x1: x - 0.32, z1: z + 0.32, x2: x - 0.32, z2: z - 0.32, base: -1, top: 3, surface: SURFACE.STONE });
   }
 
+  console.log('vertices: ' + Object.entries(spent).filter(([, v]) => v > 0)
+    .map(([k, v]) => `${k} ${Math.round(v / 1000)}k`).join(', ')
+    + `  (${roadPoints} road points over ${(roadMetres / 1000).toFixed(1)} km)`);
   console.log(`geometry: ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${buildingCount} buildings, ${stelae} stelae, ${treeList.length} trees, ${(roadMetres / 1000).toFixed(1)} km of road`);
 
   // --- surface map for footsteps -----------------------------------------
@@ -758,9 +782,15 @@ function buildDistrict(district) {
 const cityTiles = cityGrid(TILE_SIZE);
 
 // Which place tag wins when a district has several in it.
+//
+// A city node is not a district name. The first live build of the whole city
+// called the middle district Berlin, because OpenStreetMap puts a
+// place=city node for Berlin in the middle of Mitte and it outranked
+// everything else; a district two kilometres across wants the name of the
+// quarter it covers, so city and town are not names a district can take.
 const PLACE_RANK = {
-  borough: 5, suburb: 4, quarter: 3, neighbourhood: 2, city_block: 1,
-  town: 5, village: 3, hamlet: 1, city: 6,
+  suburb: 5, quarter: 4, neighbourhood: 3, village: 3, borough: 2,
+  city_block: 1, hamlet: 1,
 };
 
 const FOOT_CLASSES = new Set(['footway', 'path', 'cycleway', 'steps', 'bridleway']);
@@ -775,7 +805,12 @@ const FOOT_CLASSES = new Set(['footway', 'path', 'cycleway', 'steps', 'bridleway
 function districtName(district, places) {
   // The middle district is the brief's own box, drawn round the Gate, and the
   // project has called it Mitte since the first commit.
-  const fallback = district.core ? 'Mitte' : `Ring ${district.col + 1}-${district.row + 1}`;
+  // Out past the ring a district has no row and column to be named after, so
+  // the fallback is its own id. A live extract almost always has a place node
+  // in it and this is never seen; the offline fallback is where it shows.
+  const fallback = district.core ? 'Mitte'
+    : (district.band === 'ring' ? `Ring ${district.col + 1}-${district.row + 1}`
+      : `Berlin ${district.id}`);
   if (!places.length) return fallback;
   const cx = (district.bounds.minX + district.bounds.maxX) / 2;
   const cz = (district.bounds.minZ + district.bounds.maxZ) / 2;
@@ -835,7 +870,14 @@ function updateIndex(district, entry) {
     home: CORE_ID,
     districts: previous ? previous.districts : [],
   };
-  index.districts = index.districts.filter((d) => d.id !== district.id);
+  // A district whose bundle is not on this disk does not belong in this
+  // index. The index is committed so the game runs from a fresh clone, and
+  // without this pass it carried entries for districts built on a developer's
+  // machine: the deploy then listed bundles it had never built, and the game
+  // asked for them and got four hundred and four.
+  index.districts = index.districts.filter((d) => d.id !== district.id
+    && fs.existsSync(path.join(OUT_DIR, `world-${d.id}.bin`))
+    && fs.existsSync(path.join(OUT_DIR, `world-${d.id}.json`)));
   index.districts.push({
     id: district.id,
     tier: district.tier,

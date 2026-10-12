@@ -47,10 +47,23 @@ export const SURFACE = {
 };
 
 export const FACADE_FLAG = {
+  // The bottom band of a wall, where the shop windows are.
   GROUND_FLOOR: 1,
   LANDMARK: 2,
   ROOF_SLOPE: 4,
   NO_WINDOWS: 8,
+  // This vertex is the ground: a street, a pavement, a park, a square, the
+  // water, a railway bed. The collapse code moves these into craters and
+  // leaves the walls to be cut instead, so it has to be able to tell them
+  // apart. It used to read GROUND_FLOOR for this, which is the bottom of a
+  // building and not the ground at all, so no crater was ever drawn in a
+  // street while the collision had a ten metre hole in it. That is what made
+  // you fall through a road that looked solid.
+  GROUND: 16,
+  // Baked rubble: a wall that came down and has been written into the tile
+  // buffers for good, so the fragment shader keeps treating it as rubble long
+  // after the collapse that made it has given up its uniform slot.
+  RUBBLE: 32,
 };
 
 export const SPAWN = {

@@ -269,7 +269,8 @@ function hippedRoof(mesh, ring, y, rh, mat, seed) {
 export function ribbon(mesh, line, half, mat, yAt, opts = {}) {
   if (line.length < 2) return;
   const lift = opts.lift || 0;
-  const flags = opts.flags || 0;
+  // A road, a pavement, a railway bed: all of them ground. See groundPolygon.
+  const flags = (opts.flags || 0) | FACADE_FLAG.GROUND;
   const seed = opts.seed || 0;
   const left = [], right = [];
   let run = 0;
@@ -302,7 +303,10 @@ export function groundPolygon(mesh, outer, holes, mat, yAt, opts = {}) {
   const { verts, indices } = triangulate(outer, holes || []);
   if (!indices.length) return;
   const lift = opts.lift || 0;
-  const flags = opts.flags || 0;
+  // Everything laid flat on the world is ground, and has to say so, because
+  // that is what the collapse code tests to decide whether a vertex belongs
+  // in a crater or in a wall.
+  const flags = (opts.flags || 0) | FACADE_FLAG.GROUND;
   const map = verts.map((p) => mesh.vertex(p[0], yAt(p[0], p[1]) + lift, p[1], 0, 1, 0, p[0], p[1], mat, opts.seed || 0, 0, flags, 0, 255));
   for (let i = 0; i < indices.length; i += 3) {
     mesh.tri(map[indices[i]], map[indices[i + 2]], map[indices[i + 1]]);

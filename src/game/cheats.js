@@ -48,6 +48,33 @@ export const SPAWNS = [
   { id: 'jets', label: 'Jets', note: 'two, running in from half a kilometre', count: 2 },
 ];
 
+/**
+ * Settings with a number behind them rather than a yes or a no.
+ *
+ * Each one has a plain default that is the game as it ships, so a menu nobody
+ * has touched behaves exactly as it did before these existed. The warhead
+ * radius is the obvious one to want bigger; the skeleton timer is the one
+ * that decides whether a street full of burnt bones is a moment or a
+ * monument, and zero means they stay.
+ */
+export const SETTINGS = [
+  {
+    id: 'nukeRadius', label: 'Warhead radius', unit: 'm',
+    note: 'how far a warhead reaches, in metres',
+    min: 60, max: 900, step: 10, def: 170,
+  },
+  {
+    id: 'ionRadius', label: 'Ion cannon radius', unit: 'm',
+    note: 'how much of the city the middle beam takes',
+    min: 80, max: 900, step: 10, def: 210,
+  },
+  {
+    id: 'boneTime', label: 'Skeletons collapse after', unit: 's',
+    note: 'a burnt body falls to pieces after this long; nought leaves them standing',
+    min: 0, max: 120, step: 1, def: 0,
+  },
+];
+
 /** Things to get into, parked where you are standing. */
 export const RIDES = [
   { id: 'jeep', label: 'Jeep', note: 'fast, open, a gun on the back' },
@@ -68,6 +95,9 @@ export class Cheats {
     this.ragdoll = false;
     this.blood = false;
     this.ultraGore = false;
+    // The numeric settings, by id, starting at what the game ships with.
+    this.values = {};
+    for (const s of SETTINGS) this.values[s.id] = s.def;
     // Set the first time anything is switched on, and never cleared, so that
     // turning a cheat off again does not launder the run.
     this.used = false;
@@ -79,7 +109,8 @@ export class Cheats {
   get any() {
     return this.godmode || this.infiniteAmmo || this.nukeRain || this.noDrones
       || this.cinematic || this.slowBlast
-      || this.gib || this.ragdoll || this.blood || this.ultraGore;
+      || this.gib || this.ragdoll || this.blood || this.ultraGore
+      || this.anyValue;
   }
 
   /**
@@ -105,16 +136,47 @@ export class Cheats {
 
   toggle(id) { return this.set(id, !this[id]); }
 
+  /** What a numeric setting is on, which is its default until it is moved. */
+  value(id) {
+    const spec = SETTINGS.find((s) => s.id === id);
+    if (!spec) return 0;
+    const v = this.values[id];
+    return Number.isFinite(v) ? v : spec.def;
+  }
+
+  /**
+   * Move one. Anything away from the default marks the run, the same way a
+   * switch does, because a warhead twice the size is not the game as given.
+   *
+   * @returns {boolean} whether the value was accepted
+   */
+  setValue(id, v) {
+    const spec = SETTINGS.find((s) => s.id === id);
+    if (!spec) return false;
+    const n = Math.min(spec.max, Math.max(spec.min, Math.round(v / spec.step) * spec.step));
+    this.values[id] = n;
+    if (n !== spec.def) this.used = true;
+    this.save();
+    if (this.onChange) this.onChange(id, n);
+    return true;
+  }
+
+  /** True when a setting has been moved off what the game ships with. */
+  get anyValue() {
+    return SETTINGS.some((s) => this.value(s.id) !== s.def);
+  }
+
   /** Everything off. Does not clear the mark on the run. */
   reset() {
     for (const id of KEYS) this[id] = false;
+    for (const s of SETTINGS) this.values[s.id] = s.def;
     this.save();
     if (this.onChange) this.onChange(null, false);
   }
 
   save() {
     try {
-      const out = {};
+      const out = { values: this.values };
       for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
@@ -127,6 +189,12 @@ export class Cheats {
       const saved = JSON.parse(raw);
       for (const id in saved) {
         if (id in this && typeof this[id] === 'boolean') this[id] = !!saved[id];
+      }
+      if (saved.values) {
+        for (const s of SETTINGS) {
+          const v = saved.values[s.id];
+          if (Number.isFinite(v)) this.values[s.id] = Math.min(s.max, Math.max(s.min, v));
+        }
       }
       if (this.any) this.used = true;
     } catch { /* a corrupt entry is not worth a crash */ }

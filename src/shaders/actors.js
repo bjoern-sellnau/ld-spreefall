@@ -249,6 +249,24 @@ void main() {
     colour = mix(colour, vec3(0.020, 0.017, 0.015), vCharred);
     colour += vec3(1.0, 0.22, 0.03) * step(0.88, crack) * vCharred * 0.9;
   }
+  // A machine is the same skeleton in steel: cold, a little shiny along the
+  // bones, with one red eye in the skull. Stunned, the eye goes out and the
+  // steel picks up the blue of whatever hit it.
+  if (vMachine > 0.5) {
+    float sheen = pow(clamp(dot(normalize(vNormal), normalize(vec3(0.3, 0.9, 0.2))), 0.0, 1.0), 3.0);
+    colour = mix(vec3(0.085, 0.092, 0.105), vec3(0.42, 0.46, 0.52), sheen);
+    // The skull, part 23, carries the eye: a red that is bright from the
+    // front and still visible from the side, so a machine reads as a machine
+    // across a square and not only when it is looking at you. The other two
+    // channels are nearly nothing, which is what keeps the tonemapper from
+    // turning it white.
+    if (vPart > 24.5) {
+      float facing = clamp(-normalize(vNormal).z, 0.0, 1.0);
+      colour = mix(colour * 0.5, colour, 0.4);
+      colour += vec3(2.4, 0.03, 0.02) * (0.35 + 0.65 * facing) * (1.0 - vStun);
+    }
+    colour = mix(colour, colour * vec3(0.5, 0.7, 1.4), vStun * 0.8);
+  }
   // A white flash on the frame it takes a hit, so a connect is unmistakable.
   colour = mix(colour, vec3(3.0, 2.4, 1.6), vFlash * 0.75);
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
@@ -344,8 +362,8 @@ void main() {
 // The drones and everything else that is not a soldier can never be charred,
 // so their build of the shader has the term compiled out rather than reading
 // a varying nothing writes.
-export const DRONE_FS = bodyFS('#define vCharred 0.0');
-export const SOLDIER_FS = bodyFS('flat in float vCharred;');
+export const DRONE_FS = bodyFS('#define vCharred 0.0\n#define vMachine 0.0\n#define vStun 0.0');
+export const SOLDIER_FS = bodyFS('flat in float vCharred;\nflat in float vMachine;\nflat in float vStun;');
 
 // Soldiers share the drone's fragment shader and its instance layout, and
 // differ only in what the vertex stage does with the transform: a walk cycle
@@ -360,13 +378,15 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aInfo;     // x part id
 layout(location = 5) in vec4 iPosYaw;   // xyz feet position, w yaw
 layout(location = 6) in vec4 iState;    // x fall, y roll, z hit flash, w walk phase
-layout(location = 7) in vec4 iExtra;    // x charred 0..1
+layout(location = 7) in vec4 iExtra;    // x charred 0..1, y machine, z stunned
 
 out vec3 vWorld;
 out vec3 vNormal;
 flat out float vPart;
 flat out float vFlash;
 flat out float vCharred;
+flat out float vMachine;
+flat out float vStun;
 out float vViewDist;
 
 mat3 rotY(float a) {
@@ -388,6 +408,8 @@ void main() {
   float walk = iState.w;
   float charred = iExtra.x;
   vCharred = charred;
+  vMachine = iExtra.y;
+  vStun = iExtra.z;
 
   // Burnt to the bone. The cloth, the webbing and the helmet shrink into
   // nothing and the skeleton inside them comes out. Both sets of parts are in

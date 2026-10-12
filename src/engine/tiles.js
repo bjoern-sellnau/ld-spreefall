@@ -166,6 +166,45 @@ export class TileManager {
     return tile;
   }
 
+  /**
+   * The bytes of a tile changed under us, because a ruin was baked into them.
+   * The simplest correct answer is to throw the tile away and upload it
+   * again from the district buffer: it is one tile, it happens when a
+   * building finishes falling, and anything cleverer would have to know which
+   * vertices moved.
+   *
+   * @param {Iterable<number>} indices tiles whose bytes were rewritten
+   */
+  refresh(indices) {
+    for (const index of indices) {
+      if (!this.resident.has(index)) continue;
+      this.evict(index);
+      this.upload(index);
+    }
+  }
+
+  /**
+   * One tile's trees changed, because one of them burnt down. Only the
+   * instance buffer is rebuilt; the tile's own geometry is untouched.
+   */
+  refreshTrees(index) {
+    const gl = this.gl;
+    const tile = this.resident.get(index);
+    if (!tile) return;
+    const trees = this.world.trees(index);
+    if (!trees) {
+      if (tile.treeVao) gl.deleteVertexArray(tile.treeVao);
+      if (tile.treeVbo) gl.deleteBuffer(tile.treeVbo);
+      tile.treeVao = null; tile.treeVbo = null; tile.treeCount = 0;
+      return;
+    }
+    if (!tile.treeVbo) { this.evict(index); this.upload(index); return; }
+    gl.bindBuffer(gl.ARRAY_BUFFER, tile.treeVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, trees, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    tile.treeCount = trees.length / 5;
+  }
+
   evict(index) {
     const gl = this.gl;
     const tile = this.resident.get(index);

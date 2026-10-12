@@ -48,12 +48,22 @@ jobs:
         # One query per district, in order, with the client's own backoff
         # between mirrors. A district that cannot be fetched is skipped and the
         # build goes on without it, which is better than no city at all.
-        run: node --max-old-space-size=6144 tools/fetch-osm.mjs --all
+        #
+        # The middle district is forced when the cache holds the synthetic
+        # extract the repository ships, which is what made the first run of
+        # this workflow weigh a real Berlin with a generated Mitte in the
+        # middle of it.
+        run: |
+          if ! grep -q overpass data/raw/source.json 2>/dev/null; then
+            node --max-old-space-size=6144 tools/fetch-osm.mjs --force
+          fi
+          node --max-old-space-size=6144 tools/fetch-osm.mjs --all
       - name: Build every district
         run: node --max-old-space-size=6144 tools/build-world.mjs --all | tee city-build.log
       - name: The budget
         run: |
           node tools/weigh-city.mjs | tee city-budget.txt
+          node tools/fit-city.mjs --dry | tee -a city-budget.txt
       - name: Serve
         run: node tools/serve.mjs & sleep 2
       - name: Walk from one district into the next, in the real city

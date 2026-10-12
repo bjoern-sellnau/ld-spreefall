@@ -93,6 +93,8 @@ jobs:
         run: node tools/test-city.mjs
       - name: Walk from one district into the next
         run: node tools/test-districts.mjs
+      - name: Burn it, and then let the machines have it
+        run: node tools/test-machines.mjs
       - name: Drive the interface
         run: node tools/test-ui.mjs
       - name: Keep the screenshots

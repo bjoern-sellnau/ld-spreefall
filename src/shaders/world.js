@@ -1,5 +1,5 @@
 import { VERSION, CAMERA_BLOCK, NOISE, FOG, SHADOW } from './common.js';
-import { MAT, POS_SCALE, UV_SCALE, HEIGHT_SCALE } from '../shared/constants.js';
+import { MAT, POS_SCALE, UV_SCALE, HEIGHT_SCALE, FACADE_FLAG } from '../shared/constants.js';
 
 // What a blast does to the shape of the city, shared by the colour pass and
 // the shadow pass so a flattened building does not go on casting a standing
@@ -151,9 +151,15 @@ void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
   vec3 nrm = normalize(aNormal.xyz);
   float bHeight = float(aHeight) * ${(1 / HEIGHT_SCALE).toFixed(8)};
+  // Bit 16 is FACADE_FLAG.GROUND. It used to read bit 1, which is the shop
+  // window band at the bottom of a wall, so streets were treated as walls and
+  // never moved: the collision had a crater in it and the picture did not.
   vFall = uCollapseCount > 0
-    ? applyCollapse(p, nrm, (aPacked.w & 1u) != 0u, bHeight)
+    ? applyCollapse(p, nrm, (aPacked.w & ${FACADE_FLAG.GROUND}u) != 0u, bHeight)
     : 0.0;
+  // A ruin that was baked into the buffers is rubble for good, whether or not
+  // the site that made it still has a slot.
+  if ((aPacked.w & ${FACADE_FLAG.RUBBLE}u) != 0u) vFall = max(vFall, 1.0);
   vWorld = p;
   vNormal = nrm;
   vAo = clamp(aNormal.w * 2.0, 0.0, 1.0);
@@ -818,7 +824,7 @@ void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
   vec3 nrm = vec3(0.0, 1.0, 0.0);
   if (uCollapseCount > 0) {
-    applyCollapse(p, nrm, (aPacked.w & 1u) != 0u,
+    applyCollapse(p, nrm, (aPacked.w & ${FACADE_FLAG.GROUND}u) != 0u,
       float(aHeight) * ${(1 / HEIGHT_SCALE).toFixed(8)});
   }
   gl_Position = uLightViewProj * vec4(p, 1.0);
