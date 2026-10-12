@@ -40,12 +40,18 @@ function walk(dir, out = []) {
   return out;
 }
 
-/** How far a district is from the middle, in district steps. */
+/**
+ * How far a district is from the middle, in kilometres. Districts are not the
+ * same size any more, so counting them is meaningless; the distance between
+ * the middles is not.
+ */
 function ringOf(id) {
   const d = DISTRICTS.find((x) => x.id === id);
   const core = DISTRICTS.find((x) => x.core);
-  if (!d || !core) return 99;
-  return Math.max(Math.abs(d.col - core.col), Math.abs(d.row - core.row));
+  if (!d || !core) return 999;
+  const dx = (d.bounds.minX + d.bounds.maxX) / 2 - (core.bounds.minX + core.bounds.maxX) / 2;
+  const dz = (d.bounds.minZ + d.bounds.maxZ) / 2 - (core.bounds.minZ + core.bounds.maxZ) / 2;
+  return Math.round(Math.hypot(dx, dz) / 1000);
 }
 
 function main() {
@@ -103,7 +109,7 @@ function main() {
   console.log(`code and page   ${(code / 1e6).toFixed(2)} MB gzipped`);
   for (const d of order) {
     const kept = keep.includes(d);
-    console.log(`${kept ? '  ship ' : '  skip '} ${d.id.padEnd(6)} ring ${ringOf(d.id)}  `
+    console.log(`${kept ? '  ship ' : '  skip '} ${d.id.padEnd(6)} ${String(ringOf(d.id)).padStart(2)} km  `
       + `${String(d.name).slice(0, 22).padEnd(23)}${(d.gzip / 1e6).toFixed(2).padStart(6)} MB`);
   }
   console.log('');

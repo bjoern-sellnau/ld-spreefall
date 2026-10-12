@@ -805,7 +805,12 @@ const FOOT_CLASSES = new Set(['footway', 'path', 'cycleway', 'steps', 'bridleway
 function districtName(district, places) {
   // The middle district is the brief's own box, drawn round the Gate, and the
   // project has called it Mitte since the first commit.
-  const fallback = district.core ? 'Mitte' : `Ring ${district.col + 1}-${district.row + 1}`;
+  // Out past the ring a district has no row and column to be named after, so
+  // the fallback is its own id. A live extract almost always has a place node
+  // in it and this is never seen; the offline fallback is where it shows.
+  const fallback = district.core ? 'Mitte'
+    : (district.band === 'ring' ? `Ring ${district.col + 1}-${district.row + 1}`
+      : `Berlin ${district.id}`);
   if (!places.length) return fallback;
   const cx = (district.bounds.minX + district.bounds.maxX) / 2;
   const cz = (district.bounds.minZ + district.bounds.maxZ) / 2;

@@ -20,9 +20,22 @@ export const ORIGIN = { lat: 52.5163, lon: 13.3777 };
 // the east edge runs to 13.4150. See docs/PLAN.md section 7.
 export const BBOX = { south: 52.5080, west: 13.3650, north: 52.5250, east: 13.4150 };
 
-// The whole playable area: the bounding box of the Ringbahn, taken from the
-// four stations at its corners. See tools/districts.mjs.
-export const CITY = { south: 52.4720, west: 13.2840, north: 52.5486, east: 13.4689 };
+// Inside the Ringbahn: the bounding box of the ring, from the four stations at
+// its corners. This is not the edge of the playable area any more, it is the
+// line the detail tiers are measured from. See tools/districts.mjs.
+export const RING = { south: 52.4720, west: 13.2840, north: 52.5486, east: 13.4689 };
+
+// The whole playable area: Berlin, all of it, out to the city boundary.
+//
+// The extent is the one two independent sources give for the Land of Berlin:
+// an OpenStreetMap talk-de posting listing 52.67 N, 13.09 W, 52.34 S, 13.76 E,
+// and the EPSG registry's area of use for EPSG:3068, the Berlin Soldner grid,
+// which is 52.33 to 52.65 N and 13.09 to 13.76 E. Taken together that is the
+// box below, 45.6 km across and 37.4 km down. The city itself is about 891 of
+// those 1,706 square kilometres; the rest of the box is Brandenburg, and the
+// districts that fall entirely in it come out nearly empty, which costs
+// almost nothing and keeps the lattice regular.
+export const CITY = { south: 52.3380, west: 13.0880, north: 52.6760, east: 13.7620 };
 
 const DEG = Math.PI / 180;
 const M_PER_DEG_LAT = 110574.0;

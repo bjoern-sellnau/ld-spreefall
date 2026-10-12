@@ -576,7 +576,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 // time it is built.
 
 function districtSeed(district) {
-  return 7919 + district.col * 131 + district.row * 17;
+  // From the id rather than from a row and column, because only the districts
+  // inside the ring have those.
+  let h = 7919;
+  for (const ch of String(district.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % 100000;
 }
 
 function syntheticDistrict(district) {
@@ -676,7 +680,11 @@ function syntheticDistrict(district) {
   // place nodes, and the build prefers those; this is a neutral stand in
   // rather than a guess at which Ortsteil the box mostly covers.
   const [clon, clat] = worldToLonLat([(b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2]);
-  doc.node(clat, clon, { place: 'suburb', name: `Ring ${district.col + 1}-${district.row + 1}` });
+  doc.node(clat, clon, {
+    place: 'suburb',
+    name: district.band === 'ring'
+      ? `Ring ${district.col + 1}-${district.row + 1}` : `Berlin ${district.id}`,
+  });
 
   return doc.toXml(district.bbox);
 }
