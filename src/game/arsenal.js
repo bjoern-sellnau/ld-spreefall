@@ -144,6 +144,20 @@ export const WEAPONS = {
     splash: { radius: 11, damage: 70, force: 12 },
     incendiary: { radius: 26, pools: 7, burnSeconds: 9, damagePerSecond: 110 },
   },
+  emp: {
+    name: 'EMP bomb', short: 'EMP', kind: KIND.THROW, slot: null,
+    magazine: 1, reserve: 5, reloadTime: 1.0, fireInterval: 1.1, auto: false,
+    projectile: 'incendiary', muzzleSpeed: 22, fuse: 1.6, range: 110,
+    spreadHip: 0.005, spreadAim: 0.002, spreadPerShot: 0, spreadMax: 0.005,
+    spreadRecover: 0.2,
+    recoilKick: 0.004, recoilSide: 0.001, recoilRetain: 0.06,
+    aimFov: 58, sound: 'throw',
+    // It does almost nothing to a person and almost nothing to a wall. What
+    // it does is stop everything with a motor in it, long enough to walk up
+    // and put something in it.
+    splash: { radius: 6, damage: 14, force: 6 },
+    emp: { radius: 34, seconds: 7.5 },
+  },
   flamer: {
     name: 'Flamethrower', short: 'FLAMER', kind: KIND.STREAM, slot: 7,
     // The magazine is fuel, and it burns down about four times a second while
@@ -178,6 +192,7 @@ WEAPONS.rpg.hold = { x: 0.205, y: -0.132, z: -0.430, pitch: -0.012, yaw: 0.115, 
 WEAPONS.grenade.hold = { x: 0.185, y: -0.118, z: -0.175, pitch: 0.06, yaw: 0.22, roll: 0.10 };
 WEAPONS.c4.hold = { x: 0.180, y: -0.128, z: -0.150, pitch: 0.05, yaw: 0.26, roll: 0.08 };
 WEAPONS.banana.hold = { x: 0.175, y: -0.105, z: -0.120, pitch: 0.09, yaw: 0.30, roll: 0.16 };
+WEAPONS.emp.hold = { x: 0.178, y: -0.118, z: -0.162, pitch: 0.05, yaw: 0.24, roll: 0.07 };
 WEAPONS.incendiary.hold = { x: 0.182, y: -0.120, z: -0.168, pitch: 0.055, yaw: 0.235, roll: 0.09 };
 WEAPONS.flamer.hold = { x: 0.200, y: -0.126, z: -0.330, pitch: -0.008, yaw: 0.120, roll: 0.03 };
 WEAPONS.railgun.hold = { x: 0.215, y: -0.142, z: -0.500, pitch: -0.018, yaw: 0.118, roll: 0.04 };
@@ -187,7 +202,7 @@ WEAPONS.splinter.hold = { x: 0.215, y: -0.140, z: -0.420, pitch: -0.012, yaw: 0.
 
 export const LOADOUT = [
   'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'flamer', 'incendiary',
-  'railgun', 'plasma', 'flak', 'splinter',
+  'emp', 'railgun', 'plasma', 'flak', 'splinter',
 ];
 
 export function weaponBySlot(slot) {

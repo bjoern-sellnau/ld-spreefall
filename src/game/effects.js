@@ -48,6 +48,42 @@ export class Effects {
     s.gravity = 0;
   }
 
+  /**
+   * A beam: the same line a tracer draws, but thicker, in whatever colour it
+   * is given and lasting long enough to be seen as a line rather than as a
+   * flicker. What a machine shoots with.
+   */
+  beam(ax, ay, az, bx, by, bz, r, g, b) {
+    const s = this._get();
+    s.alive = true;
+    s.kind = 0;
+    s.ax = ax; s.ay = ay; s.az = az;
+    s.bx = bx; s.by = by; s.bz = bz;
+    s.maxLife = 0.12;
+    s.life = s.maxLife;
+    s.r = r; s.g = g; s.b = b;
+    s.size = 0.075;
+    s.vx = 0; s.vy = 0; s.vz = 0;
+    s.gravity = 0;
+  }
+
+  /** One small bright point, for something electrical going wrong. */
+  spark(x, y, z, r, g, b) {
+    const s = this._get();
+    s.alive = true;
+    s.kind = 1;
+    s.ax = x; s.ay = y; s.az = z;
+    s.bx = 0; s.by = 0; s.bz = 0;
+    s.maxLife = 0.35;
+    s.life = s.maxLife;
+    s.r = r; s.g = g; s.b = b;
+    s.size = 0.09;
+    s.vx = (Math.random() - 0.5) * 3.2;
+    s.vy = 1.4 + Math.random() * 2.4;
+    s.vz = (Math.random() - 0.5) * 3.2;
+    s.gravity = 9;
+  }
+
   flash(x, y, z, size, r, g, b, life) {
     const s = this._get();
     s.alive = true;

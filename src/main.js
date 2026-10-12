@@ -31,6 +31,7 @@ import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
 import { Fires } from './game/fires.js';
 import { FireWalls } from './game/firewall.js';
+import { Machines, MACHINES, makeMachine, empBurst } from './game/machines.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
@@ -57,6 +58,8 @@ const el = {
   sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
   cheatValues: $('cheatvalues'),
+  modeNote: $('modenote'), timePick: $('timepick'),
+  modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
@@ -201,6 +204,7 @@ async function main() {
   const cinema = new Cinema();
   const fires = new Fires(world);
   const fireWalls = new FireWalls(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const machines = new Machines();
   const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
   soldiers.hazards = () => projectiles.hazards();
@@ -487,6 +491,22 @@ async function main() {
     if (body && body.weapon && WEAPONS[body.weapon] && WEAPONS[body.weapon].incendiary) {
       incendiaryBurst(x, world.groundHeight(x, z), z, WEAPONS[body.weapon].incendiary);
     }
+    // An EMP: a blue ring, a rising whine, and everything with a motor in it
+    // inside the radius stops where it stands.
+    if (body && body.weapon && WEAPONS[body.weapon] && WEAPONS[body.weapon].emp) {
+      const spec = WEAPONS[body.weapon].emp;
+      const caught = empBurst(soldiers.active, drones.active, x, y, z, spec.radius);
+      audio.emp(dist);
+      effects.flash(x, y + 1.5, z, spec.radius * 0.5, 0.35, 0.7, 1.0, 0.5);
+      for (let i = 0; i < 30; i++) {
+        const a = (i / 30) * Math.PI * 2;
+        const r = spec.radius * (0.3 + Math.random() * 0.7);
+        effects.spark(x + Math.cos(a) * r, y + 0.6 + Math.random() * 2,
+          z + Math.sin(a) * r, 0.4, 0.75, 1.0);
+      }
+      renderer.addScar(x, y, z, spec.radius * 0.4, 0.3);
+      if (caught) feed(`<b>EMP</b> ${caught} down`);
+    }
 
     // And what it did to the city itself. Small blasts add up on a grid and
     // bring a frontage down when they have done enough; a warhead takes its
@@ -589,6 +609,21 @@ async function main() {
   // Q goes back to whatever you were holding before, which is the swap you
   // actually want in a fight.
   weapon.onSwapFrom = (from) => { state.lastWeapon = from; };
+
+  // A machine's beam: one bright red line that arrives all at once, a crack
+  // rather than a bang, and a scorch where it lands.
+  soldiers.onBeam = (s, damage) => {
+    const from = { x: s.x, y: s.y + 1.5, z: s.z };
+    const to = { x: camera.position[0], y: camera.position[1], z: camera.position[2] };
+    effects.beam(from.x, from.y, from.z, to.x, to.y, to.z, 1.0, 0.1, 0.08);
+    audio.laser(Math.hypot(player.x - s.x, player.z - s.z));
+    effects.flash(from.x, from.y, from.z, 2.4, 1.0, 0.15, 0.1, 0.07);
+    if (damage > 0 && combat.health > 0) combat.hurt(damage, s.x, s.z, player.x, player.z);
+  };
+  soldiers.onStunSpark = (s) => {
+    effects.spark(s.x + (Math.random() - 0.5), s.y + 0.8 + Math.random() * 0.9,
+      s.z + (Math.random() - 0.5), 0.5, 0.75, 1.0);
+  };
 
   soldiers.onShot = (s, damage) => {
     audio.gunshot('rifle');
@@ -1192,6 +1227,68 @@ async function main() {
    *
    * @returns {number} how many actually arrived
    */
+  /**
+   * Rise of the Machines, while it is running: keep the streets populated,
+   * drop warheads on the skyline, and hold the sky where the mode wants it.
+   */
+  function machinesTick(dt) {
+    if (!machines.active || state.mode !== 'walk') return;
+    const standing = soldiers.active.filter((s) => s.machine && s.alive).length;
+    if (machines.tickSpawn(dt, standing)) {
+      const made = soldiers.spawnNear(player.x, player.z, MACHINES.spawnFrom, MACHINES.spawnTo);
+      if (made) makeMachine(made);
+    }
+    // The hum, and the two tone they give when one of them has you. Spread
+    // out over whoever is nearest, so a street full of them is a chorus
+    // rather than a machine gun of beeps.
+    state.machineVoice = (state.machineVoice || 0) - dt;
+    if (state.machineVoice <= 0) {
+      state.machineVoice = 1.4 + Math.random() * 1.6;
+      let near = null, bestD = 150;
+      let hunting = false;
+      for (const s2 of soldiers.active) {
+        if (!s2.machine || !s2.alive || s2.stunLeft > 0) continue;
+        const d = Math.hypot(s2.x - player.x, s2.z - player.z);
+        if (d < bestD) { bestD = d; near = s2; hunting = !!s2.canSee; }
+      }
+      if (near) audio.machineCall(bestD, hunting);
+    }
+
+    if (machines.tickRain(dt)) {
+      // Somewhere you can see, rather than on top of you: the horizon is the
+      // point of this, and a warhead in your lap every two seconds is not a
+      // game.
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const a = Math.random() * Math.PI * 2;
+        const far = 420 + Math.random() * 900;
+        const x = player.x + Math.cos(a) * far;
+        const z = player.z + Math.sin(a) * far;
+        if (x < world.minX + 80 || x > world.maxX - 80) continue;
+        if (z < world.minZ + 80 || z > world.maxZ - 80) continue;
+        if (!world.isLoaded(x, z)) continue;
+        if (sanctuaryWithin(x, z, nukeRadius())) continue;
+        dropNuke(x, z, true);
+        break;
+      }
+    }
+  }
+
+  /** The end of the world, as a set of numbers the renderer understands. */
+  function applyMachineLook() {
+    if (machines.active) {
+      renderer.timeOfDay = machines.timeOfDay;
+      renderer.fogDensity = MACHINES.fog;
+      renderer.armageddon = 1;
+      soldiers.beam = MACHINES.beam;
+      el.hud.classList.add('machines');
+    } else {
+      renderer.fogDensity = 0.00075;
+      renderer.armageddon = 0;
+      soldiers.beam = null;
+      el.hud.classList.remove('machines');
+    }
+  }
+
   function spawnWave(kind, count) {
     if (state.mode !== 'walk') return 0;
     cheats.used = true;
@@ -1594,10 +1691,17 @@ async function main() {
    *
    * @returns {boolean} false when the target was refused
    */
-  function dropNuke(x, z) {
+  /**
+   * @param {boolean} ofTheMode true when it is Rise of the Machines dropping
+   *   it rather than you. The mode's own warheads are the mode, so they do
+   *   not mark the run the way reaching for one in the cheat menu does.
+   */
+  function dropNuke(x, z, ofTheMode = false) {
     if (sanctuaryWithin(x, z, nukeRadius())) return false;
-    cheats.used = true;
-    applyCheats();
+    if (!ofTheMode) {
+      cheats.used = true;
+      applyCheats();
+    }
     const ground = world.groundHeight(x, z);
     const body = projectiles.launch('nuke', {
       x, y: ground + NUKE.drop, z,
@@ -1837,6 +1941,34 @@ async function main() {
   el.play.addEventListener('click', beginWalk);
 
   // The difficulty buttons on the title screen.
+  // Which game this is. Berlin is the city as it stands; Rise of the Machines
+  // is the same city after it has gone, and it is picked here rather than in
+  // the cheat menu because it is a mode, not a cheat: the score counts.
+  const modeButtons = [...document.querySelectorAll('.diff.mode')];
+  const showMode = () => {
+    for (const b of modeButtons) {
+      b.classList.toggle('on', (b.dataset.mode === 'machines') === machines.active);
+    }
+    el.modeNote.textContent = machines.active
+      ? 'Warheads come down every few seconds, the sky is gone, and what walks the streets is steel with one red eye. G flame, V an EMP to stop them, then anything you like.'
+      : 'A walk through the real city, with the real fight in it.';
+    el.timePick.classList.toggle('hidden', !machines.active);
+    applyMachineLook();
+  };
+  for (const b of modeButtons) {
+    b.addEventListener('click', () => {
+      machines.set(b.dataset.mode === 'machines');
+      showMode();
+    });
+  }
+  el.modeTime.addEventListener('input', () => {
+    machines.timeOfDay = parseFloat(el.modeTime.value);
+    el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
+    if (machines.active) renderer.timeOfDay = machines.timeOfDay;
+  });
+  el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
+  showMode();
+
   const diffButtons = [...document.querySelectorAll('.difficulty .diff')];
   const showDifficulty = () => {
     for (const b of diffButtons) b.classList.toggle('on', b.dataset.diff === combat.rules.name);
@@ -1971,6 +2103,7 @@ async function main() {
       // and the wheel reaches it as well.
       case 'KeyG': weapon.select('flamer'); break;
       case 'KeyB': weapon.select('incendiary'); break;
+      case 'KeyV': weapon.select('emp'); break;
       case 'KeyT': {
         const n = weapon.detonate();
         if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
@@ -2203,6 +2336,7 @@ async function main() {
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     rainTick(worldDt);
+    machinesTick(worldDt);
     drones.update(worldDt, eye, state.time);
     soldiers.update(worldDt, eye, state.time);
     jets.update(worldDt, { ...eye, vx: player.vx, vz: player.vz }, state.time);
@@ -2566,7 +2700,7 @@ async function main() {
     combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs,
     demolition, demoSpec: DEMO, demoBite: bite, demoCrater: craterAt, travelSpec: TRAVEL,
     fires,
-    explode(x, y, z, splash) { return explode(x, y, z, splash, null); },
+    explode(x, y, z, splash, body) { return explode(x, y, z, splash, body || null); },
     pickupSpecs: PICKUP,
     nukeSpec: NUKE,
     targetMap,
@@ -2629,6 +2763,10 @@ async function main() {
     holdFire(on) { input.fire = !!on; },
     fireWalls,
     burningGround: burning,
+    machines, machineSpec: MACHINES,
+    makeMachine(s) { return makeMachine(s); },
+    machinesTick(dt) { machinesTick(dt); },
+    setMode(name) { machines.set(name === 'machines'); applyMachineLook(); return machines.active; },
     shoot() {
       weapon.fire(
         { x: player.x, y: player.y + PLAYER.eye, z: player.z },

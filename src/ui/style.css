@@ -559,6 +559,23 @@ html, body {
 }
 #district.loading { color: var(--accent); }
 
+/* The time of day, picked before the end of the world starts. */
+.timepick {
+  display: block;
+  width: min(420px, 80vw);
+  margin: 2px auto 10px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.timepick b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.timepick input { width: 100%; accent-color: var(--accent); margin-top: 6px; }
+.timepick.hidden { display: none; }
+
+/* In Rise of the Machines the interface runs cold and red. */
+#hud.machines { --accent: #ff4a3d; }
+#hud.machines #district { color: #ff6a5a; }
+
 /* The cheat menu's sliders: a label, the number it is on, and the slider. */
 #cheatvalues .val {
   display: grid;

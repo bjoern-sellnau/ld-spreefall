@@ -1,0 +1,122 @@
+// Rise of the Machines.
+//
+// A second way to play the same city. The sun is gone, the sky is the colour
+// of a dead screen, warheads come down every few seconds somewhere on the
+// skyline, and the things walking the streets are not people: steel skeletons
+// with a red eye each, which hum while they look for you and shoot a beam
+// when they find you.
+//
+// Nothing here is a new enemy type. A machine is a soldier with a different
+// body, a different gun and no skin, because the soldier already knows how to
+// take cover behind a real wall and how to lose you when you break line of
+// sight, and that behaviour is the expensive part. What this module owns is
+// the mode itself: what it changes, how fast the sky falls in, and what an
+// EMP does to a machine.
+
+export const MACHINES = {
+  // How often a warhead lands somewhere while this is running. The ordinary
+  // nuke rain is every five to nine seconds; this is the end of the world.
+  rainEvery: 2.6,
+  rainSpread: 1.4,
+  // The look: the time of day is chosen on the title screen, but the fog and
+  // the sky are the mode's own.
+  fog: 0.0023,
+  skyZenith: [0.055, 0.060, 0.075],
+  skyHorizon: [0.30, 0.16, 0.10],
+  sunColour: [0.95, 0.42, 0.22],
+  // How many machines are kept walking, and how far out they come in.
+  patrol: 14,
+  spawnEvery: 3.2,
+  spawnFrom: 90,
+  spawnTo: 240,
+  // The beam. It is hitscan like a rifle, but it is slower to line up and it
+  // is visible for a moment, so being shot at is something you can see coming
+  // from across a square.
+  beam: { damage: 18, interval: 1.15, charge: 0.45, range: 190 },
+  // What an EMP does to one.
+  stun: { seconds: 7.5, radius: 34, damageMultiplier: 4 },
+};
+
+/**
+ * The mode. It holds no entities of its own: it turns things on and off and
+ * answers questions about what the world should look like while it is on.
+ */
+export class Machines {
+  constructor() {
+    this.active = false;
+    this.timeOfDay = 20.2;
+    this.spawnTimer = 0;
+    this.rainTimer = 0;
+    this.kills = 0;
+  }
+
+  /** @param {boolean} on */
+  set(on) {
+    this.active = !!on;
+    this.spawnTimer = 0;
+    this.rainTimer = 0;
+    return this.active;
+  }
+
+  /** How long until the next warhead, in this mode's own time. */
+  tickRain(dt) {
+    if (!this.active) return false;
+    this.rainTimer -= dt;
+    if (this.rainTimer > 0) return false;
+    this.rainTimer = MACHINES.rainEvery + Math.random() * MACHINES.rainSpread;
+    return true;
+  }
+
+  /** Whether another machine should be put on the street this frame. */
+  tickSpawn(dt, standing) {
+    if (!this.active) return false;
+    this.spawnTimer -= dt;
+    if (this.spawnTimer > 0) return false;
+    this.spawnTimer = MACHINES.spawnEvery;
+    return standing < MACHINES.patrol;
+  }
+}
+
+/**
+ * Turns a soldier into a machine.
+ *
+ * Everything the soldier layer already does carries on working: it walks, it
+ * takes cover, it loses you behind a wall. What changes is what it is made of
+ * and what it shoots with.
+ */
+export function makeMachine(s) {
+  s.machine = true;
+  // The body is the skeleton the ion cannon leaves, and it is steel rather
+  // than bone because of the flag, not because of a second mesh.
+  s.charred = 1;
+  s.stunLeft = 0;
+  s.beamCharge = 0;
+  s.hum = Math.random() * 6.283;
+  s.health = Math.round(s.health * 1.35);
+  s.maxHealth = s.health;
+  return s;
+}
+
+/**
+ * An EMP going off. Everything metal within the radius stops, and stays
+ * stopped long enough for you to walk up to it.
+ *
+ * @returns {number} how many were caught
+ */
+export function empBurst(soldiers, drones, x, y, z, radius = MACHINES.stun.radius) {
+  let caught = 0;
+  for (const s of soldiers) {
+    if (!s.machine || !s.alive) continue;
+    if (Math.hypot(s.x - x, s.z - z) > radius) continue;
+    s.stunLeft = MACHINES.stun.seconds;
+    s.beamCharge = 0;
+    caught++;
+  }
+  for (const d of drones) {
+    if (Math.hypot(d.x - x, d.z - z) > radius) continue;
+    // A drone has nothing to stand on when its motors stop.
+    d.stunLeft = MACHINES.stun.seconds;
+    caught++;
+  }
+  return caught;
+}

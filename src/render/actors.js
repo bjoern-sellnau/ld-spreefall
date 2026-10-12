@@ -613,8 +613,10 @@ export function buildSoldierMesh() {
   }
   m.box(0, 0.88, 0, 0.26, 0.10, 0.16, 23);              // pelvis
   m.box(0, 1.47, 0, 0.075, 0.10, 0.075, 23);            // neck
-  m.box(0, 1.60, 0, 0.19, 0.20, 0.20, 23);              // skull
-  m.box(0, 1.56, -0.10, 0.13, 0.06, 0.04, 23);          // jaw
+  // The skull and the jaw have a part id of their own, so that a machine can
+  // put an eye in the head without lighting up the whole skeleton.
+  m.box(0, 1.60, 0, 0.19, 0.20, 0.20, 25);              // skull
+  m.box(0, 1.56, -0.10, 0.13, 0.06, 0.04, 25);          // jaw
   for (const side of [-1, 1]) {
     m.box(side * 0.11, 0.42, 0, 0.065, 0.84, 0.065, 23);     // leg
     m.box(side * 0.11, 0.05, -0.04, 0.09, 0.07, 0.22, 23);   // foot
@@ -840,7 +842,12 @@ export class Actors {
       // ragdoll picks up from the hit, w the walk phase.
       data[o + 4] = s.lean; data[o + 5] = s.roll || 0;
       data[o + 6] = s.hitFlash; data[o + 7] = s.walk;
-      data[o + 8] = s.charred || 0; data[o + 9] = 0; data[o + 10] = 0; data[o + 11] = 0;
+      // x charred, y machine, z stunned: a machine is drawn as steel and its
+      // eye goes out while an EMP has hold of it.
+      data[o + 8] = s.charred || 0;
+      data[o + 9] = s.machine ? 1 : 0;
+      data[o + 10] = s.machine && s.stunLeft > 0 ? Math.min(1, s.stunLeft / 2) : 0;
+      data[o + 11] = 0;
       n++;
     }
     this.soldier.instanceCount = n;

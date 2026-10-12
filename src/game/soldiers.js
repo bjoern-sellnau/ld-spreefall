@@ -94,6 +94,11 @@ export class Soldiers {
     // this game has always had.
     this.gore = { gib: false, ragdoll: false, scale: 1 };
     this.onSlip = null;
+    // Rise of the Machines: what a steel one shoots with, and what happens
+    // when an EMP has hold of it. Null in the ordinary game.
+    this.beam = null;
+    this.onBeam = null;
+    this.onStunSpark = null;
     // What is left of somebody the ion cannon burnt. Zero means they stand
     // there for the rest of the session, which is what the game did before
     // this was settable; anything else is how many seconds they hold before
@@ -269,6 +274,16 @@ export class Soldiers {
       const s = this.active[i];
       s.stateTime += dt;
       s.hitFlash = Math.max(0, s.hitFlash - dt * 4);
+
+      // An EMP has it: nothing moves, nothing shoots, and whatever you do to
+      // it next lands four times as hard.
+      if (s.machine && s.stunLeft > 0) {
+        s.stunLeft -= dt;
+        s.walk = 0;
+        s.beamCharge = 0;
+        if (this.onStunSpark && Math.random() < dt * 5) this.onStunSpark(s);
+        continue;
+      }
 
       if (s.state === STATE.DYING) {
         s.deathTime += dt;
@@ -498,6 +513,19 @@ export class Soldiers {
   }
 
   _shoot(s, dt, player, dist) {
+    // A machine does not carry a rifle. It lines up, the eye brightens, and
+    // then a beam arrives: slower than a burst, visible while it charges, and
+    // it does not miss by as much as a man does.
+    if (s.machine) {
+      s.beamCharge = (s.beamCharge || 0) + dt;
+      if (this.beam && s.beamCharge >= this.beam.charge + this.beam.interval) {
+        s.beamCharge = 0;
+        const falloff = 1 - Math.min(1, dist / this.beam.range) * 0.4;
+        const hit = Math.random() < 0.62 * falloff * this.accuracyScale;
+        if (this.onBeam) this.onBeam(s, hit ? this.beam.damage : 0);
+      }
+      return;
+    }
     if (s.reloadLeft > 0) { s.reloadLeft -= dt; return; }
     s.aim += dt;
     if (s.aim < SPEC.aimTime) return;

@@ -511,6 +511,95 @@ export class Audio {
   }
 
   /** The wall going out: a deep whoomph with a tail of its own. */
+  /**
+   * A machine's beam: a short downward zip with a hard edge on it. Nothing
+   * like a gunshot, which is the point: in Rise of the Machines you can hear
+   * what is shooting at you.
+   */
+  laser(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + Math.min(0.6, distance / 340);
+    const near = Math.max(0.05, 1 - distance / 220);
+    if (near < 0.07) return;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(2400, t);
+    o.frequency.exponentialRampToValueAtTime(320, t + 0.13);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 3.5;
+    bp.frequency.setValueAtTime(1800, t);
+    bp.frequency.exponentialRampToValueAtTime(500, t + 0.13);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.2 * near, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+    o.connect(bp); bp.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + 0.18);
+  }
+
+  /**
+   * The hum a machine makes while it is looking for you, and the clipped
+   * two tone it gives when it has found you, which is as close to an order as
+   * something with no mouth gets.
+   */
+  machineCall(distance = 0, found = false) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + Math.min(0.6, distance / 340);
+    const near = Math.max(0.04, 1 - distance / 160);
+    if (near < 0.06) return;
+    const notes = found ? [330, 196] : [92, 104];
+    let at = t;
+    for (const f of notes) {
+      const o = ctx.createOscillator();
+      o.type = found ? 'square' : 'sawtooth';
+      o.frequency.setValueAtTime(f, at);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime((found ? 0.11 : 0.05) * near, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + (found ? 0.14 : 0.5));
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = found ? 1400 : 420;
+      o.connect(lp); lp.connect(g); g.connect(this.master);
+      o.start(at); o.stop(at + (found ? 0.16 : 0.55));
+      at += found ? 0.16 : 0.28;
+    }
+  }
+
+  /** An EMP going off: a rising whine and then everything metal shuts up. */
+  emp(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + Math.min(0.6, distance / 340);
+    const near = Math.max(0.06, 1 - distance / 260);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.exponentialRampToValueAtTime(3200, t + 0.26);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.26 * near, t + 0.2);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + 0.46);
+
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = this._noiseBuffer;
+    hiss.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2600;
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0.0001, t + 0.24);
+    hg.gain.exponentialRampToValueAtTime(0.3 * near, t + 0.3);
+    hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    hiss.connect(hp); hp.connect(hg); hg.connect(this.master);
+    hiss.start(t + 0.24); hiss.stop(t + 0.95);
+  }
+
   flameWall() {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;

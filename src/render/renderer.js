@@ -128,6 +128,10 @@ export class Renderer {
     this.dayOfYear = 166;
     this.exposure = 1.70;
     this.fogDensity = 0.00075;
+    // Rise of the Machines: the sun is behind something that was not there
+    // before, so the sky loses its blue, the horizon goes the colour of a
+    // fire a long way off, and the light that is left is orange and thin.
+    this.armageddon = 0;
     this.shadowsEnabled = true;
 
     this.setQuality('high');
@@ -355,6 +359,22 @@ export class Renderer {
       zen[i] = dayZ[i] * (1 - night) + nightZ[i] * night;
       const warm = dayH[i] * (1 - dusk) + duskH[i] * dusk;
       hor[i] = warm * (1 - night) + nightH[i] * night;
+    }
+
+    // The end of the world is a blend over whatever the sky was doing anyway,
+    // so the time of day still reads: noon under it is a brown glare and
+    // midnight under it is nearly black.
+    if (this.armageddon > 0) {
+      const k = this.armageddon;
+      const ashZ = [0.055, 0.050, 0.058];
+      const ashH = [0.34, 0.15, 0.085];
+      for (let i = 0; i < 3; i++) {
+        zen[i] = zen[i] * (1 - k) + ashZ[i] * k;
+        hor[i] = hor[i] * (1 - k) + ashH[i] * k;
+      }
+      this.sunCol[0] = this.sunCol[0] * (1 - k) + 0.95 * k;
+      this.sunCol[1] = this.sunCol[1] * (1 - k) + 0.40 * k;
+      this.sunCol[2] = this.sunCol[2] * (1 - k) + 0.20 * k;
     }
 
     const c = this.cam;
