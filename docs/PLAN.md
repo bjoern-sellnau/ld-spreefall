@@ -934,3 +934,18 @@ is what prompted the change.
   your feet the whole way, so a crater opening where you stand puts you at the
   bottom of it rather than dropping you in. Walking off a kerb is unchanged,
   because that question is asked before the step rather than after it.
+
+- 2026-10-12: the flamethrower had a key that could never be pressed. Its case
+  in the keyboard switch was a second `case 'KeyG'`, and the first one holsters
+  the weapon, so the branch was unreachable from the day it was written. It is
+  Z now, the incendiary is B and the EMP is X, all three are in the help panel
+  and the readme, and the interface suite presses each of them for real and
+  checks what came up, because nothing else would have noticed.
+
+- 2026-10-12: the loop counts the seconds it has actually simulated, as
+  `loop.simTime`, and the fire checks measure against that. A machine slow
+  enough for the frame clamp to bite runs the game slower than the clock on
+  the wall, so a drain of twenty six fuel a second looked like nine on the CI
+  runner. The same slowness burnt the road out before the check could see it
+  alight, so what the wall leaves behind is now watched while the wall is
+  still running rather than counted afterwards.

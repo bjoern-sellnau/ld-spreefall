@@ -155,15 +155,17 @@ async function run() {
     if (!sd) return { skip: true };
     const fuel0 = s.weapon.ammo;
     const hp0 = sd.health;
-    // Held for a fixed stretch of time rather than a fixed number of frames:
-    // the thing being measured is a drain per second, so a slow machine must
-    // not be allowed to answer a different question from a fast one.
-    const t0 = performance.now();
-    while (performance.now() - t0 < 4000) {
+    // Held for a stretch of simulated time rather than a number of frames or
+    // a stretch of wall clock: the thing being measured is a drain per second
+    // of game, and on a machine slow enough for the frame clamp to bite the
+    // game runs slower than the clock on the wall.
+    const t0 = s.loop.simTime;
+    const wall = performance.now();
+    while (s.loop.simTime - t0 < 3 && performance.now() - wall < 60000) {
       s.holdFire(true);
       await new Promise((r) => requestAnimationFrame(r));
     }
-    const seconds = (performance.now() - t0) / 1000;
+    const seconds = s.loop.simTime - t0;
     s.holdFire(false);
     return {
       chose, seconds: +seconds.toFixed(1),
@@ -189,15 +191,20 @@ async function run() {
     const thrown = s.altFire();
     const walls = s.fireWalls.count;
     let furthest = 0;
+    // What it leaves behind is watched while it is behind it. The pools burn
+    // for eleven seconds and the wall takes nine to run out, so on a slow
+    // machine reading the count at the end of the loop reads a street that
+    // has already burnt out.
+    let pools = 0;
+    let fires = 0;
     for (let i = 0; i < 150; i++) {
       await new Promise((r) => requestAnimationFrame(r));
       const w = s.fireWalls.active[0];
       if (w) furthest = Math.max(furthest, w.travelled);
+      pools = Math.max(pools, s.burningGround.length);
+      fires = Math.max(fires, s.fires.count);
     }
-    return {
-      thrown, walls, furthest: Math.round(furthest),
-      fires: s.fires.count, pools: s.burningGround.length,
-    };
+    return { thrown, walls, furthest: Math.round(furthest), fires, pools };
   });
   check('its second trigger throws a wall that travels',
     wall.thrown && wall.walls === 1 && wall.furthest > 25,

@@ -8,6 +8,11 @@ export class Loop {
     this.onFixed = onFixed;
     this.onRender = onRender;
     this.accumulator = 0;
+    // Seconds of simulation that have actually been run. On a machine slow
+    // enough for the frame clamp to bite this falls behind the wall clock,
+    // which is the point: anything measuring a rate per second has to measure
+    // it against this and not against how long it sat there waiting.
+    this.simTime = 0;
     this.last = 0;
     this.running = false;
     this.frame = 0;
@@ -54,6 +59,7 @@ export class Loop {
     while (this.accumulator >= this.dt && steps < maxSteps) {
       this.onFixed(this.dt);
       this.accumulator -= this.dt;
+      this.simTime += this.dt;
       steps++;
     }
     if (steps === maxSteps) this.accumulator = 0;   // give up rather than spiral

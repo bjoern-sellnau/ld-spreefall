@@ -2279,8 +2279,10 @@ async function main() {
       case 'KeyQ': weapon.select(state.lastWeapon || 'm16'); break;
       case 'KeyE': case 'ShiftRight': reflex.toggle(); break;
       // The flamethrower sits past the number row, so it has a key of its own
-      // and the wheel reaches it as well.
-      case 'KeyG': weapon.select('flamer'); break;
+      // and the wheel reaches it as well. Z rather than G: G holsters, and a
+      // second case for the same key in the same switch is never reached,
+      // which is how this one spent a day doing nothing.
+      case 'KeyZ': weapon.select('flamer'); break;
       case 'KeyB': weapon.select('incendiary'); break;
       case 'KeyX': weapon.select('emp'); break;
       case 'KeyT': {

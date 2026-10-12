@@ -241,6 +241,23 @@ async function run() {
   check('Q goes back to what you had before',
     await page.evaluate(() => window.spreefall.weapon.id) === 'shotgun');
 
+  // The three that do not fit on the number row. Each is pressed for real,
+  // because a second case for a key already used in the same switch is never
+  // reached and nothing else would notice.
+  await page.evaluate(() => window.spreefall.weapon.giveAll());
+  for (const [key, id] of [['KeyZ', 'flamer'], ['KeyB', 'incendiary'], ['KeyX', 'emp']]) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(400);
+    const got = await page.evaluate(() => window.spreefall.weapon.id);
+    check(`${key.slice(3)} brings up the ${id}`, got === id, got);
+  }
+  // And G still holsters rather than selecting anything.
+  await page.keyboard.press('KeyG');
+  await page.waitForTimeout(300);
+  check('G still holsters the weapon',
+    await page.evaluate(() => window.spreefall.state.holstered) === true);
+  await page.keyboard.press('KeyG');
+
   await browser.close();
 
   const failed = checks.filter((c) => !c.ok);

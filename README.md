@@ -22,8 +22,8 @@ the sound and the data pipeline are all written from scratch.
 | Audio | raw Web Audio API, every sound synthesised at run time |
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
 | Shipped as | one HTML file, JS modules, one bundle per district, no backend |
-| Extent | Berlin inside the Ringbahn, 106 km2, 24 districts streamed as you walk |
-| Payload | 21.33 MB deployed, 7.90 MB over the wire with gzip, against a 25 MB budget |
+| Extent | Berlin, out to the city boundary, 1,718 km2 in 81 districts, one in memory at a time |
+| Payload | the code, the index and the district you are standing in: 1 to 3 MB over the wire, 9.2 MB for Mitte, against a 25 MB budget |
 | Difficulty | easy, normal and hard, with shields that come back |
 | Third party code at run time | none |
 
@@ -59,6 +59,9 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | H | help |
 | 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |
 | 7 8 9 0 | railgun, plasma rifle, flak cannon, splinter gun |
+| Z | flamethrower, right mouse throws a wall of fire that runs across the ground |
+| B | incendiary bomb |
+| X | EMP, which stops the machines where they stand |
 | E, or right Shift | reflexes: the city slows and you do not |
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
@@ -428,53 +431,104 @@ real trunks and the crack of one going over happens on the tree that is going
 over. The two sets of timings are written out twice and have to agree; that
 is the price of not uploading anything.
 
-## The city is twenty four districts
+## Fire you carry, and a wall of it
+
+The flamethrower is on Z. The primary is a stream rather than a shot: a cone
+two dozen metres long that drains fuel by the second instead of by the round,
+sets light to whatever is in it and goes on burning it afterwards. The second
+trigger throws a wall. It is a line of fire eleven metres across that leaves
+you and runs away at a jogging pace, following the ground as it goes, up a
+kerb and down into a crater, burning what it passes over and leaving the road
+itself alight behind it for eleven seconds. The wall is not geometry: it emits
+flame particles along its length, the same way every other fire here is drawn,
+so it costs nothing on the card.
+
+The incendiary bomb on B is the same idea thrown: a modest blast and then a
+ring of burning pools, so a street is on fire for the next half minute rather
+than for the frame of the explosion. The EMP on X is the opposite of all of
+it, and it only matters in one mode.
+
+## Rise of the Machines
+
+A second way to play the same city, picked on the title screen along with the
+time of day. The sky goes the colour of a dead screen, warheads come down
+every two or three seconds somewhere on the skyline, and the things on the
+street are steel skeletons with one red eye each, which hum while they look
+for you and fire a beam when they find you. Nothing in it is a new enemy
+type: a machine is a soldier with a different body, a different gun and no
+skin, because the soldier already knows how to take cover behind a real wall
+and how to lose you when you break line of sight, and that behaviour is the
+expensive part. The EMP stops every machine inside thirty four metres for
+seven and a half seconds and leaves it standing there taking quadruple damage,
+which is the whole tactic: stop them, then take them apart.
+
+It is a mode and not a cheat, so a run in it is not marked as cheated.
+
+## The city is eighty one districts
 
 The brief asks for a walkable Berlin under 25 MB of download. Mitte at full
-detail is 2.2 MB over the wire and 6.5 square kilometres; the area inside the
-Ringbahn is 106 square kilometres, and at Mitte's detail that would be about
-130 MB. So the city is cut into districts, built one at a time, streamed as you
-walk, and thinned with distance from the middle.
+detail is 2.2 MB over the wire and 6.5 square kilometres; Berlin out to the
+city boundary is 1,718 square kilometres of lattice, and at Mitte's detail
+that would be hundreds of megabytes. So the city is cut into districts, built
+one at a time, thinned with distance from the middle, and exactly one of them
+is in memory while you play.
 
-**The box.** The playable area is the bounding box of the Ringbahn, taken from
-the four stations at its corners rather than from a round number: Westkreuz at
-52.5010 N, 13.2840 E, Ostkreuz at 52.5031 N, 13.4689 E, Gesundbrunnen at
-52.5486 N, 13.3894 E and Suedkreuz at 52.4720 N, 13.3670 E. That is 12.5 km by
-8.5 km. The ring itself encloses about 88 square kilometres of the 106; the
-difference is the corners of the box, which fall outside it.
+**The box.** The playable area is the Land of Berlin: 52.3380 to 52.6760 N,
+13.0880 to 13.7620 E, which is 45.7 km by 37.4 km. That extent is the one two
+independent sources give, an OpenStreetMap talk-de posting and the EPSG
+registry's area of use for EPSG:3068, the Berlin Soldner grid. The city proper
+is about 891 of those square kilometres; the rest of the box is Brandenburg,
+and the districts that fall entirely in it come out nearly empty, which costs
+almost nothing and keeps the lattice regular. The Ringbahn box, from the four
+stations at its corners, is still in the code: it is no longer the edge of the
+world, it is the line the detail tiers are measured from.
 
-**The cut.** One tile grid, 126 by 85 tiles of 100 m, covers the whole thing. A
-district is a rectangle of that grid, anchored so the original playable box,
-the one with the Gate and the memorial in it, is exactly one district. Nothing
-overlaps: a building belongs to the district its middle is in and is built
-once, and roads, parks and water are clipped at the boundary so neither side
-draws the other's half. Each district is fetched from Overpass with a margin
-around it, so a wall standing on a boundary arrives whole in both.
+**The cut.** One tile grid, 458 by 375 tiles of 100 m, covers the whole thing.
+A district is a rectangle of that grid. The lattice is deliberately irregular:
+near the middle a district is about one and a half kilometres across, because
+that streams in quickly and the detail there is high; out past the ring they
+are four kilometres and past that eight, because a district is one Overpass
+query and one build and nobody wants four hundred of either. The cuts land on
+grid lines, so the districts partition the city exactly and nothing overlaps: a
+building belongs to the district its middle is in and is built once, and roads,
+parks and water are clipped at the boundary so neither side draws the other's
+half. Each district is fetched from Overpass with a margin around it, so a wall
+standing on a boundary arrives whole in both.
 
 **The tiers.** Detail falls off with distance from the middle.
 
-| tier | where | what it carries |
-|---|---|---|
-| full | Mitte | every building, landmark models, stelae, windows, 33 point height field |
-| near | next door | buildings over 24 m2, simplified footprints, windows, 17 point field |
-| block | out to the ring | buildings over 80 m2, flat roofs, no windows, small ones become the box that fits them, 9 point field |
-| outline | the corners outside the ring | buildings over 150 m2, driving roads only, 5 point field |
+| tier | where | districts | what it carries |
+|---|---|---|---|
+| full | Mitte | 1 | every building, landmark models, stelae, windows, 33 point height field |
+| near | next door | 4 | buildings over 40 m2, simplified footprints, windows, 17 point field |
+| block | out to the ring | 19 | buildings over 120 m2, flat roofs, no windows, driving roads only, 9 point field |
+| outline | the rest of the city | 36 | buildings over 250 m2, 5 point field |
+| sketch | the edge of the box | 21 | buildings over 600 m2, the shape of a place rather than a place |
 
-**The streaming.** `World` holds an index and however many districts are in
-memory. Tile records carry their index in the global grid and a reference to
-the district buffer their offsets point into, so the collision, the height
-field, the raycasts and the renderer all carry on addressing the city by tile
-index and do not know the bytes came from eight files. Walking towards a
-boundary starts the fetch a kilometre out; a district more than three
-kilometres behind you is let go, its tiles leave the card with it, and the
-edge of what is loaded holds you the way a wall does if you somehow get there
-first. Free travel across the city loads the destination during the flight and
-will not put you down until the ground is there.
+**The streaming.** `World` holds an index of all eighty one and the bytes of
+one. Tile records carry their index in the global grid and a reference to the
+district buffer their offsets point into, so the collision, the height field,
+the raycasts and the renderer all carry on addressing the city by tile index
+and do not know which file the bytes came from. Walking at a boundary brings up
+a loading screen that names the district you are entering, how big it is, and a
+place in it worth walking to; the bytes come down, the district you were in is
+let go, and you come out on the other side on the ground. The map is the whole
+city whatever is loaded, drawn from the index, dim for the eighty you do not
+have, and you can zoom from a street out to all of Berlin and back. Free travel
+across the city loads the destination during the flight and will not put you
+down until the ground is there.
 
-What it costs is measured, not estimated: `npm run weigh` prints the table of
-districts with deployed and gzipped bytes and fails if the whole city is over
-the 25 MB budget. The workflow in `.github/workflows/city.yml` builds all
-twenty four from the live extract and publishes that table.
+**The budget.** All of Berlin at these tiers is about 240 MB, and no amount of
+thinning gets 1,700 square kilometres under 25. What does fit, easily, is what
+a player downloads to play: the code, the index and the district they are
+standing in, which is between one and three megabytes, nine for Mitte. That is
+what the budget is now held against, and it is a reinterpretation of the
+brief's rule 6, written down in `docs/PLAN.md` rather than quietly applied. The
+old reading is still available: `npm run fit -- --whole=25` cuts the city down
+to what fits as a whole. `npm run weigh` prints the table of districts with
+deployed and gzipped bytes, `npm run fit` fails the build if a single district
+is too big to wait for, and `.github/workflows/city.yml` builds from the live
+extract and publishes that table.
 
 ## Two cities, and which one you are looking at
 
