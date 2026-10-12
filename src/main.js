@@ -30,6 +30,7 @@ import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
 import { Fires } from './game/fires.js';
+import { FireWalls } from './game/firewall.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
