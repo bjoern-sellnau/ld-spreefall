@@ -794,8 +794,16 @@ async function main() {
     burnAt(x, y, z, radius, dt, spec.damagePerSecond, spec.burnPerSecond);
   };
   fireWalls.onIgnite = (x, y, z, radius) => {
+    const spec = WEAPONS.flamer.wall;
+    // Trees first, where there are any, and then the road itself. The road is
+    // the part that matters on a street with nothing growing on it: a fire
+    // module that only knows about trees would leave Leipziger Strasse
+    // untouched after a wall of fire had crossed it.
     fires.ignite(x, y, z, radius, 0.9);
     renderer.addScar(x, y, z, radius * 0.9, 0.55);
+    if (combat.isSanctuary(x, y, z)) return;
+    burning.push({ x, y, z, radius: Math.max(5, radius * 0.6), left: spec.burnSeconds,
+      damagePerSecond: spec.groundDamagePerSecond });
   };
 
   // --- vehicles -------------------------------------------------------------

@@ -155,19 +155,29 @@ async function run() {
     if (!sd) return { skip: true };
     const fuel0 = s.weapon.ammo;
     const hp0 = sd.health;
-    for (let i = 0; i < 80; i++) {
+    // Held for a fixed stretch of time rather than a fixed number of frames:
+    // the thing being measured is a drain per second, so a slow machine must
+    // not be allowed to answer a different question from a fast one.
+    const t0 = performance.now();
+    while (performance.now() - t0 < 4000) {
       s.holdFire(true);
       await new Promise((r) => requestAnimationFrame(r));
     }
+    const seconds = (performance.now() - t0) / 1000;
     s.holdFire(false);
     return {
-      chose, fuel0: Math.round(fuel0), fuel: Math.round(s.weapon.ammo),
+      chose, seconds: +seconds.toFixed(1),
+      fuel0: Math.round(fuel0), fuel: Math.round(s.weapon.ammo),
+      perSecond: s.weapons.flamer.stream.fuelPerSecond,
       hp0: Math.round(hp0), hp: Math.round(sd.health), charred: +(sd.charred || 0).toFixed(2),
     };
   });
+  const poured = flame.skip ? 0 : flame.fuel0 - flame.fuel;
+  const owed = flame.skip ? 0 : flame.perSecond * flame.seconds;
   check('the flamethrower pours rather than fires',
-    !flame.skip && flame.chose && flame.fuel < flame.fuel0 - 100,
-    flame.skip ? 'nowhere to put a soldier' : `${flame.fuel0} fuel became ${flame.fuel}`);
+    !flame.skip && flame.chose && poured > owed * 0.6 && poured < owed * 1.3,
+    flame.skip ? 'nowhere to put a soldier'
+      : `${poured} fuel in ${flame.seconds} s, ${Math.round(owed)} owed`);
   check('and what is in the stream burns down',
     !flame.skip && flame.hp <= 0 && flame.charred > 0.9,
     flame.skip ? '' : `${flame.hp0} health became ${flame.hp}, charred ${flame.charred}`);
@@ -184,13 +194,17 @@ async function run() {
       const w = s.fireWalls.active[0];
       if (w) furthest = Math.max(furthest, w.travelled);
     }
-    return { thrown, walls, furthest: Math.round(furthest), fires: s.fires.count };
+    return {
+      thrown, walls, furthest: Math.round(furthest),
+      fires: s.fires.count, pools: s.burningGround.length,
+    };
   });
   check('its second trigger throws a wall that travels',
     wall.thrown && wall.walls === 1 && wall.furthest > 25,
     `${wall.furthest} m across the ground`);
   check('and the street it crossed is still burning behind it',
-    wall.fires > 0, `${wall.fires} fires left behind`);
+    wall.fires + wall.pools > 0,
+    `${wall.pools} stretches of road alight, ${wall.fires} fires in the trees`);
 
   await page.screenshot({ path: path.join(SHOTS, 'fire-01-wall.png') });
 
@@ -204,7 +218,8 @@ async function run() {
     await new Promise((r) => requestAnimationFrame(r));
     const pools = s.burningGround.length - before;
     // And they go out on their own rather than burning for the session.
-    const life = s.burningGround[0] ? s.burningGround[0].left : 0;
+    const last = s.burningGround[s.burningGround.length - 1];
+    const life = last ? last.left : 0;
     return { pools, life: Math.round(life) };
   });
   check('an incendiary leaves the ground on fire',

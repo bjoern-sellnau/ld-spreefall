@@ -897,3 +897,14 @@ is what prompted the change.
   not have. `docs/screenshots/district-03-crossing.png` is the screen itself,
   photographed with the line slowed down so the screen is up for real rather
   than forced open by a hook.
+
+- 2026-10-12: two checks were measuring the machine rather than the game, and
+  the live city found both. The flamethrower check held the trigger for eighty
+  frames and expected a hundred units of fuel to go, which is a statement
+  about how fast the frames are, not about the weapon; it now holds for four
+  seconds and asks whether the drain matches the twenty six a second the
+  weapon claims. The wall of fire check asked the tree fires whether anything
+  was still burning, and on a real street with no trees on it the answer is
+  no. That one was a hole in the game, not only in the test: a wall now leaves
+  the road itself alight behind it for eleven seconds, the way an incendiary
+  does, so crossing Leipziger Strasse with it does something.
