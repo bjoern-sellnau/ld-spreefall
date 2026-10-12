@@ -1411,7 +1411,14 @@ async function main() {
     state.targeting = true;
     state.mapMode = mode;
     state.pendingNuke = null;
+    // The map comes out from under your feet rather than appearing: it opens
+    // on the street you are standing in and pulls back over half a second to
+    // the scale you pick a target at. Closing runs the same move backwards,
+    // so a warhead ends where you are rather than cutting to it.
     targetMap.resetView();
+    targetMap.centre = { x: player.x, z: player.z };
+    targetMap.zoom = MAP_ZOOM.near;
+    state.mapPull = { from: MAP_ZOOM.near, to: MAP_ZOOM.pick, t: 0, back: false };
     targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true };
     el.nukeTarget.classList.toggle('travel', mode === 'travel');
     el.nukeTarget.classList.remove('hidden');
@@ -1422,17 +1429,58 @@ async function main() {
     drawTargetMap();
   }
 
+  // How far out the target map pulls, and how long it takes.
+  const MAP_ZOOM = { near: 9, pick: 2.2, seconds: 0.55 };
+
   function openTargeting() { openMap('nuke'); }
   function openTravel() { openMap('travel'); }
 
-  function closeTargeting() {
+  /**
+   * Shuts the map. With `rush` it goes at once, which is what a cancel wants;
+   * otherwise it flies back down onto you first, which is what firing wants.
+   */
+  function closeTargeting(rush = false) {
     if (!state.targeting) return;
+    if (!rush && !state.mapPull) {
+      state.mapPull = {
+        from: targetMap.zoom, to: MAP_ZOOM.near, t: 0, back: true,
+        fromCentre: targetMap.centre ? { ...targetMap.centre } : { x: player.x, z: player.z },
+      };
+      return;
+    }
     state.targeting = false;
+    state.mapPull = null;
     state.pendingNuke = null;
     targetMap.aim = null;
     el.nukeTarget.classList.add('hidden');
     el.targetConfirm.classList.add('hidden');
     relock();
+  }
+
+  /**
+   * The pull: half a second of zoom, on the wall clock, between the street you
+   * are standing in and the scale you aim at.
+   */
+  function stepMapPull(dt) {
+    const pull = state.mapPull;
+    if (!pull) return;
+    pull.t = Math.min(1, pull.t + dt / MAP_ZOOM.seconds);
+    const k = pull.t * pull.t * (3 - 2 * pull.t);
+    targetMap.zoom = pull.from + (pull.to - pull.from) * k;
+    if (pull.back) {
+      // On the way back the window slides onto you as well as zooming in, so
+      // the last thing the map shows is where you are standing.
+      targetMap.centre = {
+        x: pull.fromCentre.x + (player.x - pull.fromCentre.x) * k,
+        z: pull.fromCentre.z + (player.z - pull.fromCentre.z) * k,
+      };
+    }
+    if (pull.t >= 1) {
+      const wasBack = pull.back;
+      state.mapPull = null;
+      if (wasBack) closeTargeting(true);
+    }
+    drawTargetMap();
   }
 
   function drawTargetMap() {
@@ -1508,7 +1556,9 @@ async function main() {
     const at = state.pendingNuke;
     if (!at) return false;
     if (state.mapMode === 'travel') {
-      closeTargeting();
+      // The flight is its own camera move, so the map goes at once rather
+      // than flying back onto a player who is about to leave.
+      closeTargeting(true);
       beginTravel(at.x, at.z);
       return true;
     }
@@ -2064,7 +2114,7 @@ async function main() {
         el.targetHint.textContent = MAP_MODE[state.mapMode].hint;
         return;
       }
-      closeTargeting();
+      closeTargeting(true);
       toggleCheatMenu(false);
       return;
     }
@@ -2096,14 +2146,14 @@ async function main() {
       case 'KeyF': toggleVehicle(); break;
       case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
-      case 'KeyV': if (state.targeting) closeTargeting(); else openTravel(); break;
+      case 'KeyV': if (state.targeting) closeTargeting(true); else openTravel(); break;
       case 'KeyQ': weapon.select(state.lastWeapon || 'm16'); break;
       case 'KeyE': case 'ShiftRight': reflex.toggle(); break;
       // The flamethrower sits past the number row, so it has a key of its own
       // and the wheel reaches it as well.
       case 'KeyG': weapon.select('flamer'); break;
       case 'KeyB': weapon.select('incendiary'); break;
-      case 'KeyV': weapon.select('emp'); break;
+      case 'KeyX': weapon.select('emp'); break;
       case 'KeyT': {
         const n = weapon.detonate();
         if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
@@ -2575,6 +2625,10 @@ async function main() {
       renderer.drawActors = live;
     }
 
+    // The target map's zoom runs on the wall clock, here rather than in the
+    // simulation, because the simulation is paused while the map is up.
+    if (state.mapPull) stepMapPull(loop.stats.intervalMs / 1000);
+
     // Keep the city around whoever is being followed: the district they are
     // in, the ones within reach, and nothing beyond the drop distance. This
     // starts fetches and returns at once; tiles appear as the bytes land.
@@ -2718,7 +2772,21 @@ async function main() {
     beginTravel(x, z) { return beginTravel(x, z); },
     armNuke(x, z) { return armNuke(x, z); },
     releaseNuke() { return releaseNuke(); },
-    closeTargeting() { closeTargeting(); },
+    closeTargeting() { closeTargeting(true); },
+    /**
+     * Finish the map's zoom now rather than over half a second. For the
+     * tests, which measure the scale of the map and would otherwise be
+     * reading it mid flight.
+     */
+    settleMap() {
+      if (!state.mapPull) return false;
+      const pull = state.mapPull;
+      targetMap.zoom = pull.to;
+      if (pull.back) targetMap.centre = { x: player.x, z: player.z };
+      state.mapPull = null;
+      drawTargetMap();
+      return true;
+    },
     cheatMenu(on) { toggleCheatMenu(on); },
     setCheat(id, on) { const ok = cheats.set(id, on); applyCheats(); return ok; },
     cheatAction(id) { runCheatAction(id); },

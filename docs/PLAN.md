@@ -801,3 +801,43 @@ in the four megabytes left over.
   It walks, takes cover and loses you behind a wall because the soldier
   already knew how to do all three. An EMP stops it where it stands, and what
   you do to it then is your business.
+
+### What it would take to build the whole of Berlin
+
+Measured rather than estimated, from the live Overpass extract, at the tiers
+as they stand after the retune:
+
+```
+tier 0  full      6.5 km2   1.18 MB of download per km2    7.6 MB
+tier 1  near     21.8 km2   0.52                          11.3 MB
+tier 2  block    60.2 km2   0.45                          27.1 MB
+tier 3  outline  17.9 km2   0.24                           4.3 MB
+                                                    about 50 MB
+```
+
+So the whole area inside the Ringbahn is about fifty megabytes of download at
+walkable quality, against a budget of twenty five. It builds: all twenty four
+districts have been built from the live extract, with 52,806 buildings and
+2,679 km of road in them, and the game streams them. What does not fit is the
+download, and nothing else: there is no limit in the engine, the tile grid or
+the memory. The city is held a few square kilometres at a time whatever its
+total size, and the only number that goes up with the whole is the index.
+
+Three ways to close the gap, in the order they cost quality:
+
+1. Ship less of it. This is what happens today: fit-city takes districts
+   outward from Mitte until the budget is spent and the rest are not deployed.
+   At the current tiers that is Mitte plus eight or nine districts, about
+   forty square kilometres.
+2. Spend the budget differently. Mitte is a third of it for six per cent of
+   the area. Dropping the middle to the near tier would free about four
+   megabytes, which is four more districts.
+3. Make the block tier cheaper. It is the biggest single line in the table and
+   it is mostly road ribbon: at ten metres of simplification and no pavements
+   it is already a third of what it was, and dropping it to a flat extrusion
+   with no roof detail at all would take it under 0.25, which would bring the
+   whole ring to about thirty five megabytes.
+
+None of those is a decision this project should take on its own, because all
+three of them trade away something the brief asks for. The numbers are here so
+the trade can be made with eyes open.

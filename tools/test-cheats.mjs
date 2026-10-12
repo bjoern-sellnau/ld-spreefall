@@ -566,27 +566,30 @@ async function run() {
     s.cheats.reset();
     s.teleport(81, 0);
     s.openTargeting();
+    s.settleMap();
     const host = document.getElementById('nuketarget');
     const open = !host.classList.contains('hidden');
     const c = document.getElementById('targetmap');
     const r = c.getBoundingClientRect();
-    // The middle of the map is the middle of the world, and a quarter of the
-    // way across it is a quarter of the way across the world. If the click to
-    // world transform were wrong, one of these would be.
+    // The map opens on where you are standing, so the middle of it is you.
+    // And the scale has to be the same everywhere: a quarter of the canvas is
+    // a quarter of what the canvas is showing, whatever the zoom is on.
     const mid = s.targetMap.worldAt(r.left + r.width / 2, r.top + r.height / 2);
     const quarter = s.targetMap.worldAt(r.left + r.width * 0.25, r.top + r.height / 2);
-    const want = { x: (s.world.minX + s.world.maxX) / 2, z: (s.world.minZ + s.world.maxZ) / 2 };
-    const span = (s.world.maxX - s.world.minX);
+    const edge = s.targetMap.worldAt(r.left, r.top + r.height / 2);
+    const shown = Math.abs(mid.x - edge.x) * 2;
     s.closeTargeting();
     return {
       open, closed: host.classList.contains('hidden'),
-      midErr: Math.round(Math.hypot(mid.x - want.x, mid.z - want.z)),
-      quarterErr: Math.round(Math.abs((mid.x - quarter.x) / (span * 0.25) - 1) * 100),
+      midErr: Math.round(Math.hypot(mid.x - s.player.x, mid.z - s.player.z)),
+      quarterErr: Math.round(Math.abs((mid.x - quarter.x) / (shown * 0.25) - 1) * 100),
+      shown: Math.round(shown),
     };
   });
   const zoomed = await page.evaluate(() => {
     const s = window.spreefall;
     s.openTargeting();
+    s.settleMap();
     const c = document.getElementById('targetmap');
     const r = c.getBoundingClientRect();
     // Near the middle, where the window is free to move. Zooming at the very
@@ -634,6 +637,7 @@ async function run() {
     const s = window.spreefall;
     s.projectiles.clear();
     s.openTargeting();
+    s.settleMap();
     const armed = s.armNuke(s.player.x + 800, s.player.z);
     const beforeRelease = s.projectiles.active.filter((b) => b.kind === 'nuke').length;
     const says = document.getElementById('confirmwhere').textContent;
@@ -690,6 +694,7 @@ async function run() {
     const s = window.spreefall;
     s.cheatMenu(false);
     s.openTargeting();
+    s.settleMap();
   });
   await page.waitForTimeout(900);
   await page.screenshot({ path: path.join(SHOTS, 'cheat-02-targeting.png') });
