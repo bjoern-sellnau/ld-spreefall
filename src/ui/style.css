@@ -432,6 +432,26 @@ html, body {
   color: #d6d1c6;
   backdrop-filter: blur(3px);
 }
+#ridehint {
+  position: absolute;
+  left: 50%; top: 58%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 13px;
+  background: rgba(10, 12, 15, 0.62);
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  font-size: 13px; color: #e7e3db;
+  pointer-events: none;
+}
+#ridehint b {
+  display: inline-block; min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid rgba(226, 201, 141, 0.55);
+  border-radius: 2px;
+  color: var(--accent);
+  font-size: 11px; font-weight: 700; text-align: center;
+}
 #sanctuary b {
   display: block;
   color: var(--accent);

@@ -168,14 +168,25 @@ async function run() {
       visible: !line.classList.contains('hidden'),
       onScreen: s.crossingShown(),
     };
+    window.__crossCentre = { x: cx, z: cz };
     return shown;
   });
   await page.screenshot({ path: path.join(SHOTS, 'district-03-crossing.png') });
-  await page.evaluate(() => window.__crossBack);
+  const landed = await page.evaluate(async () => {
+    const s = window.spreefall;
+    await window.__crossBack;
+    const c = window.__crossCentre;
+    return {
+      rides: s.vehicles.active
+        .filter((v) => v.alive && Math.hypot(v.x - c.x, v.z - c.z) < 400).length,
+    };
+  });
   await page.unroute('**/world-core.*');
   check('the loading screen names a landmark of the district you are entering',
     !!sight.wanted && sight.onScreen && sight.visible && sight.shown === sight.wanted,
     `${sight.shown || 'nothing'} (index says ${sight.wanted || 'nothing'})`);
+  check('and the district you walk into has its own vehicles in it',
+    landed.rides >= 3, `${landed.rides} parked where you came out`);
 
   // --- it only holds what is near -----------------------------------------
   const held = await page.evaluate(() => {

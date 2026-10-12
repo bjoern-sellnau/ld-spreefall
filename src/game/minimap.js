@@ -80,8 +80,9 @@ export class Minimap {
    * @param {number} yaw heading, radians
    * @param {Set} found the landmarks you have stood in front of
    * @param {Array} pads live pickup pads to mark, if any
+   * @param {Array} rides vehicles standing empty, if any
    */
-  draw(px, pz, yaw, found, pads = null) {
+  draw(px, pz, yaw, found, pads = null, rides = null) {
     this._sizeCanvas();
     const ctx = this.ctx;
     const W = this.canvas.width, H = this.canvas.height;
@@ -190,6 +191,18 @@ export class Minimap {
         ctx.beginPath();
         ctx.arc(p.x, p.z, r, 0, Math.PI * 2);
         ctx.fill();
+      }
+    }
+
+    // Vehicles standing empty. A square rather than a dot, because the thing
+    // a player is asking the map is not where something is but what it is,
+    // and the answer here is always the same: something you can get into.
+    if (rides && rides.length) {
+      const r = (this.big ? 2.6 : 3.8) / scale * this.dpr * 0.5;
+      ctx.fillStyle = '#7fd6c9';
+      for (const v of rides) {
+        if (!this.big && Math.hypot(v.x - px, v.z - pz) > reach) continue;
+        ctx.fillRect(v.x - r, v.z - r, r * 2, r * 2);
       }
     }
 

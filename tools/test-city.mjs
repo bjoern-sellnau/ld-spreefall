@@ -509,6 +509,28 @@ async function run() {
     return { inIt, tooFar: tooFar === null, moved: Math.round(moved),
       rode: Math.round(rode), out, dropped: Math.round(dropped) };
   });
+  // --- can you tell they are there? ----------------------------------------
+  const findable = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const jeep = s.vehicles.active.find((v) => v.type === 'jeep');
+    s.teleport(jeep.x + 400, jeep.z);
+    await new Promise((r) => requestAnimationFrame(r));
+    const far = !document.getElementById('ridehint').classList.contains('hidden');
+    s.teleport(jeep.x + 2.5, jeep.z);
+    await new Promise((r) => requestAnimationFrame(r));
+    const hint = document.getElementById('ridehint');
+    return {
+      far,
+      near: !hint.classList.contains('hidden'),
+      name: document.getElementById('ridehintname').textContent,
+      marked: s.vehicles.active.filter((v) => v.alive && !v.occupied).length,
+    };
+  });
+  check('standing next to one says so on the screen',
+    findable.near && !findable.far, `${findable.name} within reach`);
+  check('and the map says where the others are',
+    findable.marked >= 3, `${findable.marked} marked`);
+
   check('you can only get into one you are standing next to', drive.tooFar);
   check('and then it drives', drive.inIt && drive.moved > 15, `${drive.moved} m`);
   check('with you in it', drive.rode === 0);

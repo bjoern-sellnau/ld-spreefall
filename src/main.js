@@ -65,6 +65,7 @@ const el = {
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'),
+  rideHint: $('ridehint'), rideHintName: $('ridehintname'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
   targetHint: $('targethint'), cinemaHint: $('cinemahint'),
@@ -950,16 +951,22 @@ async function main() {
     return null;
   }
 
-  /** Puts a few where you can find them, once, after the world loads. */
-  function parkVehicles() {
+  /**
+   * Puts a few where you can find them: once after the world loads, and again
+   * each time you cross into a district, because the ones you left behind
+   * went out of memory with the streets they were parked on.
+   *
+   * @param {{x,z}} at the middle of the search
+   */
+  function parkVehicles(at = spawn) {
     const kinds = ['jeep', 'jeep', 'tank', 'heli', 'jet'];
     let placed = 0;
     for (let i = 0; i < kinds.length; i++) {
       for (let attempt = 0; attempt < 40; attempt++) {
         const a = Math.random() * Math.PI * 2;
         const r = 30 + Math.random() * 110;
-        const x = spawn.x + Math.cos(a) * r;
-        const z = spawn.z + Math.sin(a) * r;
+        const x = at.x + Math.cos(a) * r;
+        const z = at.z + Math.sin(a) * r;
         if (combat.isSanctuary(x, 0, z)) continue;
         // Somewhere a vehicle could actually sit: nothing within its own
         // length in four directions.
@@ -1681,6 +1688,16 @@ async function main() {
       state.prev = { x, y: player.y, z };
       state.curr = { x, y: player.y, z };
     }
+    // The vehicles that were parked in the district you have left went with
+    // it, so the new one gets its own, parked around where you came out. The
+    // one you are sitting in, if you drove here, comes with you.
+    for (let i = vehicles.active.length - 1; i >= 0; i--) {
+      const v = vehicles.active[i];
+      if (v === state.inVehicle) continue;
+      v.alive = false;
+      vehicles.active.splice(i, 1);
+    }
+    parkVehicles({ x, z });
     tiles.uploadsPerFrame = 10000;
     tiles.updateResidency(x, z, loop.frame);
     tiles.uploadsPerFrame = renderer.quality === 'low' ? 3 : renderer.quality === 'medium' ? 5 : 8;
@@ -2806,12 +2823,19 @@ async function main() {
           el.sanctuary.classList.add('hidden');
         }
       }
+      // What you are standing next to. Vehicles were always here and F always
+      // worked, but nothing on the screen said so, which is the same thing as
+      // them not working.
+      const near = state.inVehicle ? null : vehicles.nearest(player.x, player.z, 7);
+      el.rideHint.classList.toggle('hidden', !near);
+      if (near) el.rideHintName.textContent = near.spec.name;
     }
 
     if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
       || state.mode === 'cinema') {
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
-        state.mode === 'title' ? null : pickups.live);
+        state.mode === 'title' ? null : pickups.live,
+        vehicles.active.filter((v) => v.alive && !v.occupied && v.health > 0));
       el.found.textContent = String(landmarks.foundInGoal);
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
       const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];

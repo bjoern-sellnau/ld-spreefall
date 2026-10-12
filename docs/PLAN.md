@@ -908,3 +908,13 @@ is what prompted the change.
   no. That one was a hole in the game, not only in the test: a wall now leaves
   the road itself alight behind it for eleven seconds, the way an incendiary
   does, so crossing Leipziger Strasse with it does something.
+
+- 2026-10-12: vehicles reported as not working were working: F gets you into
+  anything within seven metres and W drives it, which the suite has checked
+  since phase 15. What was missing is everything that tells you so. There is
+  now a prompt on the screen when you are standing next to one, saying which
+  key and what it is; empty vehicles are squares on both maps, so you can see
+  where the nearest one is parked rather than finding it by accident; and
+  crossing into a district parks a fresh set around where you came out,
+  because the ones you left were in the district that has just been let go.
+  Two checks in the city suite and one in the district suite hold that.
