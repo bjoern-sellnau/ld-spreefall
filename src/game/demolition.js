@@ -22,6 +22,7 @@
 // which is why a flattened block still has a street running past it.
 
 import { COLLISION_GRID, GROUND_SCALE } from '../shared/constants.js';
+import { bakeSite } from './bake.js';
 import { segmentDistance } from '../engine/world.js';
 
 export const DEMO = {
@@ -130,11 +131,16 @@ export class Demolition {
     // edit, and it has to survive the tile being cut into pieces too.
     this.original = new Map();
     this.onStage = null;         // fn(site, level, previousLevel)
+    // fn(tileIndices) when a ruin has been written into the tile buffers and
+    // the card needs the new bytes.
+    this.onBaked = null;
+    this.baked = 0;              // how many sites have been made permanent
     this.enabled = true;
   }
 
   reset() {
     this.sites.length = 0;
+    this.baked = 0;
     this.damage.clear();
     this.original.clear();
     // The collision was edited in place, so the only way back is to drop the
@@ -243,16 +249,35 @@ export class Demolition {
       return this._raise(site, level, crater);
     }
 
-    // All the slots are taken. Rather than evict one, which would stand a
-    // flattened building back up, the nearest site swallows this one.
-    let best = this.sites[0];
-    let bestD = Infinity;
+    // All the slots are taken. The furthest finished site is written into the
+    // city and gives up its slot, so this blast gets one of its own.
+    //
+    // This used to be a swallow: the nearest site grew until it covered the
+    // new blast as well, which meant that after sixteen explosions a rocket
+    // fired across town flattened a strip between here and there and left
+    // nothing where it actually landed. Baking is what makes destruction
+    // work everywhere and keep working.
+    let worst = null, worstD = -1;
+    for (const s of this.sites) {
+      if (s.shown < s.level) continue;        // still falling, leave it alone
+      const d = Math.hypot(s.x - x, s.z - z);
+      if (d > worstD) { worstD = d; worst = s; }
+    }
+    if (worst) {
+      this.bake(worst);
+      this.sites.push(site);
+      return this._raise(site, level, crater);
+    }
+    // Sixteen sites all still falling at once, which takes a warhead on top
+    // of a firefight. The nearest one takes it rather than losing the blast.
+    let near = this.sites[0];
+    let nearD = Infinity;
     for (const s of this.sites) {
       const d = Math.hypot(s.x - x, s.z - z);
-      if (d < bestD) { bestD = d; best = s; }
+      if (d < nearD) { nearD = d; near = s; }
     }
-    best.radius = Math.max(best.radius, bestD + radius);
-    return this._raise(best, Math.max(best.level, level), crater);
+    near.radius = Math.max(near.radius, nearD + radius);
+    return this._raise(near, Math.max(near.level, level), crater);
   }
 
   /** Puts a site up to a new level and starts that stage playing. */
@@ -274,16 +299,47 @@ export class Demolition {
   }
 
   update(dt) {
-    for (const site of this.sites) {
-      if (site.shown >= site.level) continue;
-      site.t += dt;
-      const k = Math.min(1, site.t / site.fall);
-      site.shown = site.from + (site.level - site.from) * (k * k * (3 - 2 * k));
-      if (!site.opened && k >= DEMO.openAt) {
-        site.opened = true;
-        this.release(site);
+    for (let i = this.sites.length - 1; i >= 0; i--) {
+      const site = this.sites[i];
+      if (site.shown < site.level) {
+        site.t += dt;
+        const k = Math.min(1, site.t / site.fall);
+        site.shown = site.from + (site.level - site.from) * (k * k * (3 - 2 * k));
+        if (!site.opened && k >= DEMO.openAt) {
+          site.opened = true;
+          this.release(site);
+        }
+        continue;
       }
+      // It has finished falling. After a moment to settle it is written into
+      // the city's own bytes and gives its slot back, which is what lets the
+      // next sixteen explosions happen somewhere else entirely.
+      site.rest = (site.rest || 0) + dt;
+      if (site.rest >= DEMO.settle) this.bake(site);
     }
+  }
+
+  /**
+   * Writes a finished site into the tile buffers and drops it.
+   *
+   * The ruin stays exactly as it was: same cut, same heap, same crater, drawn
+   * from the buffers instead of from a uniform. Nothing is restored, which is
+   * the whole point. Only a reload brings the city back.
+   */
+  bake(site) {
+    const at = this.sites.indexOf(site);
+    if (at < 0) return false;
+    this.release(site);
+    const { tiles } = bakeSite(this.world, site);
+    this.sites.splice(at, 1);
+    this.baked++;
+    if (tiles.length && this.onBaked) this.onBaked(tiles);
+    return true;
+  }
+
+  /** Everything that is still standing, baked where it stands. */
+  bakeAll() {
+    for (const site of [...this.sites]) this.bake(site);
   }
 
   /**

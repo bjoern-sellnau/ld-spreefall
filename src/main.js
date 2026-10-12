@@ -24,7 +24,7 @@ import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
-import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES } from './game/cheats.js';
+import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
 import { Gibs } from './game/gibs.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
@@ -55,6 +55,7 @@ const el = {
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
   sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
+  cheatValues: $('cheatvalues'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
@@ -185,9 +186,20 @@ async function main() {
   const cheats = new Cheats();
   const gibs = new Gibs(world);
   const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  // A ruin that has stopped moving is written into the city's own bytes, and
+  // the card needs the new ones. Nothing else changes: the same ruin, drawn
+  // from the buffers instead of from a uniform slot, which is then free for
+  // the next explosion somewhere else entirely.
+  demolition.onBaked = (indices) => tiles.refresh(indices);
+  // A tree that has burnt down is struck off the tile it stood in, and that
+  // tile's instance buffer is built again without it. It does not come back
+  // when the fire burns out, and it does not come back when you walk away:
+  // only a reload rebuilds the city from the bundle.
+  world.onTreesChanged = (index) => tiles.refreshTrees(index);
   const travel = new Travel();
   const cinema = new Cinema();
   const fires = new Fires(world);
+  const fireWalls = new FireWalls(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
   soldiers.hazards = () => projectiles.hazards();
@@ -468,6 +480,13 @@ async function main() {
     effects.shake = Math.min(splash.nuke ? 2.6 : 1.4, effects.shake
       + Math.max(0, 1 - dist / (splash.radius * 3)) * (splash.nuke ? 2.2 : 0.9));
 
+    // An incendiary is a small blast and a large fire: the pools it leaves
+    // are what it is for, and they go down here so that anything which can
+    // set one off, a thrown bomb or a vehicle gun, gets the same behaviour.
+    if (body && body.weapon && WEAPONS[body.weapon] && WEAPONS[body.weapon].incendiary) {
+      incendiaryBurst(x, world.groundHeight(x, z), z, WEAPONS[body.weapon].incendiary);
+    }
+
     // And what it did to the city itself. Small blasts add up on a grid and
     // bring a frontage down when they have done enough; a warhead takes its
     // whole radius at once.
@@ -602,6 +621,7 @@ async function main() {
   fires.onFlame = (tree, strength) => effects.flame(tree.x, tree.y, tree.z, tree.height, strength);
   fires.onBurst = (tree) => {
     effects.treeBurst(tree.x, tree.y, tree.z, tree.height);
+
     // Burning wood, thrown about. The same chunks the buildings use, in the
     // charred part of the palette.
     gibs.rubble(tree.x, tree.y + tree.height * 0.5, tree.z, tree.height * 0.4, 7, tree.height * 0.3);
@@ -609,6 +629,134 @@ async function main() {
   };
   fires.onTopple = (tree) => {
     audio.treeFall(Math.hypot(player.x - tree.x, player.z - tree.z));
+  };
+  // Burst or fallen, a tree is struck off the city when the fire has finished
+  // with it: out of the instance buffer so it is not drawn, out of the
+  // collision so its trunk stops blocking, and not back on a reload of the
+  // tile. A burnt stand of limes stays a burnt stand of limes.
+  fires.onGone = (tree) => world.killTree(tree.x, tree.z);
+
+  // --- the flamethrower -----------------------------------------------------
+  // Everything in the cone in front of you burns: soldiers char and go down,
+  // drones and jets come apart, trees catch, and the ground behind what you
+  // hit goes on burning after you let go. The weapon itself knows none of
+  // this; it hands over a cone and a time step.
+  function burnAt(x, y, z, radius, dt, damagePerSecond, burnPerSecond) {
+    for (const sd of [...soldiers.active]) {
+      if (Math.hypot(sd.x - x, sd.z - z) > radius + 0.9) continue;
+      if (Math.abs(sd.y - y) > 3.2) continue;
+      sd.charred = Math.min(1, (sd.charred || 0) + burnPerSecond * dt);
+      if (Math.random() < dt * 7) effects.flame(sd.x, sd.y + 0.8, sd.z, 1.9, 0.5);
+      if (soldiers.damage(sd, damagePerSecond * dt, { x: 0, y: 0, z: 0 })) {
+        creditTarget(sd, false, 'soldier');
+      }
+    }
+    for (const d of [...drones.active]) {
+      if (Math.hypot(d.x - x, d.z - z) > radius + 2 || Math.abs(d.y - y) > 7) continue;
+      if (drones.damage(d, damagePerSecond * 0.8 * dt)) creditTarget(d, false, 'drone');
+    }
+    for (const v of [...vehicles.active]) {
+      if (!v.alive || Math.hypot(v.x - x, v.z - z) > radius + 3) continue;
+      vehicles.damage(v, damagePerSecond * 0.5 * dt);
+    }
+    // And you, because a wall of fire does not know whose it is.
+    if (Math.hypot(player.x - x, player.z - z) < radius * 0.8
+        && Math.abs(player.y - y) < 2.4 && combat.health > 0) {
+      combat.hurt(damagePerSecond * 0.35 * dt, x, z, player.x, player.z);
+    }
+  }
+
+  /**
+   * What an incendiary does when it goes off: a modest blast, then a ring of
+   * burning pools around where it landed, so the street itself is on fire for
+   * the next half minute rather than the bomb being a brighter grenade.
+   */
+  function incendiaryBurst(x, y, z, spec) {
+    const n = spec.pools;
+    fires.ignite(x, y, z, spec.radius * 0.5, 1);
+    renderer.addScar(x, y, z, spec.radius * 0.8, 0.8);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+      const r = spec.radius * (0.3 + Math.random() * 0.7);
+      const px = x + Math.cos(a) * r;
+      const pz = z + Math.sin(a) * r;
+      const py = world.groundHeight(px, pz);
+      if (combat.isSanctuary(px, py, pz)) continue;
+      fires.ignite(px, py, pz, 8, 0.9);
+      renderer.addScar(px, py, pz, 4.5, 0.6);
+      effects.flame(px, py + 0.5, pz, 3.0, 0.9);
+      burning.push({ x: px, y: py, z: pz, radius: 7.5, left: spec.burnSeconds,
+        damagePerSecond: spec.damagePerSecond });
+    }
+    audio.flameWall();
+  }
+
+  // Ground that is on fire and will burn anything standing in it. The pools
+  // an incendiary leaves, kept here rather than in the fire module, because
+  // that one is about trees and this one is about people.
+  const burning = [];
+
+  function updateBurning(dt) {
+    for (let i = burning.length - 1; i >= 0; i--) {
+      const b = burning[i];
+      b.left -= dt;
+      if (b.left <= 0) { burning.splice(i, 1); continue; }
+      burnAt(b.x, b.y, b.z, b.radius, dt, b.damagePerSecond, 1.1);
+      if (Math.random() < dt * 9) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.random() * b.radius;
+        effects.flame(b.x + Math.cos(a) * r, b.y + 0.3, b.z + Math.sin(a) * r, 2.6, 0.8);
+      }
+    }
+  }
+
+  weapon.onStream = (eye, dir, dt, spec) => {
+    const reach = spec.stream.reach;
+    // Where the stream stops: the first wall in front of you, so you cannot
+    // burn somebody through the Brandenburg Gate.
+    const hit = world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, reach);
+    const far = hit ? Math.max(1.5, hit.t - 0.6) : reach;
+    // Flame along the cone, thicker and slower the further it has gone.
+    for (let i = 0; i < 3; i++) {
+      const t = 2 + Math.random() * (far - 2);
+      const spread = spec.stream.cone * t * 0.5;
+      const x = eye.x + dir.x * t + (Math.random() - 0.5) * spread;
+      const y = eye.y + dir.y * t + (Math.random() - 0.5) * spread * 0.6;
+      const z = eye.z + dir.z * t + (Math.random() - 0.5) * spread;
+      effects.flame(x, y - 0.4, z, 1.1 + t * 0.07, 0.55 + 0.4 * (t / far));
+      burnAt(x, y, z, 1.6 + t * spec.stream.cone, dt,
+        spec.stream.damagePerSecond, spec.stream.burnPerSecond);
+    }
+    // What it lands on catches, so a hedge keeps burning after you stop.
+    if (Math.random() < dt * 5) {
+      const x = eye.x + dir.x * far, y = eye.y + dir.y * far, z = eye.z + dir.z * far;
+      fires.ignite(x, world.groundHeight(x, z), z, 7, 0.8);
+      renderer.addScar(x, y, z, 3.4, 0.5);
+    }
+    audio.flameLoop(true);
+    state.muzzle = Math.max(state.muzzle, 0.5);
+    effects.flash(eye.x + dir.x * 1.2, eye.y + dir.y * 1.2, eye.z + dir.z * 1.2,
+      2.2, 1.0, 0.55, 0.2, 0.05);
+  };
+  weapon.onStreamEnd = () => audio.flameLoop(false);
+
+  weapon.onWall = (eye, dir, spec) => {
+    const wall = fireWalls.throw_({ x: player.x, y: player.y, z: player.z },
+      { x: dir.x, z: dir.z }, spec.wall);
+    if (!wall) { toast('not here'); return; }
+    audio.flameWall();
+    effects.shake = Math.min(1.2, effects.shake + 0.3);
+    feed('<b>wall of fire</b>');
+  };
+
+  fireWalls.onFlame = (x, y, z, height, strength) => effects.flame(x, y, z, height, strength);
+  fireWalls.onBurn = (x, y, z, radius, dt) => {
+    const spec = WEAPONS.flamer.wall;
+    burnAt(x, y, z, radius, dt, spec.damagePerSecond, spec.burnPerSecond);
+  };
+  fireWalls.onIgnite = (x, y, z, radius) => {
+    fires.ignite(x, y, z, radius, 0.9);
+    renderer.addScar(x, y, z, radius * 0.9, 0.55);
   };
 
   // --- vehicles -------------------------------------------------------------
@@ -828,7 +976,7 @@ async function main() {
     // the buildings, the trees and the collision all hear about it the same
     // way they would from anything else.
     explode(x, y + 40, z, {
-      radius: ION.blast, damage: ION.damage, burst: 40, nuke: true,
+      radius: ionRadius(), damage: ION.damage, burst: 40, nuke: true,
     });
     state.flash = Math.max(state.flash, 1.1);
   };
@@ -873,9 +1021,18 @@ async function main() {
       effects.stain(s.x, world.groundHeight(s.x, s.z), s.z, 0.5 + k * 0.16, 40);
     }, 700);
   };
+  // A skeleton that has stood long enough comes apart where it stands: a
+  // handful of bone coloured pieces, a dry clatter, and nothing left.
+  soldiers.onCrumble = (s) => {
+    gibs.rubble(s.x, s.y + 0.9, s.z, 0.5, 7, 1.1);
+    effects.dust(s.x, s.y + 0.4, s.z, 1.4);
+    audio.treeFall(Math.hypot(player.x - s.x, player.z - s.z) + 60);
+    feed('<b>crumbled</b>');
+  };
   soldiers.onSlip = (s) => {
     toast('down he goes');
     feed('<b>slipped</b> on a banana');
+    audio.swoosh(Math.hypot(player.x - s.x, player.z - s.z));
   };
 
   drones.onShot = (d, damage) => {
@@ -932,11 +1089,16 @@ async function main() {
     soldiers.gore.gib = cheats.gibbing;
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;
+    soldiers.boneTime = cheats.value('boneTime');
     el.cheatMark.classList.toggle('hidden', !cheats.used);
     for (const sw of cheatRows) sw.el.classList.toggle('on', !!cheats[sw.id]);
   }
 
   const cheatRows = [];
+  // The sliders, so that resetting the menu can put them back where they
+  // started without rebuilding the whole thing.
+  const settingShown = [];
+
   function buildCheatMenu() {
     for (const a of ACTIONS) {
       const b = document.createElement('button');
@@ -967,6 +1129,41 @@ async function main() {
         toast(n ? `${n} ${sp.label.toLowerCase()}` : 'no room for any more');
       });
       el.cheatSpawns.appendChild(b);
+    }
+    for (const spec of SETTINGS) {
+      const row = document.createElement('label');
+      row.className = 'val';
+      row.dataset.setting = spec.id;
+      const num = document.createElement('span');
+      num.className = 'num';
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = String(spec.min);
+      slider.max = String(spec.max);
+      slider.step = String(spec.step);
+      slider.value = String(cheats.value(spec.id));
+      const show = () => {
+        const v = cheats.value(spec.id);
+        // Nought on a timer does not mean nought seconds, it means never, and
+        // the menu should say so rather than making you work it out.
+        num.textContent = v === 0 && spec.unit === 's' ? 'never' : `${v} ${spec.unit}`;
+      };
+      slider.addEventListener('input', () => {
+        cheats.setValue(spec.id, parseFloat(slider.value));
+        show();
+        applyCheats();
+      });
+      const name = document.createElement('b');
+      name.textContent = spec.label;
+      const note = document.createElement('i');
+      note.textContent = spec.note;
+      row.appendChild(name);
+      row.appendChild(num);
+      row.appendChild(note);
+      row.appendChild(slider);
+      el.cheatValues.appendChild(row);
+      show();
+      settingShown.push({ spec, slider, show });
     }
     for (const [list, host, gore] of [[SWITCHES, el.cheatSwitches, false],
       [GORE, el.cheatGore, true]]) {
@@ -1061,7 +1258,14 @@ async function main() {
     input.requestLock();
   }
   el.cheatsClose.addEventListener('click', () => toggleCheatMenu(false));
-  el.cheatsReset.addEventListener('click', () => { cheats.reset(); applyCheats(); });
+  el.cheatsReset.addEventListener('click', () => {
+    cheats.reset();
+    for (const row of settingShown) {
+      row.slider.value = String(cheats.value(row.spec.id));
+      row.show();
+    }
+    applyCheats();
+  });
 
   // --- putting a warhead somewhere ----------------------------------------
   // The target is picked on a map rather than down the sight, because the
@@ -1289,11 +1493,19 @@ async function main() {
     }
   }
 
+  /**
+   * What a warhead and the ion cannon reach, which the cheat menu can turn up
+   * and which everything that draws a circle or asks about the memorial has
+   * to read rather than assume.
+   */
+  function nukeRadius() { return cheats.value('nukeRadius') || NUKE.radius; }
+  function ionRadius() { return cheats.value('ionRadius') || ION.blast; }
+
   /** How big the circle on the map is, which is what each mode is about. */
   function aimRadius(mode) {
     if (mode === 'travel') return 14;
-    if (mode === 'ion') return ION.blast;
-    return NUKE.radius;
+    if (mode === 'ion') return ionRadius();
+    return nukeRadius();
   }
 
   function aimAt(x, z) {
@@ -1382,14 +1594,22 @@ async function main() {
    * @returns {boolean} false when the target was refused
    */
   function dropNuke(x, z) {
-    if (sanctuaryWithin(x, z, NUKE.radius)) return false;
+    if (sanctuaryWithin(x, z, nukeRadius())) return false;
     cheats.used = true;
     applyCheats();
     const ground = world.groundHeight(x, z);
     const body = projectiles.launch('nuke', {
       x, y: ground + NUKE.drop, z,
       vx: 0, vy: -NUKE.speed, vz: 0,
-      splash: { radius: NUKE.radius, damage: NUKE.damage, burst: NUKE.burst, nuke: true },
+      splash: {
+        radius: nukeRadius(),
+        // A bigger warhead is a bigger warhead: the damage and the height the
+        // fireball radiates from go up with the radius rather than staying at
+        // what a hundred and seventy metre one does.
+        damage: NUKE.damage * Math.max(1, nukeRadius() / NUKE.radius),
+        burst: NUKE.burst * Math.max(1, Math.sqrt(nukeRadius() / NUKE.radius)),
+        nuke: true,
+      },
     });
     audio.incoming(NUKE.fall);
     if (cheats.cinematic && state.mode === 'walk') startCinema(body, x, z);
@@ -1640,6 +1860,22 @@ async function main() {
     state.landFrom = { ...state.dronePose };
   }
 
+  // The wheel. On the big map and the target map it zooms, which is what a
+  // wheel is for; everywhere else it changes weapon, which is the only way to
+  // reach the two that do not fit on the number row.
+  window.addEventListener('wheel', (ev) => {
+    if (state.targeting) return;              // the target map has its own
+    if (minimap.big) {
+      minimap.zoomAt(ev.clientX, ev.clientY, ev.deltaY < 0 ? 1.18 : 1 / 1.18);
+      ev.preventDefault();
+      return;
+    }
+    if (state.mode !== 'walk' || photo.active) return;
+    if (!el.cheats.classList.contains('hidden')) return;
+    weapon.cycle(ev.deltaY > 0 ? 1 : -1);
+    ev.preventDefault();
+  }, { passive: false });
+
   el.btnMap.addEventListener('click', () => minimap.toggle({ x: player.x, z: player.z }));
   el.btnTravel.addEventListener('click', () => openTravel());
   el.btnHelp.addEventListener('click', () => el.help.classList.toggle('hidden'));
@@ -1730,6 +1966,10 @@ async function main() {
       case 'KeyV': if (state.targeting) closeTargeting(); else openTravel(); break;
       case 'KeyQ': weapon.select(state.lastWeapon || 'm16'); break;
       case 'KeyE': case 'ShiftRight': reflex.toggle(); break;
+      // The flamethrower sits past the number row, so it has a key of its own
+      // and the wheel reaches it as well.
+      case 'KeyG': weapon.select('flamer'); break;
+      case 'KeyB': weapon.select('incendiary'); break;
       case 'KeyT': {
         const n = weapon.detonate();
         if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
@@ -1826,6 +2066,8 @@ async function main() {
       gibs.update(worldDt);
       demolition.update(worldDt);
       fires.update(worldDt, player);
+      fireWalls.update(worldDt);
+      updateBurning(worldDt);
       ion.update(worldDt);
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
@@ -1904,11 +2146,19 @@ async function main() {
     const holstered = state.holstered || photo.active || state.inSanctuary
       || combat.health <= 0 || paused;
     weapon.setHolstered(holstered);
-    weapon.aiming = input.secondary && !holstered;
+    // A flamethrower has nothing to aim down. Its second trigger throws a
+    // wall of fire instead, once per press rather than while it is held.
+    const hasAlt = !!weapon.spec.wall;
+    weapon.aiming = input.secondary && !holstered && !hasAlt;
 
     const dir = {
       x: camera.forward[0], y: camera.forward[1], z: camera.forward[2],
     };
+    if (hasAlt && input.secondary && !state.altWasDown && !holstered
+        && !photo.active && combat.health > 0 && !paused) {
+      weapon.altFire(eye, dir);
+    }
+    state.altWasDown = input.secondary;
     const wantFire = input.fire && !photo.active && combat.health > 0 && !paused;
     weapon.update(dt, wantFire, eye, dir);
     // Recoil composes with looking around here, in one place. It is carried as
@@ -1946,6 +2196,8 @@ async function main() {
     gibs.update(worldDt);
     demolition.update(worldDt);
     fires.update(worldDt, player);
+    fireWalls.update(worldDt);
+    updateBurning(worldDt);
     ion.update(worldDt);
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
@@ -2371,6 +2623,11 @@ async function main() {
       pickups.pads.push(pad);
       return pad;
     },
+    // Holding the trigger, for whatever pours rather than fires. The input
+    // layer sets the same flag when a mouse button is down.
+    holdFire(on) { input.fire = !!on; },
+    fireWalls,
+    burningGround: burning,
     shoot() {
       weapon.fire(
         { x: player.x, y: player.y + PLAYER.eye, z: player.z },
@@ -2386,6 +2643,12 @@ async function main() {
     applyRecoil() { applyRecoil(); },
     loadout: LOADOUT,
     weapons: WEAPONS,
+    altFire() {
+      return weapon.altFire(
+        { x: player.x, y: player.y + PLAYER.eye, z: player.z },
+        { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] },
+      );
+    },
     skipToWalk() {
       el.title.classList.add('hidden');
       el.hud.classList.remove('hidden');

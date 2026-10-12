@@ -11,6 +11,7 @@ export const KIND = {
   LAUNCH: 'launch',     // leaves the muzzle fast and flat
   THROW: 'throw',       // leaves your hand on an arc
   PLACE: 'place',       // stuck where you put it, fired later
+  STREAM: 'stream',     // pours while you hold it, and burns what it touches
 };
 
 /**
@@ -129,6 +130,42 @@ export const WEAPONS = {
     // No splash. It lies there, and whoever walks onto it goes down.
     slip: { radius: 1.05, seconds: 3.4 },
   },
+  incendiary: {
+    name: 'Incendiary bomb', short: 'INCENDIARY', kind: KIND.THROW, slot: null,
+    magazine: 1, reserve: 6, reloadTime: 1.1, fireInterval: 1.2, auto: false,
+    projectile: 'incendiary', muzzleSpeed: 21, fuse: 2.2, range: 120,
+    spreadHip: 0.005, spreadAim: 0.002, spreadPerShot: 0, spreadMax: 0.005,
+    spreadRecover: 0.2,
+    recoilKick: 0.005, recoilSide: 0.001, recoilRetain: 0.08,
+    aimFov: 58, sound: 'throw',
+    // A small blast and a large fire. The damage is in the burning, not in
+    // the bang: what this does is set fire to everything inside it and leave
+    // the place alight for half a minute.
+    splash: { radius: 11, damage: 70, force: 12 },
+    incendiary: { radius: 26, pools: 7, burnSeconds: 9, damagePerSecond: 110 },
+  },
+  flamer: {
+    name: 'Flamethrower', short: 'FLAMER', kind: KIND.STREAM, slot: 7,
+    // The magazine is fuel, and it burns down about four times a second while
+    // the trigger is held rather than a round at a time.
+    magazine: 320, reserve: 640, reloadTime: 2.4, fireInterval: 0.055, auto: true,
+    range: 22, damage: 0, sound: 'flame',
+    spreadHip: 0.02, spreadAim: 0.02, spreadPerShot: 0, spreadMax: 0.02,
+    spreadRecover: 0.2,
+    recoilKick: 0.0016, recoilSide: 0.0006, recoilRetain: 0.04,
+    aimFov: 58,
+    // The stream itself: how far it reaches, how wide the cone is at that
+    // distance, what it does a second to whatever is in it, and how fast it
+    // sets a person alight.
+    stream: { reach: 22, cone: 0.20, damagePerSecond: 190, burnPerSecond: 0.75, fuelPerSecond: 26 },
+    // The wall: a line of fire that leaves you and runs away across the
+    // ground, burning what it goes over. It costs a slug of fuel rather than
+    // a round, so you can throw two if you are full and none if you are not.
+    wall: {
+      fuel: 90, width: 11, speed: 16, reach: 150, life: 9,
+      damagePerSecond: 240, burnPerSecond: 1.6, ignite: 7,
+    },
+  },
 };
 
 /**
@@ -141,13 +178,15 @@ WEAPONS.rpg.hold = { x: 0.205, y: -0.132, z: -0.430, pitch: -0.012, yaw: 0.115, 
 WEAPONS.grenade.hold = { x: 0.185, y: -0.118, z: -0.175, pitch: 0.06, yaw: 0.22, roll: 0.10 };
 WEAPONS.c4.hold = { x: 0.180, y: -0.128, z: -0.150, pitch: 0.05, yaw: 0.26, roll: 0.08 };
 WEAPONS.banana.hold = { x: 0.175, y: -0.105, z: -0.120, pitch: 0.09, yaw: 0.30, roll: 0.16 };
+WEAPONS.incendiary.hold = { x: 0.182, y: -0.120, z: -0.168, pitch: 0.055, yaw: 0.235, roll: 0.09 };
+WEAPONS.flamer.hold = { x: 0.200, y: -0.126, z: -0.330, pitch: -0.008, yaw: 0.120, roll: 0.03 };
 WEAPONS.railgun.hold = { x: 0.215, y: -0.142, z: -0.500, pitch: -0.018, yaw: 0.118, roll: 0.04 };
 WEAPONS.plasma.hold = { x: 0.220, y: -0.146, z: -0.430, pitch: -0.014, yaw: 0.130, roll: 0.05 };
 WEAPONS.flak.hold = { x: 0.225, y: -0.150, z: -0.440, pitch: -0.010, yaw: 0.128, roll: 0.05 };
 WEAPONS.splinter.hold = { x: 0.215, y: -0.140, z: -0.420, pitch: -0.012, yaw: 0.135, roll: 0.06 };
 
 export const LOADOUT = [
-  'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana',
+  'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'flamer', 'incendiary',
   'railgun', 'plasma', 'flak', 'splinter',
 ];
 

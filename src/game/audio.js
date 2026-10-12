@@ -466,6 +466,141 @@ export class Audio {
    * rush of air after it and no bass at all, which is what separates it from
    * every other bang in this game.
    */
+  /**
+   * The flamethrower, while it is pouring. One looped noise source through a
+   * low shelf with a slow wobble on it, started when the trigger goes down and
+   * faded when it comes up, because a flamethrower is a continuous sound and
+   * retriggering a one shot sixty times a second is a buzz, not a roar.
+   */
+  flameLoop(on) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) {
+      return;
+    }
+    if (on) {
+      if (!this._flame) {
+        const src = ctx.createBufferSource();
+        src.buffer = this._noiseBuffer;
+        src.loop = true;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 900;
+        lp.Q.value = 0.9;
+        // The flutter: a slow wobble on the cutoff, which is what stops it
+        // sounding like a hairdryer.
+        const wob = ctx.createOscillator();
+        wob.type = 'sine';
+        wob.frequency.value = 7.5;
+        const wobGain = ctx.createGain();
+        wobGain.gain.value = 260;
+        wob.connect(wobGain); wobGain.connect(lp.frequency);
+        const g = ctx.createGain();
+        g.gain.value = 0.0001;
+        src.connect(lp); lp.connect(g); g.connect(this.master);
+        src.start();
+        wob.start();
+        this._flame = { src, g, wob };
+      }
+      this._flame.g.gain.setTargetAtTime(0.22, ctx.currentTime, 0.04);
+      this._flameHold = 0.12;
+      return;
+    }
+    if (this._flame) {
+      this._flame.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.07);
+    }
+  }
+
+  /** The wall going out: a deep whoomph with a tail of its own. */
+  flameWall() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    src.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1600, t);
+    lp.frequency.exponentialRampToValueAtTime(260, t + 0.9);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.34, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    src.connect(lp); lp.connect(g); g.connect(this.master);
+    src.start(t); src.stop(t + 1.2);
+
+    const thud = ctx.createOscillator();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(90, t);
+    thud.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(0.0001, t);
+    tg.gain.exponentialRampToValueAtTime(0.26, t + 0.03);
+    tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    thud.connect(tg); tg.connect(this.master);
+    thud.start(t); thud.stop(t + 0.62);
+  }
+
+  /**
+   * The swoosh a cartoon makes when somebody's feet go out from under them:
+   * a band of noise sliding up and then away, with a wooden knock at the end
+   * where he lands. Every bit of it is synthesised here like everything else
+   * in this game; there are no samples anywhere in the project.
+   */
+  swoosh(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + Math.min(0.4, distance / 340);
+    const near = Math.max(0.05, 1 - distance / 90);
+    if (near < 0.08) return;
+
+    // The slide: noise through a band that sweeps up a couple of octaves and
+    // opens out, which is the sound of something travelling past you fast.
+    const air = ctx.createBufferSource();
+    air.buffer = this._noiseBuffer;
+    air.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 7;
+    bp.frequency.setValueAtTime(420, t);
+    bp.frequency.exponentialRampToValueAtTime(2600, t + 0.26);
+    bp.frequency.exponentialRampToValueAtTime(900, t + 0.42);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.32 * near, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.46);
+    air.connect(bp); bp.connect(g); g.connect(this.master);
+    air.start(t); air.stop(t + 0.5);
+
+    // A rising whistle over the top of it, which is the part that makes it
+    // read as comic rather than as a passing lorry.
+    const whistle = ctx.createOscillator();
+    whistle.type = 'sine';
+    whistle.frequency.setValueAtTime(520, t);
+    whistle.frequency.exponentialRampToValueAtTime(1500, t + 0.22);
+    whistle.frequency.exponentialRampToValueAtTime(680, t + 0.4);
+    const wg = ctx.createGain();
+    wg.gain.setValueAtTime(0.0001, t);
+    wg.gain.exponentialRampToValueAtTime(0.12 * near, t + 0.08);
+    wg.gain.exponentialRampToValueAtTime(0.0001, t + 0.44);
+    whistle.connect(wg); wg.connect(this.master);
+    whistle.start(t); whistle.stop(t + 0.46);
+
+    // And the landing: a short wooden thump a third of a second later, when
+    // the back hits the pavement.
+    const thumpAt = t + 0.34;
+    const body = ctx.createOscillator();
+    body.type = 'triangle';
+    body.frequency.setValueAtTime(140, thumpAt);
+    body.frequency.exponentialRampToValueAtTime(58, thumpAt + 0.16);
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0.0001, thumpAt);
+    bg.gain.exponentialRampToValueAtTime(0.3 * near, thumpAt + 0.012);
+    bg.gain.exponentialRampToValueAtTime(0.0001, thumpAt + 0.2);
+    body.connect(bg); bg.connect(this.master);
+    body.start(thumpAt); body.stop(thumpAt + 0.22);
+  }
+
   treeBurst(distance = 0) {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;

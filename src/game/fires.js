@@ -28,6 +28,10 @@ export const FIRE = {
   // Trees further than this from you are still burning, they just do not get
   // particles, because nobody can see them.
   particleRange: 180,
+  // How long a tree that has gone over lies there burning before it is struck
+  // off the city. Counted in game time, not wall clock, so it behaves in slow
+  // motion and while the game is paused.
+  afterFall: 2.4,
 };
 
 /** The same hash the tree shaders use, so both sides pick the same numbers. */
@@ -51,6 +55,7 @@ export class Fires {
     this.sites = [];
     this.onBurst = null;       // fn(tree) when one goes up
     this.onTopple = null;      // fn(tree) when one goes over
+    this.onGone = null;        // fn(tree) when it is off the city for good
     this.onFlame = null;       // fn(tree, strength) every few frames
     this.enabled = true;
   }
@@ -152,8 +157,16 @@ export class Fires {
         if (age <= 0) continue;
         if (!t.done && age >= t.doom) {
           t.done = true;
-          if (t.bursts) { t.gone = true; if (this.onBurst) this.onBurst(t); }
-          else if (this.onTopple) this.onTopple(t);
+          if (t.bursts) {
+            t.gone = true;
+            if (this.onBurst) this.onBurst(t);
+            if (this.onGone) this.onGone(t);
+          } else if (this.onTopple) this.onTopple(t);
+        }
+        // One that went over lies there burning and is then gone, for good.
+        if (t.done && !t.bursts && !t.struck && age >= t.doom + FIRE.afterFall) {
+          t.struck = true;
+          if (this.onGone) this.onGone(t);
         }
         // A tree that burst is not there any more. One that went over is
         // still alight on the ground for a couple of seconds.

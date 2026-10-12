@@ -94,6 +94,12 @@ export class Soldiers {
     // this game has always had.
     this.gore = { gib: false, ragdoll: false, scale: 1 };
     this.onSlip = null;
+    // What is left of somebody the ion cannon burnt. Zero means they stand
+    // there for the rest of the session, which is what the game did before
+    // this was settable; anything else is how many seconds they hold before
+    // they come apart.
+    this.boneTime = 0;
+    this.onCrumble = null;     // fn(soldier) when a skeleton goes down
     this.hazards = () => [];
     // Scaled by the difficulty: how often their aimed shot is actually aimed.
     this.accuracyScale = 1;
@@ -266,6 +272,18 @@ export class Soldiers {
 
       if (s.state === STATE.DYING) {
         s.deathTime += dt;
+        // Burnt to the bone: what is left does not fall over. It stands where
+        // it was, black, until the timer in the cheat menu says otherwise.
+        if ((s.charred || 0) >= 0.95) {
+          s.lean += (0 - s.lean) * Math.min(1, dt * 2.5);
+          s.roll += (0 - s.roll) * Math.min(1, dt * 2.5);
+          s.y = w.groundHeight(s.x, s.z);
+          if (this.boneTime > 0 && s.deathTime > this.boneTime) {
+            if (this.onCrumble) this.onCrumble(s);
+            this._retire(s);
+          }
+          continue;
+        }
         if (this.gore.ragdoll) {
           // A rigid body, not a jointed one. The whole figure tumbles about
           // its feet with the angular momentum the shot gave it, falls, lands,
@@ -328,8 +346,16 @@ export class Soldiers {
             s.state = STATE.SLIPPED;
             s.stateTime = 0;
             s.slipLeft = b.slip.seconds || 3;
-            s.vx = (s.vx || 0) * 2.2;
-            s.vz = (s.vz || 0) * 2.2;
+            // Feet out from under him. The slide keeps whatever he was doing
+            // and adds a shove of its own, so he goes past the banana rather
+            // than stopping on it, and the body goes over backwards with a
+            // spin, which is the whole point of a banana.
+            const run = Math.hypot(s.vx || 0, s.vz || 0) || 1;
+            const push = 5.5 + run;
+            s.vx = ((s.vx || 0) / run) * push;
+            s.vz = ((s.vz || 0) / run) * push;
+            s.spin = (Math.random() < 0.5 ? -1 : 1) * (2.4 + Math.random() * 2.2);
+            s.lean = -0.25;
             if (this.onSlip) this.onSlip(s, b);
             break;
           }
@@ -338,11 +364,21 @@ export class Soldiers {
 
       if (s.state === STATE.SLIPPED) {
         s.slipLeft -= dt;
-        s.lean = Math.min(1.5, s.lean + dt * 5);
+        // Backwards, not forwards: the legs come up and the back goes down,
+        // all the way flat, and he turns as he slides.
+        s.lean = Math.max(-1.62, s.lean - dt * 6.5);
+        s.roll = (s.roll || 0) + (s.spin || 0) * dt * 0.35;
+        s.yaw += (s.spin || 0) * dt;
         s.x += s.vx * dt; s.z += s.vz * dt;
-        s.vx *= 0.86; s.vz *= 0.86;
+        s.vx *= 0.93; s.vz *= 0.93;
         s.y = w.groundHeight(s.x, s.z);
-        if (s.slipLeft <= 0) { s.state = STATE.ADVANCE; s.stateTime = 0; }
+        if (s.slipLeft <= 0) {
+          s.state = STATE.ADVANCE;
+          s.stateTime = 0;
+          s.lean = 0;
+          s.roll = 0;
+          s.spin = 0;
+        }
         continue;
       }
 

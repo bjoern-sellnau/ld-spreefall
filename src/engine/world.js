@@ -69,6 +69,11 @@ export class World {
     this.pending = new Map();          // id -> promise, so two asks are one fetch
     this.collisionCache = new Map();
     this.heightCache = new Map();
+    // Trees that have burnt down, by tile index and ordinal within the tile.
+    // Kept on the world rather than in the bundle bytes, because the bundle
+    // is what a reload reads and a reload is meant to bring the city back.
+    this.deadTrees = new Map();
+    this.onTreesChanged = null;        // fn(tileIndex) when one has gone
     this.onDistrict = null;            // fn(district) when one lands
     this.onDrop = null;                // fn(district, indices) before one goes
     // What the rest of the game reads. The arrays are the same objects for the
@@ -591,21 +596,92 @@ export class World {
     return h === null;
   }
 
-  /** Trees packed in a tile, unpacked to world space. */
+  /**
+   * Trees packed in a tile, unpacked to world space, minus the ones that have
+   * burnt down. A tree that bursts or goes over is gone for the rest of the
+   * session: it is struck off here, the tile's instance buffer is built again
+   * without it, and nothing short of a reload brings it back.
+   */
   trees(index) {
     const rec = this.tiles[index];
     if (!rec || !rec.trCount) return null;
+    const dead = this.deadTrees.get(index);
+    const live = dead ? rec.trCount - dead.size : rec.trCount;
+    if (live <= 0) return null;
     const [ox, oz] = this.tileOrigin(index);
     const view = rec.view;
-    const out = new Float32Array(rec.trCount * 5);
+    const out = new Float32Array(live * 5);
+    let k = 0;
     for (let i = 0; i < rec.trCount; i++) {
+      if (dead && dead.has(i)) continue;
       const o = rec.trOff + i * 8;
-      out[i * 5] = view.getInt16(o, true) / 64 + ox;
-      out[i * 5 + 1] = view.getInt16(o + 2, true) / 64;
-      out[i * 5 + 2] = view.getInt16(o + 4, true) / 64 + oz;
-      out[i * 5 + 3] = view.getUint8(o + 6) / 8;
-      out[i * 5 + 4] = view.getUint8(o + 7);
+      out[k * 5] = view.getInt16(o, true) / 64 + ox;
+      out[k * 5 + 1] = view.getInt16(o + 2, true) / 64;
+      out[k * 5 + 2] = view.getInt16(o + 4, true) / 64 + oz;
+      out[k * 5 + 3] = view.getUint8(o + 6) / 8;
+      out[k * 5 + 4] = view.getUint8(o + 7);
+      k++;
     }
     return out;
+  }
+
+  /**
+   * The nearest tree to a point in a tile, as its ordinal in that tile's
+   * instance list, so a tree that has burnt down can be named without
+   * carrying an id for every tree in Berlin.
+   *
+   * @returns {number} the ordinal, or -1
+   */
+  treeAt(index, x, z, within = 1.5) {
+    const rec = this.tiles[index];
+    if (!rec || !rec.trCount) return -1;
+    const [ox, oz] = this.tileOrigin(index);
+    const view = rec.view;
+    let best = -1, bestD = within * within;
+    for (let i = 0; i < rec.trCount; i++) {
+      const o = rec.trOff + i * 8;
+      const tx = view.getInt16(o, true) / 64 + ox;
+      const tz = view.getInt16(o + 4, true) / 64 + oz;
+      const d = (tx - x) * (tx - x) + (tz - z) * (tz - z);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
+  /**
+   * Strikes a tree off for good.
+   *
+   * @returns {boolean} true when this one had not already gone, which is what
+   *   decides whether the tile has to be sent to the card again
+   */
+  killTree(x, z) {
+    const index = this.tileIndex(x, z);
+    if (index < 0) return false;
+    const ordinal = this.treeAt(index, x, z);
+    if (ordinal < 0) return false;
+    let dead = this.deadTrees.get(index);
+    if (!dead) { dead = new Set(); this.deadTrees.set(index, dead); }
+    if (dead.has(ordinal)) return false;
+    dead.add(ordinal);
+    // And its trunk stops blocking. A tree is four short segments round a
+    // 0.64 m box; without this you walk into an invisible post where a tree
+    // burnt down an hour ago.
+    const segs = this.segments(index);
+    for (let i = 0; i < segs.length; i += 6) {
+      const mx = (segs[i] + segs[i + 2]) * 0.5;
+      const mz = (segs[i + 1] + segs[i + 3]) * 0.5;
+      if (Math.hypot(mx - x, mz - z) > 0.9) continue;
+      if (segs[i + 5] - segs[i + 4] > 4.5) continue;     // a wall, not a trunk
+      segs[i + 5] = segs[i + 4];
+    }
+    if (this.onTreesChanged) this.onTreesChanged(index);
+    return true;
+  }
+
+  /** How many trees have been burnt down, for the interface and the tests. */
+  get deadTreeCount() {
+    let n = 0;
+    for (const set of this.deadTrees.values()) n += set.size;
+    return n;
   }
 }

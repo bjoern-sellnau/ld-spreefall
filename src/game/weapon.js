@@ -60,6 +60,12 @@ export class Weapon {
     this.onLock = null;
 
     this.onFire = null;
+    // fn(eye, dir, dt, spec) while the flamethrower is pouring, and when it
+    // stops; fn(eye, dir, spec) when the second trigger throws a wall.
+    this.onStream = null;
+    this.onStreamEnd = null;
+    this.onWall = null;
+    this.streaming = false;
     this.onDryFire = null;
     this.onReloadStart = null;
     this.onReloadEnd = null;
@@ -225,7 +231,19 @@ export class Weapon {
       return;
     }
 
-    if (this.holstered) { this.triggerWasDown = trigger; return; }
+    if (this.holstered) {
+      this.streaming = false;
+      this.triggerWasDown = trigger;
+      return;
+    }
+
+    // Something that pours rather than fires: the trigger is a tap, not a
+    // pull, and what it costs is fuel a second rather than a round a shot.
+    if (spec.kind === KIND.STREAM) {
+      this._stream(dt, trigger, spec, eye, dir);
+      this.triggerWasDown = trigger;
+      return;
+    }
 
     // A semi automatic needs the trigger released between shots. Holding it
     // down on a shotgun should not empty the tube.
@@ -242,6 +260,67 @@ export class Weapon {
       }
     }
     this.triggerWasDown = trigger;
+  }
+
+  /**
+   * The flamethrower, while the trigger is down. Fuel drains on the clock and
+   * the game layer is handed the cone to do something with: this class knows
+   * what it costs and the game layer knows what it burns.
+   */
+  _stream(dt, trigger, spec, eye, dir) {
+    const was = this.streaming;
+    const can = this.ammo > 0 || this.infiniteAmmo;
+    this.streaming = !!(trigger && can);
+    if (this.streaming) {
+      if (!this.infiniteAmmo) {
+        this.ammo = Math.max(0, this.ammo - spec.stream.fuelPerSecond * dt);
+      }
+      this.shotsFired += dt;
+      // A small shove, so the thing feels like it is pushing back.
+      this.recoilVel += spec.recoilKick * 14 * dt * 60;
+      this.kick = Math.min(1, this.kick + dt * 2.2);
+      if (this.onStream) this.onStream(eye, dir, dt, spec);
+    }
+    if (was && !this.streaming && this.onStreamEnd) this.onStreamEnd();
+    if (trigger && !can) {
+      if (this.reserve > 0) this.startReload();
+      else if (this.cooldown <= 0) {
+        this.cooldown = 0.5;
+        if (this.onDryFire) this.onDryFire();
+      }
+    }
+  }
+
+  /**
+   * The second trigger. Only the flamethrower has one: it throws a wall of
+   * fire that leaves you and runs away across the ground.
+   *
+   * @returns {boolean} whether anything was thrown
+   */
+  altFire(eye, dir) {
+    const spec = this.spec;
+    if (this.holstered || this.state === STATE.RELOADING) return false;
+    if (!spec.wall || !this.onWall) return false;
+    if (this.cooldown > 0) return false;
+    const cost = spec.wall.fuel;
+    if (!this.infiniteAmmo && this.ammo < cost) {
+      if (this.onDryFire) this.onDryFire();
+      this.cooldown = 0.4;
+      return false;
+    }
+    if (!this.infiniteAmmo) this.ammo -= cost;
+    this.cooldown = 1.1;
+    this.recoilVel += spec.recoilKick * 40;
+    this.kick = 1;
+    this.onWall(eye, dir, spec);
+    return true;
+  }
+
+  /** Where in the loadout list this weapon is, for cycling with the wheel. */
+  cycle(step) {
+    const at = LOADOUT.indexOf(this.id);
+    const next = LOADOUT[(at + step + LOADOUT.length * 2) % LOADOUT.length];
+    return this.select(next);
   }
 
   _updateLock(dt, spec, eye, dir) {
