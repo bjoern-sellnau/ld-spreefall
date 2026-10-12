@@ -918,3 +918,19 @@ is what prompted the change.
   crossing into a district parks a fresh set around where you came out,
   because the ones you left were in the district that has just been let go.
   Two checks in the city suite and one in the district suite hold that.
+
+## 21. The ground you see is the ground you stand on
+
+- 2026-10-12: being in the air after an explosion had two causes and both are
+  gone. The crater went into the collision field in one go, at the moment the
+  collapse opened, while the drawn ground sank over the next second and a
+  half; for that second the ground underfoot was six metres below the ground
+  in front of your eyes, and when you did fall, you fell the whole way. The
+  hole now goes into the field in step with the picture, a share each frame,
+  as the difference between two levels of the same profile so that two craters
+  on top of each other still add up. And the controller knows the difference
+  between the world moving and you moving: ground that sinks under the feet
+  you are standing on carries you down with it at nine metres a second, on
+  your feet the whole way, so a crater opening where you stand puts you at the
+  bottom of it rather than dropping you in. Walking off a kerb is unchanged,
+  because that question is asked before the step rather than after it.

@@ -226,6 +226,41 @@ async function run() {
   check('and the collision agrees with the shape the shader draws',
     crater.worst < 1.2, `worst ${crater.worst} m out over eight radii`);
 
+  // --- and it takes you with it --------------------------------------------
+  // The crater opens under the player's own feet, through the real fixed
+  // step, and the gap between where the player is and where the ground is is
+  // watched the whole way down. A hole that arrives in one frame leaves that
+  // gap at six metres and then drops you into it.
+  const rode = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.demolition.reset(); s.renderer.clearCollapses();
+    const x = s.player.x, z = s.player.z;
+    const before = s.world.groundHeight(x, z);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    s.demolition.blast(x + 3, before, z, 170, 4000);
+    let worstGap = 0;
+    let fastest = 0;
+    for (let i = 0; i < 400; i++) {
+      s.fixedForTest(1 / 60);
+      const g = s.world.groundHeight(s.player.x, s.player.z);
+      worstGap = Math.max(worstGap, s.player.y - g);
+      fastest = Math.min(fastest, s.player.vy || 0);
+    }
+    return {
+      sank: Number((before - s.world.groundHeight(s.player.x, s.player.z)).toFixed(1)),
+      worstGap: Number(worstGap.toFixed(2)),
+      fastest: Number(fastest.toFixed(1)),
+      onGround: s.player.onGround,
+      health: s.combat.health,
+    };
+  });
+  check('the ground going down under you takes you with it',
+    rode.sank > 3 && rode.worstGap < 0.6,
+    `${rode.sank} m down, never more than ${rode.worstGap} m above it`);
+  check('rather than leaving you in the air to fall',
+    rode.fastest > -4 && rode.onGround,
+    `worst fall ${-rode.fastest} m/s, standing at the bottom`);
+
   // --- small blasts leave the ground alone ---------------------------------
   const small = await page.evaluate(() => {
     const s = window.spreefall;

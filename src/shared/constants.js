@@ -82,4 +82,9 @@ export const PLAYER = {
   jumpSpeed: 5.2,
   gravity: 22.0,
   stepUp: 0.4,
+  // How fast you go down with ground that is sinking under you. A crater
+  // opening where you are standing used to leave you hanging over it and then
+  // dropping; this is the speed you ride it down at instead. It is below free
+  // fall on purpose: you are going down with the street, not falling off it.
+  rideDown: 9.0,
 };

@@ -245,7 +245,11 @@ export class Demolition {
       depth: 0,
       rubble: Math.min(DEMO.maxRubble, radius * DEMO.rubble),
       opened: false,
-      dug: false,
+      // How much of the crater is in the collision field, and the shape it
+      // went in with. The picture deepens the hole over the collapse; this is
+      // what keeps the ground you stand on level with the ground you see.
+      dugLevel: 0,
+      dugShape: null,
     };
 
     if (this.sites.length < DEMO.maxSites) {
@@ -294,7 +298,6 @@ export class Demolition {
     if (crater > site.craterRadius) {
       site.craterRadius = crater;
       site.depth = Math.min(DEMO.maxCraterDepth, crater * DEMO.craterDepth);
-      site.dug = false;
     }
     site.fall = DEMO.fallTime + site.radius * DEMO.fallPerMetre;
     site.t = 0;
@@ -309,6 +312,12 @@ export class Demolition {
         site.t += dt;
         const k = Math.min(1, site.t / site.fall);
         site.shown = site.from + (site.level - site.from) * (k * k * (3 - 2 * k));
+        // The hole goes into the collision field as it goes into the picture,
+        // a little each step, rather than all at once when the dust settles.
+        // Before this, the drawn ground sank for a second while the ground
+        // underfoot stayed where it was, and then the whole six metres
+        // arrived in one frame and left you standing in the air.
+        if (site.craterRadius > 0) this.sinkCrater(site);
         if (!site.opened && k >= DEMO.openAt) {
           site.opened = true;
           this.release(site);
@@ -352,10 +361,7 @@ export class Demolition {
    */
   release(site) {
     this.lowerWalls(site);
-    if (site.craterRadius > 0 && !site.dug) {
-      site.dug = true;
-      this.digCrater(site);
-    }
+    this.sinkCrater(site);
   }
 
   /**
@@ -431,13 +437,50 @@ export class Demolition {
   }
 
   /**
-   * Digs the crater into the collision height field with the same profile the
-   * vertex shader uses on the drawn ground, including the ring of thrown up
-   * ground around the lip. Editing the cached field is enough: every query in
-   * the game goes through it.
+   * Brings the collision field up to date with how deep the hole is drawn.
+   *
+   * The work is done in differences rather than by rewriting the ground from
+   * a copy of how it started, because two craters can overlap and the second
+   * one must not undo the first. A profile scales linearly with its level, so
+   * the difference between two levels is itself a profile.
+   *
+   * @returns {number} how many points of the field moved
    */
-  digCrater(site) {
+  sinkCrater(site) {
+    if (!site.craterRadius || !site.depth) return 0;
+    const shape = site.dugShape;
+    if (shape && (shape.craterRadius !== site.craterRadius || shape.depth !== site.depth)) {
+      // The hole grew. The old one comes out at the profile it went in with
+      // before the new one goes in, so the field never keeps a shape that is
+      // not the shape of the crater.
+      if (site.dugLevel) this.applyCrater(shape, -site.dugLevel);
+      site.dugShape = null;
+      site.dugLevel = 0;
+    }
+    const want = Math.max(0, Math.min(1, site.shown));
+    const delta = want - site.dugLevel;
+    if (Math.abs(delta) < 0.002) return 0;
+    const use = site.dugShape || {
+      x: site.x, z: site.z, craterRadius: site.craterRadius, depth: site.depth,
+    };
+    const moved = this.applyCrater(use, delta);
+    site.dugShape = use;
+    site.dugLevel = want;
+    return moved;
+  }
+
+  /**
+   * Adds a share of a crater profile to the collision height field, with the
+   * same shape the vertex shader uses on the drawn ground, lip and all.
+   * Editing the cached field is enough: every query in the game goes through
+   * it.
+   *
+   * @param {{x,z,craterRadius,depth}} shape the hole
+   * @param {number} level how much of it to add, which may be negative
+   */
+  applyCrater(shape, level) {
     const w = this.world;
+    const site = shape;
     const r = site.craterRadius * DEMO.rimOut;
     const tx0 = Math.max(0, Math.floor((site.x - r - w.minX) / w.tileSize));
     const tx1 = Math.min(w.nx - 1, Math.floor((site.x + r - w.minX) / w.tileSize));
@@ -457,7 +500,7 @@ export class Demolition {
         for (let j = 0; j < grid; j++) {
           for (let i = 0; i < grid; i++) {
             const px = ox + i * step, pz = oz + j * step;
-            const d = craterAt(px, pz, site);
+            const d = craterAt(px, pz, site, level);
             if (d === 0) continue;
             hf[j * grid + i] += Math.round(d * GROUND_SCALE);
             moved++;
