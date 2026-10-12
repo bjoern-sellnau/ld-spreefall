@@ -752,6 +752,7 @@ function buildDistrict(district) {
     tallest: Math.round(bundle.tallest * 10) / 10,
     waterLevel,
     landmarks: manifest.landmarks.length,
+    sight: pickSight(manifest.landmarks, manifest.stations, world),
     builtAt: new Date().toISOString(),
   });
 
@@ -1356,6 +1357,44 @@ function buildSurfaceGrid(world, roads, areas, greens, waterPolys, memorials, st
   for (const w of waterPolys) fillRing(w.ring, SURFACE.WATER);
   for (const m of memorials) fillRing(m.ring, SURFACE.STONE);
   return { step, nx, nz, data };
+}
+
+/**
+ * The one place in a district worth naming on the loading screen.
+ *
+ * The crossing screen has to say where you are going before any of the
+ * district has arrived, so the name has to live in the small index that is
+ * loaded once at the start rather than in the district's own file. This picks
+ * it: a landmark that came with a written card first, because those are the
+ * ones a person has heard of, then any named attraction, then the station the
+ * district is built around, each time the one nearest the middle. Nothing is
+ * invented. A district whose extract named nothing gets null and the screen
+ * leaves the line out.
+ *
+ * @param {Array} landmarks the district's landmark cards
+ * @param {Array} stations its railway stations
+ * @param {{minX,minZ,maxX,maxZ}} world its box in metres
+ * @returns {string|null}
+ */
+function pickSight(landmarks, stations, world) {
+  const cx = (world.minX + world.maxX) / 2;
+  const cz = (world.minZ + world.maxZ) / 2;
+  const nearest = (list) => {
+    let best = null; let bestD = Infinity;
+    for (const it of list) {
+      if (!it.name) continue;
+      const d = Math.hypot(it.x - cx, it.z - cz);
+      if (d < bestD) { bestD = d; best = it; }
+    }
+    return best;
+  };
+  const told = nearest(landmarks.filter((l) => l.text));
+  if (told) return told.name;
+  const any = nearest(landmarks);
+  if (any) return any.name;
+  const stop = nearest(stations.filter((s) => s.kind === 'station'))
+    || nearest(stations);
+  return stop ? stop.name : null;
 }
 
 function buildLandmarkCards(attractions, landmarkIndex) {

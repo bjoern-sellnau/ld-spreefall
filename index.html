@@ -59,6 +59,22 @@
   </div>
 </div>
 
+<!-- Changing district. One district is in memory at a time, so crossing a
+     boundary is a short wait, and a wait should say where you are going. -->
+<div id="crossing" class="overlay hidden">
+  <div class="crossbox">
+    <div class="crosskicker">entering</div>
+    <div class="crossname" id="crossname">Berlin</div>
+    <div class="crosssight hidden" id="crosssightline">
+      <span class="crosssightlabel">in this district</span>
+      <span class="crosssightname" id="crosssight"></span>
+    </div>
+    <div class="crossnote" id="crossnote"></div>
+    <div class="crossbar"><i id="crossfill"></i></div>
+    <div class="crosshint" id="crosshint">loading the district</div>
+  </div>
+</div>
+
 <div id="hud" class="hidden">
   <div id="crosshair"><i></i><i></i><i></i><i></i></div>
   <div id="hitmarker"></div>

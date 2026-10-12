@@ -305,6 +305,33 @@ export class World {
    * @param {number} drop metres, how far before one is let go
    * @returns {Array<string>} the ids being fetched right now
    */
+  /**
+   * Hold exactly one district: the one a point is in.
+   *
+   * Berlin is eighty one districts and two hundred and forty megabytes. A
+   * player holds one of them, between two and eight, and changes it at a
+   * boundary with a loading screen rather than carrying its neighbours about
+   * on the chance of walking into them. That is what makes the whole city
+   * possible rather than the part of it that fits in a budget.
+   *
+   * @returns {Promise<object|null>} the district, once it is in
+   */
+  async enterOnly(x, z, onProgress = null) {
+    const here = this.entryAt(x, z);
+    if (!here) return null;
+    const district = await this.loadDistrict(here.id, onProgress);
+    for (const id of [...this.districts.keys()]) {
+      if (id !== here.id) this.unloadDistrict(id);
+    }
+    return district;
+  }
+
+  /** Which district a point is in, by id, loaded or not. */
+  idAt(x, z) {
+    const e = this.entryAt(x, z);
+    return e ? e.id : null;
+  }
+
   keepAround(x, z, reach = 900, drop = 2600, max = 9) {
     const want = new Set();
     const here = this.entryAt(x, z);

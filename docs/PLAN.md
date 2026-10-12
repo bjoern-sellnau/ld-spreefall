@@ -841,3 +841,59 @@ Three ways to close the gap, in the order they cost quality:
 None of those is a decision this project should take on its own, because all
 three of them trade away something the brief asks for. The numbers are here so
 the trade can be made with eyes open.
+
+## 20. All of Berlin, one district at a time
+
+The city is no longer the area inside the Ringbahn. It is Berlin, out to the
+administrative boundary: a box 45.7 km by 37.4 km, 1,706 square kilometres of
+which the city proper is about 891, cut into eighty one districts on one tile
+grid of 458 by 375 tiles. Steglitz, Lichterfelde and Treptow are in it, which
+is what prompted the change.
+
+- 2026-10-12: the lattice is deliberately irregular. Near the middle a
+  district is one and a half kilometres across, because that streams in
+  quickly and the detail there is high. Out past the ring they are four
+  kilometres, and past that eight, because a district is one Overpass query
+  and one build and nobody wants four hundred of either. Three bands, two
+  cell sizes, five tiers of detail, and the cuts all land on lines of the
+  global grid so the districts still partition the city exactly.
+
+- 2026-10-12: one district is in memory at a time. That is the whole answer to
+  the budget question. The brief asks for the playable area to come down in
+  under twenty five megabytes; all of Berlin at the tiers as they stand is
+  about two hundred and forty, and no amount of thinning gets 1,700 square
+  kilometres under twenty five. What does fit, and fits easily, is what a
+  player actually downloads to play: the code, the index and the district they
+  are standing in, which is between one and three megabytes. So that is what
+  the budget is now held against, and `tools/fit-city.mjs` fails the build if
+  any single district is too big to wait for, because a district that big
+  should have been split instead.
+
+  This is a reinterpretation of rule 6 and it is written down here rather than
+  quietly applied. The old reading, the whole deployed city under twenty five
+  megabytes, is still available: `fit-city --whole=25` cuts the city down to
+  what fits and deletes the rest.
+
+- 2026-10-12: crossing a boundary is a loading screen, not a stall. It names
+  the district you are entering and says how big it is, the bytes come down,
+  the district you were in is let go, and you are put down on the other side.
+  The controller holds you at the edge of what is loaded while that happens,
+  which it already did; what is new is that something starts the load when you
+  walk at the edge rather than after you have been stopped by it.
+
+- 2026-10-12: the map is the whole city whatever is loaded. It draws every
+  district in the index, dim for the ones that are not in memory, with their
+  names, and you can zoom from a street out to all of Berlin and back. That
+  separation, the map knowing the catalogue and the memory holding one entry
+  of it, is what makes the city feel whole while costing one district.
+
+- 2026-10-12: the loading screen names a place in the district, not just the
+  district. The build picks it: a landmark that came with a written card
+  first, then any named attraction from the extract, then the station the
+  district is built around, each time the one nearest the middle, and it goes
+  into the small index rather than the district's own file, because the screen
+  has to say it before any of the district has arrived. A district whose
+  extract named nothing says nothing, rather than being given a name it does
+  not have. `docs/screenshots/district-03-crossing.png` is the screen itself,
+  photographed with the line slowed down so the screen is up for real rather
+  than forced open by a hook.

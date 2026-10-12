@@ -58,6 +58,9 @@ const el = {
   sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
   cheatValues: $('cheatvalues'),
+  crossing: $('crossing'), crossName: $('crossname'), crossNote: $('crossnote'),
+  crossFill: $('crossfill'), crossHint: $('crosshint'),
+  crossSightLine: $('crosssightline'), crossSight: $('crosssight'),
   modeNote: $('modenote'), timePick: $('timepick'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
@@ -1605,8 +1608,17 @@ async function main() {
     // there when you arrive rather than appearing around you afterwards.
     const far = world.entryAt(tx, tz);
     if (far && !world.loaded(far.id)) {
+      // The flight is the loading screen: it takes seven seconds and the
+      // district lands inside that, so there is nothing to wait for at the
+      // far end. If it does not, the landing holds in the air until it does.
       world.loadDistrict(far.id).then(() => {
+        tiles.uploadsPerFrame = 10000;
         tiles.updateResidency(tx, tz, loop.frame);
+        tiles.uploadsPerFrame = 8;
+        // One district at a time: whatever we took off from goes now.
+        for (const id of world.loadedIds) {
+          if (id !== far.id) world.unloadDistrict(id);
+        }
       }).catch(() => toast(`${far.name} could not be loaded`));
     }
     tiles.updateResidency(tx, tz, loop.frame);
@@ -1614,31 +1626,123 @@ async function main() {
   }
 
   /**
-   * The district streamer. One district is in front of you, the next is on its
-   * way, and the ones behind are let go: the whole city is a hundred and six
-   * square kilometres and about twenty five megabytes, which is the budget for
-   * the lot, but only a few square kilometres of it is ever in memory.
+   * Crossing into another district.
+   *
+   * One district is in memory at a time, so this is a wait rather than a
+   * stream: the screen says which part of Berlin is coming and what is in it,
+   * the bytes land, the old district is let go, and you are put down on the
+   * other side. Everything that was happening is left where it was, because
+   * the simulation is not what is being swapped, the city is.
+   *
+   * @param {number} x @param {number} z where you are going
+   * @param {string} why what to say under the name
+   * @returns {Promise<boolean>} whether the district is now in
+   */
+  async function crossInto(x, z, why = '') {
+    const entry = world.entryAt(x, z);
+    if (!entry) return false;
+    if (world.loaded(entry.id)) return true;
+    if (state.crossing) return false;
+    state.crossing = entry.id;
+    el.crossName.textContent = entry.name || 'Berlin';
+    // The one thing in there worth walking towards. It is chosen when the
+    // district is built, so it is in the little index and can be named before
+    // a single byte of the district itself has arrived.
+    el.crossSight.textContent = entry.sight || '';
+    el.crossSightLine.classList.toggle('hidden', !entry.sight);
+    el.crossNote.textContent = why || districtBlurb(entry);
+    el.crossFill.style.width = '0%';
+    el.crossHint.textContent = `${(entry.bytes / 1e6).toFixed(1)} MB of city`;
+    el.crossing.classList.remove('hidden');
+    input.exitLock();
+    try {
+      await world.enterOnly(x, z, (p) => {
+        el.crossFill.style.width = `${Math.round(p * 100)}%`;
+      });
+    } catch (err) {
+      el.crossHint.textContent = 'that district could not be loaded';
+      await new Promise((r) => setTimeout(r, 1200));
+    }
+    state.crossing = null;
+    el.crossing.classList.add('hidden');
+    // You were held at the boundary while it loaded, and the district you were
+    // standing in has just been let go, so the last thing this does is put you
+    // down on the other side rather than on ground that is no longer there.
+    if (!world.isLoaded(player.x, player.z) && world.isLoaded(x, z)) {
+      player.teleport(x, z);
+      state.prev = { x, y: player.y, z };
+      state.curr = { x, y: player.y, z };
+    }
+    tiles.uploadsPerFrame = 10000;
+    tiles.updateResidency(x, z, loop.frame);
+    tiles.uploadsPerFrame = renderer.quality === 'low' ? 3 : renderer.quality === 'medium' ? 5 : 8;
+    if (!isTouch && state.lockWanted) relock();
+    return world.isLoaded(x, z);
+  }
+
+  /**
+   * What to say about a district while it loads: the landmark it is known for
+   * if the data gave it one, and how much of it there is. Nothing invented:
+   * the names come out of the district's own extract.
+   */
+  function districtBlurb(entry) {
+    const km2 = ((entry.bounds.maxX - entry.bounds.minX)
+      * (entry.bounds.maxZ - entry.bounds.minZ)) / 1e6;
+    const parts = [`${km2.toFixed(1)} square kilometres`, `${entry.buildings} buildings`];
+    if (entry.roadKm) parts.push(`${entry.roadKm} km of street`);
+    return parts.join(', ');
+  }
+
+  /**
+   * The district streamer. One district is in memory, and the next one is a
+   * loading screen away: the whole of Berlin is eighty one districts and more
+   * than two hundred megabytes, and what a player holds is the one they are
+   * standing in.
    */
   function streamCity(x, z) {
-    const ride = state.inVehicle;
-    const flying = state.mode === 'travel' || state.mode === 'cinema'
-      || (ride && (ride.kind === 'jet' || ride.kind === 'heli'));
-    // From the air you see further and you get there faster, so the reach goes
-    // out and nothing is dropped while a flight is in progress.
-    const reach = flying ? 2200 : 1100;
-    const drop = flying ? 7000 : 3000;
-    const fetching = world.keepAround(x, z, reach, drop, flying ? 12 : 9);
-    const names = fetching.map((id) => {
-      const e = world.entryFor(id);
-      return e ? e.name : id;
-    });
-    if (names.length) {
-      el.district.textContent = `${world.nameAt(x, z) || 'Berlin'}  loading ${names.join(', ')}`;
-      el.district.classList.add('loading');
-    } else {
-      el.district.textContent = world.nameAt(x, z) || 'Berlin';
-      el.district.classList.remove('loading');
-    }
+    const here = world.idAt(x, z);
+    el.district.textContent = world.nameAt(x, z) || 'Berlin';
+    el.district.classList.toggle('loading', !!state.crossing);
+    if (!here || state.crossing) return;
+    // Walking at a boundary: when the ground ahead belongs to another
+    // district, that is where you are going, and the screen says so. The
+    // controller holds you at the edge until the bytes are in.
+    if (!world.loaded(here)) crossInto(x, z);
+  }
+
+  /**
+   * Are you about to walk out of the district you are in?
+   *
+   * Looks at the edge you are nearest and at the way you are facing rather
+   * than at where your feet are: the controller holds you at the boundary of
+   * what is loaded, so by the time your feet are over it you would be stuck
+   * against an invisible wall waiting for a load that nothing had started.
+   */
+  function checkBoundary() {
+    if (state.crossing || state.mode !== 'walk' || state.inVehicle) return;
+    const here = world.entryFor(world.idAt(player.x, player.z));
+    if (!here) return;
+    // How close the nearest edge is, and which way it lies.
+    const toWest = player.x - here.bounds.minX;
+    const toEast = here.bounds.maxX - player.x;
+    const toNorth = player.z - here.bounds.minZ;
+    const toSouth = here.bounds.maxZ - player.z;
+    const near = Math.min(toWest, toEast, toNorth, toSouth);
+    if (near > 30) return;
+    // A point just over whichever edge is nearest.
+    let x = player.x, z = player.z;
+    if (near === toWest) x = here.bounds.minX - 6;
+    else if (near === toEast) x = here.bounds.maxX + 6;
+    else if (near === toNorth) z = here.bounds.minZ - 6;
+    else z = here.bounds.maxZ + 6;
+    const next = world.idAt(x, z);
+    if (!next || next === here.id || world.loaded(next)) return;
+    // Only when you are actually walking at it, so standing near a boundary
+    // does not drag the next district in behind you.
+    const facing = { x: camera.forward[0], z: camera.forward[2] };
+    const toward = (x - player.x) * facing.x + (z - player.z) * facing.z;
+    if (toward <= 0) return;
+    crossInto(x, z);
   }
 
   /**
@@ -2633,6 +2737,7 @@ async function main() {
     // in, the ones within reach, and nothing beyond the drop distance. This
     // starts fetches and returns at once; tiles appear as the bytes land.
     streamCity(camera.position[0], camera.position[2]);
+    checkBoundary();
     tiles.updateResidency(camera.position[0], camera.position[2], loop.frame);
     // Dynamic resolution, fed the real cost of the last frame. When it decides
     // to move, the scene target is rebuilt at the new size; the page and the
@@ -2835,6 +2940,8 @@ async function main() {
     makeMachine(s) { return makeMachine(s); },
     machinesTick(dt) { machinesTick(dt); },
     setMode(name) { machines.set(name === 'machines'); applyMachineLook(); return machines.active; },
+    crossInto(x, z) { return crossInto(x, z); },
+    crossingShown() { return !el.crossing.classList.contains('hidden'); },
     shoot() {
       weapon.fire(
         { x: player.x, y: player.y + PLAYER.eye, z: player.z },
