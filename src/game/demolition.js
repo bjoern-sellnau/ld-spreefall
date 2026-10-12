@@ -26,6 +26,10 @@ import { bakeSite } from './bake.js';
 import { segmentDistance } from '../engine/world.js';
 
 export const DEMO = {
+  // How long a finished site holds its uniform slot before it is written into
+  // the city for good. Long enough for the dust to settle, so that the shader
+  // and the baked bytes are showing the same thing at the moment they swap.
+  settle: 1.6,
   // The grid damage accumulates on, in metres. About the width of one Berlin
   // apartment block frontage, which is the unit that should come down.
   cell: 22,

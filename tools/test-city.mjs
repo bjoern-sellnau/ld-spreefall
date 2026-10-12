@@ -99,13 +99,16 @@ async function run() {
     };
     const before = probe(5, 60);
     s.demolition.blast(x, y, z, 90, 3000);
+    // Taken while it is still a site. A finished one is written into the tile
+    // buffers and gives its slot back, so by the end of this it is a ruin in
+    // the city rather than an entry in a list.
+    const radius = Math.round(s.demolition.sites[0].radius);
     const halfway = (() => { for (let i = 0; i < 30; i++) s.demolition.update(1 / 60); return probe(5, 60); })();
     for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
     const inner = probe(5, 32);
     const rim = probe(5, 72);
     const low = probe(0.6, 32);
-    return { before, halfway, inner, rim, low,
-      radius: Math.round(s.demolition.sites[0].radius) };
+    return { before, halfway, inner, rim, low, radius };
   });
   check('a square with buildings round it has walls in it', walls.before >= 6,
     `${walls.before} of 24 rays hit one`);
@@ -230,10 +233,13 @@ async function run() {
     const x = s.player.x - 30, z = s.player.z - 30;
     const y = s.world.groundHeight(x, z);
     for (let i = 0; i < 8; i++) s.demolition.blast(x, y, z, 9, 150);
-    for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
+    // Read while it is still a site, because a finished one is baked into the
+    // city and the list it was in is empty by then. What the ground did is
+    // read afterwards, and it should have done nothing at all.
     const site = s.demolition.sites[0];
-    return { crater: site ? site.craterRadius : null,
-      moved: Number((y - s.world.groundHeight(x, z)).toFixed(3)) };
+    const crater = site ? site.craterRadius : null;
+    for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
+    return { crater, moved: Number((y - s.world.groundHeight(x, z)).toFixed(3)) };
   });
   check('a rocket does not crater the street', small.crater === 0 && small.moved === 0,
     'the ground mesh is a 12.5 m grid, so a small hole would be invisible');

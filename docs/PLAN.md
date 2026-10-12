@@ -747,3 +747,57 @@ saying so is how a budget stops meaning anything.
 If the intended reading was the stricter one, the change is one line in each
 of those three tools, and the shipped city becomes Mitte plus whatever fits
 in the four megabytes left over.
+
+## 19. Fire, machines, and damage that stays done
+
+- 2026-10-12: the crater was never drawn. The vertex shader decided whether a
+  vertex was ground by testing bit one of the facade flags, and bit one is
+  GROUND_FLOOR, the shop window band at the bottom of a wall. Streets, squares
+  and parks carried no flag at all, so the collapse code treated them as
+  buildings, found they were nowhere above the site, and left them alone. The
+  collision meanwhile had a ten metre hole in it, because that is dug in
+  JavaScript against the same profile. The result was a street that looked
+  solid and was not: you walked onto it and fell, which is what "suddenly I am
+  in the air after an explosion" means. Ground now carries a flag of its own
+  and the shader reads that one.
+
+  The check that was supposed to catch this, "the collision agrees with the
+  shape the shader draws", compared the JavaScript crater profile with the
+  collision height field. Both are the collision. It never looked at what was
+  drawn, and the name of it said it did.
+
+- 2026-10-12: devastation is permanent now, and that is what makes it work
+  everywhere. There are sixteen uniform slots for collapses. The old answer to
+  the seventeenth blast was for the nearest site to swallow it: its radius
+  grew until it covered the new one, so a rocket fired across the square
+  flattened a strip between here and there and left nothing where it landed.
+  After sixteen explosions, nothing new came down anywhere.
+
+  A finished site is now written into the tile buffers: the same arithmetic
+  the shader does, run once in JavaScript over the vertices of every tile it
+  touches, with the result stored back into the district's own bytes and the
+  tile re-uploaded. The slot is then free. Rubble is marked with a flag the
+  fragment shader reads, so a baked ruin lights like rubble for ever rather
+  than for as long as it holds a slot. A reload rebuilds the city from the
+  bundle; nothing else does.
+
+- 2026-10-12: trees that burn down are struck off by tile and ordinal, which
+  means the instance buffer is rebuilt without them and their trunks stop
+  blocking. Thirty nine of thirty nine, measured, with no fires left running.
+
+- 2026-10-12: the flamethrower is the first weapon in this game that pours
+  rather than fires. It cost a new weapon kind, because every other weapon in
+  the table spends a round on a trigger pull and this one spends fuel on a
+  clock. Its second trigger throws a wall of fire that travels: a line of
+  flame that walks away from you across the ground, burning what it passes and
+  leaving the street alight behind it. The wall is not geometry, it is flame
+  particles emitted along its length, which is how every other fire here is
+  drawn and costs nothing on the card.
+
+- 2026-10-12: Rise of the Machines is a mode, not a cheat, and the score says
+  so. A machine is a soldier with a different body and a different gun: the
+  skeleton the ion cannon leaves, drawn in steel, with the skull given a part
+  id of its own so it can carry one red eye without the whole figure glowing.
+  It walks, takes cover and loses you behind a wall because the soldier
+  already knew how to do all three. An EMP stops it where it stands, and what
+  you do to it then is your business.
