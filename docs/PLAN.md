@@ -1100,3 +1100,11 @@ is what prompted the change.
   two ways along a wall it has run into, keeps whichever is clear for a second
   and a half so it does not dither in a doorway, and slides along at four
   fifths of its walking speed.
+
+- 2026-10-13: the whole city, measured. The city job built all eighty one
+  districts from the live extract: 102,691 buildings over 1,717 square
+  kilometres, 304 MB deployed and 107 MB over the wire, which is 0.062 MB of
+  download per square kilometre. The biggest district to walk into is 8.65 MB,
+  8.89 MB with the code and the index, so the per district budget holds with
+  room to spare. Two checks had to learn that a city with nothing left unbuilt
+  is the point rather than a failure: they pass by saying so.

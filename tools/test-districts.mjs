@@ -536,13 +536,18 @@ async function run() {
       loadedBefore: before, loadedAfter: s.world.loadedIds.length,
     };
   });
+  // When every district has been built there is nothing to refuse, and that
+  // is the city this is all for rather than a failure: the pair pass by
+  // saying so. They do their work on a partial city, which is what a deploy
+  // has until the whole city job has filled the cache.
   check('a district nobody has built yet refuses the trip rather than failing it',
-    !unbuilt.skip && unbuilt.armed === false && unbuilt.confirmHidden
-      && /not built/.test(unbuilt.hint),
+    unbuilt.skip || (unbuilt.armed === false && unbuilt.confirmHidden
+      && /not built/.test(unbuilt.hint)),
     unbuilt.skip ? 'every district is built' : `${unbuilt.id}: ${unbuilt.hint}`);
   check('and walking at one loads nothing',
-    !unbuilt.skip && unbuilt.loadedAfter === unbuilt.loadedBefore,
-    `${unbuilt.loadedAfter} district in memory`);
+    unbuilt.skip || unbuilt.loadedAfter === unbuilt.loadedBefore,
+    unbuilt.skip ? 'nothing left unbuilt to walk at'
+      : `${unbuilt.loadedAfter} district in memory`);
 
   check('free travel reaches a district that was not in memory when it started',
       flight.started && flight.mode === 'walk' && flight.out < 6,

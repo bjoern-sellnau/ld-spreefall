@@ -525,13 +525,26 @@ async function run() {
     }
     s.input.fire = false;
     const hp1 = theirs.health;
+    // If nothing landed, say why: where the target was, whether the gun's own
+    // ray finds it, and what the world puts in the way.
+    const mz = s.mechs.muzzle(mine, s.mechSpec.titan.chaingun.muzzle);
+    const aim = s.mechs.aim(mine);
+    const wall = s.world.raycast(mz.x, mz.y, mz.z, aim.x, aim.y, aim.z, 260);
+    const onTarget = s.mechs.raycast(mz.x, mz.y, mz.z, aim.x, aim.y, aim.z, 260);
+    const why = {
+      away: Math.round(Math.hypot(theirs.x - mine.x, theirs.z - mine.z)),
+      wall: wall ? Math.round(wall.t) : null,
+      mech: onTarget ? Math.round(onTarget.t) : null,
+      alive: theirs.alive && theirs.health > 0,
+      inIt2: s.state.inMech === mine,
+    };
     // And a salvo of rockets out of the pod.
     const before = s.projectiles.active.length;
     s.input.secondary = true;
     for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
     s.input.secondary = false;
     const rockets = s.projectiles.active.length - before;
-    const out = { inIt, walked: Math.round(walked), hp0, hp1, rockets, torso: 0 };
+    const out = { inIt, walked: Math.round(walked), hp0, hp1, rockets, torso: 0, why };
     // The torso goes where you look and the legs follow it rather than leading.
     s.look((yaw + 1.2) * 180 / Math.PI, 0);
     const legsWere = mine.yaw;
@@ -547,7 +560,7 @@ async function run() {
     piloted.skip ? '' : `${piloted.walked} m of walking`);
   check('its chaingun takes a mech apart',
     !piloted.skip && piloted.hp1 < piloted.hp0 - 300,
-    piloted.skip ? '' : `${piloted.hp0} to ${piloted.hp1}`);
+    piloted.skip ? '' : `${piloted.hp0} to ${piloted.hp1} ${JSON.stringify(piloted.why)}`);
   check('and the pod throws a salvo rather than one rocket',
     !piloted.skip && piloted.rockets >= 3, `${piloted.rockets} in the air`);
   check('the torso goes where you look and the legs follow',
