@@ -491,10 +491,23 @@ async function run() {
     // known place so that this measures the gun rather than the street. The
     // place is worked out once: taking it off the torso each step made the
     // target orbit the mech as the torso turned towards it.
-    const spot = {
-      x: mine.x - Math.sin(mine.torso) * 40,
-      z: mine.z - Math.cos(mine.torso) * 40,
-    };
+    // Somewhere the mech can actually see: a spot behind a frontage is a
+    // test of the wall, not of the gun. Candidates are tried in a fan round
+    // the torso until the line from the muzzle is clear.
+    const muzzle = s.mechs.muzzle(mine, s.mechSpec.titan.chaingun.muzzle);
+    let spot = null;
+    for (let step = 0; step < 24 && !spot; step++) {
+      const a = mine.torso + (step % 2 ? 1 : -1) * Math.floor(step / 2) * 0.26;
+      const d = 30 + (step % 3) * 6;
+      const px = mine.x - Math.sin(a) * d;
+      const pz = mine.z - Math.cos(a) * d;
+      const dx = px - muzzle.x, dz = pz - muzzle.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const blocked = s.world.raycast(muzzle.x, muzzle.y, muzzle.z,
+        dx / len, 0, dz / len, len);
+      if (!blocked) spot = { x: px, z: pz };
+    }
+    if (!spot) return { skip: true };
     theirs.x = spot.x;
     theirs.z = spot.z;
     theirs.y = s.world.groundHeight(spot.x, spot.z);
