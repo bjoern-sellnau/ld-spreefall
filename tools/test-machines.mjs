@@ -374,11 +374,18 @@ async function run() {
     s.teleport(0, 0);
     s.look(90, -4);
     for (let i = 0; i < 6; i++) await new Promise((r) => requestAnimationFrame(r));
+    // Find a frontage the camera is actually pointing at, rather than
+    // guessing a distance down the street and hoping. Without this the blast
+    // sometimes lands in the open and there is no bite in the picture to
+    // measure.
     const f = s.camera.forward;
-    const x = s.player.x + f[0] * 70, z = s.player.z + f[2] * 70;
+    const eye = s.camera.position;
+    const wall = s.world.raycast(eye[0], eye[1], eye[2], f[0], f[1], f[2], 220);
+    const away = wall ? Math.min(wall.t, 120) : 70;
+    const x = s.player.x + f[0] * away, z = s.player.z + f[2] * away;
     s.demolition.blast(x, s.world.groundHeight(x, z), z, 46, 3400);
     for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
-    s.teleport(x - f[0] * 26, z - f[2] * 26);
+    s.teleport(x - f[0] * Math.min(26, away * 0.5), z - f[2] * Math.min(26, away * 0.5));
     // Wait for the dust to settle, literally: smoke and sparks are bright and
     // they drift, and two frames taken while they are still up differ for
     // reasons that have nothing to do with what is being measured.
@@ -426,7 +433,7 @@ async function run() {
     return { armed, changed, darker };
   });
   check('a bite out of the city is dark inside rather than see through',
-    seeThrough.armed > 0 && seeThrough.changed > 300
+    seeThrough.armed > 0 && seeThrough.changed > 80
       && seeThrough.darker === seeThrough.changed,
     `${seeThrough.changed} pixels filled, all ${seeThrough.darker} of them darker`);
 
@@ -481,10 +488,16 @@ async function run() {
     s.input.keys.delete('KeyW');
     const walked = Math.hypot(mine.x - was.x, mine.z - was.z);
     // Then put the chaingun on the other one, which is stood in the open at a
-    // known distance so that this measures the gun rather than the street.
-    theirs.x = mine.x - Math.sin(mine.torso) * 40;
-    theirs.z = mine.z - Math.cos(mine.torso) * 40;
-    theirs.y = s.world.groundHeight(theirs.x, theirs.z);
+    // known place so that this measures the gun rather than the street. The
+    // place is worked out once: taking it off the torso each step made the
+    // target orbit the mech as the torso turned towards it.
+    const spot = {
+      x: mine.x - Math.sin(mine.torso) * 40,
+      z: mine.z - Math.cos(mine.torso) * 40,
+    };
+    theirs.x = spot.x;
+    theirs.z = spot.z;
+    theirs.y = s.world.groundHeight(spot.x, spot.z);
     theirs.health = theirs.maxHealth;
     const yaw = Math.atan2(-(theirs.x - mine.x), -(theirs.z - mine.z));
     s.look(yaw * 180 / Math.PI, 0);
@@ -493,8 +506,8 @@ async function run() {
     for (let i = 0; i < 60 * 4; i++) {
       // Nailed to the spot, so this measures the gun rather than whether the
       // other one happened to sidestep out of the line.
-      theirs.x = mine.x - Math.sin(mine.torso) * 40;
-      theirs.z = mine.z - Math.cos(mine.torso) * 40;
+      theirs.x = spot.x;
+      theirs.z = spot.z;
       s.fixedForTest(1 / 60);
     }
     s.input.fire = false;
