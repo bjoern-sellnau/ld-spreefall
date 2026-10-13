@@ -67,6 +67,8 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
 | F | get into the nearest vehicle, or out of the one you are in |
+| driving | W forward, S back, A D steer, Shift brake, left mouse fires |
+| flying | W S throttle, A D roll, mouse flies it, Space climbs, right mouse drops |
 | F4 | debug overlay |
 | V | free travel: pick a place on the map and fly there |
 | Q | back to the weapon you had before |
@@ -313,11 +315,21 @@ draw call.
 
 ## Vehicles
 
-Four of them stand near the spawn when the city loads, and the cheat menu
-will park one wherever you are. **F** gets you into the nearest, and out of
-the one you are in. The camera goes to a chase view behind it, because the
-inside of a tank is not a thing this project is going to model, and the gun
-fires wherever you are looking.
+Four of them stand near the spawn when the city loads, a fresh set is parked
+around you each time you cross into a district, and the cheat menu will put
+one wherever you are. On foot, standing next to one puts **F** and its name on
+the screen; empty ones are squares on both maps. **F** gets you into the
+nearest, and out of the one you are in. The camera goes to a chase view behind
+it, because the inside of a tank is not a thing this project is going to
+model, and the gun fires wherever you are looking.
+
+**W** is forward, **S** back, **A** and **D** steer, **Shift** brakes. When
+you climb in, the view turns to face the way the hull is pointing, and while
+you steer it turns with the hull, so forward is always into the screen. Before
+that the camera kept the heading you had on foot, which meant a tank parked
+across your line of sight drove off sideways or straight past you when you
+pressed forward: the hull was going nose first the whole time, but what you
+saw was a tank reversing.
 
 | | |
 |---|---|

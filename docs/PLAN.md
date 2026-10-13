@@ -975,3 +975,14 @@ is what prompted the change.
 - 2026-10-13: and there were too few of them. The mode now keeps twenty two
   machines walking instead of fourteen and puts a new one up every 1.1
   seconds instead of every 3.2, which is the soldier pool nearly full.
+
+- 2026-10-13: forward in a vehicle is forward on the screen. The hull always
+  drove nose first, and the suite has checked that since phase 15, but the
+  camera kept the heading you had on foot, so a tank parked across your line
+  of sight drove sideways or straight past you when you pressed W: it read as
+  reverse. Getting in now turns the view to the hull's heading, and steering
+  turns the view with the hull, free look still live on top of it. Two checks
+  hold it, one that forward goes where you are looking however the thing was
+  parked, one that the view and the hull turn by the same angle. The controls
+  are also on the screen now while you are in it, which is the other half of
+  why nobody could tell.

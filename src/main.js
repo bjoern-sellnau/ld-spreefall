@@ -65,7 +65,7 @@ const el = {
   modeNote: $('modenote'), timePick: $('timepick'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
-  vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'),
+  vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'), vehicleKeys: $('vehiclekeys'),
   rideHint: $('ridehint'), rideHintName: $('ridehintname'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
@@ -927,6 +927,15 @@ async function main() {
     el.hud.classList.add('driving');
     el.vehiclePanel.classList.remove('hidden');
     el.vehicleName.textContent = near.spec.name;
+    el.vehicleKeys.textContent = near.spec.kind === 'air'
+      ? 'W S throttle, A D roll, mouse flies, Space up, right mouse down, left mouse fires'
+      : 'W forward, S back, A D steer, Shift brake, left mouse fires';
+    // You look where it is pointing. Before this the camera kept the heading
+    // you had on foot, so a tank parked across your line of sight drove off
+    // sideways or straight past you when you pressed forward, which reads as
+    // reverse however the hull is actually moving.
+    camera.yaw = near.yaw;
+    camera.pitch = Math.min(camera.pitch, -0.05);
     audio.swap();
     toast(`${near.spec.name}. F to get out.`);
   }
@@ -2434,7 +2443,14 @@ async function main() {
         fire: input.fire && !photo.active,
         secondary: false,
       };
+      // The view turns with the hull. Steering a vehicle turns the thing you
+      // are sitting in, and a camera that ignored that would leave you
+      // driving sideways across your own screen within one corner. Free look
+      // still works: this adds the hull's own turn to whatever you are doing
+      // with the mouse rather than taking the mouse away.
+      const hullWas = v.yaw;
       vehicles.update(selfDt, controls, state.time);
+      if (!air) camera.yaw += v.yaw - hullWas;
       // Dead or alive, you are where it is.
       player.teleport(v.x, v.z);
       state.curr.x = v.x; state.curr.y = v.y; state.curr.z = v.z;
