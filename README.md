@@ -476,6 +476,32 @@ which is the whole tactic: stop them, then take them apart.
 
 It is a mode and not a cheat, so a run in it is not marked as cheated.
 
+## Mechs
+
+Eight metres of walking gun platform, theirs and yours. A mech is not a
+vehicle: it walks, so it follows the ground and steps over kerbs, and its legs
+turn slowly while its torso turns fast. The torso is where the guns are, so it
+can walk one way and shoot another, and that split is most of what makes one
+feel like forty tonnes rather than like a car.
+
+**Yours** comes out of the cheat menu and you climb in with **F**, the same
+key as everything else. W A S D walks it, the mouse aims the torso and the
+legs chase the torso, the left mouse is a chaingun, the right mouse throws a
+salvo of six rockets, **Shift** dashes and **Space** jumps. The landing is a
+weapon in its own right: forty tonnes arriving opens the road and takes apart
+whatever is standing in eleven metres of it. The camera hangs behind the
+shoulders, because the thing worth looking at here is the mech.
+
+**Theirs**, the Reaper, walks in from two hundred metres, closes to about
+forty, sidesteps rather than standing still, and fires five rounds then waits
+two seconds. Rockets only past fifty five metres. Rise of the Machines keeps
+two of them on the streets; the cheat menu will drop a pair wherever you are.
+
+The whole body is one mesh and one instanced draw call, and the walk, the
+torso turn, the pitch, the stride bob and the fall are all in the vertex
+shader. The only thing that distinguishes yours from theirs is one number per
+instance, which turns the red core blue.
+
 ## The city is eighty one districts
 
 The brief asks for a walkable Berlin under 25 MB of download. Mitte at full

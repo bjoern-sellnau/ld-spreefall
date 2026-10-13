@@ -1006,3 +1006,42 @@ is what prompted the change.
   rule as everywhere else in this project. Fetching all eighty one from cold
   is an hour and three quarters, nearly all of it waiting on Overpass; the
   build itself is two minutes.
+
+## 22. Mechs
+
+- 2026-10-13: eight metres of walking gun platform, theirs and yours, in
+  `src/game/mechs.js`. A mech is neither a soldier nor a vehicle: it walks, so
+  it follows the ground and steps over kerbs; it is a machine, so its legs
+  turn slowly and its torso turns fast, and the torso is what the guns are on.
+  That split is the whole feel of it. One update drives both: a pilot is a set
+  of controls where the hunting ones have an intent, so there is one physics
+  path rather than two that drift apart.
+
+- 2026-10-13: the body is one mesh and one draw call, with the transform doing
+  the work. `MECH_VS` swings the legs about the hip line, turns and pitches
+  the torso about the same line, bobs the whole body twice a stride and lays
+  it over when it dies. The materials are the shared body shader's: hull
+  plate, joint steel, gun metal, glass, and the glowing core, which the vertex
+  stage swaps from red to blue when the instance says the mech is yours. That
+  is the only difference between the thing hunting you and the thing you are
+  standing in: one number per instance.
+
+- 2026-10-13: yours is called from the cheat menu, boarded with F like
+  everything else, and driven in a chase view from behind the shoulders. W A S
+  D walks it, the mouse aims the torso and the legs chase the torso, the left
+  mouse is a chaingun and the right is a salvo out of the pod, Shift dashes
+  and Space jumps. The landing is its own weapon: forty tonnes arriving opens
+  the road and takes apart what is standing in eleven metres of it, and the
+  pilot inside the armour is fine, which is the one place where the blast does
+  not treat you like everything else.
+
+- 2026-10-13: theirs, the Reaper, walks in from a couple of hundred metres,
+  closes to about forty, sidesteps rather than standing still, and fires five
+  rounds then waits two seconds, because a mech that fires without pausing
+  kills you from across a square before you have found which street it is in.
+  Rockets only past fifty five metres, for the same reason. Rise of the
+  Machines keeps two of them walking; the cheat menu drops a pair on demand.
+  Twenty four checks hold the lot, including that its feet never leave the
+  ground, that the chaingun takes another mech apart, and that a jump ends in
+  a hole rather than in silence: the first landing did nothing at all, because
+  the kerb step in the walker was catching the fall and cancelling it.

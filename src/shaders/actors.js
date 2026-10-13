@@ -472,6 +472,90 @@ void main() {
 }
 `;
 
+// A mech. The transform is the point of this shader: the legs swing about the
+// hips and the torso turns and pitches about the same line, so the thing can
+// walk one way and shoot another. Everything else, the materials and the fog
+// and the shadows, is the shared body shader.
+export const MECH_VS = `${VERSION}
+precision highp float;
+${CAMERA_BLOCK}
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aInfo;     // x part id
+layout(location = 5) in vec4 iPosYaw;   // xyz feet position, w leg yaw
+layout(location = 6) in vec4 iState;    // x stride, y torso yaw, z hit flash, w torso pitch
+layout(location = 7) in vec4 iExtra;    // x mine, y dying, z boost
+
+out vec3 vWorld;
+out vec3 vNormal;
+flat out float vPart;
+flat out float vFlash;
+out float vViewDist;
+
+const float HIP = 4.2;
+
+mat3 rotY(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
+}
+mat3 rotX(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+}
+mat3 rotZ(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0);
+}
+
+void main() {
+  vec3 p = aPos;
+  vec3 n = aNormal;
+  float stride = iState.x;
+  float swing = sin(stride) * 0.38;
+
+  if (p.y < HIP) {
+    // A leg. The two of them are in opposition, and the lower half of each
+    // swings a little further than the upper, which is enough of a knee.
+    float side = p.x < 0.0 ? 1.0 : -1.0;
+    vec3 hip = vec3(p.x, HIP, 0.0);
+    float amount = swing * side * (p.y < 2.6 ? 1.25 : 1.0);
+    mat3 r = rotX(amount);
+    p = hip + r * (p - hip);
+    n = r * n;
+  } else {
+    // The torso, which is where the guns are. It turns relative to the legs
+    // and it pitches, and both happen about the hip line so that nothing
+    // tears at the waist.
+    vec3 base = vec3(0.0, HIP, 0.0);
+    mat3 t = rotY(iState.y) * rotX(iState.w);
+    p = base + t * (p - base);
+    n = t * n;
+  }
+
+  // The body rises and falls twice a stride, which is most of what makes a
+  // walk read as weight.
+  p.y += sin(stride * 2.0) * 0.14;
+
+  // Going over, once it is dead.
+  float down = clamp(iExtra.y, 0.0, 1.0);
+  mat3 fall = rotZ(down * 0.35) * rotX(-down * 1.35);
+  p = fall * p;
+  n = fall * n;
+
+  mat3 body = rotY(-iPosYaw.w);
+  vec3 world = body * p + iPosYaw.xyz;
+  vWorld = world;
+  vNormal = normalize(body * n);
+  // The eye and the reactor are part 1, the red core material. Yours burns
+  // blue instead, which is part 11, and that is the only thing that tells the
+  // two apart at a distance.
+  vPart = (aInfo.x < 1.5 && aInfo.x > 0.5 && iExtra.x > 0.5) ? 11.0 : aInfo.x;
+  vFlash = iState.z;
+  vViewDist = length(world - uCamPos.xyz);
+  gl_Position = uViewProj * vec4(world, 1.0);
+}
+`;
+
 export const DRONE_SHADOW_VS = `${VERSION}
 precision highp float;
 layout(location = 0) in vec3 aPos;

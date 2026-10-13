@@ -46,6 +46,7 @@ export const SPAWNS = [
   { id: 'soldiers', label: 'Soldiers', note: 'a section of six, in the streets around you', count: 6 },
   { id: 'drones', label: 'Drones', note: 'four, overhead', count: 4 },
   { id: 'jets', label: 'Jets', note: 'two, running in from half a kilometre', count: 2 },
+  { id: 'reapers', label: 'Enemy mechs', note: 'two, eight metres of walking gun', count: 2 },
 ];
 
 /**
@@ -81,6 +82,7 @@ export const RIDES = [
   { id: 'tank', label: 'Tank', note: 'slow, hard to kill, one very large gun' },
   { id: 'heli', label: 'Helicopter', note: 'hovers; space climbs, right mouse drops rockets' },
   { id: 'jet', label: 'Fighter', note: 'will not fly below forty metres a second' },
+  { id: 'titan', label: 'Mech', note: 'yours: chaingun, rockets, a dash and a landing that opens the road' },
 ];
 
 export class Cheats {

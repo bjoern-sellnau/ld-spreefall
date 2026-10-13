@@ -38,6 +38,12 @@ export const MACHINES = {
   beam: { damage: 18, interval: 1.15, charge: 0.45, range: 190 },
   // What an EMP does to one.
   stun: { seconds: 7.5, radius: 34, damageMultiplier: 4 },
+  // And the heavy ones. Two at a time is plenty: a Reaper is eight metres of
+  // walking gun and the city is not wide enough for a herd of them.
+  mechs: 2,
+  mechEvery: 14,
+  mechFrom: 90,
+  mechTo: 200,
 };
 
 /**
@@ -50,6 +56,7 @@ export class Machines {
     this.timeOfDay = 20.2;
     this.spawnTimer = 0;
     this.rainTimer = 0;
+    this.mechTimer = 6;
     this.kills = 0;
   }
 
@@ -58,6 +65,7 @@ export class Machines {
     this.active = !!on;
     this.spawnTimer = 0;
     this.rainTimer = 0;
+    this.mechTimer = 6;
     return this.active;
   }
 
@@ -68,6 +76,15 @@ export class Machines {
     if (this.rainTimer > 0) return false;
     this.rainTimer = MACHINES.rainEvery + Math.random() * MACHINES.rainSpread;
     return true;
+  }
+
+  /** Whether another Reaper should be walked in. */
+  tickMech(dt, standing) {
+    if (!this.active) return false;
+    this.mechTimer = (this.mechTimer || 0) - dt;
+    if (this.mechTimer > 0) return false;
+    this.mechTimer = MACHINES.mechEvery;
+    return standing < MACHINES.mechs;
   }
 
   /** Whether another machine should be put on the street this frame. */

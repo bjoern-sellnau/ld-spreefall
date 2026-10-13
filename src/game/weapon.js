@@ -28,6 +28,7 @@ export class Weapon {
     // Filled in by the game layer once they exist, so the weapon can hit them.
     this.soldiers = opts.soldiers || null;
     this.jets = opts.jets || null;
+    this.mechs = opts.mechs || null;
     this.projectiles = opts.projectiles || null;
 
     this.carried = {};
@@ -385,6 +386,10 @@ export class Weapon {
       const h = this.jets.raycast(ox, oy, oz, dx, dy, dz, maxT);
       take(h, 'jet', h && h.jet);
     }
+    if (this.mechs) {
+      const h = this.mechs.raycast(ox, oy, oz, dx, dy, dz, maxT);
+      take(h, 'mech', h && h.mech);
+    }
     return best;
   }
 
@@ -392,6 +397,7 @@ export class Weapon {
   _damage(hit, amount, dir) {
     if (hit.kind === 'soldier') return this.soldiers.damage(hit.target, amount, dir);
     if (hit.kind === 'jet') return this.jets.damage(hit.target, amount);
+    if (hit.kind === 'mech') return this.mechs.damage(hit.target, amount);
     return this.drones.damage(hit.target, amount);
   }
 

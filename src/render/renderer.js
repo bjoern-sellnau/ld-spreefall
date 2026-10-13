@@ -487,6 +487,7 @@ export class Renderer {
       if (i === 0 && this.drawActors) {
         draws += this.actors.drawDroneShadows(this.lightVp[i]);
         draws += this.actors.drawSoldierShadows(this.lightVp[i]);
+        draws += this.actors.drawMechShadows(this.lightVp[i]);
       }
 
       if (i === 0) {
@@ -571,6 +572,8 @@ export class Renderer {
       tris += this.actors.jet.instanceCount * (this.actors.jet.count / 3);
       draws += this.actors.drawSoldiers();
       tris += this.actors.soldier.instanceCount * (this.actors.soldier.count / 3);
+      draws += this.actors.drawMechs();
+      tris += this.actors.mech.instanceCount * (this.actors.mech.count / 3);
       draws += this.actors.drawProjectiles();
       for (const kind in this.actors.props) {
         const mesh = this.actors.props[kind];
