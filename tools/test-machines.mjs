@@ -508,8 +508,8 @@ async function run() {
       // And on ground near its own level: by this point in the suite the city
       // is full of craters, and a target standing eight metres down is a test
       // of how far a level shot carries over a hole.
-      const step = Math.abs(s.world.groundHeight(px, pz) - mine.y);
-      if (!blocked && step < 3) spot = { x: px, z: pz };
+      const drop = Math.abs(s.world.groundHeight(px, pz) - mine.y);
+      if (!blocked && drop < 3) spot = { x: px, z: pz };
     }
     if (!spot) return { skip: true };
     theirs.x = spot.x;
