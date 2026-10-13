@@ -175,9 +175,13 @@ export const WEAPONS = {
     // The wall: a line of fire that leaves you and runs away across the
     // ground, burning what it goes over. It costs a slug of fuel rather than
     // a round, so you can throw two if you are full and none if you are not.
+    // burnSeconds is what it leaves on the road behind it: the trees it goes
+    // past catch light, but a street with no trees on it has to go on burning
+    // too, or the wall is a flash rather than a fire.
     wall: {
       fuel: 90, width: 11, speed: 16, reach: 150, life: 9,
       damagePerSecond: 240, burnPerSecond: 1.6, ignite: 7,
+      burnSeconds: 11, groundDamagePerSecond: 95,
     },
   },
 };

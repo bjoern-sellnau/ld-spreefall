@@ -841,3 +841,111 @@ Three ways to close the gap, in the order they cost quality:
 None of those is a decision this project should take on its own, because all
 three of them trade away something the brief asks for. The numbers are here so
 the trade can be made with eyes open.
+
+## 20. All of Berlin, one district at a time
+
+The city is no longer the area inside the Ringbahn. It is Berlin, out to the
+administrative boundary: a box 45.7 km by 37.4 km, 1,706 square kilometres of
+which the city proper is about 891, cut into eighty one districts on one tile
+grid of 458 by 375 tiles. Steglitz, Lichterfelde and Treptow are in it, which
+is what prompted the change.
+
+- 2026-10-12: the lattice is deliberately irregular. Near the middle a
+  district is one and a half kilometres across, because that streams in
+  quickly and the detail there is high. Out past the ring they are four
+  kilometres, and past that eight, because a district is one Overpass query
+  and one build and nobody wants four hundred of either. Three bands, two
+  cell sizes, five tiers of detail, and the cuts all land on lines of the
+  global grid so the districts still partition the city exactly.
+
+- 2026-10-12: one district is in memory at a time. That is the whole answer to
+  the budget question. The brief asks for the playable area to come down in
+  under twenty five megabytes; all of Berlin at the tiers as they stand is
+  about two hundred and forty, and no amount of thinning gets 1,700 square
+  kilometres under twenty five. What does fit, and fits easily, is what a
+  player actually downloads to play: the code, the index and the district they
+  are standing in, which is between one and three megabytes. So that is what
+  the budget is now held against, and `tools/fit-city.mjs` fails the build if
+  any single district is too big to wait for, because a district that big
+  should have been split instead.
+
+  This is a reinterpretation of rule 6 and it is written down here rather than
+  quietly applied. The old reading, the whole deployed city under twenty five
+  megabytes, is still available: `fit-city --whole=25` cuts the city down to
+  what fits and deletes the rest.
+
+- 2026-10-12: crossing a boundary is a loading screen, not a stall. It names
+  the district you are entering and says how big it is, the bytes come down,
+  the district you were in is let go, and you are put down on the other side.
+  The controller holds you at the edge of what is loaded while that happens,
+  which it already did; what is new is that something starts the load when you
+  walk at the edge rather than after you have been stopped by it.
+
+- 2026-10-12: the map is the whole city whatever is loaded. It draws every
+  district in the index, dim for the ones that are not in memory, with their
+  names, and you can zoom from a street out to all of Berlin and back. That
+  separation, the map knowing the catalogue and the memory holding one entry
+  of it, is what makes the city feel whole while costing one district.
+
+- 2026-10-12: the loading screen names a place in the district, not just the
+  district. The build picks it: a landmark that came with a written card
+  first, then any named attraction from the extract, then the station the
+  district is built around, each time the one nearest the middle, and it goes
+  into the small index rather than the district's own file, because the screen
+  has to say it before any of the district has arrived. A district whose
+  extract named nothing says nothing, rather than being given a name it does
+  not have. `docs/screenshots/district-03-crossing.png` is the screen itself,
+  photographed with the line slowed down so the screen is up for real rather
+  than forced open by a hook.
+
+- 2026-10-12: two checks were measuring the machine rather than the game, and
+  the live city found both. The flamethrower check held the trigger for eighty
+  frames and expected a hundred units of fuel to go, which is a statement
+  about how fast the frames are, not about the weapon; it now holds for four
+  seconds and asks whether the drain matches the twenty six a second the
+  weapon claims. The wall of fire check asked the tree fires whether anything
+  was still burning, and on a real street with no trees on it the answer is
+  no. That one was a hole in the game, not only in the test: a wall now leaves
+  the road itself alight behind it for eleven seconds, the way an incendiary
+  does, so crossing Leipziger Strasse with it does something.
+
+- 2026-10-12: vehicles reported as not working were working: F gets you into
+  anything within seven metres and W drives it, which the suite has checked
+  since phase 15. What was missing is everything that tells you so. There is
+  now a prompt on the screen when you are standing next to one, saying which
+  key and what it is; empty vehicles are squares on both maps, so you can see
+  where the nearest one is parked rather than finding it by accident; and
+  crossing into a district parks a fresh set around where you came out,
+  because the ones you left were in the district that has just been let go.
+  Two checks in the city suite and one in the district suite hold that.
+
+## 21. The ground you see is the ground you stand on
+
+- 2026-10-12: being in the air after an explosion had two causes and both are
+  gone. The crater went into the collision field in one go, at the moment the
+  collapse opened, while the drawn ground sank over the next second and a
+  half; for that second the ground underfoot was six metres below the ground
+  in front of your eyes, and when you did fall, you fell the whole way. The
+  hole now goes into the field in step with the picture, a share each frame,
+  as the difference between two levels of the same profile so that two craters
+  on top of each other still add up. And the controller knows the difference
+  between the world moving and you moving: ground that sinks under the feet
+  you are standing on carries you down with it at nine metres a second, on
+  your feet the whole way, so a crater opening where you stand puts you at the
+  bottom of it rather than dropping you in. Walking off a kerb is unchanged,
+  because that question is asked before the step rather than after it.
+
+- 2026-10-12: the flamethrower had a key that could never be pressed. Its case
+  in the keyboard switch was a second `case 'KeyG'`, and the first one holsters
+  the weapon, so the branch was unreachable from the day it was written. It is
+  Z now, the incendiary is B and the EMP is X, all three are in the help panel
+  and the readme, and the interface suite presses each of them for real and
+  checks what came up, because nothing else would have noticed.
+
+- 2026-10-12: the loop counts the seconds it has actually simulated, as
+  `loop.simTime`, and the fire checks measure against that. A machine slow
+  enough for the frame clamp to bite runs the game slower than the clock on
+  the wall, so a drain of twenty six fuel a second looked like nine on the CI
+  runner. The same slowness burnt the road out before the check could see it
+  alight, so what the wall leaves behind is now watched while the wall is
+  still running rather than counted afterwards.

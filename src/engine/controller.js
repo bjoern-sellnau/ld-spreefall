@@ -12,6 +12,9 @@ export class CharacterController {
     this.x = 0; this.y = 0; this.z = 0;
     this.vy = 0;
     this.onGround = false;
+    // True while the ground under you is sinking and you are going with it.
+    this.sinking = false;
+
     this.radius = PLAYER.radius;
     this.height = PLAYER.height;
     this.stepUp = PLAYER.stepUp;
@@ -28,6 +31,7 @@ export class CharacterController {
     this.groundY = this.world.groundHeight(x, z);
     this.y = y === null ? this.groundY : y;
     this.vy = 0;
+    this.sinking = false;
   }
 
   /** Gather the segments that could matter this step, once per step. */
@@ -140,6 +144,12 @@ export class CharacterController {
     const reach = Math.hypot(wishX, wishZ) * dt + this.radius + 1.0;
     this.gather(this.x - reach, this.z - reach, this.x + reach, this.z + reach);
 
+    // Did the ground move while you were standing on it? Asked here, before
+    // the horizontal move, at the point you were standing on last step, so
+    // that a crater opening under your feet is told apart from you walking
+    // off a kerb. One is the world changing and one is you.
+    if (this.onGround && this.supportHeight() < this.groundY - 0.01) this.sinking = true;
+
     // Horizontal move in substeps so nothing is tunnelled through at a run.
     const stepX = (wishX * dt) / SUBSTEPS;
     const stepZ = (wishZ * dt) / SUBSTEPS;
@@ -180,9 +190,23 @@ export class CharacterController {
       this.onGround = false;
     }
 
+    // Going down with the street. While the ground you were on is below you
+    // and it got there by sinking, you follow it at a walking pace rather
+    // than hanging in the air waiting for gravity to notice, and you are on
+    // the ground the whole way down, so the landing costs nothing.
+    if (this.sinking) {
+      const target = Math.max(support, this.y - PLAYER.rideDown * dt);
+      if (target < this.y) this.y = target;
+      this.vy = 0;
+      this.onGround = true;
+      if (this.y <= support + 0.001) { this.y = support; this.sinking = false; }
+    }
+
     if (jump && this.onGround) {
       this.vy = PLAYER.jumpSpeed * jumpBoost;
       this.onGround = false;
+      // Jumping off ground that is on its way down is leaving it.
+      this.sinking = false;
     }
 
     // Keep the player inside the box.

@@ -432,6 +432,26 @@ html, body {
   color: #d6d1c6;
   backdrop-filter: blur(3px);
 }
+#ridehint {
+  position: absolute;
+  left: 50%; top: 58%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 13px;
+  background: rgba(10, 12, 15, 0.62);
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  font-size: 13px; color: #e7e3db;
+  pointer-events: none;
+}
+#ridehint b {
+  display: inline-block; min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid rgba(226, 201, 141, 0.55);
+  border-radius: 2px;
+  color: var(--accent);
+  font-size: 11px; font-weight: 700; text-align: center;
+}
 #sanctuary b {
   display: block;
   color: var(--accent);
@@ -558,6 +578,45 @@ html, body {
   text-shadow: 0 1px 4px #000;
 }
 #district.loading { color: var(--accent); }
+
+/* The district change. Full screen, because it is a wait, and the wait should
+   say which part of Berlin is coming. */
+#crossing {
+  display: flex; align-items: center; justify-content: center;
+  background: #07080a;
+  z-index: 40;
+}
+#crossing.hidden { display: none; }
+.crossbox { width: min(560px, 86vw); text-align: left; }
+.crosskicker {
+  font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase;
+  color: var(--dim); margin-bottom: 10px;
+}
+.crossname {
+  font-size: clamp(30px, 6vw, 58px); font-weight: 700; letter-spacing: 0.02em;
+  line-height: 1.02; color: #f2efe9;
+}
+.crosssight {
+  margin-top: 14px; display: flex; align-items: baseline; gap: 10px;
+  flex-wrap: wrap;
+}
+.crosssightlabel {
+  font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: rgba(242, 239, 233, 0.4);
+}
+.crosssightname {
+  font-size: clamp(15px, 2.4vw, 21px); color: var(--accent); font-weight: 600;
+}
+.crossnote { margin-top: 12px; color: var(--dim); font-size: 14px; line-height: 1.5; }
+.crossbar {
+  margin-top: 26px; height: 2px; background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.crossbar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.crosshint {
+  margin-top: 10px; font-size: 11px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--dim);
+}
 
 /* The time of day, picked before the end of the world starts. */
 .timepick {

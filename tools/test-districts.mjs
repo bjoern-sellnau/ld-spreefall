@@ -107,6 +107,87 @@ async function run() {
     index.districts.every((d) => d.mb > 0),
     index.districts.map((d) => `${d.id} ${d.mb} MB`).join(', '));
 
+  // --- one district at a time ---------------------------------------------
+  const only = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const home = s.world.entryFor(s.world.home);
+    // Walk at the nearest boundary until the screen comes up, the way a
+    // player gets there.
+    s.teleport(home.bounds.minX + 25, (home.bounds.minZ + home.bounds.maxZ) / 2);
+    s.look(90, -2);
+    const held = [];
+    for (let i = 0; i < 240; i++) {
+      s.player.step(1 / 60, -5.2, 0, false);
+      await new Promise((r) => requestAnimationFrame(r));
+      held.push(s.world.loadedIds.length);
+      if (s.crossingShown()) break;
+    }
+    const showing = s.crossingShown();
+    const name = document.getElementById('crossname').textContent;
+    const note = document.getElementById('crossnote').textContent;
+    for (let i = 0; i < 400 && s.crossingShown(); i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return {
+      showing, name, note,
+      most: Math.max(...held, s.world.loadedIds.length),
+      loaded: s.world.loadedIds,
+      here: s.world.nameAt(s.player.x, s.player.z),
+      onGround: Math.abs(s.player.y - s.world.groundHeight(s.player.x, s.player.z)) < 1,
+      mb: Math.round(s.world.residentBytes / 1e5) / 10,
+    };
+  });
+  check('walking at a boundary brings up the district you are entering',
+    only.showing && !!only.name, `${only.name}: ${only.note}`);
+  check('and only ever one district is in memory', only.most <= 1 && only.loaded.length === 1,
+    `${only.most} at most, ${only.mb} MB held`);
+  check('and you come out on the other side, on the ground',
+    only.loaded.length === 1 && only.onGround, `standing in ${only.here}`);
+
+  // --- the loading screen names a place in the district --------------------
+  // Held open by a slow line rather than by a hook: the screen is only up
+  // while the bytes are in the air, so the only honest way to photograph it
+  // is to put the bytes in the air for longer.
+  await page.route('**/world-core.*', async (route) => {
+    await new Promise((r) => setTimeout(r, 1400));
+    await route.continue();
+  });
+  const sight = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const home = s.world.entryFor(s.world.home);
+    const cx = (home.bounds.minX + home.bounds.maxX) / 2;
+    const cz = (home.bounds.minZ + home.bounds.maxZ) / 2;
+    const back = s.crossInto(cx, cz);
+    // Read the screen while it is still up, then let the load finish.
+    await new Promise((r) => requestAnimationFrame(r));
+    window.__crossBack = back;
+    const line = document.getElementById('crosssightline');
+    const shown = {
+      wanted: home.sight || null,
+      shown: document.getElementById('crosssight').textContent,
+      visible: !line.classList.contains('hidden'),
+      onScreen: s.crossingShown(),
+    };
+    window.__crossCentre = { x: cx, z: cz };
+    return shown;
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'district-03-crossing.png') });
+  const landed = await page.evaluate(async () => {
+    const s = window.spreefall;
+    await window.__crossBack;
+    const c = window.__crossCentre;
+    return {
+      rides: s.vehicles.active
+        .filter((v) => v.alive && Math.hypot(v.x - c.x, v.z - c.z) < 400).length,
+    };
+  });
+  await page.unroute('**/world-core.*');
+  check('the loading screen names a landmark of the district you are entering',
+    !!sight.wanted && sight.onScreen && sight.visible && sight.shown === sight.wanted,
+    `${sight.shown || 'nothing'} (index says ${sight.wanted || 'nothing'})`);
+  check('and the district you walk into has its own vehicles in it',
+    landed.rides >= 3, `${landed.rides} parked where you came out`);
+
   // --- it only holds what is near -----------------------------------------
   const held = await page.evaluate(() => {
     const s = window.spreefall;

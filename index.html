@@ -59,6 +59,22 @@
   </div>
 </div>
 
+<!-- Changing district. One district is in memory at a time, so crossing a
+     boundary is a short wait, and a wait should say where you are going. -->
+<div id="crossing" class="overlay hidden">
+  <div class="crossbox">
+    <div class="crosskicker">entering</div>
+    <div class="crossname" id="crossname">Berlin</div>
+    <div class="crosssight hidden" id="crosssightline">
+      <span class="crosssightlabel">in this district</span>
+      <span class="crosssightname" id="crosssight"></span>
+    </div>
+    <div class="crossnote" id="crossnote"></div>
+    <div class="crossbar"><i id="crossfill"></i></div>
+    <div class="crosshint" id="crosshint">loading the district</div>
+  </div>
+</div>
+
 <div id="hud" class="hidden">
   <div id="crosshair"><i></i><i></i><i></i><i></i></div>
   <div id="hitmarker"></div>
@@ -88,6 +104,7 @@
     <span id="cheatmark" class="hidden">cheated</span>
   </div>
   <div id="sanctuary" class="hidden"></div>
+  <div id="ridehint" class="hidden"><b>F</b><span id="ridehintname">Jeep</span></div>
   <div id="killfeed"></div>
   <canvas id="minimap" width="196" height="196"></canvas>
   <div id="compass"><span id="compasslabel">N</span></div>
@@ -143,6 +160,9 @@
     <tr><td>Right mouse</td><td>aim down the sight</td></tr>
     <tr><td>1 to 6, or the wheel</td><td>M16, shotgun, rocket launcher, grenade, C4, banana</td></tr>
     <tr><td>7 8 9 0</td><td>railgun, plasma rifle, flak cannon, splinter gun</td></tr>
+    <tr><td>Z</td><td>flamethrower, right mouse throws a wall of fire</td></tr>
+    <tr><td>B</td><td>incendiary bomb, leaves the street burning</td></tr>
+    <tr><td>X</td><td>EMP, stops a machine where it stands</td></tr>
     <tr><td>Right mouse with the launcher</td><td>hold the sight on a target to lock, then the rocket chases it</td></tr>
     <tr><td>Q</td><td>back to the last weapon</td></tr>
     <tr><td>T</td><td>blow the C4 you have put down</td></tr>
