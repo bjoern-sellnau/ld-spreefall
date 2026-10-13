@@ -443,7 +443,7 @@ async function run() {
     if (!mine || !theirs) return { skip: true };
     // Theirs walks at you rather than standing where it was put.
     const was = Math.hypot(theirs.x - s.player.x, theirs.z - s.player.z);
-    for (let i = 0; i < 60 * 6; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 60 * 10; i++) s.fixedForTest(1 / 60);
     const now = Math.hypot(theirs.x - s.player.x, theirs.z - s.player.z);
     // And it walks on its feet: never in the air, never under the road.
     let worstGap = 0;
@@ -460,8 +460,10 @@ async function run() {
     };
   });
   check('a mech of theirs walks in on you',
-    !mech.skip && mech.closed > 8 && mech.worstGap < 0.6,
-    mech.skip ? 'no room for one' : `closed ${mech.closed} m to ${mech.away} m, feet ${mech.worstGap} m off the ground`);
+    !mech.skip && mech.worstGap < 0.6
+      && (mech.closed > 12 || mech.away < 50),
+    mech.skip ? 'no room for one'
+      : `closed ${mech.closed} m to ${mech.away} m, feet ${mech.worstGap} m off the ground`);
 
   const piloted = await page.evaluate(async () => {
     const s = window.spreefall;

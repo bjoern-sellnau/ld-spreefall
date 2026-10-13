@@ -405,18 +405,47 @@ export class Mechs {
 
   // --- walking --------------------------------------------------------------
 
-  /** A step across the ground, with the hull stopped by walls. */
+  /**
+   * A step across the ground, with the hull stopped by walls and walked round
+   * them rather than into them.
+   *
+   * A mech that only stops at a wall is a mech that never arrives: the real
+   * city is full of frontages, and one of these spawning two hundred metres
+   * away with a building in between used to walk into it and stay there. So
+   * when the way ahead is blocked it tries the two ways along the wall, keeps
+   * whichever is clear for a second or two so it does not dither in a
+   * doorway, and slides.
+   */
   _move(m, dt, wx, wz) {
     const s = m.spec;
     const step = Math.hypot(wx, wz) * dt;
     if (step > 0.0001) {
-      const dx = wx / (Math.hypot(wx, wz) || 1);
-      const dz = wz / (Math.hypot(wx, wz) || 1);
-      // What is in front of it, at chest height, out of the same raycast the
-      // bullets use. A mech walks over cars and kerbs and into buildings.
-      const hit = this.world.raycast(m.x, m.y + s.height * 0.5, m.z,
-        dx, 0, dz, step + s.radius);
-      if (!hit || hit.kind !== 'wall') {
+      const len = Math.hypot(wx, wz) || 1;
+      let dx = wx / len;
+      let dz = wz / len;
+      const clear = (ax, az, reach) => !this.world.raycast(
+        m.x, m.y + s.height * 0.5, m.z, ax, 0, az, reach);
+      const reach = step + s.radius + 1.5;
+      m.slideLeft = (m.slideLeft || 0) - dt;
+      if (!clear(dx, dz, reach)) {
+        // Blocked. Try along the wall, keeping the side it picked last time
+        // while that side is still open.
+        const left = [-dz, dx];
+        const right = [dz, -dx];
+        const side = m.slideLeft > 0 && m.slideSide
+          ? m.slideSide
+          : (clear(left[0], left[1], s.radius + 6) ? left
+            : (clear(right[0], right[1], s.radius + 6) ? right : null));
+        if (side && clear(side[0], side[1], s.radius + 2)) {
+          m.slideSide = side;
+          m.slideLeft = 1.6;
+          dx = side[0]; dz = side[1];
+          wx = dx * len * 0.8; wz = dz * len * 0.8;
+        } else {
+          dx = 0; dz = 0; wx = 0; wz = 0;
+        }
+      }
+      if (dx !== 0 || dz !== 0) {
         const nx = m.x + wx * dt, nz = m.z + wz * dt;
         if (!this.isSanctuary(nx, 0, nz)) { m.x = nx; m.z = nz; }
       }

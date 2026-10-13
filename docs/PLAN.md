@@ -1092,3 +1092,11 @@ is what prompted the change.
   street you flattened is flat when you walk back into it from the other side
   of Berlin, and it costs a few dozen bytes a ruin rather than holding the
   district open.
+
+- 2026-10-13: a Reaper walks round a building instead of into it. The live
+  city found this one: in Mitte it spawned seventy seven metres out, found a
+  frontage in the way and stood there for the rest of the test, having closed
+  six metres. A mech that only stops at walls never arrives. It now tries the
+  two ways along a wall it has run into, keeps whichever is clear for a second
+  and a half so it does not dither in a doorway, and slides along at four
+  fifths of its walking speed.
