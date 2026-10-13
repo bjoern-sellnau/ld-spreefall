@@ -57,7 +57,7 @@ jobs:
           if ! grep -q overpass data/raw/source.json 2>/dev/null; then
             node --max-old-space-size=6144 tools/fetch-osm.mjs --force
           fi
-          node --max-old-space-size=6144 tools/fetch-osm.mjs --all
+          node --max-old-space-size=6144 tools/fetch-osm.mjs --all --live-only
       - name: Build every district
         run: node --max-old-space-size=6144 tools/build-world.mjs --all | tee city-build.log
       - name: The budget

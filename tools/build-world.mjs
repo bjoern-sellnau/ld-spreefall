@@ -803,15 +803,34 @@ const FOOT_CLASSES = new Set(['footway', 'path', 'cycleway', 'steps', 'bridleway
  * is. Nothing here guesses: with no place node the district keeps its grid
  * name, which is what the offline fallback produces.
  */
+/**
+ * What to call a district before anything has been built in it.
+ *
+ * A built district is named after the quarter its extract puts in the middle
+ * of it; a placeholder has no extract, so it gets a label off the lattice
+ * instead, which is at least true: where in Berlin it is and how far out.
+ */
+function placeholderName(district) {
+  if (district.core) return 'Mitte';
+  if (district.band === 'ring') return `Ring ${district.col + 1}-${district.row + 1}`;
+  const b = district.bounds;
+  const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+  const km = Math.round(Math.hypot(cx, cz) / 1000);
+  const dirs = ['north', 'north east', 'east', 'south east',
+    'south', 'south west', 'west', 'north west'];
+  // Screen z goes south, so the bearing is measured against negative z.
+  const a = Math.atan2(cx, -cz);
+  const dir = dirs[(Math.round((a / (Math.PI * 2)) * 8) + 8) % 8];
+  return `${km} km ${dir}`;
+}
+
 function districtName(district, places) {
   // The middle district is the brief's own box, drawn round the Gate, and the
   // project has called it Mitte since the first commit.
   // Out past the ring a district has no row and column to be named after, so
   // the fallback is its own id. A live extract almost always has a place node
   // in it and this is never seen; the offline fallback is where it shows.
-  const fallback = district.core ? 'Mitte'
-    : (district.band === 'ring' ? `Ring ${district.col + 1}-${district.row + 1}`
-      : `Berlin ${district.id}`);
+  const fallback = placeholderName(district);
   if (!places.length) return fallback;
   const cx = (district.bounds.minX + district.bounds.maxX) / 2;
   const cz = (district.bounds.minZ + district.bounds.maxZ) / 2;
@@ -889,8 +908,31 @@ function updateIndex(district, entry) {
       maxX: round2(district.bounds.maxX), maxZ: round2(district.bounds.maxZ),
     },
     bbox: district.bbox,
+    built: true,
     ...entry,
   });
+  // Every other district of Berlin goes in as a placeholder. The map is the
+  // whole city whatever is built, so the eighty that are not here yet are
+  // drawn as ground nobody has surveyed, with their names and their size, and
+  // the game refuses to walk or fly into one rather than loading a file that
+  // is not there. A placeholder carries no bytes and the budget passes over
+  // it, because nothing about it is downloaded.
+  const have = new Set(index.districts.map((d) => d.id));
+  for (const d of DISTRICTS) {
+    if (have.has(d.id)) continue;
+    index.districts.push({
+      id: d.id, tier: d.tier, col: d.col, row: d.row,
+      tx: d.tx, tz: d.tz, nx: d.nx, nz: d.nz,
+      bounds: {
+        minX: round2(d.bounds.minX), minZ: round2(d.bounds.minZ),
+        maxX: round2(d.bounds.maxX), maxZ: round2(d.bounds.maxZ),
+      },
+      bbox: d.bbox,
+      name: placeholderName(d),
+      built: false,
+      bytes: 0, gzip: 0,
+    });
+  }
   index.districts.sort((a, b) => (a.row - b.row) || (a.col - b.col));
   index.builtAt = new Date().toISOString();
   fs.writeFileSync(INDEX_FILE, JSON.stringify(index));
@@ -900,7 +942,10 @@ function updateIndex(district, entry) {
 function writeIndexSummary() {
   const index = readIndex();
   if (!index) return;
-  const rows = index.districts;
+  // Only what was actually built. The index also carries a placeholder for
+  // every district of Berlin that is not here yet, so that the map can draw
+  // the whole city; a placeholder has no bytes and nothing to weigh.
+  const rows = index.districts.filter((d) => d.built !== false);
   let bytes = 0, gz = 0, tris = 0, buildings = 0, trees = 0, road = 0;
   console.log('');
   console.log('district  tier  name                       MB     gz MB   triangles  buildings');

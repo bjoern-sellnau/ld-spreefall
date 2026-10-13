@@ -1560,8 +1560,17 @@ async function main() {
     aimAt(x, z);
     const away = Math.round(Math.hypot(x - player.x, z - player.z));
     if (state.mapMode === 'travel') {
-      // Nothing is off limits here. Walking into the memorial has always been
-      // allowed; it is firing in it that is not.
+      // Except a district nobody has built yet, which is on the map because
+      // the map is all of Berlin, and which there is nothing to land in.
+      const where = world.entryAt(x, z);
+      if (where && !world.isBuilt(where)) {
+        state.pendingNuke = null;
+        el.targetConfirm.classList.add('hidden');
+        el.targetHint.textContent = `${where.name || where.id} is not built yet`;
+        return false;
+      }
+      // Nothing else is off limits here. Walking into the memorial has always
+      // been allowed; it is firing in it that is not.
       state.pendingNuke = { x, z };
       el.confirmWhere.textContent = away >= 1000
         ? `${(away / 1000).toFixed(2)} km from here. About ${Math.round(estimateFlight(away))} seconds.`
@@ -1689,6 +1698,17 @@ async function main() {
     if (!entry) return false;
     if (world.loaded(entry.id)) return true;
     if (state.crossing) return false;
+    // A district of Berlin that has not been built yet is on the map and in
+    // the index, because the city is the whole city whatever is built, but
+    // there is nothing to walk into. Saying so is better than a loading
+    // screen that never fills.
+    if (!world.isBuilt(entry)) {
+      if (state.unbuiltSaid !== entry.id) {
+        state.unbuiltSaid = entry.id;
+        toast(`${entry.name || 'that part of Berlin'} is not built yet`);
+      }
+      return false;
+    }
     state.crossing = entry.id;
     el.crossName.textContent = entry.name || 'Berlin';
     // The one thing in there worth walking towards. It is chosen when the

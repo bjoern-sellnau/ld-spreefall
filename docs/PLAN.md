@@ -986,3 +986,23 @@ is what prompted the change.
   parked, one that the view and the hull turn by the same angle. The controls
   are also on the screen now while you are in it, which is the other half of
   why nobody could tell.
+
+- 2026-10-13: the map is all of Berlin whether or not Berlin has been built.
+  The index now carries an entry for each of the eighty one districts: the
+  ones with a bundle behind them as before, and the rest as placeholders with
+  their box, their tier and a label saying where they are, at no cost in bytes
+  because there is nothing to download. The map draws those as unsurveyed
+  ground, free travel refuses them with the reason rather than flying you into
+  a hole, and walking at one says so and holds you at the edge. `World.isBuilt`
+  is the single gate; everything that loads goes through it.
+
+- 2026-10-13: and the deploy builds the city rather than a corner of it. The
+  deploy used to fetch a hardcoded dozen districts, which is why most of
+  Berlin was missing from the deployed game. It now restores the extract cache
+  the weekly whole city job writes, spends up to twenty minutes filling
+  whatever gaps are left, writes back what it got, and builds everything it
+  has. Both jobs fetch live only: Overpass failing leaves a district unbuilt
+  rather than putting a synthesised Berlin on the website, which is the same
+  rule as everywhere else in this project. Fetching all eighty one from cold
+  is an hour and three quarters, nearly all of it waiting on Overpass; the
+  build itself is two minutes.

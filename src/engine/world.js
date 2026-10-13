@@ -101,6 +101,19 @@ export class World {
 
   entryFor(id) { return this.catalogue.find((d) => d.id === id) || null; }
 
+  /**
+   * Is there anything to load for this district?
+   *
+   * The index lists every district of Berlin so that the map can draw the
+   * whole city, but a district nobody has built yet has no bundle behind it.
+   * Asking for one would be a pair of four hundred and fours, so everything
+   * that loads goes through here first.
+   */
+  isBuilt(entry) {
+    const d = typeof entry === 'string' ? this.entryFor(entry) : entry;
+    return !!(d && d.built !== false && d.bin && d.json);
+  }
+
   /** The district entry a point in metres falls in, loaded or not. */
   entryAt(x, z) {
     for (const d of this.catalogue) {
@@ -163,6 +176,7 @@ export class World {
     if (waiting) return waiting;
     const entry = this.entryFor(id);
     if (!entry) return Promise.resolve(null);
+    if (!this.isBuilt(entry)) return Promise.resolve(null);
     const job = this._fetchDistrict(entry, onProgress)
       .then((district) => {
         this.pending.delete(id);
@@ -318,10 +332,14 @@ export class World {
    */
   async enterOnly(x, z, onProgress = null) {
     const here = this.entryAt(x, z);
-    if (!here) return null;
+    if (!here || !this.isBuilt(here)) return null;
     const district = await this.loadDistrict(here.id, onProgress);
-    for (const id of [...this.districts.keys()]) {
-      if (id !== here.id) this.unloadDistrict(id);
+    // Only once the new one is in. Letting the old district go first would
+    // leave the player standing on nothing if the fetch failed.
+    if (district) {
+      for (const id of [...this.districts.keys()]) {
+        if (id !== here.id) this.unloadDistrict(id);
+      }
     }
     return district;
   }
@@ -341,6 +359,7 @@ export class World {
       .sort((a, b) => a.away - b.away);
     for (const { d, away } of sorted) {
       if (want.size >= max) break;
+      if (!this.isBuilt(d)) continue;
       if (away <= reach) want.add(d.id);
     }
     for (const id of want) {

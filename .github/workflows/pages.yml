@@ -29,11 +29,19 @@ jobs:
         run: node --test tools/test/*.test.mjs
       - name: The day, so the extract is fetched once a day and no more
         run: echo "OSM_DAY=$(date -u +%F)" >> "$GITHUB_ENV"
-      - name: Cache the OSM extract
-        uses: actions/cache@v4
+      - name: Take whatever extracts the city build has already fetched
+        # Restore only. The weekly whole city job writes this cache, which is
+        # every district of Berlin; a deploy reads it and writes nothing back,
+        # because re-uploading gigabytes of XML on every push would cost more
+        # than the fetch it saves. Without the cache a deploy still works: it
+        # fetches what it can inside the budget below and deploys that.
+        uses: actions/cache/restore@v4
         with:
           path: data/raw
-          key: osm-${{ env.OSM_DAY }}
+          key: osm-city-${{ env.OSM_DAY }}
+          restore-keys: |
+            osm-city-
+            osm-
       - name: Fetch the OSM extract
         # GitHub runners can reach Overpass, so this is the real thing rather
         # than the offline fallback, and --force ignores the dataset committed
@@ -55,17 +63,31 @@ jobs:
           else
             node --max-old-space-size=6144 tools/fetch-osm.mjs --force
           fi
-      - name: Fetch the districts around it
-        # The deployed city is the middle plus the ring around it, which is as
-        # much of Berlin as can be fetched inside a deploy. All eighty one are
-        # built by the city workflow, which runs weekly and on demand. A
-        # district that cannot be fetched is simply not in the index, and the
-        # game loads the ones that are.
+      - name: Fetch whatever districts are still missing, inside a budget
+        # The deployed city is meant to be all of Berlin. Fetching all eighty
+        # one from cold takes an hour and three quarters, nearly all of it
+        # waiting on Overpass, so a deploy takes what the cache gave it and
+        # spends up to twenty minutes filling the gaps. Each deploy fills a few
+        # more, the weekly city job fills the rest, and a district that is not
+        # there yet is marked unbuilt in the index rather than faked: this runs
+        # live only, so Overpass failing leaves a hole instead of writing a
+        # synthetic Berlin into the cache.
         continue-on-error: true
         run: |
-          for d in c2r0 c3r0 c4r0 c2r1 c4r1 c2r2 c3r2 c4r2 c1r1 c5r1 c1r2 c5r2; do
-            node --max-old-space-size=6144 tools/fetch-osm.mjs --district=$d || true
-          done
+          timeout 1200 node --max-old-space-size=6144 tools/fetch-osm.mjs --all --live-only || true
+          ls data/raw/*.osm 2>/dev/null | wc -l
+      - name: Keep what was fetched for the next deploy
+        # The restore above is shared with the weekly city job; this is the
+        # other half of it. The first deploy of the day writes back whatever
+        # it managed to add, later ones find the key taken and carry on, and
+        # the set of extracts grows towards the whole city over a few runs
+        # instead of each deploy fetching the same gaps and throwing them
+        # away.
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw
+          key: osm-city-${{ env.OSM_DAY }}
       - name: Build every district that has an extract
         run: node --max-old-space-size=6144 tools/build-world.mjs --all
       - name: Weigh the city against the budget
