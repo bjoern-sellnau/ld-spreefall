@@ -930,7 +930,7 @@ html, body {
   position: absolute;
   /* Beside the vitals, where the ammunition readout sits when you are on
      foot, because it is the same piece of information: what you are firing. */
-  left: 236px; bottom: 34px;
+  left: 236px; bottom: 88px;
   font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.08em;
   color: var(--ink);
@@ -940,6 +940,39 @@ html, body {
 #vehicle #vehiclekeys {
   font-size: 11px; letter-spacing: 0.06em; color: var(--dim);
   margin: 2px 0 1px; max-width: 420px;
+}
+/* The hull bar: the same shape as the shield bar on foot, because it is the
+   same question. It goes amber under a third and red under a sixth. */
+#vehicle .vhull {
+  width: 220px; height: 5px;
+  margin: 5px 0 6px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+#vehicle .vhull i {
+  display: block; height: 100%; width: 100%;
+  background: #7fd6c9;
+  transition: width 0.12s linear;
+}
+#vehicle.hurt .vhull i { background: #e2c98d; }
+#vehicle.critical .vhull i { background: #e2705a; }
+#vehicle .vstats {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+#vehicle .vstat { display: flex; align-items: baseline; gap: 4px; font-size: 12px; }
+#vehicle .vstat b {
+  font-size: 17px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink);
+}
+#vehicle .vstat i {
+  font-style: normal; font-size: 9px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--dim);
+}
+#vehicle .vstat.cold b { color: var(--dim); }
+#vehicle .vwarn {
+  font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: #e2705a;
+  margin-bottom: 3px;
 }
 #vehicle em {
   font-style: normal;

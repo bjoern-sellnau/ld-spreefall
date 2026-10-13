@@ -323,6 +323,11 @@ nearest, and out of the one you are in. The camera goes to a chase view behind
 it, because the inside of a tank is not a thing this project is going to
 model, and the gun fires wherever you are looking.
 
+Whatever you are in has a readout: what it is, what is left of its hull, how
+fast it is going, whether the gun is ready, and in the air how far it is to
+the ground. The bar goes amber under a third and red under a sixth, and one
+line underneath says what is about to go wrong.
+
 **W** is forward, **S** back, **A** and **D** steer, **Shift** brakes. When
 you climb in, the view turns to face the way the hull is pointing, and while
 you steer it turns with the hull, so forward is always into the screen. Before

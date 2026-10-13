@@ -67,6 +67,13 @@ const el = {
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'), vehicleKeys: $('vehiclekeys'),
+  vehicleHull: $('vehiclehull'), vehicleSpeed: $('vehiclespeed'),
+  vehicleSpeedUnit: $('vehiclespeedunit'),
+  vehicleAltStat: $('vehiclealtstat'), vehicleAlt: $('vehiclealt'),
+  vehicleGun: $('vehiclegun'), vehicleGunLabel: $('vehiclegunlabel'),
+  vehicleRockStat: $('vehiclerockstat'), vehicleRock: $('vehiclerock'),
+  vehicleDashStat: $('vehicledashstat'), vehicleDash: $('vehicledash'),
+  vehicleWarn: $('vehiclewarn'),
   rideHint: $('ridehint'), rideHintName: $('ridehintname'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
@@ -200,7 +207,36 @@ async function main() {
   // the card needs the new ones. Nothing else changes: the same ruin, drawn
   // from the buffers instead of from a uniform slot, which is then free for
   // the next explosion somewhere else entirely.
-  demolition.onBaked = (indices) => tiles.refresh(indices);
+  demolition.onBaked = (indices) => {
+    tiles.refresh(indices);
+    // A ruin written into the bytes is still a ruin with holes in it.
+    for (const i of indices) renderer.scarredTiles.add(i);
+  };
+  // And the city remembers it. The bytes a ruin was written into are thrown
+  // away when the district is unloaded, so the record goes to the world,
+  // which puts it back the next time the district is loaded.
+  demolition.onScar = (scar) => world.recordScar(scar);
+
+  /**
+   * Puts the ruins back in a district that has just been loaded.
+   *
+   * Everything about a finished ruin is in eight numbers, and replaying them
+   * is the same code the live collapse ends with, so what you walk back into
+   * is what you left: same cut, same heap, same crater.
+   *
+   * @param {string} id the district
+   */
+  function restoreScars(id) {
+    const list = world.scarsFor(id);
+    if (!list.length) return 0;
+    const touched = new Set();
+    for (const scar of list) {
+      for (const i of demolition.replay(scar)) touched.add(i);
+      scarTiles(scar.x, scar.z, scar.radius);
+    }
+    if (touched.size) tiles.refresh([...touched]);
+    return list.length;
+  }
   // A tree that has burnt down is struck off the tile it stood in, and that
   // tile's instance buffer is built again without it. It does not come back
   // when the fire burns out, and it does not come back when you walk away:
@@ -800,7 +836,26 @@ async function main() {
   // Each stage of a building coming apart: the dust and the pieces come off
   // the line it has been cut back to, not out of the ground, so a top storey
   // going is a top storey going and not a puff at your feet.
+  /**
+   * Marks the tiles a blast has taken a bite out of, so the renderer can draw
+   * them inside out afterwards and a hole shows the inside of the world
+   * instead of the sky behind it. Costs one pass over a handful of tiles, and
+   * nothing at all in a city nobody has hit yet.
+   */
+  function scarTiles(x, z, radius) {
+    const w = world;
+    const r = radius + 6;
+    const tx0 = Math.max(0, Math.floor((x - r - w.minX) / w.tileSize));
+    const tx1 = Math.min(w.nx - 1, Math.floor((x + r - w.minX) / w.tileSize));
+    const tz0 = Math.max(0, Math.floor((z - r - w.minZ) / w.tileSize));
+    const tz1 = Math.min(w.nz - 1, Math.floor((z + r - w.minZ) / w.tileSize));
+    for (let tz = tz0; tz <= tz1; tz++) {
+      for (let tx = tx0; tx <= tx1; tx++) renderer.scarredTiles.add(tz * w.nx + tx);
+    }
+  }
+
   demolition.onStage = (site, level, was) => {
+    scarTiles(site.x, site.z, site.radius);
     const share = level - was;
     // How tall whatever is in the site still was before this stage. The
     // tallest wall inside it is the best answer available without asking the
@@ -1083,6 +1138,84 @@ async function main() {
   }
 
   /**
+   * The readout for whatever you are in: a jeep, a tank, an aircraft or a
+   * mech. One panel for all four, because the questions are the same ones in
+   * every case and they are the questions a driver actually has: how much of
+   * this thing is left, how fast is it going, can I fire yet, and in the air,
+   * how far is it to the ground.
+   *
+   * Everything here is read off the entity rather than tracked separately, so
+   * the numbers on the screen are the numbers the simulation is using.
+   */
+  function rideHud() {
+    const ride = state.inMech || state.inVehicle;
+    if (!ride) return;
+    const spec = ride.spec;
+    const mech = ride === state.inMech;
+    const hull = Math.max(0, ride.health) / (ride.maxHealth || spec.health);
+    el.vehicleName.textContent = `${spec.name} ${Math.max(0, Math.round(ride.health))}`;
+    el.vehicleHull.style.width = `${Math.round(hull * 100)}%`;
+    el.vehiclePanel.classList.toggle('hurt', hull < 0.34);
+    el.vehiclePanel.classList.toggle('critical', hull < 0.16);
+
+    // Speed, in the unit a person reads: kilometres an hour on the ground and
+    // in the air, because metres a second means nothing at a glance.
+    const speed = mech ? ride.speed : Math.abs(ride.speed);
+    el.vehicleSpeed.textContent = String(Math.round(speed * 3.6));
+    el.vehicleSpeedUnit.textContent = 'km/h';
+
+    // Altitude, for the two that fly, measured to the ground under them
+    // rather than to sea level, which is the number that matters when you are
+    // about to put a helicopter into a roof.
+    const air = !mech && spec.kind === 'air';
+    el.vehicleAltStat.classList.toggle('hidden', !air);
+    if (air) {
+      const up = Math.max(0, ride.y - world.groundHeight(ride.x, ride.z));
+      el.vehicleAlt.textContent = String(Math.round(up));
+    }
+
+    // The guns. A cooldown is shown as the seconds left rather than as a bar,
+    // because what a tank wants to know is when, not how far along.
+    const gunLeft = mech
+      ? Math.max(0, ride.restLeft || 0)
+      : Math.max(0, ride.cooldown || 0);
+    el.vehicleGunLabel.textContent = mech ? 'chaingun' : (spec.gun.kind === 'shell' ? 'shell' : 'gun');
+    el.vehicleGun.textContent = gunLeft > 0.08 ? `${gunLeft.toFixed(1)}s` : 'ready';
+    el.vehicleGun.parentElement.classList.toggle('cold', gunLeft > 0.08);
+
+    const rockets = mech ? spec.rockets : spec.rocket;
+    el.vehicleRockStat.classList.toggle('hidden', !rockets);
+    if (rockets) {
+      const left = mech
+        ? Math.max(0, ride.rocketTimer || 0)
+        : Math.max(0, ride.rocketCooldown || 0);
+      el.vehicleRock.textContent = left > 0.08 ? `${left.toFixed(1)}s` : 'ready';
+      el.vehicleRockStat.classList.toggle('cold', left > 0.08);
+    }
+
+    // And the one thing only a mech has.
+    el.vehicleDashStat.classList.toggle('hidden', !(mech && spec.dash));
+    if (mech && spec.dash) {
+      const left = Math.max(0, ride.dashCool || 0);
+      el.vehicleDash.textContent = ride.dashLeft > 0 ? 'now'
+        : (left > 0.08 ? `${left.toFixed(1)}s` : 'ready');
+      el.vehicleDashStat.classList.toggle('cold', left > 0.08 && ride.dashLeft <= 0);
+    }
+
+    // What is about to go wrong, in one line. A fighter below its stall speed
+    // is falling whatever the throttle says, and a hull under a sixth is the
+    // last warning you get.
+    let warn = '';
+    if (!mech && spec.stall && air && Math.abs(ride.speed) < spec.stall) warn = 'stall';
+    else if (hull < 0.16) warn = 'hull critical';
+    else if (air && ride.y - world.groundHeight(ride.x, ride.z) < 12 && ride.vy < -6) {
+      warn = 'pull up';
+    }
+    el.vehicleWarn.textContent = warn;
+    el.vehicleWarn.classList.toggle('hidden', !warn);
+  }
+
+  /**
    * Into the cockpit. You see out of the canopy, the torso goes where you
    * look and the legs follow it, and the two guns are the mouse buttons.
    */
@@ -1146,6 +1279,35 @@ async function main() {
     // A mech needs more room than a jeep and is not in the vehicle table at
     // all, so it goes out through its own spawner.
     if (MECH[type]) return spawnMech(type, 14);
+    // A fighter needs a runway, and a street is not one. Asked for from the
+    // menu it arrives in the air, already flying, with you in it: the cheat
+    // is the take off. It can still be taken off the ground if you find
+    // somewhere long enough and straight enough to roll.
+    const spec = VEHICLE[type];
+    if (spec && spec.stall) {
+      const yaw = camera.yaw;
+      const ahead = 60;
+      const x = player.x - Math.sin(yaw) * ahead;
+      const z = player.z - Math.cos(yaw) * ahead;
+      const v = vehicles.spawn(type, x, z, yaw, 180);
+      if (!v) return null;
+      v.speed = spec.stall * 1.6;
+      v.pitch = 0.05;
+      if (state.inVehicle) leaveVehicle(false);
+      if (state.inMech) leaveMech(false);
+      if (vehicles.enter(v)) {
+        state.inVehicle = v;
+        state.holstered = true;
+        el.hud.classList.add('driving');
+        el.vehiclePanel.classList.remove('hidden');
+        el.vehicleName.textContent = v.spec.name;
+        el.vehicleKeys.textContent =
+          'W S throttle, A D roll, mouse flies, Space up, right mouse down, left mouse fires';
+        camera.yaw = v.yaw;
+        audio.swap();
+      }
+      return v;
+    }
     for (let i = 0; i < 24; i++) {
       const a = (i / 24) * Math.PI * 2;
       const x = player.x + Math.cos(a) * 9;
@@ -1886,7 +2048,11 @@ async function main() {
       // The flight is the loading screen: it takes seven seconds and the
       // district lands inside that, so there is nothing to wait for at the
       // far end. If it does not, the landing holds in the air until it does.
+      // Anything still falling where you are standing goes into the record
+      // before you leave it behind.
+      demolition.bakeAll();
       world.loadDistrict(far.id).then(() => {
+        restoreScars(far.id);
         tiles.uploadsPerFrame = 10000;
         tiles.updateResidency(tx, tz, loop.frame);
         tiles.uploadsPerFrame = 8;
@@ -1941,10 +2107,15 @@ async function main() {
     el.crossHint.textContent = `${(entry.bytes / 1e6).toFixed(1)} MB of city`;
     el.crossing.classList.remove('hidden');
     input.exitLock();
+    // Anything still coming down goes into the record before the district it
+    // is standing in is let go, or the last building you hit would be the one
+    // building that got away.
+    demolition.bakeAll();
     try {
       await world.enterOnly(x, z, (p) => {
         el.crossFill.style.width = `${Math.round(p * 100)}%`;
       });
+      restoreScars(entry.id);
     } catch (err) {
       el.crossHint.textContent = 'that district could not be loaded';
       await new Promise((r) => setTimeout(r, 1200));
@@ -2700,8 +2871,11 @@ async function main() {
         throttle: photo.active ? 0 : input.moveZ,
         steer: photo.active ? 0 : (air ? input.moveX : -input.moveX),
         // In the air the mouse flies it: looking up pitches up and the roll
-        // comes off the same stick as the yaw.
-        pitch: air && !photo.active ? clamp(-camera.pitch * 1.6, -1, 1) : 0,
+        // comes off the same stick as the yaw. The sign here was inverted,
+        // which on a helicopter only changed which way it leaned, and on a
+        // fighter meant that pulling back on the stick put the nose into the
+        // road.
+        pitch: air && !photo.active ? clamp(camera.pitch * 1.6, -1, 1) : 0,
         roll: air && !photo.active ? clamp(input.moveX * -1, -1, 1) : 0,
         lift: air && !photo.active ? (input.run ? 1 : (input.jumpHeld ? 1 : (input.secondary ? -1 : 0))) : 0,
         brake: !air && input.run,
@@ -3167,13 +3341,7 @@ async function main() {
         : (mechs.nearest(player.x, player.z, 9) || vehicles.nearest(player.x, player.z, 7));
       el.rideHint.classList.toggle('hidden', !near);
       if (near) el.rideHintName.textContent = near.spec.name;
-      // What is left of the thing you are standing in. A mech takes a lot of
-      // killing and you need to know how much of it is gone.
-      if (state.inMech) {
-        const m = state.inMech;
-        el.vehicleName.textContent =
-          `${m.spec.name} ${Math.max(0, Math.round(m.health))}`;
-      }
+      rideHud();
     }
 
     if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'

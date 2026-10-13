@@ -119,6 +119,18 @@ export function craterAt(x, z, site, level = 1) {
   return site.depth * DEMO.rim * Math.sin(Math.PI * t) * level;
 }
 
+/** The eight numbers that say what a finished ruin looks like. */
+export function scarOf(site) {
+  return {
+    x: site.x, y: site.y, z: site.z,
+    radius: site.radius,
+    level: site.level,
+    craterRadius: site.craterRadius,
+    depth: site.depth,
+    rubble: site.rubble,
+  };
+}
+
 export class Demolition {
   /**
    * @param {object} world the collision world, which this edits in place
@@ -138,6 +150,9 @@ export class Demolition {
     // fn(tileIndices) when a ruin has been written into the tile buffers and
     // the card needs the new bytes.
     this.onBaked = null;
+    // fn(scar) when a ruin is finished, so that whoever owns the city can
+    // write it down and put it back after the district has been unloaded.
+    this.onScar = null;
     this.baked = 0;              // how many sites have been made permanent
     this.enabled = true;
   }
@@ -346,8 +361,38 @@ export class Demolition {
     const { tiles } = bakeSite(this.world, site);
     this.sites.splice(at, 1);
     this.baked++;
+    // What was done here, in eight numbers, for whoever wants to do it again:
+    // the district this ruin is in keeps the record, and replays it when it
+    // is loaded back, so a street you flattened is still flat when you walk
+    // into it from the other side of Berlin.
+    if (this.onScar) this.onScar(scarOf(site));
     if (tiles.length && this.onBaked) this.onBaked(tiles);
     return true;
+  }
+
+  /**
+   * Puts a recorded ruin back, with no animation and no uniform slot: the
+   * walls are cut, the crater is dug and the whole thing is written into the
+   * tile buffers in one go, exactly as the live one ended up.
+   *
+   * @param {object} rec what `scarOf` wrote down
+   * @returns {number[]} the tiles that changed
+   */
+  replay(rec) {
+    const site = {
+      x: rec.x, y: rec.y, z: rec.z,
+      radius: rec.radius,
+      level: rec.level, shown: rec.level, from: rec.level,
+      craterRadius: rec.craterRadius, depth: rec.depth,
+      rubble: rec.rubble,
+      opened: true, dugLevel: 0, dugShape: null,
+      fall: DEMO.fallTime, t: DEMO.fallTime,
+    };
+    this.lowerWalls(site);
+    this.sinkCrater(site);
+    const { tiles } = bakeSite(this.world, site);
+    this.baked++;
+    return tiles;
   }
 
   /** Everything that is still standing, baked where it stands. */

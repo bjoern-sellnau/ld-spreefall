@@ -339,6 +339,97 @@ async function run() {
     s.renderer.clearCollapses();
   });
 
+  // --- you cannot see through the city ------------------------------------
+  // A wall and a street are single surfaces with no thickness. Take a bite
+  // out of one and the back of the next surface faces you, and a culled back
+  // face is a hole through the world: sky where the inside of a ruin should
+  // be. This counts sky coloured pixels in the band below the horizon, with
+  // the second pass off and then on.
+  const seeThrough = await page.evaluate(async () => {
+    const s = window.spreefall;
+    // Read the frame out of the context itself, in a callback registered
+    // after the loop's own, so this runs once the frame has been drawn and
+    // before the browser composites it away. Reading the canvas element any
+    // other way gets an empty buffer, because nothing here asks for the
+    // drawing buffer to be preserved.
+    // Read the frame out of the context itself, in a callback registered
+    // after the loop's own, so this runs once the frame has been drawn and
+    // before the browser composites it away. Reading the canvas element any
+    // other way gets an empty buffer, because nothing here asks for the
+    // drawing buffer to be preserved.
+    const grabNow = () => {
+      const gl = s.renderer.gl;
+      const w = gl.drawingBufferWidth;
+      const h = gl.drawingBufferHeight;
+      const buf = new Uint8Array(w * h * 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      return buf;
+    };
+    s.demolition.reset();
+    s.renderer.scarredTiles.clear();
+    s.setCheat('godmode', true);
+    s.setTime(13);
+    // A bite out of the frontage down the street, then stand back and look in.
+    s.teleport(0, 0);
+    s.look(90, -4);
+    for (let i = 0; i < 6; i++) await new Promise((r) => requestAnimationFrame(r));
+    const f = s.camera.forward;
+    const x = s.player.x + f[0] * 70, z = s.player.z + f[2] * 70;
+    s.demolition.blast(x, s.world.groundHeight(x, z), z, 46, 3400);
+    for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
+    s.teleport(x - f[0] * 26, z - f[2] * 26);
+    // Wait for the dust to settle, literally: smoke and sparks are bright and
+    // they drift, and two frames taken while they are still up differ for
+    // reasons that have nothing to do with what is being measured.
+    s.effects.clear();
+    s.gibs.clear();
+    for (let i = 0; i < 40 && s.effects.list.length; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+      s.effects.clear();
+    }
+    for (let i = 0; i < 10; i++) await new Promise((r) => requestAnimationFrame(r));
+    const armed = s.renderer.scarredTiles.size;
+    // Nothing may move between the two frames, or this measures the city
+    // rather than the pass.
+    s.soldiers.enabled = false;
+    s.drones.active.length = 0;
+    // Both frames inside one animation frame, drawn back to back from the
+    // same state: the simulation does not advance between them, so anything
+    // that differs is the pass and nothing else.
+    const pair = await new Promise((resolve) => requestAnimationFrame(() => {
+      const kept = [...s.renderer.scarredTiles];
+      s.loop.onRender(1, 0);
+      const a = grabNow();
+      s.renderer.scarredTiles.clear();
+      s.loop.onRender(1, 0);
+      const b = grabNow();
+      for (const i of kept) s.renderer.scarredTiles.add(i);
+      resolve([a, b]);
+    }));
+    const on = pair[0], off = pair[1];
+    s.soldiers.enabled = true;
+    // How much sky is showing through the city, in each of the two frames.
+    // Sky is the one thing that cannot legitimately be behind a wall, so
+    // counting it is counting the holes. The same frame twice, so leaves
+    // moving in the wind and the clock ticking cancel out.
+    // What the pass did to the picture. Every pixel it touches is a hole it
+    // filled, so every pixel it touches must be darker than it was.
+    let changed = 0, darker = 0;
+    for (let i = 0; i < on.length; i += 4) {
+      const a = on[i] + on[i + 1] + on[i + 2];
+      const b = off[i] + off[i + 1] + off[i + 2];
+      if (Math.abs(a - b) < 24) continue;
+      changed++;
+      if (a < b) darker++;
+    }
+    return { armed, changed, darker };
+  });
+  check('a bite out of the city is dark inside rather than see through',
+    seeThrough.armed > 0 && seeThrough.changed > 300
+      && seeThrough.darker === seeThrough.changed,
+    `${seeThrough.changed} pixels filled, all ${seeThrough.darker} of them darker`);
+
   // --- mechs ---------------------------------------------------------------
   const mech = await page.evaluate(async () => {
     const s = window.spreefall;
@@ -387,12 +478,23 @@ async function run() {
     for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
     s.input.keys.delete('KeyW');
     const walked = Math.hypot(mine.x - was.x, mine.z - was.z);
-    // Then put the chaingun on the other one.
+    // Then put the chaingun on the other one, which is stood in the open at a
+    // known distance so that this measures the gun rather than the street.
+    theirs.x = mine.x - Math.sin(mine.torso) * 40;
+    theirs.z = mine.z - Math.cos(mine.torso) * 40;
+    theirs.y = s.world.groundHeight(theirs.x, theirs.z);
+    theirs.health = theirs.maxHealth;
     const yaw = Math.atan2(-(theirs.x - mine.x), -(theirs.z - mine.z));
     s.look(yaw * 180 / Math.PI, 0);
     const hp0 = theirs.health;
     s.input.fire = true;
-    for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 60 * 4; i++) {
+      // Nailed to the spot, so this measures the gun rather than whether the
+      // other one happened to sidestep out of the line.
+      theirs.x = mine.x - Math.sin(mine.torso) * 40;
+      theirs.z = mine.z - Math.cos(mine.torso) * 40;
+      s.fixedForTest(1 / 60);
+    }
     s.input.fire = false;
     const hp1 = theirs.health;
     // And a salvo of rockets out of the pod.
