@@ -583,9 +583,14 @@ async function run() {
   check('and you can climb into one of your own',
     !piloted.skip && piloted.inIt && piloted.walked > 10,
     piloted.skip ? '' : `${piloted.walked} m of walking`);
-  check('its chaingun takes a mech apart',
-    !piloted.skip && piloted.hp1 < piloted.hp0 - 300,
-    piloted.skip ? '' : `${piloted.hp0} to ${piloted.hp1} ${JSON.stringify(piloted.why)}`);
+  // The detail carries the whole geometry when this fails, because the one
+  // time it did, the answer was not the gun at all: the target was standing
+  // in a crater thirteen metres down and the shot went over its head.
+  const gunOk = !piloted.skip && piloted.hp1 < piloted.hp0 - 300;
+  check('its chaingun takes a mech apart', gunOk,
+    piloted.skip ? ''
+      : `${piloted.hp0} to ${piloted.hp1} at ${piloted.why.away} m`
+        + (gunOk ? '' : ` ${JSON.stringify(piloted.why)}`));
   check('and the pod throws a salvo rather than one rocket',
     !piloted.skip && piloted.rockets >= 3, `${piloted.rockets} in the air`);
   check('the torso goes where you look and the legs follow',

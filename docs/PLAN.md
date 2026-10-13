@@ -1108,3 +1108,14 @@ is what prompted the change.
   8.89 MB with the code and the index, so the per district budget holds with
   room to spare. Two checks had to learn that a city with nothing left unbuilt
   is the point rather than a failure: they pass by saying so.
+
+- 2026-10-13: the mech guns are harmonised. They sit two metres out on the
+  arms and fired straight down their own barrels, so every round went two
+  metres to the side of whatever the pilot had the crosshair on, which at
+  thirty metres is a clean miss against something three metres wide. They now
+  converge on the point the torso is looking at, found by tracing the line of
+  sight the way a gun mount is harmonised on a range. What found this was a
+  flaky check: it failed only sometimes, and when it was made to say why, it
+  said the target was thirteen metres below the muzzle, standing in a crater
+  the earlier checks had dug. Two faults in one measurement, one in the test
+  and one in the game.
