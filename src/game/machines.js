@@ -24,11 +24,14 @@ export const MACHINES = {
   skyZenith: [0.055, 0.060, 0.075],
   skyHorizon: [0.30, 0.16, 0.10],
   sunColour: [0.95, 0.42, 0.22],
-  // How many machines are kept walking, and how far out they come in.
-  patrol: 14,
-  spawnEvery: 3.2,
-  spawnFrom: 90,
-  spawnTo: 240,
+  // How many machines are kept walking, and how far out they come in. This
+  // is an army rather than a patrol: the soldier layer holds twenty four at
+  // once and the mode runs the streets right up to that, because a handful of
+  // figures in the distance is not what the end of the world looks like.
+  patrol: 22,
+  spawnEvery: 1.1,
+  spawnFrom: 70,
+  spawnTo: 220,
   // The beam. It is hitscan like a rifle, but it is slower to line up and it
   // is visible for a moment, so being shot at is something you can see coming
   // from across a square.

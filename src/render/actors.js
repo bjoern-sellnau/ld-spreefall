@@ -623,8 +623,31 @@ export function buildSoldierMesh() {
     m.box(side * 0.30, 1.16, -0.05, 0.055, 0.54, 0.055, 23); // arm
     m.box(side * 0.22, 1.42, 0, 0.17, 0.05, 0.05, 23);       // collarbone
   }
+
+  // The beam rifle, which only a machine carries. It is in the same mesh as
+  // everything else and the vertex shader collapses it for anyone who is not
+  // one, the same trick the skeleton uses. The soldier's own rifle is cloth
+  // side work and goes when the cloth goes, which is why a machine stood
+  // there shooting with empty hands until this was put in.
+  //
+  // Held across the body in both hands, pointing where the body points, with
+  // the emitter at the front as its own part so it can glow without the whole
+  // gun glowing. MACHINE_MUZZLE below is where the beam comes out, in the
+  // model's own coordinates, so the gun and the shot cannot drift apart.
+  m.box(0.20, 1.16, -0.34, 0.085, 0.11, 0.86, 26);          // body
+  m.box(0.20, 1.26, -0.20, 0.07, 0.10, 0.34, 26);           // sight rail
+  m.box(0.20, 1.06, -0.12, 0.06, 0.16, 0.12, 26);           // grip
+  m.box(0.20, 1.16, 0.18, 0.13, 0.15, 0.16, 26);            // power pack
+  m.box(0.20, 1.16, -0.80, 0.055, 0.055, 0.14, 27);         // emitter
   return m;
 }
+
+/**
+ * Where a machine's beam comes out, in the body's own coordinates. The
+ * renderer builds the gun around this point and main.js turns it into a world
+ * position with the same rotation the vertex shader uses.
+ */
+export const MACHINE_MUZZLE = [0.20, 1.16, -0.88];
 
 // --- renderer --------------------------------------------------------------
 

@@ -34,6 +34,7 @@ import { FireWalls } from './game/firewall.js';
 import { Machines, MACHINES, makeMachine, empBurst } from './game/machines.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
+import { MACHINE_MUZZLE } from './render/actors.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -614,12 +615,33 @@ async function main() {
   // actually want in a fight.
   weapon.onSwapFrom = (from) => { state.lastWeapon = from; };
 
+  /**
+   * Where a machine's shot starts: the emitter on the rifle it is holding,
+   * carried through the same rotation the vertex shader puts the body
+   * through, so the line in the air leaves the end of the gun you can see
+   * rather than the middle of its chest.
+   */
+  function machineMuzzle(s) {
+    const [mx, my, mz] = MACHINE_MUZZLE;
+    const c = Math.cos(s.yaw), sn = Math.sin(s.yaw);
+    // The body's own axes in the world. A model's negative z is the way the
+    // figure faces, which is the same direction the soldier layer means by
+    // its yaw: (-sin, -cos). Written out rather than taken from the shader by
+    // eye, because getting the sign wrong puts the muzzle in its back and
+    // nothing on the screen says so.
+    return {
+      x: s.x + c * mx + sn * mz,
+      y: s.y + my,
+      z: s.z - sn * mx + c * mz,
+    };
+  }
+
   // A machine's beam: one bright red line that arrives all at once, a crack
   // rather than a bang, and a scorch where it lands.
   soldiers.onBeam = (s, damage) => {
-    const from = { x: s.x, y: s.y + 1.5, z: s.z };
+    const from = machineMuzzle(s);
     const to = { x: camera.position[0], y: camera.position[1], z: camera.position[2] };
-    effects.beam(from.x, from.y, from.z, to.x, to.y, to.z, 1.0, 0.1, 0.08);
+    effects.lance(from.x, from.y, from.z, to.x, to.y, to.z, 1.0, 0.1, 0.08);
     audio.laser(Math.hypot(player.x - s.x, player.z - s.z));
     effects.flash(from.x, from.y, from.z, 2.4, 1.0, 0.15, 0.1, 0.07);
     if (damage > 0 && combat.health > 0) combat.hurt(damage, s.x, s.z, player.x, player.z);
@@ -2973,6 +2995,7 @@ async function main() {
     machines, machineSpec: MACHINES,
     makeMachine(s) { return makeMachine(s); },
     machinesTick(dt) { machinesTick(dt); },
+    machineMuzzle(s) { return machineMuzzle(s); },
     setMode(name) { machines.set(name === 'machines'); applyMachineLook(); return machines.active; },
     crossInto(x, z) { return crossInto(x, z); },
     crossingShown() { return !el.crossing.classList.contains('hidden'); },

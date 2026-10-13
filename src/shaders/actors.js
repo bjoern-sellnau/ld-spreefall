@@ -260,11 +260,15 @@ void main() {
     // across a square and not only when it is looking at you. The other two
     // channels are nearly nothing, which is what keeps the tonemapper from
     // turning it white.
-    if (vPart > 24.5) {
+    if (vPart > 24.5 && vPart < 25.5) {
       float facing = clamp(-normalize(vNormal).z, 0.0, 1.0);
       colour = mix(colour * 0.5, colour, 0.4);
       colour += vec3(2.4, 0.03, 0.02) * (0.35 + 0.65 * facing) * (1.0 - vStun);
     }
+    // The rifle is darker than the frame, and its emitter carries the same
+    // red as the eye, so you can see which end of a machine to stand behind.
+    if (vPart > 25.5 && vPart < 26.5) colour *= 0.55;
+    if (vPart > 26.5) colour += vec3(2.2, 0.05, 0.03) * (1.0 - vStun);
     colour = mix(colour, colour * vec3(0.5, 0.7, 1.4), vStun * 0.8);
   }
   // A white flash on the frame it takes a hit, so a connect is unmistakable.
@@ -417,6 +421,10 @@ void main() {
   // a few dozen triangles and no draw calls at all.
   bool bone = aInfo.x > 22.5;
   float keep = bone ? charred : 1.0 - charred;
+  // Parts 26 and 27 are the beam rifle, and only a machine carries one. A
+  // soldier burnt to the skeleton by the ion cannon is still a dead man, not
+  // a machine, and does not stand there holding a gun he never had.
+  if (aInfo.x > 25.5) keep = iExtra.y;
   if (keep < 0.999) {
     // Collapse towards the body's own centre line rather than towards the
     // origin, so what shrinks goes into the figure instead of into its feet.

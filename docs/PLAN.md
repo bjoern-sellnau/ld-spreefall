@@ -949,3 +949,29 @@ is what prompted the change.
   runner. The same slowness burnt the road out before the check could see it
   alight, so what the wall leaves behind is now watched while the wall is
   still running rather than counted afterwards.
+
+## 21. Machines with guns, and mechs
+
+- 2026-10-13: a machine's shot came out of the sky, and the reason is the same
+  shape as the dead key: `Effects` had two methods called `beam`, one a line
+  from here to there and one a column of light standing on the ground, and a
+  class keeps the last one. Every machine shot was being drawn as a pillar
+  standing on the machine and going up out of the world. The line is called
+  `lance` now, which cannot collide with anything.
+
+- 2026-10-13: and the machine had nothing to shoot with. The soldier's rifle
+  is one of the cloth side parts, and a machine is the skeleton with the cloth
+  collapsed to nothing, so it went with the uniform. A machine now carries a
+  beam rifle of its own, parts 26 and 27 in the same mesh, which the vertex
+  shader keeps only when the instance says machine, so a man burnt to the bone
+  by the ion cannon does not stand up holding a gun he never had. The shot
+  leaves the emitter at the end of that barrel: `MACHINE_MUZZLE` is exported
+  by the renderer that builds the gun, and main.js turns it into a world point
+  with the body's own rotation, so the gun you see and the line you see are
+  the same object. The suite checks that a shot is one line, that no column is
+  made, and that the line starts in front of the machine rather than in its
+  back, which a distance alone cannot tell you.
+
+- 2026-10-13: and there were too few of them. The mode now keeps twenty two
+  machines walking instead of fourteen and puts a new one up every 1.1
+  seconds instead of every 3.2, which is the soldier pool nearly full.

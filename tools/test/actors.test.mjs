@@ -4,7 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDroneMesh, buildWeaponMesh } from '../../src/render/actors.js';
+import {
+  buildDroneMesh, buildWeaponMesh, buildSoldierMesh, MACHINE_MUZZLE,
+} from '../../src/render/actors.js';
 
 function audit(build) {
   const v = build.v;
@@ -72,4 +74,43 @@ test('the weapon sits in front of the eye and points down negative z', () => {
   assert.ok(b.minZ > -1.3, `muzzle at z ${b.minZ.toFixed(3)}, that is too far away`);
   const length = b.maxZ - b.minZ;
   assert.ok(length > 0.6 && length < 1.2, `${length.toFixed(2)} m long, which is not a rifle`);
+});
+
+/** Every distinct part id in a mesh, and the box each one spans. */
+function parts(build) {
+  const out = new Map();
+  for (let o = 0; o < build.v.length; o += 8) {
+    const id = build.v[o + 6];
+    let b = out.get(id);
+    if (!b) { b = { minX: 1e9, maxX: -1e9, minY: 1e9, maxY: -1e9, minZ: 1e9, maxZ: -1e9, n: 0 }; out.set(id, b); }
+    b.minX = Math.min(b.minX, build.v[o]); b.maxX = Math.max(b.maxX, build.v[o]);
+    b.minY = Math.min(b.minY, build.v[o + 1]); b.maxY = Math.max(b.maxY, build.v[o + 1]);
+    b.minZ = Math.min(b.minZ, build.v[o + 2]); b.maxZ = Math.max(b.maxZ, build.v[o + 2]);
+    b.n++;
+  }
+  return out;
+}
+
+test('the soldier mesh is wound to face outwards', () => {
+  const r = audit(buildSoldierMesh());
+  assert.ok(r.tris > 200, `the body has geometry, got ${r.tris} triangles`);
+  assert.equal(r.bad, 0, `${r.bad} of ${r.checked} body triangles face inwards`);
+});
+
+test('a machine has a beam rifle in its hands', () => {
+  const p = parts(buildSoldierMesh());
+  const gun = p.get(26);
+  const emitter = p.get(27);
+  assert.ok(gun, 'part 26, the rifle, is in the mesh');
+  assert.ok(emitter, 'part 27, the emitter, is in the mesh');
+  // In front of the body, at the height of the hands, on one side.
+  assert.ok(gun.minZ < -0.5, `the barrel reaches z ${gun.minZ.toFixed(2)}, in front of the chest`);
+  assert.ok(gun.maxY < 1.45 && gun.minY > 0.85, 'carried at the hands, not over the head');
+  // And the muzzle the game shoots from is at the end of the barrel it draws.
+  assert.ok(MACHINE_MUZZLE[2] <= emitter.minZ + 0.02,
+    `the muzzle at z ${MACHINE_MUZZLE[2]} is at or past the emitter at ${emitter.minZ.toFixed(2)}`);
+  assert.ok(Math.abs(MACHINE_MUZZLE[0] - (emitter.minX + emitter.maxX) / 2) < 0.05,
+    'the muzzle is on the barrel line');
+  assert.ok(Math.abs(MACHINE_MUZZLE[1] - (emitter.minY + emitter.maxY) / 2) < 0.08,
+    'and at the height of the barrel');
 });

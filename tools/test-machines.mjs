@@ -286,6 +286,45 @@ async function run() {
     return { put: near.length, stunned: stunned.length, moved: Math.round(moved * 10) / 10,
       left: stunned[0] ? Math.round(stunned[0].stunLeft) : 0 };
   });
+  // --- the gun, and where its shot comes from ------------------------------
+  const gun = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const m = s.soldiers.active.find((x) => x.machine) || s.makeMachine(
+      s.soldiers.spawnNear(s.player.x + 14, s.player.z, 0.5, 1.5));
+    if (!m) return { skip: true };
+    m.yaw = 1.1;
+    s.effects.clear();
+    s.soldiers.onBeam(m, 0);
+    const live = s.effects.pool.filter((p) => p.alive);
+    const lines = live.filter((p) => p.kind === 0);
+    const columns = live.filter((p) => p.kind === 5);
+    const l = lines[0];
+    const muzzle = s.machineMuzzle(m);
+    return {
+      lines: lines.length,
+      columns: columns.length,
+      fromGun: l ? Math.round(Math.hypot(l.ax - muzzle.x, l.ay - muzzle.y, l.az - muzzle.z) * 100) / 100 : -1,
+      startHeight: l ? Math.round((l.ay - m.y) * 100) / 100 : -1,
+      endsAtCamera: l
+        ? Math.round(Math.hypot(l.bx - s.camera.position[0], l.by - s.camera.position[1],
+          l.bz - s.camera.position[2]) * 100) / 100
+        : -1,
+      offCentre: Math.round(Math.hypot(muzzle.x - m.x, muzzle.z - m.z) * 100) / 100,
+      // And on the side it is facing, which is the half of this that a
+      // distance cannot tell you: a muzzle in its back is exactly as far from
+      // the middle as one in its hands.
+      ahead: Math.round(((muzzle.x - m.x) * -Math.sin(m.yaw)
+        + (muzzle.z - m.z) * -Math.cos(m.yaw)) * 100) / 100,
+    };
+  });
+  check('a machine shoots a line from its gun, not a column from the sky',
+    !gun.skip && gun.lines === 1 && gun.columns === 0 && gun.fromGun < 0.01,
+    `${gun.lines} line, ${gun.columns} columns, ${gun.fromGun} m from the muzzle`);
+  check('and the shot starts at the end of the barrel',
+    !gun.skip && gun.ahead > 0.6 && gun.startHeight > 0.9 && gun.startHeight < 1.5
+      && gun.endsAtCamera < 0.01,
+    `${gun.ahead} m in front of it, ${gun.startHeight} m up, ending at the eye`);
+
   check('an EMP stops the machines inside it',
     emp.stunned >= Math.min(3, emp.put), `${emp.stunned} of ${emp.put} caught`);
   check('and a stopped one stands there while you deal with it',
