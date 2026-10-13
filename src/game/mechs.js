@@ -200,6 +200,33 @@ export class Mechs {
     };
   }
 
+  /**
+   * Where the guns are pointed, as a point in the world rather than as a
+   * direction: the first thing the torso's own line of sight runs into, or a
+   * long way down that line when it runs into nothing.
+   *
+   * The guns are on the arms, two metres out from the middle of the body. A
+   * gun that fired straight down its own barrel would put every round two
+   * metres to the right of whatever the pilot was looking at, which at thirty
+   * metres is a clean miss against something three metres wide. So they
+   * converge on this point instead, the way a real gun mount is harmonised,
+   * and what you are looking at is what you hit.
+   */
+  aimPoint(m, range) {
+    const a = this.aim(m);
+    const eye = { x: m.x, y: m.y + m.spec.eye, z: m.z };
+    const hit = this.world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, range);
+    const t = hit ? hit.t : range;
+    return { x: eye.x + a.x * t, y: eye.y + a.y * t, z: eye.z + a.z * t };
+  }
+
+  /** From a gun to the point the torso is looking at, as a unit vector. */
+  aimFrom(from, at) {
+    const dx = at.x - from.x, dy = at.y - from.y, dz = at.z - from.z;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    return { x: dx / l, y: dy / l, z: dz / l };
+  }
+
   /** Which way the torso is pointing, as a unit vector including the pitch. */
   aim(m) {
     const cp = Math.cos(m.pitch);
@@ -381,7 +408,10 @@ export class Mechs {
         m.burstLeft--;
         if (m.burstLeft <= 0) m.restLeft = gun.rest;
       }
-      if (this.onChaingun) this.onChaingun(m, this.muzzle(m, gun.muzzle), this.aim(m), gun);
+      if (this.onChaingun) {
+        const from = this.muzzle(m, gun.muzzle);
+        this.onChaingun(m, from, this.aimFrom(from, this.aimPoint(m, gun.range)), gun);
+      }
     }
 
     const rockets = s.rockets;
@@ -397,7 +427,8 @@ export class Mechs {
         m.salvoTimer = rockets.gap;
         m.salvoLeft--;
         if (this.onRockets) {
-          this.onRockets(m, this.muzzle(m, rockets.muzzle), this.aim(m), rockets);
+          const from = this.muzzle(m, rockets.muzzle);
+          this.onRockets(m, from, this.aimFrom(from, this.aimPoint(m, 400)), rockets);
         }
       }
     }

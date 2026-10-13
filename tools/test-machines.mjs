@@ -505,7 +505,11 @@ async function run() {
       const len = Math.hypot(dx, dz) || 1;
       const blocked = s.world.raycast(muzzle.x, muzzle.y, muzzle.z,
         dx / len, 0, dz / len, len);
-      if (!blocked) spot = { x: px, z: pz };
+      // And on ground near its own level: by this point in the suite the city
+      // is full of craters, and a target standing eight metres down is a test
+      // of how far a level shot carries over a hole.
+      const step = Math.abs(s.world.groundHeight(px, pz) - mine.y);
+      if (!blocked && step < 3) spot = { x: px, z: pz };
     }
     if (!spot) return { skip: true };
     theirs.x = spot.x;
@@ -513,7 +517,12 @@ async function run() {
     theirs.y = s.world.groundHeight(spot.x, spot.z);
     theirs.health = theirs.maxHealth;
     const yaw = Math.atan2(-(theirs.x - mine.x), -(theirs.z - mine.z));
-    s.look(yaw * 180 / Math.PI, 0);
+    // Look at its chest rather than at the horizon: the guns go where the
+    // torso points and the torso goes where the pilot looks, so a level shot
+    // at something standing lower than you goes over its head.
+    const flat = Math.hypot(theirs.x - mine.x, theirs.z - mine.z);
+    const rise = (theirs.y + 5.2) - (mine.y + s.mechSpec.titan.eye);
+    s.look(yaw * 180 / Math.PI, Math.atan2(rise, flat) * 180 / Math.PI);
     const hp0 = theirs.health;
     s.input.fire = true;
     for (let i = 0; i < 60 * 4; i++) {
@@ -531,12 +540,28 @@ async function run() {
     const aim = s.mechs.aim(mine);
     const wall = s.world.raycast(mz.x, mz.y, mz.z, aim.x, aim.y, aim.z, 260);
     const onTarget = s.mechs.raycast(mz.x, mz.y, mz.z, aim.x, aim.y, aim.z, 260);
+    const toward = {
+      x: theirs.x - mine.x,
+      z: theirs.z - mine.z,
+    };
+    const tl = Math.hypot(toward.x, toward.z) || 1;
     const why = {
-      away: Math.round(Math.hypot(theirs.x - mine.x, theirs.z - mine.z)),
+      away: Math.round(tl),
       wall: wall ? Math.round(wall.t) : null,
       mech: onTarget ? Math.round(onTarget.t) : null,
       alive: theirs.alive && theirs.health > 0,
       inIt2: s.state.inMech === mine,
+      // How well the torso is actually pointed at it, and whether the aim
+      // point the guns converge on is anywhere near it.
+      facing: Number(((aim.x * toward.x + aim.z * toward.z) / tl).toFixed(2)),
+      torso: Number(mine.torso.toFixed(2)),
+      cam: Number(s.camera.yaw.toFixed(2)),
+      aimAt: (() => {
+        const p = s.mechs.aimPoint(mine, 260);
+        return Math.round(Math.hypot(p.x - theirs.x, p.z - theirs.z));
+      })(),
+      mineY: Number(mine.y.toFixed(1)),
+      theirsY: Number(theirs.y.toFixed(1)),
     };
     // And a salvo of rockets out of the pod.
     const before = s.projectiles.active.length;
