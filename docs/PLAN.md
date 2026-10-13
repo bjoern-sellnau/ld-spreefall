@@ -949,3 +949,99 @@ is what prompted the change.
   runner. The same slowness burnt the road out before the check could see it
   alight, so what the wall leaves behind is now watched while the wall is
   still running rather than counted afterwards.
+
+## 21. Machines with guns, and mechs
+
+- 2026-10-13: a machine's shot came out of the sky, and the reason is the same
+  shape as the dead key: `Effects` had two methods called `beam`, one a line
+  from here to there and one a column of light standing on the ground, and a
+  class keeps the last one. Every machine shot was being drawn as a pillar
+  standing on the machine and going up out of the world. The line is called
+  `lance` now, which cannot collide with anything.
+
+- 2026-10-13: and the machine had nothing to shoot with. The soldier's rifle
+  is one of the cloth side parts, and a machine is the skeleton with the cloth
+  collapsed to nothing, so it went with the uniform. A machine now carries a
+  beam rifle of its own, parts 26 and 27 in the same mesh, which the vertex
+  shader keeps only when the instance says machine, so a man burnt to the bone
+  by the ion cannon does not stand up holding a gun he never had. The shot
+  leaves the emitter at the end of that barrel: `MACHINE_MUZZLE` is exported
+  by the renderer that builds the gun, and main.js turns it into a world point
+  with the body's own rotation, so the gun you see and the line you see are
+  the same object. The suite checks that a shot is one line, that no column is
+  made, and that the line starts in front of the machine rather than in its
+  back, which a distance alone cannot tell you.
+
+- 2026-10-13: and there were too few of them. The mode now keeps twenty two
+  machines walking instead of fourteen and puts a new one up every 1.1
+  seconds instead of every 3.2, which is the soldier pool nearly full.
+
+- 2026-10-13: forward in a vehicle is forward on the screen. The hull always
+  drove nose first, and the suite has checked that since phase 15, but the
+  camera kept the heading you had on foot, so a tank parked across your line
+  of sight drove sideways or straight past you when you pressed W: it read as
+  reverse. Getting in now turns the view to the hull's heading, and steering
+  turns the view with the hull, free look still live on top of it. Two checks
+  hold it, one that forward goes where you are looking however the thing was
+  parked, one that the view and the hull turn by the same angle. The controls
+  are also on the screen now while you are in it, which is the other half of
+  why nobody could tell.
+
+- 2026-10-13: the map is all of Berlin whether or not Berlin has been built.
+  The index now carries an entry for each of the eighty one districts: the
+  ones with a bundle behind them as before, and the rest as placeholders with
+  their box, their tier and a label saying where they are, at no cost in bytes
+  because there is nothing to download. The map draws those as unsurveyed
+  ground, free travel refuses them with the reason rather than flying you into
+  a hole, and walking at one says so and holds you at the edge. `World.isBuilt`
+  is the single gate; everything that loads goes through it.
+
+- 2026-10-13: and the deploy builds the city rather than a corner of it. The
+  deploy used to fetch a hardcoded dozen districts, which is why most of
+  Berlin was missing from the deployed game. It now restores the extract cache
+  the weekly whole city job writes, spends up to twenty minutes filling
+  whatever gaps are left, writes back what it got, and builds everything it
+  has. Both jobs fetch live only: Overpass failing leaves a district unbuilt
+  rather than putting a synthesised Berlin on the website, which is the same
+  rule as everywhere else in this project. Fetching all eighty one from cold
+  is an hour and three quarters, nearly all of it waiting on Overpass; the
+  build itself is two minutes.
+
+## 22. Mechs
+
+- 2026-10-13: eight metres of walking gun platform, theirs and yours, in
+  `src/game/mechs.js`. A mech is neither a soldier nor a vehicle: it walks, so
+  it follows the ground and steps over kerbs; it is a machine, so its legs
+  turn slowly and its torso turns fast, and the torso is what the guns are on.
+  That split is the whole feel of it. One update drives both: a pilot is a set
+  of controls where the hunting ones have an intent, so there is one physics
+  path rather than two that drift apart.
+
+- 2026-10-13: the body is one mesh and one draw call, with the transform doing
+  the work. `MECH_VS` swings the legs about the hip line, turns and pitches
+  the torso about the same line, bobs the whole body twice a stride and lays
+  it over when it dies. The materials are the shared body shader's: hull
+  plate, joint steel, gun metal, glass, and the glowing core, which the vertex
+  stage swaps from red to blue when the instance says the mech is yours. That
+  is the only difference between the thing hunting you and the thing you are
+  standing in: one number per instance.
+
+- 2026-10-13: yours is called from the cheat menu, boarded with F like
+  everything else, and driven in a chase view from behind the shoulders. W A S
+  D walks it, the mouse aims the torso and the legs chase the torso, the left
+  mouse is a chaingun and the right is a salvo out of the pod, Shift dashes
+  and Space jumps. The landing is its own weapon: forty tonnes arriving opens
+  the road and takes apart what is standing in eleven metres of it, and the
+  pilot inside the armour is fine, which is the one place where the blast does
+  not treat you like everything else.
+
+- 2026-10-13: theirs, the Reaper, walks in from a couple of hundred metres,
+  closes to about forty, sidesteps rather than standing still, and fires five
+  rounds then waits two seconds, because a mech that fires without pausing
+  kills you from across a square before you have found which street it is in.
+  Rockets only past fifty five metres, for the same reason. Rise of the
+  Machines keeps two of them walking; the cheat menu drops a pair on demand.
+  Twenty four checks hold the lot, including that its feet never leave the
+  ground, that the chaingun takes another mech apart, and that a jump ends in
+  a hole rather than in silence: the first landing did nothing at all, because
+  the kerb step in the walker was catching the fall and cancelling it.

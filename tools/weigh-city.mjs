@@ -39,7 +39,9 @@ function main() {
     process.exit(1);
   }
   const index = JSON.parse(fs.readFileSync(INDEX, 'utf8'));
-  const rows = index.districts || [];
+  // Placeholders for districts nobody has built yet carry no bytes; this is
+  // about what the city costs, so they are not in it.
+  const rows = (index.districts || []).filter((d) => d.built !== false);
 
   // The code and the page, which a player downloads once whatever else they
   // do. Counted from the source tree rather than from dist, so this can be

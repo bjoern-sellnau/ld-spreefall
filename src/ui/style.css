@@ -937,6 +937,10 @@ html, body {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
 }
 #vehicle span { display: block; font-size: 19px; letter-spacing: 0.04em; }
+#vehicle #vehiclekeys {
+  font-size: 11px; letter-spacing: 0.06em; color: var(--dim);
+  margin: 2px 0 1px; max-width: 420px;
+}
 #vehicle em {
   font-style: normal;
   font-size: 10px;

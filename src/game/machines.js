@@ -24,17 +24,26 @@ export const MACHINES = {
   skyZenith: [0.055, 0.060, 0.075],
   skyHorizon: [0.30, 0.16, 0.10],
   sunColour: [0.95, 0.42, 0.22],
-  // How many machines are kept walking, and how far out they come in.
-  patrol: 14,
-  spawnEvery: 3.2,
-  spawnFrom: 90,
-  spawnTo: 240,
+  // How many machines are kept walking, and how far out they come in. This
+  // is an army rather than a patrol: the soldier layer holds twenty four at
+  // once and the mode runs the streets right up to that, because a handful of
+  // figures in the distance is not what the end of the world looks like.
+  patrol: 22,
+  spawnEvery: 1.1,
+  spawnFrom: 70,
+  spawnTo: 220,
   // The beam. It is hitscan like a rifle, but it is slower to line up and it
   // is visible for a moment, so being shot at is something you can see coming
   // from across a square.
   beam: { damage: 18, interval: 1.15, charge: 0.45, range: 190 },
   // What an EMP does to one.
   stun: { seconds: 7.5, radius: 34, damageMultiplier: 4 },
+  // And the heavy ones. Two at a time is plenty: a Reaper is eight metres of
+  // walking gun and the city is not wide enough for a herd of them.
+  mechs: 2,
+  mechEvery: 14,
+  mechFrom: 90,
+  mechTo: 200,
 };
 
 /**
@@ -47,6 +56,7 @@ export class Machines {
     this.timeOfDay = 20.2;
     this.spawnTimer = 0;
     this.rainTimer = 0;
+    this.mechTimer = 6;
     this.kills = 0;
   }
 
@@ -55,6 +65,7 @@ export class Machines {
     this.active = !!on;
     this.spawnTimer = 0;
     this.rainTimer = 0;
+    this.mechTimer = 6;
     return this.active;
   }
 
@@ -65,6 +76,15 @@ export class Machines {
     if (this.rainTimer > 0) return false;
     this.rainTimer = MACHINES.rainEvery + Math.random() * MACHINES.rainSpread;
     return true;
+  }
+
+  /** Whether another Reaper should be walked in. */
+  tickMech(dt, standing) {
+    if (!this.active) return false;
+    this.mechTimer = (this.mechTimer || 0) - dt;
+    if (this.mechTimer > 0) return false;
+    this.mechTimer = MACHINES.mechEvery;
+    return standing < MACHINES.mechs;
   }
 
   /** Whether another machine should be put on the street this frame. */

@@ -330,9 +330,16 @@ export class Minimap {
     for (const d of list) {
       const b = d.bounds;
       const here = this.world.loaded(d.id);
-      ctx.fillStyle = here ? 'rgba(26,32,38,0.55)' : 'rgba(16,18,21,0.75)';
+      // Three states, not two: the one you are in, one that is built and a
+      // loading screen away, and one that nobody has built yet, which is
+      // drawn as unsurveyed ground so the map never promises a street that
+      // is not there.
+      const built = d.built !== false;
+      ctx.fillStyle = here ? 'rgba(26,32,38,0.55)'
+        : (built ? 'rgba(16,18,21,0.75)' : 'rgba(12,12,14,0.86)');
       ctx.fillRect(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
-      ctx.strokeStyle = here ? 'rgba(120,150,170,0.35)' : 'rgba(90,96,104,0.22)';
+      ctx.strokeStyle = here ? 'rgba(120,150,170,0.35)'
+        : (built ? 'rgba(90,96,104,0.22)' : 'rgba(70,74,80,0.14)');
       ctx.strokeRect(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
     }
     ctx.restore();
@@ -351,9 +358,17 @@ export class Minimap {
       const mx = cx + ((b.minX + b.maxX) / 2 - originX) * scale;
       const mz = cy + ((b.minZ + b.maxZ) / 2 - originZ) * scale;
       if (mx < -60 || mz < -20 || mx > W + 60 || mz > H + 20) continue;
+      // A name only where there is room for it. Eighty one districts across a
+      // canvas this size is eighty one names on top of each other, which says
+      // less than none of them: below the width of its own label a district
+      // is a rectangle and nothing more.
+      const label = String(d.name || d.id).toUpperCase();
+      if (ctx.measureText(label).width > (b.maxX - b.minX) * scale - 6) continue;
       const here = this.world.loaded(d.id);
-      ctx.fillStyle = here ? 'rgba(206,214,222,0.72)' : 'rgba(150,156,164,0.40)';
-      ctx.fillText(String(d.name || d.id).toUpperCase(), mx, mz);
+      const built = d.built !== false;
+      ctx.fillStyle = here ? 'rgba(206,214,222,0.72)'
+        : (built ? 'rgba(150,156,164,0.40)' : 'rgba(120,124,130,0.22)');
+      ctx.fillText(label, mx, mz);
     }
     ctx.restore();
   }

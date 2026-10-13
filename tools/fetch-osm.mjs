@@ -169,6 +169,11 @@ export async function fetchOverpass(query, { attempts = 4, deadlineMs = 600000 }
 async function main() {
   const force = process.argv.includes('--force');
   const offline = process.argv.includes('--offline');
+  // What the deploy uses: a district that Overpass will not give up is left
+  // out rather than invented. The synthetic fallback exists so that this
+  // repository builds and plays with no network at all; it is a stand in for
+  // development, and a stand in has no business being deployed as Berlin.
+  const liveOnly = process.argv.includes('--live-only');
   const all = process.argv.includes('--all');
   const named = process.argv.find((a) => a.startsWith('--district='));
   fs.mkdirSync(RAW_DIR, { recursive: true });
@@ -181,12 +186,15 @@ async function main() {
     wanted = [d];
   } else wanted = [districtById(CORE_ID)];
 
+  let missed = 0;
   for (const district of wanted) {
-    await fetchDistrict(district, { force, offline });
+    if (!await fetchDistrict(district, { force, offline, liveOnly })) missed++;
   }
+  if (missed) console.log(`\n${missed} district${missed === 1 ? '' : 's'} left for next time`);
 }
 
-async function fetchDistrict(district, { force, offline }) {
+/** @returns {Promise<boolean>} whether there is an extract for it now */
+async function fetchDistrict(district, { force, offline, liveOnly = false }) {
   const file = rawFile(district.id);
   const meta = metaFile(district.id);
   const e = extent(district.bbox);
@@ -196,7 +204,7 @@ async function fetchDistrict(district, { force, offline }) {
     const m = fs.existsSync(meta) ? JSON.parse(fs.readFileSync(meta, 'utf8')) : {};
     console.log(`cache hit: ${label} ${(fs.statSync(file).size / 1e6).toFixed(2)} MB, source ${m.source || 'unknown'}`);
     report(file);
-    return;
+    return true;
   }
 
   let text = null;
@@ -212,6 +220,10 @@ async function fetchDistrict(district, { force, offline }) {
     }
   }
 
+  if (text === null && liveOnly) {
+    console.error(`leaving ${district.id} out: Overpass would not answer and this is a live only run\n`);
+    return false;
+  }
   if (text === null) {
     console.error(`falling back to the synthesised dataset for ${district.id}, see docs/PLAN.md section 7\n`);
     const { buildSyntheticOsm } = await import('./synth-osm.mjs');
@@ -226,6 +238,7 @@ async function fetchDistrict(district, { force, offline }) {
   }, null, 2));
   console.log(`wrote ${file}, ${(text.length / 1e6).toFixed(2)} MB, source ${source}`);
   report(file);
+  return true;
 }
 
 function report(file) {

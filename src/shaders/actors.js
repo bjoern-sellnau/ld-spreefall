@@ -260,11 +260,15 @@ void main() {
     // across a square and not only when it is looking at you. The other two
     // channels are nearly nothing, which is what keeps the tonemapper from
     // turning it white.
-    if (vPart > 24.5) {
+    if (vPart > 24.5 && vPart < 25.5) {
       float facing = clamp(-normalize(vNormal).z, 0.0, 1.0);
       colour = mix(colour * 0.5, colour, 0.4);
       colour += vec3(2.4, 0.03, 0.02) * (0.35 + 0.65 * facing) * (1.0 - vStun);
     }
+    // The rifle is darker than the frame, and its emitter carries the same
+    // red as the eye, so you can see which end of a machine to stand behind.
+    if (vPart > 25.5 && vPart < 26.5) colour *= 0.55;
+    if (vPart > 26.5) colour += vec3(2.2, 0.05, 0.03) * (1.0 - vStun);
     colour = mix(colour, colour * vec3(0.5, 0.7, 1.4), vStun * 0.8);
   }
   // A white flash on the frame it takes a hit, so a connect is unmistakable.
@@ -417,6 +421,10 @@ void main() {
   // a few dozen triangles and no draw calls at all.
   bool bone = aInfo.x > 22.5;
   float keep = bone ? charred : 1.0 - charred;
+  // Parts 26 and 27 are the beam rifle, and only a machine carries one. A
+  // soldier burnt to the skeleton by the ion cannon is still a dead man, not
+  // a machine, and does not stand there holding a gun he never had.
+  if (aInfo.x > 25.5) keep = iExtra.y;
   if (keep < 0.999) {
     // Collapse towards the body's own centre line rather than towards the
     // origin, so what shrinks goes into the figure instead of into its feet.
@@ -458,6 +466,90 @@ void main() {
   vWorld = world;
   vNormal = normalize(body * n);
   vPart = aInfo.x;
+  vFlash = iState.z;
+  vViewDist = length(world - uCamPos.xyz);
+  gl_Position = uViewProj * vec4(world, 1.0);
+}
+`;
+
+// A mech. The transform is the point of this shader: the legs swing about the
+// hips and the torso turns and pitches about the same line, so the thing can
+// walk one way and shoot another. Everything else, the materials and the fog
+// and the shadows, is the shared body shader.
+export const MECH_VS = `${VERSION}
+precision highp float;
+${CAMERA_BLOCK}
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aInfo;     // x part id
+layout(location = 5) in vec4 iPosYaw;   // xyz feet position, w leg yaw
+layout(location = 6) in vec4 iState;    // x stride, y torso yaw, z hit flash, w torso pitch
+layout(location = 7) in vec4 iExtra;    // x mine, y dying, z boost
+
+out vec3 vWorld;
+out vec3 vNormal;
+flat out float vPart;
+flat out float vFlash;
+out float vViewDist;
+
+const float HIP = 4.2;
+
+mat3 rotY(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
+}
+mat3 rotX(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+}
+mat3 rotZ(float a) {
+  float c = cos(a), s = sin(a);
+  return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0);
+}
+
+void main() {
+  vec3 p = aPos;
+  vec3 n = aNormal;
+  float stride = iState.x;
+  float swing = sin(stride) * 0.38;
+
+  if (p.y < HIP) {
+    // A leg. The two of them are in opposition, and the lower half of each
+    // swings a little further than the upper, which is enough of a knee.
+    float side = p.x < 0.0 ? 1.0 : -1.0;
+    vec3 hip = vec3(p.x, HIP, 0.0);
+    float amount = swing * side * (p.y < 2.6 ? 1.25 : 1.0);
+    mat3 r = rotX(amount);
+    p = hip + r * (p - hip);
+    n = r * n;
+  } else {
+    // The torso, which is where the guns are. It turns relative to the legs
+    // and it pitches, and both happen about the hip line so that nothing
+    // tears at the waist.
+    vec3 base = vec3(0.0, HIP, 0.0);
+    mat3 t = rotY(iState.y) * rotX(iState.w);
+    p = base + t * (p - base);
+    n = t * n;
+  }
+
+  // The body rises and falls twice a stride, which is most of what makes a
+  // walk read as weight.
+  p.y += sin(stride * 2.0) * 0.14;
+
+  // Going over, once it is dead.
+  float down = clamp(iExtra.y, 0.0, 1.0);
+  mat3 fall = rotZ(down * 0.35) * rotX(-down * 1.35);
+  p = fall * p;
+  n = fall * n;
+
+  mat3 body = rotY(-iPosYaw.w);
+  vec3 world = body * p + iPosYaw.xyz;
+  vWorld = world;
+  vNormal = normalize(body * n);
+  // The eye and the reactor are part 1, the red core material. Yours burns
+  // blue instead, which is part 11, and that is the only thing that tells the
+  // two apart at a distance.
+  vPart = (aInfo.x < 1.5 && aInfo.x > 0.5 && iExtra.x > 0.5) ? 11.0 : aInfo.x;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);

@@ -71,7 +71,7 @@ async function run() {
       grid: [w.nx, w.nz],
       size: [Math.round(w.maxX - w.minX), Math.round(w.maxZ - w.minZ)],
       districts: w.catalogue.map((d) => ({
-        id: d.id, name: d.name, tier: d.tier,
+        id: d.id, name: d.name, tier: d.tier, built: d.built !== false,
         tx: d.tx, tz: d.tz, nx: d.nx, nz: d.nz,
         mb: Math.round(d.bytes / 1e5) / 10,
       })),
@@ -103,9 +103,18 @@ async function run() {
   check('you start in the middle of town',
     index.loaded.includes(index.home) && index.here === 'Mitte',
     `${index.here}, holding ${index.loaded.join(', ')}`);
-  check('and the index says what each district costs',
-    index.districts.every((d) => d.mb > 0),
-    index.districts.map((d) => `${d.id} ${d.mb} MB`).join(', '));
+  // Every district of Berlin is in the index so that the map can draw the
+  // whole city; the ones with a bundle behind them say what they cost, and
+  // the rest say they are not built, which the game reads before it tries to
+  // walk or fly into one.
+  const built = index.districts.filter((d) => d.built);
+  check('and the index says what each built district costs',
+    built.length > 0 && built.every((d) => d.mb > 0),
+    built.map((d) => `${d.id} ${d.mb} MB`).join(', '));
+  check('and lists the rest of Berlin as ground nobody has built yet',
+    index.districts.length === 81
+      && index.districts.filter((d) => !d.built).every((d) => d.mb === 0),
+    `${built.length} built of ${index.districts.length}`);
 
   // --- one district at a time ---------------------------------------------
   const only = await page.evaluate(async () => {
@@ -465,7 +474,36 @@ async function run() {
         mode: s.state.mode,
       };
     }, neighbour);
-    check('free travel reaches a district that was not in memory when it started',
+    // --- and it says no to the parts of Berlin nobody has built --------------
+  const unbuilt = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const gap = s.world.catalogue.find((d) => d.built === false);
+    if (!gap) return { skip: true };
+    s.openTravel();
+    s.settleMap();
+    const armed = s.armNuke((gap.bounds.minX + gap.bounds.maxX) / 2,
+      (gap.bounds.minZ + gap.bounds.maxZ) / 2);
+    const hint = document.getElementById('targethint').textContent;
+    const confirmHidden = document.getElementById('targetconfirm').classList.contains('hidden');
+    s.closeTargeting();
+    // And nothing loads when you walk at one either.
+    const before = s.world.loadedIds.length;
+    await s.crossInto((gap.bounds.minX + gap.bounds.maxX) / 2,
+      (gap.bounds.minZ + gap.bounds.maxZ) / 2);
+    return {
+      id: gap.id, armed, hint, confirmHidden,
+      loadedBefore: before, loadedAfter: s.world.loadedIds.length,
+    };
+  });
+  check('a district nobody has built yet refuses the trip rather than failing it',
+    !unbuilt.skip && unbuilt.armed === false && unbuilt.confirmHidden
+      && /not built/.test(unbuilt.hint),
+    unbuilt.skip ? 'every district is built' : `${unbuilt.id}: ${unbuilt.hint}`);
+  check('and walking at one loads nothing',
+    !unbuilt.skip && unbuilt.loadedAfter === unbuilt.loadedBefore,
+    `${unbuilt.loadedAfter} district in memory`);
+
+  check('free travel reaches a district that was not in memory when it started',
       flight.started && flight.mode === 'walk' && flight.out < 6,
       `${flight.loadedAtStart.join(', ')} at take off, landed ${flight.out} m out in ${flight.landedIn}`);
     check('and puts you down on ground rather than in the air',

@@ -68,7 +68,9 @@ function main() {
   for (const f of [path.join(ROOT, 'index.html'), ...walk(path.join(ROOT, 'src'))]) code += gz(f);
   const fixed = code + gz(INDEX);
 
-  const rows = [...index.districts].sort((a, b) => b.gzip - a.gzip);
+  const rows = index.districts
+    .filter((d) => d.built !== false)
+    .sort((a, b) => b.gzip - a.gzip);
   const tooBig = rows.filter((d) => fixed + d.gzip > perDistrict);
 
   console.log(`a district costs   the code and the index, ${(fixed / 1e6).toFixed(2)} MB, plus itself`);

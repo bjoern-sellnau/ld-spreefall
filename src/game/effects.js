@@ -49,11 +49,17 @@ export class Effects {
   }
 
   /**
-   * A beam: the same line a tracer draws, but thicker, in whatever colour it
+   * A lance: the same line a tracer draws, but thicker, in whatever colour it
    * is given and lasting long enough to be seen as a line rather than as a
    * flicker. What a machine shoots with.
+   *
+   * It is not called beam, and that is not pedantry. It was, and so is the
+   * column of light further down this file, and a class keeps the last method
+   * of a name: every machine shot was quietly drawn as a pillar standing on
+   * the machine and going up into the sky. Two methods in one class may not
+   * share a name, and nothing in the language will tell you when they do.
    */
-  beam(ax, ay, az, bx, by, bz, r, g, b) {
+  lance(ax, ay, az, bx, by, bz, r, g, b) {
     const s = this._get();
     s.alive = true;
     s.kind = 0;

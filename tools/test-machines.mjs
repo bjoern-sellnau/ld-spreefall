@@ -262,6 +262,8 @@ async function run() {
 
   await page.screenshot({ path: path.join(SHOTS, 'machines-01-street.png') });
 
+
+
   const emp = await page.evaluate(async () => {
     const s = window.spreefall;
     const near = [];
@@ -286,6 +288,45 @@ async function run() {
     return { put: near.length, stunned: stunned.length, moved: Math.round(moved * 10) / 10,
       left: stunned[0] ? Math.round(stunned[0].stunLeft) : 0 };
   });
+  // --- the gun, and where its shot comes from ------------------------------
+  const gun = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const m = s.soldiers.active.find((x) => x.machine) || s.makeMachine(
+      s.soldiers.spawnNear(s.player.x + 14, s.player.z, 0.5, 1.5));
+    if (!m) return { skip: true };
+    m.yaw = 1.1;
+    s.effects.clear();
+    s.soldiers.onBeam(m, 0);
+    const live = s.effects.pool.filter((p) => p.alive);
+    const lines = live.filter((p) => p.kind === 0);
+    const columns = live.filter((p) => p.kind === 5);
+    const l = lines[0];
+    const muzzle = s.machineMuzzle(m);
+    return {
+      lines: lines.length,
+      columns: columns.length,
+      fromGun: l ? Math.round(Math.hypot(l.ax - muzzle.x, l.ay - muzzle.y, l.az - muzzle.z) * 100) / 100 : -1,
+      startHeight: l ? Math.round((l.ay - m.y) * 100) / 100 : -1,
+      endsAtCamera: l
+        ? Math.round(Math.hypot(l.bx - s.camera.position[0], l.by - s.camera.position[1],
+          l.bz - s.camera.position[2]) * 100) / 100
+        : -1,
+      offCentre: Math.round(Math.hypot(muzzle.x - m.x, muzzle.z - m.z) * 100) / 100,
+      // And on the side it is facing, which is the half of this that a
+      // distance cannot tell you: a muzzle in its back is exactly as far from
+      // the middle as one in its hands.
+      ahead: Math.round(((muzzle.x - m.x) * -Math.sin(m.yaw)
+        + (muzzle.z - m.z) * -Math.cos(m.yaw)) * 100) / 100,
+    };
+  });
+  check('a machine shoots a line from its gun, not a column from the sky',
+    !gun.skip && gun.lines === 1 && gun.columns === 0 && gun.fromGun < 0.01,
+    `${gun.lines} line, ${gun.columns} columns, ${gun.fromGun} m from the muzzle`);
+  check('and the shot starts at the end of the barrel',
+    !gun.skip && gun.ahead > 0.6 && gun.startHeight > 0.9 && gun.startHeight < 1.5
+      && gun.endsAtCamera < 0.01,
+    `${gun.ahead} m in front of it, ${gun.startHeight} m up, ending at the eye`);
+
   check('an EMP stops the machines inside it',
     emp.stunned >= Math.min(3, emp.put), `${emp.stunned} of ${emp.put} caught`);
   check('and a stopped one stands there while you deal with it',
@@ -297,6 +338,125 @@ async function run() {
     s.demolition.reset();
     s.renderer.clearCollapses();
   });
+
+  // --- mechs ---------------------------------------------------------------
+  const mech = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.mechs.reset();
+    // The suite has been shot at for a while by now and a Reaper hits hard;
+    // this is about the mechs, not about whether the run survives them.
+    s.setCheat('godmode', true);
+    s.combat.health = 100;
+    const mine = s.spawnMech('titan', 12);
+    const theirs = s.spawnMech('reaper', 70);
+    if (!mine || !theirs) return { skip: true };
+    // Theirs walks at you rather than standing where it was put.
+    const was = Math.hypot(theirs.x - s.player.x, theirs.z - s.player.z);
+    for (let i = 0; i < 60 * 6; i++) s.fixedForTest(1 / 60);
+    const now = Math.hypot(theirs.x - s.player.x, theirs.z - s.player.z);
+    // And it walks on its feet: never in the air, never under the road.
+    let worstGap = 0;
+    for (let i = 0; i < 60 * 2; i++) {
+      s.fixedForTest(1 / 60);
+      worstGap = Math.max(worstGap, Math.abs(theirs.y - s.world.groundHeight(theirs.x, theirs.z)));
+    }
+    return {
+      closed: Math.round(was - now),
+      away: Math.round(now),
+      worstGap: Number(worstGap.toFixed(2)),
+      health: theirs.health,
+      hurt: s.combat.health < 100,
+    };
+  });
+  check('a mech of theirs walks in on you',
+    !mech.skip && mech.closed > 8 && mech.worstGap < 0.6,
+    mech.skip ? 'no room for one' : `closed ${mech.closed} m to ${mech.away} m, feet ${mech.worstGap} m off the ground`);
+
+  const piloted = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const mine = s.mechs.active.find((m) => m.mine);
+    const theirs = s.mechs.active.find((m) => !m.mine);
+    if (!mine || !theirs) return { skip: true };
+    s.teleport(mine.x + 3, mine.z);
+    s.toggleVehicle();
+    const inIt = s.state.inMech === mine;
+    // Walk it, looking the way it is already facing.
+    s.look(mine.torso * 180 / Math.PI, 0);
+    const was = { x: mine.x, z: mine.z };
+    s.input.keys.add('KeyW');
+    for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('KeyW');
+    const walked = Math.hypot(mine.x - was.x, mine.z - was.z);
+    // Then put the chaingun on the other one.
+    const yaw = Math.atan2(-(theirs.x - mine.x), -(theirs.z - mine.z));
+    s.look(yaw * 180 / Math.PI, 0);
+    const hp0 = theirs.health;
+    s.input.fire = true;
+    for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    s.input.fire = false;
+    const hp1 = theirs.health;
+    // And a salvo of rockets out of the pod.
+    const before = s.projectiles.active.length;
+    s.input.secondary = true;
+    for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+    s.input.secondary = false;
+    const rockets = s.projectiles.active.length - before;
+    const out = { inIt, walked: Math.round(walked), hp0, hp1, rockets, torso: 0 };
+    // The torso goes where you look and the legs follow it rather than leading.
+    s.look((yaw + 1.2) * 180 / Math.PI, 0);
+    const legsWere = mine.yaw;
+    s.fixedForTest(1 / 60);
+    out.torsoSnap = Math.abs(mine.torso - s.camera.yaw) < 0.01;
+    out.legsLag = Math.abs(mine.yaw - legsWere) < 0.1;
+    s.toggleVehicle();
+    out.outAgain = s.state.inMech === null;
+    return out;
+  });
+  check('and you can climb into one of your own',
+    !piloted.skip && piloted.inIt && piloted.walked > 10,
+    piloted.skip ? '' : `${piloted.walked} m of walking`);
+  check('its chaingun takes a mech apart',
+    !piloted.skip && piloted.hp1 < piloted.hp0 - 300,
+    piloted.skip ? '' : `${piloted.hp0} to ${piloted.hp1}`);
+  check('and the pod throws a salvo rather than one rocket',
+    !piloted.skip && piloted.rockets >= 3, `${piloted.rockets} in the air`);
+  check('the torso goes where you look and the legs follow',
+    !piloted.skip && piloted.torsoSnap && piloted.legsLag && piloted.outAgain);
+
+  const stomp = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const mine = s.mechs.active.find((m) => m.mine);
+    if (!mine) return { skip: true };
+    s.demolition.reset();
+    s.teleport(mine.x + 3, mine.z);
+    s.toggleVehicle();
+    const hp = s.combat.health;
+    const floor = s.world.groundHeight(mine.x, mine.z);
+    s.input.jumpHeld = true;
+    for (let i = 0; i < 8; i++) s.fixedForTest(1 / 60);
+    s.input.jumpHeld = false;
+    let peak = mine.y;
+    for (let i = 0; i < 200; i++) { s.fixedForTest(1 / 60); peak = Math.max(peak, mine.y); }
+    const out = {
+      jumped: Number((peak - floor).toFixed(1)),
+      sites: s.demolition.sites.length + s.demolition.baked,
+      pilotHurt: s.combat.health < hp,
+    };
+    s.toggleVehicle();
+    return out;
+  });
+  check('it jumps, and the landing opens the road',
+    !stomp.skip && stomp.jumped > 2 && stomp.sites > 0,
+    stomp.skip ? '' : `${stomp.jumped} m up, ${stomp.sites} places came apart underneath`);
+  check('and the pilot inside the armour is fine', !stomp.skip && !stomp.pilotHurt);
+
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    const mine = s.mechs.active.find((m) => m.mine);
+    if (mine) { s.teleport(mine.x + 4, mine.z); s.look(mine.torso * 180 / Math.PI + 160, -6); }
+    for (let i = 0; i < 20; i++) await new Promise((r) => requestAnimationFrame(r));
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'mech-03-pair.png') });
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

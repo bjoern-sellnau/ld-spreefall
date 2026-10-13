@@ -34,6 +34,8 @@ import { FireWalls } from './game/firewall.js';
 import { Machines, MACHINES, makeMachine, empBurst } from './game/machines.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
+import { Mechs, MECH } from './game/mechs.js';
+import { MACHINE_MUZZLE } from './render/actors.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -64,7 +66,7 @@ const el = {
   modeNote: $('modenote'), timePick: $('timepick'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
-  vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'),
+  vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'), vehicleKeys: $('vehiclekeys'),
   rideHint: $('ridehint'), rideHintName: $('ridehintname'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
@@ -211,6 +213,8 @@ async function main() {
   const machines = new Machines();
   const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const mechs = new Mechs(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  weapon.mechs = mechs;
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
@@ -340,6 +344,12 @@ async function main() {
     autoQualityDone: false,
     frameSamples: [],
     lastGround: true,
+    // What you are sitting in, if anything. A vehicle drives and a mech
+    // walks, and they are different enough to be two fields rather than one
+    // with a kind on it.
+    inVehicle: null,
+    inMech: null,
+    unbuiltSaid: null,
   };
 
   function resize() {
@@ -614,16 +624,166 @@ async function main() {
   // actually want in a fight.
   weapon.onSwapFrom = (from) => { state.lastWeapon = from; };
 
+  /**
+   * Where a machine's shot starts: the emitter on the rifle it is holding,
+   * carried through the same rotation the vertex shader puts the body
+   * through, so the line in the air leaves the end of the gun you can see
+   * rather than the middle of its chest.
+   */
+  function machineMuzzle(s) {
+    const [mx, my, mz] = MACHINE_MUZZLE;
+    const c = Math.cos(s.yaw), sn = Math.sin(s.yaw);
+    // The body's own axes in the world. A model's negative z is the way the
+    // figure faces, which is the same direction the soldier layer means by
+    // its yaw: (-sin, -cos). Written out rather than taken from the shader by
+    // eye, because getting the sign wrong puts the muzzle in its back and
+    // nothing on the screen says so.
+    return {
+      x: s.x + c * mx + sn * mz,
+      y: s.y + my,
+      z: s.z - sn * mx + c * mz,
+    };
+  }
+
   // A machine's beam: one bright red line that arrives all at once, a crack
   // rather than a bang, and a scorch where it lands.
   soldiers.onBeam = (s, damage) => {
-    const from = { x: s.x, y: s.y + 1.5, z: s.z };
+    const from = machineMuzzle(s);
     const to = { x: camera.position[0], y: camera.position[1], z: camera.position[2] };
-    effects.beam(from.x, from.y, from.z, to.x, to.y, to.z, 1.0, 0.1, 0.08);
+    effects.lance(from.x, from.y, from.z, to.x, to.y, to.z, 1.0, 0.1, 0.08);
     audio.laser(Math.hypot(player.x - s.x, player.z - s.z));
     effects.flash(from.x, from.y, from.z, 2.4, 1.0, 0.15, 0.1, 0.07);
     if (damage > 0 && combat.health > 0) combat.hurt(damage, s.x, s.z, player.x, player.z);
   };
+  // --- mechs ----------------------------------------------------------------
+  // Eight metres of walking gun platform. The hooks below are everything the
+  // mech layer knows about this game: it decides when a gun goes off and
+  // where the muzzle is, and this decides what that does to the city.
+
+  /** A chaingun round, from a mech, at whatever is in front of it. */
+  mechs.onChaingun = (m, from, dir, gun) => {
+    const spread = gun.spread;
+    const d = {
+      x: dir.x + (Math.random() - 0.5) * spread,
+      y: dir.y + (Math.random() - 0.5) * spread,
+      z: dir.z + (Math.random() - 0.5) * spread,
+    };
+    const l = Math.hypot(d.x, d.y, d.z) || 1;
+    d.x /= l; d.y /= l; d.z /= l;
+    const hit = world.raycast(from.x, from.y, from.z, d.x, d.y, d.z, gun.range);
+    const reach = hit ? hit.t : gun.range;
+    const end = { x: from.x + d.x * reach, y: from.y + d.y * reach, z: from.z + d.z * reach };
+    audio.gunshot('rifle');
+    effects.tracer(from.x, from.y, from.z, end.x, end.y, end.z, m.mine);
+    if (hit) effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+    if (m.mine) {
+      // Yours hits whatever is out there, through the same raycasts the rifle
+      // uses, so cover works the same way for a mech as for a man.
+      mechHit(from, d, Math.min(reach, gun.range), gun.damage);
+    } else {
+      // Theirs hits you, if the line is clear and you are near it.
+      // A near miss is a miss. The spread is already in the direction, so the
+      // only question here is whether this round went through you, and the
+      // answer has to be a body's width rather than a bus's.
+      const near = pointToRay(player.x, player.y + PLAYER.eye * 0.6, player.z, from, d, reach);
+      if (near < 0.9 && combat.health > 0) combat.hurt(gun.damage, m.x, m.z, player.x, player.z);
+    }
+  };
+
+  /** One rocket out of a pod. */
+  mechs.onRockets = (m, from, dir, rockets) => {
+    projectiles.launch('rocket', {
+      x: from.x, y: from.y, z: from.z,
+      vx: dir.x * rockets.speed, vy: dir.y * rockets.speed, vz: dir.z * rockets.speed,
+      splash: rockets.splash, weapon: m.mine ? 'mech' : 'reaper',
+    });
+    audio.gunshot('launcher');
+    if (m.mine) effects.shake = Math.min(1.1, effects.shake + 0.12);
+  };
+
+  // A footfall you can feel from a street away.
+  mechs.onStep = (m, hard) => {
+    const away = Math.hypot(m.x - player.x, m.z - player.z);
+    if (away > 180) return;
+    audio.land(0);
+    const close = Math.max(0, 1 - away / 60);
+    effects.shake = Math.min(1.0, effects.shake + close * (hard ? 0.22 : 0.12));
+    effects.dust(m.x, m.y, m.z, 1.6);
+  };
+
+  // And the landing, which opens the road. This is not an explosion: it is
+  // forty tonnes arriving, so it goes through the city and through whatever
+  // is standing in the circle, and the pilot inside the armour is fine.
+  mechs.onStomp = (m, stomp) => {
+    audio.explosion();
+    effects.blast(m.x, m.y + 0.4, m.z, stomp.radius);
+    effects.dust(m.x, m.y, m.z, stomp.radius * 0.7);
+    renderer.addScar(m.x, m.y, m.z, stomp.radius * 0.8, 0.7);
+    demolition.blast(m.x, m.y, m.z, stomp.radius, stomp.damage);
+    gibs.rubble(m.x, m.y + 0.5, m.z, 4, 8, 1.4);
+    for (const sd of [...soldiers.active]) {
+      const away = Math.hypot(sd.x - m.x, sd.z - m.z);
+      if (away > stomp.radius) continue;
+      const share = stomp.damage * (1 - away / stomp.radius);
+      if (soldiers.damage(sd, share, { x: (sd.x - m.x) / (away || 1), y: 0.4, z: (sd.z - m.z) / (away || 1) })) {
+        creditTarget(sd, false, 'soldier');
+      }
+    }
+    for (const v of [...vehicles.active]) {
+      const away = Math.hypot(v.x - m.x, v.z - m.z);
+      if (away < stomp.radius) vehicles.damage(v, stomp.damage * (1 - away / stomp.radius));
+    }
+    for (const other of [...mechs.active]) {
+      if (other === m) continue;
+      const away = Math.hypot(other.x - m.x, other.z - m.z);
+      if (away < stomp.radius && mechs.damage(other, stomp.damage * 0.6 * (1 - away / stomp.radius))) {
+        creditTarget(other, true, 'mech');
+      }
+    }
+    effects.shake = Math.min(1.6, effects.shake + 0.8);
+  };
+
+  mechs.onDestroyed = (m) => {
+    explode(m.x, m.y + 3.0, m.z, { radius: 26, damage: 420 }, { weapon: 'mech' });
+    gibs.rubble(m.x, m.y + 2.0, m.z, 9, 16, 2.4);
+    feed(`<b>${m.spec.name.toLowerCase()} down</b>`);
+    if (state.inMech === m) leaveMech(true);
+  };
+
+  /**
+   * How near a point is to a ray, for working out whether a shot that was not
+   * aimed at anything in particular went through you anyway.
+   */
+  function pointToRay(px, py, pz, from, dir, reach) {
+    const vx = px - from.x, vy = py - from.y, vz = pz - from.z;
+    const t = Math.max(0, Math.min(reach, vx * dir.x + vy * dir.y + vz * dir.z));
+    return Math.hypot(vx - dir.x * t, vy - dir.y * t, vz - dir.z * t);
+  }
+
+  /** What your mech's chaingun hits: the same enemies your rifle hits. */
+  function mechHit(from, d, reach, damage) {
+    let best = null;
+    const take = (hit, kind, target) => {
+      if (!hit || hit.t > reach) return;
+      if (!best || hit.t < best.t) best = { t: hit.t, kind, target, core: !!hit.core };
+    };
+    const dr = drones.raycast(from.x, from.y, from.z, d.x, d.y, d.z, reach);
+    take(dr, 'drone', dr && dr.drone);
+    const sd = soldiers.raycast(from.x, from.y, from.z, d.x, d.y, d.z, reach);
+    take(sd, 'soldier', sd && sd.soldier);
+    const jt = jets.raycast(from.x, from.y, from.z, d.x, d.y, d.z, reach);
+    take(jt, 'jet', jt && jt.jet);
+    const mc = mechs.raycast(from.x, from.y, from.z, d.x, d.y, d.z, reach);
+    if (mc && !mc.mech.mine) take(mc, 'mech', mc.mech);
+    if (!best) return;
+    let killed = false;
+    if (best.kind === 'soldier') killed = soldiers.damage(best.target, damage, d);
+    else if (best.kind === 'jet') killed = jets.damage(best.target, damage);
+    else if (best.kind === 'mech') killed = mechs.damage(best.target, damage);
+    else killed = drones.damage(best.target, damage);
+    if (killed) creditTarget(best.target, best.core, best.kind);
+  }
+
   soldiers.onStunSpark = (s) => {
     effects.spark(s.x + (Math.random() - 0.5), s.y + 0.8 + Math.random() * 0.9,
       s.z + (Math.random() - 0.5), 0.5, 0.75, 1.0);
@@ -896,7 +1056,11 @@ async function main() {
   /** Into the nearest one, or out of the one you are in. */
   function toggleVehicle() {
     if (state.mode !== 'walk') return;
+    if (state.inMech) { leaveMech(false); return; }
     if (state.inVehicle) { leaveVehicle(false); return; }
+    // A mech first: it is the bigger thing and you are standing under it.
+    const mech = mechs.nearest(player.x, player.z, 9);
+    if (mech) { enterMech(mech); return; }
     const near = vehicles.nearest(player.x, player.z, 7);
     if (!near) { toast('nothing to get into'); return; }
     if (!vehicles.enter(near)) return;
@@ -905,8 +1069,53 @@ async function main() {
     el.hud.classList.add('driving');
     el.vehiclePanel.classList.remove('hidden');
     el.vehicleName.textContent = near.spec.name;
+    el.vehicleKeys.textContent = near.spec.kind === 'air'
+      ? 'W S throttle, A D roll, mouse flies, Space up, right mouse down, left mouse fires'
+      : 'W forward, S back, A D steer, Shift brake, left mouse fires';
+    // You look where it is pointing. Before this the camera kept the heading
+    // you had on foot, so a tank parked across your line of sight drove off
+    // sideways or straight past you when you pressed forward, which reads as
+    // reverse however the hull is actually moving.
+    camera.yaw = near.yaw;
+    camera.pitch = Math.min(camera.pitch, -0.05);
     audio.swap();
     toast(`${near.spec.name}. F to get out.`);
+  }
+
+  /**
+   * Into the cockpit. You see out of the canopy, the torso goes where you
+   * look and the legs follow it, and the two guns are the mouse buttons.
+   */
+  function enterMech(m) {
+    if (!mechs.enter(m)) return;
+    state.inMech = m;
+    state.holstered = true;
+    el.hud.classList.add('driving');
+    el.vehiclePanel.classList.remove('hidden');
+    el.vehicleName.textContent = m.spec.name;
+    el.vehicleKeys.textContent =
+      'W A S D walks, mouse aims, left mouse chaingun, right mouse rockets, '
+      + 'Shift dashes, Space jumps and the landing opens the road';
+    camera.yaw = m.torso;
+    audio.swap();
+    toast(`${m.spec.name}. F to get out.`);
+  }
+
+  function leaveMech(thrown) {
+    const m = state.inMech;
+    if (!m) return;
+    const out = mechs.leave() || { x: m.x, z: m.z };
+    state.inMech = null;
+    state.holstered = false;
+    el.hud.classList.remove('driving');
+    el.vehiclePanel.classList.add('hidden');
+    player.teleport(out.x, out.z);
+    state.prev = { x: out.x, y: player.y, z: out.z };
+    state.curr = { x: out.x, y: player.y, z: out.z };
+    if (thrown) {
+      combat.hurt(30, m.x, m.z, out.x, out.z);
+      toast('blown clear');
+    }
   }
 
   function leaveVehicle(thrown) {
@@ -934,6 +1143,9 @@ async function main() {
     if (state.mode !== 'walk') return null;
     cheats.used = true;
     applyCheats();
+    // A mech needs more room than a jeep and is not in the vehicle table at
+    // all, so it goes out through its own spawner.
+    if (MECH[type]) return spawnMech(type, 14);
     for (let i = 0; i < 24; i++) {
       const a = (i / 24) * Math.PI * 2;
       const x = player.x + Math.cos(a) * 9;
@@ -947,6 +1159,37 @@ async function main() {
       if (boxed) continue;
       const v = vehicles.spawn(type, x, z, a + Math.PI);
       if (v) return v;
+    }
+    return null;
+  }
+
+  /**
+   * Puts a mech on the street near you, in the first place one fits.
+   *
+   * It is a bigger thing than a jeep, so the search is wider and it asks for
+   * clear ground in four directions rather than two: a mech wedged into a
+   * courtyard it cannot walk out of is worse than no mech at all.
+   *
+   * @param {string} type a key of MECH
+   * @param {number} away how far out to look
+   * @returns {object|null}
+   */
+  function spawnMech(type, away = 14) {
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+      const r = away * (0.8 + Math.random() * 0.6);
+      const x = player.x + Math.cos(a) * r;
+      const z = player.z + Math.sin(a) * r;
+      if (!world.isLoaded(x, z)) continue;
+      let boxed = false;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, 7)) {
+          boxed = true; break;
+        }
+      }
+      if (boxed) continue;
+      const m = mechs.spawn(type, x, z, a + Math.PI);
+      if (m) return m;
     }
     return null;
   }
@@ -1256,6 +1499,12 @@ async function main() {
       const made = soldiers.spawnNear(player.x, player.z, MACHINES.spawnFrom, MACHINES.spawnTo);
       if (made) makeMachine(made);
     }
+    // And the heavy ones, walking in from further out.
+    const heavies = mechs.active.filter((m) => !m.mine && m.health > 0).length;
+    if (machines.tickMech(dt, heavies)) {
+      spawnMech('reaper', MACHINES.mechFrom
+        + Math.random() * (MACHINES.mechTo - MACHINES.mechFrom));
+    }
     // The hum, and the two tone they give when one of them has you. Spread
     // out over whoever is nearest, so a street full of them is a chorus
     // rather than a machine gun of beeps.
@@ -1322,6 +1571,8 @@ async function main() {
         if (drones.spawnNear(player.x, player.z, 55, 130)) made++;
       } else if (kind === 'jets') {
         if (jets.spawnFar(player.x, player.z)) made++;
+      } else if (kind === 'reapers') {
+        if (spawnMech('reaper', 60 + Math.random() * 60)) made++;
       }
     }
     if (kind === 'soldiers') soldiers.budget = Math.max(soldiers.budget, soldiers.active.length);
@@ -1529,8 +1780,17 @@ async function main() {
     aimAt(x, z);
     const away = Math.round(Math.hypot(x - player.x, z - player.z));
     if (state.mapMode === 'travel') {
-      // Nothing is off limits here. Walking into the memorial has always been
-      // allowed; it is firing in it that is not.
+      // Except a district nobody has built yet, which is on the map because
+      // the map is all of Berlin, and which there is nothing to land in.
+      const where = world.entryAt(x, z);
+      if (where && !world.isBuilt(where)) {
+        state.pendingNuke = null;
+        el.targetConfirm.classList.add('hidden');
+        el.targetHint.textContent = `${where.name || where.id} is not built yet`;
+        return false;
+      }
+      // Nothing else is off limits here. Walking into the memorial has always
+      // been allowed; it is firing in it that is not.
       state.pendingNuke = { x, z };
       el.confirmWhere.textContent = away >= 1000
         ? `${(away / 1000).toFixed(2)} km from here. About ${Math.round(estimateFlight(away))} seconds.`
@@ -1658,6 +1918,17 @@ async function main() {
     if (!entry) return false;
     if (world.loaded(entry.id)) return true;
     if (state.crossing) return false;
+    // A district of Berlin that has not been built yet is on the map and in
+    // the index, because the city is the whole city whatever is built, but
+    // there is nothing to walk into. Saying so is better than a loading
+    // screen that never fills.
+    if (!world.isBuilt(entry)) {
+      if (state.unbuiltSaid !== entry.id) {
+        state.unbuiltSaid = entry.id;
+        toast(`${entry.name || 'that part of Berlin'} is not built yet`);
+      }
+      return false;
+    }
     state.crossing = entry.id;
     el.crossName.textContent = entry.name || 'Berlin';
     // The one thing in there worth walking towards. It is chosen when the
@@ -2395,6 +2666,31 @@ async function main() {
 
     state.prev.x = player.x; state.prev.y = player.y; state.prev.z = player.z;
 
+    // Piloting. Same idea as driving, except that what you are in walks: the
+    // torso goes where you look at once, the legs chase the torso, and you
+    // are wherever the cockpit is.
+    if (state.inMech) {
+      const m = state.inMech;
+      const controls = {
+        forward: photo.active ? 0 : input.moveZ,
+        strafe: photo.active ? 0 : input.moveX,
+        yaw: camera.yaw,
+        pitch: camera.pitch,
+        fire: input.fire && !photo.active,
+        rockets: input.secondary && !photo.active,
+        dash: input.run && !photo.active,
+        jump: input.jumpHeld && !photo.active,
+      };
+      mechs.update(worldDt, { x: player.x, y: player.y, z: player.z }, controls);
+      player.teleport(m.x, m.z);
+      state.curr.x = m.x; state.curr.y = m.y; state.curr.z = m.z;
+      state.prev.x = m.x; state.prev.y = m.y; state.prev.z = m.z;
+      player.vx = 0; player.vz = 0;
+      landmarks.update(m.x, m.z, dt, player.distanceWalked);
+      runCombatWorld(dt, worldDt, scale);
+      return;
+    }
+
     // Driving. The controls go to the vehicle instead of to your legs, and
     // you go wherever it goes.
     if (state.inVehicle) {
@@ -2412,7 +2708,14 @@ async function main() {
         fire: input.fire && !photo.active,
         secondary: false,
       };
+      // The view turns with the hull. Steering a vehicle turns the thing you
+      // are sitting in, and a camera that ignored that would leave you
+      // driving sideways across your own screen within one corner. Free look
+      // still works: this adds the hull's own turn to whatever you are doing
+      // with the mouse rather than taking the mouse away.
+      const hullWas = v.yaw;
       vehicles.update(selfDt, controls, state.time);
+      if (!air) camera.yaw += v.yaw - hullWas;
       // Dead or alive, you are where it is.
       player.teleport(v.x, v.z);
       state.curr.x = v.x; state.curr.y = v.y; state.curr.z = v.z;
@@ -2516,6 +2819,10 @@ async function main() {
     ion.update(worldDt);
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
+    // And the ones hunting you keep walking whether or not you are in one.
+    if (!state.inMech) {
+      mechs.update(worldDt, { x: player.x, y: player.y, z: player.z }, null);
+    }
     rainTick(worldDt);
     machinesTick(worldDt);
     drones.update(worldDt, eye, state.time);
@@ -2601,6 +2908,32 @@ async function main() {
       camera.position[2] = p.z;
       camera.yaw = p.yaw;
       camera.pitch = p.pitch;
+    } else if (state.inMech) {
+      // Behind and above the shoulders, with the look you are holding, and
+      // pulled in when a wall gets between. The same camera a tank gets, from
+      // higher up, because the thing worth seeing here is the mech itself: a
+      // cockpit view of a machine this shape is a view of its own canopy.
+      const m = state.inMech;
+      const ms = m.spec;
+      camera.position[0] = m.x - camera.forward[0] * ms.chase;
+      camera.position[1] = m.y + ms.chaseUp - camera.forward[1] * ms.chase;
+      camera.position[2] = m.z - camera.forward[2] * ms.chase;
+      const toCam = {
+        x: camera.position[0] - m.x,
+        y: camera.position[1] - (m.y + ms.chaseUp),
+        z: camera.position[2] - m.z,
+      };
+      const l = Math.hypot(toCam.x, toCam.y, toCam.z) || 1;
+      const blocked = world.raycast(m.x, m.y + ms.chaseUp, m.z,
+        toCam.x / l, toCam.y / l, toCam.z / l, l);
+      if (blocked) {
+        const t = Math.max(2.5, blocked.t - 0.8);
+        camera.position[0] = m.x + (toCam.x / l) * t;
+        camera.position[1] = m.y + ms.chaseUp + (toCam.y / l) * t;
+        camera.position[2] = m.z + (toCam.z / l) * t;
+      }
+      const floor = world.groundHeight(camera.position[0], camera.position[2]) + 1.2;
+      if (camera.position[1] < floor) camera.position[1] = floor;
     } else if (state.inVehicle) {
       // A chase camera, hung behind and above whatever you are in, with the
       // look you are holding. Third person because the inside of a tank is
@@ -2684,7 +3017,7 @@ async function main() {
     camera.update(w / Math.max(1, h));
 
     // --- the weapon in your hands ---
-    if (state.mode === 'walk' && !photo.active && !state.inVehicle) {
+    if (state.mode === 'walk' && !photo.active && !state.inVehicle && !state.inMech) {
       const speed = Math.hypot(player.vx || 0, player.vz || 0);
       state.bob += elapsed * (speed > 4 ? 11.5 : 7.4) * Math.min(1, speed / 2.6);
       // Sway lags the look, which is what makes a viewmodel feel like a weight.
@@ -2737,6 +3070,7 @@ async function main() {
       renderer.actors.updatePickups(pickups.live, camera.position);
       renderer.actors.updateGibs(gibs.active);
       renderer.actors.updateVehicles(vehicles.active);
+      renderer.actors.updateMechs(mechs.active);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -2753,6 +3087,7 @@ async function main() {
       renderer.actors.updatePickups(live ? pickups.live : [], camera.position);
       renderer.actors.updateGibs(live ? gibs.active : []);
       renderer.actors.updateVehicles(live ? vehicles.active : []);
+      renderer.actors.updateMechs(live ? mechs.active : []);
       renderer.drawActors = live;
     }
 
@@ -2828,9 +3163,17 @@ async function main() {
       // What you are standing next to. Vehicles were always here and F always
       // worked, but nothing on the screen said so, which is the same thing as
       // them not working.
-      const near = state.inVehicle ? null : vehicles.nearest(player.x, player.z, 7);
+      const near = (state.inVehicle || state.inMech) ? null
+        : (mechs.nearest(player.x, player.z, 9) || vehicles.nearest(player.x, player.z, 7));
       el.rideHint.classList.toggle('hidden', !near);
       if (near) el.rideHintName.textContent = near.spec.name;
+      // What is left of the thing you are standing in. A mech takes a lot of
+      // killing and you need to know how much of it is gone.
+      if (state.inMech) {
+        const m = state.inMech;
+        el.vehicleName.textContent =
+          `${m.spec.name} ${Math.max(0, Math.round(m.health))}`;
+      }
     }
 
     if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
@@ -2903,6 +3246,10 @@ async function main() {
     cinema, cinemaSpec: CINEMA,
     ion, ionSpec: ION, ionState: ION_STATE,
     vehicles, vehicleSpec: VEHICLE,
+    mechs, mechSpec: MECH,
+    spawnMech(type, away) { return spawnMech(type, away); },
+    enterMech(m) { return enterMech(m); },
+    leaveMech() { return leaveMech(false); },
     toggleVehicle() { toggleVehicle(); },
     dropRide(type) { return dropRide(type); },
     parkVehicles() { return parkVehicles(); },
@@ -2973,6 +3320,7 @@ async function main() {
     machines, machineSpec: MACHINES,
     makeMachine(s) { return makeMachine(s); },
     machinesTick(dt) { machinesTick(dt); },
+    machineMuzzle(s) { return machineMuzzle(s); },
     setMode(name) { machines.set(name === 'machines'); applyMachineLook(); return machines.active; },
     crossInto(x, z) { return crossInto(x, z); },
     crossingShown() { return !el.crossing.classList.contains('hidden'); },

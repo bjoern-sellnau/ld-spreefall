@@ -7,7 +7,7 @@ import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
   SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_FS, SOLDIER_SHADOW_VS,
-  PICKUP_VS, GIB_VS,
+  PICKUP_VS, GIB_VS, MECH_VS,
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
@@ -16,6 +16,7 @@ const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
 const MAX_VEHICLES = 8;
+const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 96;
 // Past this there is no point drawing a pad: the fog has it anyway.
@@ -623,8 +624,98 @@ export function buildSoldierMesh() {
     m.box(side * 0.30, 1.16, -0.05, 0.055, 0.54, 0.055, 23); // arm
     m.box(side * 0.22, 1.42, 0, 0.17, 0.05, 0.05, 23);       // collarbone
   }
+
+  // The beam rifle, which only a machine carries. It is in the same mesh as
+  // everything else and the vertex shader collapses it for anyone who is not
+  // one, the same trick the skeleton uses. The soldier's own rifle is cloth
+  // side work and goes when the cloth goes, which is why a machine stood
+  // there shooting with empty hands until this was put in.
+  //
+  // Held across the body in both hands, pointing where the body points, with
+  // the emitter at the front as its own part so it can glow without the whole
+  // gun glowing. MACHINE_MUZZLE below is where the beam comes out, in the
+  // model's own coordinates, so the gun and the shot cannot drift apart.
+  m.box(0.20, 1.16, -0.34, 0.085, 0.11, 0.86, 26);          // body
+  m.box(0.20, 1.26, -0.20, 0.07, 0.10, 0.34, 26);           // sight rail
+  m.box(0.20, 1.06, -0.12, 0.06, 0.16, 0.12, 26);           // grip
+  m.box(0.20, 1.16, 0.18, 0.13, 0.15, 0.16, 26);            // power pack
+  m.box(0.20, 1.16, -0.80, 0.055, 0.055, 0.14, 27);         // emitter
   return m;
 }
+
+/**
+ * Where a machine's beam comes out, in the body's own coordinates. The
+ * renderer builds the gun around this point and main.js turns it into a world
+ * position with the same rotation the vertex shader uses.
+ */
+export const MACHINE_MUZZLE = [0.20, 1.16, -0.88];
+
+// The hip line of a mech, in its own coordinates. Everything below it is leg
+// and swings; everything above it is torso and turns. The vertex shader uses
+// the same number, which is why it is here rather than written twice.
+export const MECH_HIP = 4.2;
+
+/**
+ * A mech. Eight metres, two legs, a turning torso with a chaingun on one arm
+ * and a rocket pod on the other, and one lit eye.
+ *
+ * Built facing negative z with its feet at zero, like everything else here.
+ * Part ids are chosen to land on materials the shared body shader already
+ * has: 0 is hull plate, 2 is the lighter steel of a joint, 7 is gun metal, 12
+ * is a scuffed plate, 24 is glass, and 1 is the glowing core, which the
+ * vertex shader swaps for 11, the blue energy material, when the mech is
+ * yours. That is the whole difference between a thing hunting you and the
+ * thing you are standing in: one number per instance.
+ */
+export function buildMechMesh() {
+  const m = new MeshBuild();
+  for (const side of [-1, 1]) {
+    const x = side * 1.25;
+    m.box(x, 0.35, -0.25, 1.45, 0.70, 3.00, 12);        // foot
+    m.box(x, 1.05, 0.10, 0.95, 0.80, 1.10, 2);          // ankle
+    m.box(x, 2.10, 0.00, 1.15, 1.70, 1.25, 0);          // shin
+    m.box(x, 3.00, -0.05, 1.00, 0.55, 1.05, 2);         // knee
+    m.box(x, 3.75, 0.05, 1.35, 1.25, 1.45, 0);          // thigh
+  }
+  // Hips and the waist the torso turns on.
+  m.box(0, 4.35, 0, 3.10, 0.95, 1.95, 0);
+  m.box(0, 4.85, 0, 1.60, 0.55, 1.30, 2);
+
+  // Torso.
+  m.box(0, 5.75, 0.05, 3.00, 1.60, 2.10, 0);
+  m.box(0, 6.45, 0.35, 2.30, 0.70, 1.60, 0);            // engine deck
+  m.box(0, 5.70, -1.12, 2.00, 1.00, 0.22, 24);          // canopy
+  m.box(0, 6.25, -0.95, 0.70, 0.26, 0.26, 1);           // the eye
+  m.box(0, 5.05, 0.95, 1.10, 0.90, 0.50, 1);            // reactor, at the back
+
+  // Shoulders, and what is hung off them.
+  for (const side of [-1, 1]) m.box(side * 1.85, 6.05, 0.05, 0.95, 1.10, 1.60, 2);
+  // The chaingun on the right arm: a block and four barrels.
+  m.box(2.05, 5.60, -0.70, 0.90, 0.95, 2.20, 7);
+  for (const dx of [-0.22, 0.22]) {
+    for (const dy of [-0.2, 0.2]) {
+      m.box(2.05 + dx, 5.60 + dy, -2.35, 0.16, 0.16, 1.40, 7);
+    }
+  }
+  // The rocket pod on the left: six tubes in a block.
+  m.box(-2.05, 6.30, -0.35, 1.30, 1.10, 1.80, 7);
+  for (const dx of [-0.38, 0, 0.38]) {
+    for (const dy of [-0.26, 0.26]) {
+      m.box(-2.05 + dx, 6.30 + dy, -1.30, 0.26, 0.26, 0.30, 8);
+    }
+  }
+  return m;
+}
+
+/**
+ * Where a mech's guns are, in its own coordinates, for the game layer. These
+ * are the same numbers the mesh above is built around, exported so that the
+ * shot and the barrel it comes out of cannot drift apart.
+ */
+export const MECH_MUZZLE = {
+  chaingun: [2.05, 5.60, -3.20],
+  rockets: [-2.05, 6.30, -1.55],
+};
 
 // --- renderer --------------------------------------------------------------
 
@@ -646,6 +737,9 @@ export class Actors {
     this.progSoldier = createProgram(gl, SOLDIER_VS, SOLDIER_FS, 'soldier');
     this.progSoldierShadow = createProgram(gl, SOLDIER_SHADOW_VS, DRONE_SHADOW_FS, 'soldierShadow');
     this.progSoldier.use().int('uShadow0', 4).int('uShadow1', 5);
+    // A mech rides the shared body shader with a transform of its own.
+    this.progMech = createProgram(gl, MECH_VS, DRONE_FS, 'mech');
+    this.progMech.use().int('uShadow0', 4).int('uShadow1', 5);
     this.progPickup = createProgram(gl, PICKUP_VS, DRONE_FS, 'pickup');
     this.progPickup.use().int('uShadow0', 4).int('uShadow1', 5);
     this.progGib = createProgram(gl, GIB_VS, DRONE_FS, 'gib');
@@ -656,6 +750,10 @@ export class Actors {
     // which the walk and the fall had no room left for.
     this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 3);
     this.jet = this._uploadMesh(buildJetMesh(), MAX_JETS, 2);
+    // Three vec4s: where it is and which way its legs point, then the stride,
+    // the torso and the hit flash, then whether it is yours and how far over
+    // it has gone.
+    this.mech = this._uploadMesh(buildMechMesh(), MAX_MECHS, 3);
     // What you can get into. The fighter you can fly is the same mesh as the
     // ones that come after you, because it is the same aircraft.
     this.vehicles = {
@@ -1002,6 +1100,57 @@ export class Actors {
     }
   }
 
+  /** @param {Array} list live mechs */
+  updateMechs(list) {
+    const gl = this.gl;
+    const data = this.mech.instData;
+    let n = 0;
+    for (const m of list) {
+      if (!m.alive || n >= MAX_MECHS) continue;
+      const o = n * 12;
+      data[o] = m.x; data[o + 1] = m.y; data[o + 2] = m.z; data[o + 3] = m.yaw;
+      // The torso angle is relative to the legs, because that is what the
+      // shader turns it by.
+      data[o + 4] = m.walk;
+      data[o + 5] = m.torso - m.yaw;
+      data[o + 6] = m.hitFlash;
+      data[o + 7] = m.pitch;
+      data[o + 8] = m.mine ? 1 : 0;
+      data[o + 9] = m.health > 0 ? 0 : Math.min(1, (m.dying || 0) / 1.6);
+      data[o + 10] = m.dashLeft > 0 ? 1 : 0;
+      data[o + 11] = 0;
+      n++;
+    }
+    this.mech.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.mech.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 12);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  drawMechs() {
+    if (!this.mech.instanceCount) return 0;
+    const gl = this.gl;
+    this.progMech.use();
+    gl.bindVertexArray(this.mech.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, this.mech.count, this.mech.indexType, 0,
+      this.mech.instanceCount);
+    gl.bindVertexArray(null);
+    return 1;
+  }
+
+  drawMechShadows(lightViewProj) {
+    if (!this.mech.instanceCount) return 0;
+    const gl = this.gl;
+    this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
+    gl.bindVertexArray(this.mech.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, this.mech.count, this.mech.indexType, 0,
+      this.mech.instanceCount);
+    gl.bindVertexArray(null);
+    return 1;
+  }
+
   drawVehicles() {
     const gl = this.gl;
     let draws = 0;
@@ -1156,7 +1305,7 @@ export class Actors {
 
   dispose() {
     const gl = this.gl;
-    for (const mesh of [this.drone, this.soldier, this.jet, this.gib,
+    for (const mesh of [this.drone, this.soldier, this.jet, this.gib, this.mech,
       ...Object.values(this.weapons),
       ...Object.values(this.props), ...Object.values(this.pickups),
       ...Object.values(this.vehicles)]) {

@@ -618,6 +618,46 @@ async function run() {
   check('and they can be shot at like anything else',
     shot.found && shot.dead, `${shot.before} to ${shot.after}`);
 
+  // --- and forward is forward ----------------------------------------------
+  const facing = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = [];
+    for (const yaw of [Math.PI / 2, Math.PI, -2.1]) {
+      s.vehicles.reset();
+      s.look(0, 0);
+      const t = s.vehicles.spawn('tank', s.player.x + 3, s.player.z, yaw);
+      s.teleport(t.x + 1.5, t.z);
+      s.toggleVehicle();
+      // The view is read as an angle rather than off the camera's forward
+      // vector, which is only recomputed when a frame is drawn.
+      const cam = s.camera.yaw;
+      const f = [-Math.sin(cam), -Math.cos(cam)];
+      const was = { x: t.x, z: t.z };
+      s.input.keys.add('KeyW');
+      for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+      s.input.keys.delete('KeyW');
+      const hullWas = t.yaw, camWas = s.camera.yaw;
+      s.input.keys.add('KeyD');
+      for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+      s.input.keys.delete('KeyD');
+      const moved = { x: t.x - was.x, z: t.z - was.z };
+      const len = Math.hypot(moved.x, moved.z) || 1;
+      out.push({
+        towardsView: +((moved.x / len) * f[0] + (moved.z / len) * f[1]).toFixed(2),
+        hullTurn: +(t.yaw - hullWas).toFixed(2),
+        camTurn: +(s.camera.yaw - camWas).toFixed(2),
+      });
+      s.toggleVehicle();
+    }
+    return out;
+  });
+  check('forward drives where you are looking, however it was parked',
+    facing.every((f) => f.towardsView > 0.97),
+    facing.map((f) => f.towardsView).join(', '));
+  check('and steering turns the view with the hull',
+    facing.every((f) => Math.abs(f.hullTurn) > 0.2 && Math.abs(f.hullTurn - f.camTurn) < 0.01),
+    `hull ${facing[0].hullTurn} rad, view ${facing[0].camTurn} rad`);
+
   // --- the pictures ---------------------------------------------------------
   await page.evaluate(() => {
     const s = window.spreefall;
