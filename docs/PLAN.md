@@ -1145,3 +1145,45 @@ is what prompted the change.
 
 - 2026-10-16: the help panel scrolls. It has a line for every key now and a
   laptop screen ran out before the list did.
+
+- 2026-10-16: a Titan carries a loadout. Five weapons instead of one, in the
+  spirit of what a Titan carries in the games this is named after: the XO
+  chaingun that hoses, a forty millimetre cannon that punches, a thermite
+  launcher that denies a street, a plasma railgun you hold to charge and
+  which goes through four machines on one bolt, and the Leadwall, fourteen
+  slugs at once at close range. Each is a row of numbers, the same way the
+  hand weapons are, with its own magazine, its own rhythm and its own kick.
+  The number row and the wheel choose between them while you are sitting in
+  it, and R reloads what it is holding. The hull now has a shield over it
+  that soaks the first fifteen hundred and comes back five seconds after
+  anybody stops shooting.
+
+- 2026-10-16: and a cockpit to fire them out of. The camera sits on the
+  torso's own line of sight, a metre and a half in front of its eye, which is
+  not a detail: the guns converge on the point that line runs into, so a
+  camera parked beside it would put the crosshair half a metre under the shot
+  at fifty paces. A check measures exactly that, level and pitched down, and
+  wants the aim point within ten centimetres of the middle of the screen. The
+  view bobs with the same walk counter the legs are drawn from, so the step
+  you feel is the step you can see, and the pilot's look is held to the same
+  limit the torso turns through, because a view that can point somewhere the
+  guns cannot is a view that lies. V swaps to the old camera over the
+  shoulder. The readout alongside it is the mech's own: the loadout down the
+  right with the live magazines, hull and shield, the pod and the dash, and
+  the charge on the railgun drawn under a reticle that goes blue while it
+  builds.
+
+- 2026-10-16: three things a blast did not do, which it now does. It did not
+  touch a mech, so a rocket at a Titan's feet took the paint off and nothing
+  else; it did not touch a parked vehicle; and a rocket flew straight through
+  a mech to go off on the wall behind it, because the list of bodies a shell
+  asks about had every actor in the city on it except the largest. The same
+  list now says what it hit as well as where, which is what the gun on a tank
+  had been reading all along and never getting. Fire reaches a mech too, at a
+  seventh of what it does to a person, which is what makes the thermite
+  launcher a way to deny a street to one.
+
+- 2026-10-16: a pilot inside forty tonnes of armour no longer burns to death.
+  The street catching light under a Titan was being charged to the man in the
+  seat, and so was the blast from a rocket that had already dented the hull:
+  both now go to the machine, which is the thing standing in them.

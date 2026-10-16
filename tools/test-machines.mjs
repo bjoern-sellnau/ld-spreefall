@@ -440,7 +440,21 @@ async function run() {
   // --- mechs ---------------------------------------------------------------
   const mech = await page.evaluate(async () => {
     const s = window.spreefall;
+    // By now the suite has been shot at for twenty checks and the run may
+    // have ended behind us. Everything from here is about mechs, and none of
+    // it can be measured, let alone photographed, through a screen that says
+    // Systems down, so the run is picked up off the floor first.
+    const down = document.getElementById('down');
+    if (down && !down.classList.contains('hidden')) {
+      document.getElementById('downbtn').click();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
     s.mechs.reset();
+    // Half the district has been on fire since the flamethrower checks, and a
+    // mech parked in a burning street burns. That is the right behaviour and
+    // it is checked further down; here it would only mean measuring how long
+    // a Titan lasts in somebody else's fire.
+    s.burningGround.length = 0;
     // The suite has been shot at for a while by now and a Reaper hits hard;
     // this is about the mechs, not about whether the run survives them.
     s.setCheat('godmode', true);
@@ -602,6 +616,290 @@ async function run() {
     !piloted.skip && piloted.rockets >= 3, `${piloted.rockets} in the air`);
   check('the torso goes where you look and the legs follow',
     !piloted.skip && piloted.torsoSnap && piloted.legsLag && piloted.outAgain);
+
+  // --- the loadout and the cockpit -----------------------------------------
+  // Five weapons rather than one, chosen with the number row and the wheel,
+  // and a view out of the canopy whose crosshair says where the shot goes.
+  const got = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.mechs.reset();
+    const mine = s.spawnMech('titan', 12);
+    if (!mine) return { skip: true };
+    s.teleport(mine.x + 3, mine.z);
+    s.toggleVehicle();
+    if (s.state.inMech !== mine) return { skip: true };
+    s.look(mine.torso * 180 / Math.PI, 0);
+    for (let i = 0; i < 4; i++) s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(r));
+    return {
+      skip: false,
+      arms: s.mechArms.length,
+      rows: document.querySelectorAll('#mecharms .marm').length,
+      hud: !document.getElementById('mechhud').classList.contains('hidden'),
+      cockpit: s.state.cockpit,
+      arm: mine.arm,
+      named: document.querySelector('#mecharms .marm.on span').textContent,
+    };
+  });
+  check('a mech of your own carries a loadout rather than one gun',
+    !got.skip && got.arms === 5 && got.rows === 5 && got.hud,
+    got.skip ? 'no room for one' : `${got.arms} weapons, holding the ${got.named}`);
+
+  // The number row and the wheel, through the real keyboard and the real
+  // wheel rather than by calling the function underneath them.
+  await page.keyboard.press('Digit4');
+  const picked = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const m = s.state.inMech;
+    // One frame, so the readout has been drawn since the key was pressed.
+    await new Promise((r) => requestAnimationFrame(r));
+    return {
+      arm: m ? m.arm : -1,
+      id: m ? s.mechArms[m.arm].id : '',
+      lit: document.querySelectorAll('#mecharms .marm.on').length,
+      litIndex: [...document.querySelectorAll('#mecharms .marm')]
+        .findIndex((r) => r.classList.contains('on')),
+    };
+  });
+  check('the number row chooses out of the mech loadout',
+    picked.arm === 3 && picked.id === 'railgun' && picked.lit === 1
+      && picked.litIndex === 3,
+    `4 picked the ${picked.id}`);
+  await page.mouse.wheel(0, 120);
+  const wheeled = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const m = s.state.inMech;
+    await new Promise((r) => requestAnimationFrame(r));
+    return { id: m ? s.mechArms[m.arm].id : '' };
+  });
+  check('and the wheel moves one along, not two',
+    wheeled.id === 'leadwall', `the wheel reached the ${wheeled.id}`);
+
+  // The view out of the canopy. The thing worth measuring is not where the
+  // camera is but whether it tells the truth: the guns converge on the point
+  // the torso's own line of sight runs into, so that point has to sit on the
+  // ray out of the middle of the screen. Half a metre off at fifty paces is
+  // a miss, and that is exactly what a camera parked beside the aim line
+  // gives you.
+  const view = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const m = s.state.inMech;
+    if (!m) return { skip: true };
+    s.selectArm(0);
+    await new Promise((r) => requestAnimationFrame(r));
+    const inside = Math.hypot(s.camera.position[0] - m.x, s.camera.position[2] - m.z);
+    const cp = Math.cos(s.camera.pitch);
+    const f = {
+      x: -Math.sin(s.camera.yaw) * cp,
+      y: Math.sin(s.camera.pitch),
+      z: -Math.cos(s.camera.yaw) * cp,
+    };
+    const at = s.mechs.aimPoint(m, 300);
+    const vx = at.x - s.camera.position[0];
+    const vy = at.y - s.camera.position[1];
+    const vz = at.z - s.camera.position[2];
+    const t = vx * f.x + vy * f.y + vz * f.z;
+    const off = Math.hypot(vx - f.x * t, vy - f.y * t, vz - f.z * t);
+    // And looking down. The offset is along the line of sight, so pitching
+    // must not put the crosshair off the shot either.
+    s.look(m.torso * 180 / Math.PI, -24);
+    s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(r));
+    const cp2 = Math.cos(s.camera.pitch);
+    const f2 = {
+      x: -Math.sin(s.camera.yaw) * cp2,
+      y: Math.sin(s.camera.pitch),
+      z: -Math.cos(s.camera.yaw) * cp2,
+    };
+    const at2 = s.mechs.aimPoint(m, 300);
+    const wx = at2.x - s.camera.position[0];
+    const wy = at2.y - s.camera.position[1];
+    const wz = at2.z - s.camera.position[2];
+    const t2 = wx * f2.x + wy * f2.y + wz * f2.z;
+    const offDown = Math.hypot(wx - f2.x * t2, wy - f2.y * t2, wz - f2.z * t2);
+    s.look(m.torso * 180 / Math.PI, 0);
+    const chase = s.toggleCockpit() === false;
+    s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(r));
+    const back = Math.hypot(s.camera.position[0] - m.x, s.camera.position[2] - m.z);
+    s.toggleCockpit();
+    await new Promise((r) => requestAnimationFrame(r));
+    return {
+      skip: false, chase,
+      inside: Number(inside.toFixed(1)),
+      back: Number(back.toFixed(1)),
+      off: Number(off.toFixed(2)),
+      offDown: Number(offDown.toFixed(2)),
+      aimAway: Math.round(Math.hypot(at.x - m.x, at.z - m.z)),
+    };
+  });
+  check('the cockpit view sits in the machine, not behind it',
+    !view.skip && view.inside < 4 && view.chase && view.back > 8,
+    view.skip ? '' : `${view.inside} m from the hull, ${view.back} m from over the shoulder`);
+  check('and its crosshair says where the shot goes',
+    !view.skip && view.off < 0.1 && view.offDown < 0.1,
+    view.skip ? ''
+      : `${view.off} m off level, ${view.offDown} m off looking down, aiming ${view.aimAway} m out`);
+
+  // The railgun. Held it charges, let go it fires, and a full charge is worth
+  // several times a tap: the whole weapon is in that difference.
+  const rail = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const mine = s.state.inMech;
+    if (!mine) return { skip: true };
+    const theirs = s.spawnMech('reaper', 60);
+    if (!theirs) return { skip: true };
+    // Somewhere the mech can see, on ground near its own level, the same way
+    // the chaingun check picks its spot.
+    const muzzle = s.mechs.muzzle(mine, s.mechSpec.titan.chaingun.muzzle);
+    let spot = null;
+    for (let step = 0; step < 24 && !spot; step++) {
+      const a = mine.torso + (step % 2 ? 1 : -1) * Math.floor(step / 2) * 0.26;
+      const d = 34 + (step % 3) * 6;
+      const px = mine.x - Math.sin(a) * d;
+      const pz = mine.z - Math.cos(a) * d;
+      const dx = px - muzzle.x, dz = pz - muzzle.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const blocked = s.world.raycast(muzzle.x, muzzle.y, muzzle.z, dx / len, 0, dz / len, len);
+      if (!blocked && Math.abs(s.world.groundHeight(px, pz) - mine.y) < 3) {
+        spot = { x: px, z: pz };
+      }
+    }
+    if (!spot) return { skip: true };
+    const park = () => {
+      theirs.x = spot.x; theirs.z = spot.z;
+      theirs.y = s.world.groundHeight(spot.x, spot.z);
+    };
+    park();
+    const yaw = Math.atan2(-(theirs.x - mine.x), -(theirs.z - mine.z));
+    const flat = Math.hypot(theirs.x - mine.x, theirs.z - mine.z);
+    const rise = (theirs.y + 5.2) - (mine.y + s.mechSpec.titan.eye);
+    s.look(yaw * 180 / Math.PI, Math.atan2(rise, flat) * 180 / Math.PI);
+    s.selectArm(3);
+    // Held to the top of the charge, then let go. Nothing is counted until
+    // the trigger comes up, which is the point of the weapon.
+    // Deliberately given more health than a Reaper has: a full charge is
+    // meant to be most of a mech, and the comparison needs a target that is
+    // still standing after the first one.
+    const pool = 9000;
+    theirs.health = pool;
+    theirs.shield = 0;
+    s.input.fire = true;
+    for (let i = 0; i < 90; i++) { park(); s.fixedForTest(1 / 60); }
+    const held = theirs.health;
+    const charge = Number(mine.charge.toFixed(2));
+    s.input.fire = false;
+    for (let i = 0; i < 6; i++) { park(); s.fixedForTest(1 / 60); }
+    const full = pool - theirs.health;
+    // And a tap, for the comparison. The weapon has its own interval after a
+    // shot, and a trigger pulled inside it holds the shot rather than losing
+    // it, so this waits for the gun to come back up first.
+    for (let i = 0; i < 60; i++) { park(); s.fixedForTest(1 / 60); }
+    theirs.health = pool;
+    theirs.shield = 0;
+    s.input.fire = true;
+    s.fixedForTest(1 / 60);
+    s.input.fire = false;
+    for (let i = 0; i < 6; i++) { park(); s.fixedForTest(1 / 60); }
+    const tap = pool - theirs.health;
+    return {
+      skip: false, charge,
+      whileHeld: Math.round(pool - held),
+      full: Math.round(full),
+      tap: Math.round(tap),
+    };
+  });
+  check('the railgun charges while you hold it and goes off when you let go',
+    !rail.skip && rail.whileHeld < 50 && rail.charge > 1.1 && rail.full > 1000,
+    rail.skip ? 'no clear line'
+      : `${rail.whileHeld} while held, ${rail.full} on release`);
+  check('and a tap is worth a fraction of a full charge',
+    !rail.skip && rail.tap > 0 && rail.tap < rail.full * 0.6,
+    rail.skip ? '' : `${rail.tap} against ${rail.full}`);
+
+  // A picture of the cockpit, with the loadout down the side of it.
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.selectArm(0);
+    for (let i = 0; i < 20; i++) await new Promise((r) => requestAnimationFrame(r));
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'mech-05-cockpit.png') });
+
+  // Thermite, which is a canister rather than a shell: what it does is leave
+  // the street burning where it lands.
+  const therm = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const mine = s.state.inMech;
+    if (!mine) return { skip: true };
+    s.selectArm(2);
+    s.look(mine.torso * 180 / Math.PI, -18);
+    // A weapon just brought up takes a moment to come up, the same way it
+    // does for a man, so the trigger waits for it.
+    for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
+    const before = s.burningGround.length;
+    s.input.fire = true;
+    s.fixedForTest(1 / 60);
+    s.input.fire = false;
+    for (let i = 0; i < 120; i++) s.fixedForTest(1 / 60);
+    return { skip: false, pools: s.burningGround.length - before };
+  });
+  check('the thermite launcher leaves the street on fire',
+    !therm.skip && therm.pools >= 4, therm.skip ? '' : `${therm.pools} pools burning`);
+
+  // A shield that soaks the first hits and comes back when it is left alone.
+  const shield = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const mine = s.state.inMech;
+    if (!mine || !mine.shieldMax) return { skip: true };
+    // Alone in a street that is not on fire for this one: a shield that is
+    // coming back while something is still shooting at it, or while the
+    // thermite from the last check is still burning round its ankles,
+    // measures that instead of the shield.
+    s.burningGround.length = 0;
+    for (let i = s.mechs.active.length - 1; i >= 0; i--) {
+      const other = s.mechs.active[i];
+      if (!other.mine) { other.alive = false; s.mechs.active.splice(i, 1); }
+    }
+    mine.shield = mine.shieldMax;
+    mine.health = mine.maxHealth;
+    const hp0 = mine.health;
+    s.mechs.damage(mine, 600);
+    const afterOne = { shield: mine.shield, health: mine.health };
+    s.mechs.damage(mine, 2000);
+    const through = hp0 - mine.health;
+    // Then left alone, it fills again.
+    for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
+    return {
+      skip: false,
+      soaked: afterOne.shield === mine.shieldMax - 600 && afterOne.health === hp0,
+      through: Math.round(through),
+      back: Math.round(mine.shield),
+      max: mine.shieldMax,
+    };
+  });
+  check('a shield soaks what hits it before the hull does',
+    !shield.skip && shield.soaked && shield.through === 1100,
+    shield.skip ? '' : `600 soaked, ${shield.through} of 2000 reached the hull`);
+  check('and it comes back when nobody is shooting at it',
+    !shield.skip && shield.back === shield.max, shield.skip ? '' : `${shield.back} of ${shield.max}`);
+
+  // And the one thing a rocket used to do to a mech, which was nothing.
+  const splash = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const theirs = s.spawnMech('reaper', 60);
+    if (!theirs) return { skip: true };
+    theirs.health = theirs.maxHealth;
+    const hp0 = theirs.health;
+    s.explode(theirs.x, theirs.y + 5, theirs.z, { radius: 20, damage: 400 }, { weapon: 'rpg' });
+    const took = Math.round(hp0 - theirs.health);
+    // And back out on foot, because what comes after this measures a mech
+    // being climbed into and F would take us out of this one instead.
+    if (s.state.inMech) s.toggleVehicle();
+    return { skip: false, took, out: s.state.inMech === null };
+  });
+  check('a blast beside a mech takes a piece out of it',
+    !splash.skip && splash.took > 100 && splash.out,
+    splash.skip ? '' : `${splash.took} off the hull`);
 
   // --- the call ------------------------------------------------------------
   const called = await page.evaluate(async () => {

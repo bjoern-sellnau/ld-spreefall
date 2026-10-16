@@ -46,13 +46,24 @@ export const MECH = {
     name: 'Titan',
     mine: true,
     height: 7.0, radius: 2.4, eye: 6.3,
-    // Where the camera hangs. Behind and above, like everything else you can
-    // get into here: a mech is a thing worth looking at, and the inside of
-    // one is no more modelled than the inside of a tank.
+    // Where the camera hangs when you are looking at it from outside. Behind
+    // and above, like everything else you can get into here, because a mech
+    // is a thing worth looking at.
     chase: 17, chaseUp: 9.5,
+    // And where the pilot's head is for the view from inside: this far in
+    // front of the torso's own eye, along the line the torso is looking down.
+    // On that line rather than near it, because the guns converge on what
+    // that line runs into, and a camera parked beside it would put the
+    // crosshair half a metre under the shot at fifty paces. Far enough out to
+    // clear the canopy, which is a plate two centimetres thick in the mesh
+    // and from behind is all you would see.
+    cockpit: 1.6,
     health: 3600,
     walk: 11.5, turn: 2.6, torsoTurn: 5.0, climb: 1.6, gravity: 22,
     jump: 11.5,
+    // Yours carries the five arm weapons and a shield that comes back.
+    arms: true,
+    shield: { max: 1500, rate: 300, wait: 5.0 },
     dash: { speed: 27, seconds: 0.85, cooldown: 3.6 },
     chaingun: {
       damage: 24, interval: 0.075, burst: 0, rest: 0,
@@ -70,6 +81,64 @@ export const MECH = {
     stomp: { radius: 11, damage: 420, force: 26, speed: 9 },
   },
 };
+
+/**
+ * What a mech of yours carries.
+ *
+ * Five primaries, one at a time, switched with the number keys or the wheel,
+ * in the spirit of the Titan loadouts: a chaingun that hoses, a cannon that
+ * punches, a thermite launcher that denies a street, a railgun you charge for
+ * one enormous shot, and a close range slug thrower. The ordnance, the rocket
+ * pod, is on the right mouse whatever is in the hands, and the dash and the
+ * landing are the rest of it.
+ *
+ * Each one is a row of numbers, the same way the hand weapons are, because
+ * every difference between a chaingun and a railgun that this game cares
+ * about is a number. `shake` is how hard it hits your own screen, which is
+ * most of what makes forty tonnes feel like forty tonnes.
+ */
+export const ARMS = [
+  {
+    id: 'chaingun', name: 'XO Chaingun', kind: 'auto', mount: 'chaingun',
+    damage: 38, interval: 0.07, spread: 0.02, range: 280,
+    magazine: 200, reload: 2.8, shake: 0.045, sound: 'mechgun',
+  },
+  {
+    id: 'cannon', name: '40 mm Cannon', kind: 'shell', mount: 'chaingun',
+    speed: 320, interval: 0.8, spread: 0.004,
+    splash: { radius: 10, damage: 320, force: 20 },
+    magazine: 12, reload: 3.2, shake: 0.34, sound: 'mechcannon',
+  },
+  {
+    id: 'thermite', name: 'Thermite Launcher', kind: 'thermite', mount: 'rockets',
+    speed: 95, interval: 1.2, spread: 0.01,
+    splash: { radius: 8, damage: 180, force: 12 },
+    fire: { radius: 22, pools: 7, burnSeconds: 12, damagePerSecond: 170 },
+    magazine: 6, reload: 3.6, shake: 0.26, sound: 'rpg',
+  },
+  {
+    id: 'railgun', name: 'Plasma Railgun', kind: 'rail', mount: 'chaingun',
+    // Held to charge. Letting go early still fires, for less: the charge is
+    // a multiplier on the hit rather than a gate in front of it.
+    charge: 1.2, damage: 420, chargedDamage: 1500, range: 900, pierce: 4,
+    interval: 0.75, magazine: 6, reload: 3.4, shake: 0.55, sound: 'rail',
+  },
+  {
+    id: 'leadwall', name: 'Leadwall', kind: 'shotgun', mount: 'chaingun',
+    pellets: 14, damage: 78, spread: 0.11, range: 75,
+    interval: 0.7, magazine: 8, reload: 2.9, shake: 0.4, sound: 'mechgun',
+  },
+];
+
+/** The arm by id, for the interface and the tests. */
+export function armById(id) { return ARMS.find((a) => a.id === id) || null; }
+
+/**
+ * How far up and down a torso turns. The pilot's view is held to the same
+ * number, so that where you are looking and where the guns are pointed cannot
+ * come apart.
+ */
+export const MECH_PITCH = 0.7;
 
 const clamp = (v, a, b) => (v < a ? a : (v > b ? b : v));
 
@@ -99,6 +168,9 @@ export class Mechs {
     this.piloted = null;
     this.enabled = true;
     this.onChaingun = null;    // fn(mech, from, dir, spec)
+    this.onArmFire = null;     // fn(mech, from, dir, arm, extra) for the loadout
+    this.onArmChange = null;   // fn(mech, arm)
+    this.onReload = null;      // fn(mech, arm)
     this.onRockets = null;     // fn(mech, from, dir, spec)
     this.onStep = null;        // fn(mech, hard)
     this.onStomp = null;       // fn(mech, spec)
@@ -155,6 +227,20 @@ export class Mechs {
     m.dashLeft = 0;
     m.dashCool = 0;
     m.stepAt = 0;
+    // The loadout, for the ones that have one. A magazine per arm, so
+    // switching away from an empty railgun and back does not refill it.
+    m.arm = 0;
+    m.armTimer = 0;
+    m.reloadLeft = 0;
+    m.charge = 0;
+    m.wasFiring = false;
+    m.mags = ARMS.map((a) => a.magazine);
+    // A shield over the hull that comes back when nothing has hit it for a
+    // few seconds. It is what lets a mech walk into a street, take the first
+    // volley and walk out again.
+    m.shield = spec.shield ? spec.shield.max : 0;
+    m.shieldMax = spec.shield ? spec.shield.max : 0;
+    m.shieldWait = 0;
     this.active.push(m);
     return m;
   }
@@ -263,8 +349,17 @@ export class Mechs {
 
   damage(m, amount) {
     if (!m.alive || m.health <= 0) return false;
-    m.health -= amount;
     m.hitFlash = 1;
+    if (m.shieldMax) {
+      m.shieldWait = m.spec.shield.wait;
+      if (m.shield > 0) {
+        const soaked = Math.min(m.shield, amount);
+        m.shield -= soaked;
+        amount -= soaked;
+        if (amount <= 0) return false;
+      }
+    }
+    m.health -= amount;
     if (m.health > 0) return false;
     m.health = 0;
     m.dying = 0.01;
@@ -333,6 +428,12 @@ export class Mechs {
     for (let i = this.active.length - 1; i >= 0; i--) {
       const m = this.active[i];
       m.hitFlash = Math.max(0, m.hitFlash - dt * 4);
+      if (m.shieldMax && m.health > 0) {
+        m.shieldWait = Math.max(0, m.shieldWait - dt);
+        if (m.shieldWait <= 0 && m.shield < m.shieldMax) {
+          m.shield = Math.min(m.shieldMax, m.shield + m.spec.shield.rate * dt);
+        }
+      }
       if (m.health <= 0) {
         // Down on one knee, then over, then gone.
         m.dying += dt;
@@ -358,7 +459,7 @@ export class Mechs {
     // turned round: the legs were pointing where you looked while the body
     // moved somewhere else.
     m.torso = c.yaw;
-    m.pitch = clamp(c.pitch, -0.7, 0.7);
+    m.pitch = clamp(c.pitch, -MECH_PITCH, MECH_PITCH);
 
     if (m.dashCool > 0) m.dashCool -= dt;
     if (c.dash && m.dashLeft <= 0 && m.dashCool <= 0) {
@@ -394,7 +495,7 @@ export class Mechs {
     m.torso = turnTowards(m.torso, want, s.torsoTurn * dt);
     const eye = m.y + s.eye;
     const dy = (target.y + 1.4) - eye;
-    m.pitch = clamp(Math.atan2(dy, away), -0.7, 0.7);
+    m.pitch = clamp(Math.atan2(dy, away), -MECH_PITCH, MECH_PITCH);
 
     // Walk in until it is close enough to be a problem, then hold. Either
     // way the legs are turned to the way it is going rather than to the way
@@ -429,8 +530,95 @@ export class Mechs {
 
   // --- guns -----------------------------------------------------------------
 
+  /** Puts a different weapon in the hands, by index or by step. */
+  selectArm(m, index) {
+    if (!m.spec.arms) return m.arm;
+    const n = ARMS.length;
+    m.arm = ((index % n) + n) % n;
+    m.charge = 0;
+    m.reloadLeft = 0;
+    m.armTimer = Math.max(m.armTimer, 0.25);
+    if (this.onArmChange) this.onArmChange(m, ARMS[m.arm]);
+    return m.arm;
+  }
+
+  cycleArm(m, step) { return this.selectArm(m, m.arm + (step > 0 ? 1 : -1)); }
+
+  /** What is in its hands, and how much of it is left. */
+  arm(m) { return m.spec.arms ? ARMS[m.arm] : null; }
+
+  /**
+   * The arm weapons, for a mech that carries them.
+   *
+   * One weapon at a time, each with its own magazine, its own rhythm and its
+   * own way of leaving the barrel: a stream of rounds, a shell, a canister of
+   * thermite, a charged bolt, or a wall of slugs. What each of those does
+   * when it arrives is the game layer's business; this decides when, where
+   * from and how much of it.
+   */
+  _armFire(m, dt, want) {
+    const arm = ARMS[m.arm];
+    if (m.armTimer > 0) m.armTimer -= dt;
+    if (m.reloadLeft > 0) {
+      m.reloadLeft -= dt;
+      if (m.reloadLeft <= 0) m.mags[m.arm] = arm.magazine;
+      m.charge = 0;
+      m.wasFiring = false;
+      return;
+    }
+    if (m.mags[m.arm] <= 0) {
+      m.reloadLeft = arm.reload;
+      if (this.onReload) this.onReload(m, arm);
+      return;
+    }
+
+    // The railgun is the one that works differently: holding charges it and
+    // letting go fires it, and a shot let go early is a weaker shot rather
+    // than no shot at all.
+    if (arm.kind === 'rail') {
+      if (want) {
+        m.charge = Math.min(arm.charge, m.charge + dt);
+        m.wasFiring = true;
+        return;
+      }
+      // Let go and it goes off. If the weapon is still in its own interval,
+      // or has only just been brought up, the shot waits for that rather
+      // than being thrown away: a charge you have held for a second is not
+      // something to lose to a timer.
+      if (!m.wasFiring) return;
+      if (m.armTimer > 0) return;
+      const k = clamp(m.charge / arm.charge, 0, 1);
+      m.wasFiring = false;
+      m.charge = 0;
+      m.armTimer = arm.interval;
+      m.mags[m.arm]--;
+      this._leaveBarrel(m, arm, { charged: k });
+      return;
+    }
+
+    if (!want || m.armTimer > 0) return;
+    m.armTimer = arm.interval;
+    m.mags[m.arm]--;
+    this._leaveBarrel(m, arm, {});
+  }
+
+  /** Where a shot starts and which way it goes, then over to the game. */
+  _leaveBarrel(m, arm, extra) {
+    if (!this.onArmFire) return;
+    const mount = arm.mount === 'rockets' ? m.spec.rockets.muzzle : m.spec.chaingun.muzzle;
+    const from = this.muzzle(m, mount);
+    const dir = this.aimFrom(from, this.aimPoint(m, arm.range || 400));
+    this.onArmFire(m, from, dir, arm, extra);
+  }
+
   _guns(m, dt, wantGun, wantRockets) {
     const s = m.spec;
+    // A mech with a loadout fires that instead of the fixed chaingun.
+    if (s.arms) {
+      this._armFire(m, dt, wantGun);
+      this._pod(m, dt, wantRockets);
+      return;
+    }
     const gun = s.chaingun;
     if (m.gunTimer > 0) m.gunTimer -= dt;
     if (m.restLeft > 0) m.restLeft -= dt;
@@ -447,9 +635,14 @@ export class Mechs {
       }
     }
 
-    const rockets = s.rockets;
+    this._pod(m, dt, wantRockets);
+  }
+
+  /** The rocket pod, which every mech has whatever is in its hands. */
+  _pod(m, dt, want) {
+    const rockets = m.spec.rockets;
     if (m.rocketTimer > 0) m.rocketTimer -= dt;
-    if (wantRockets && m.rocketTimer <= 0 && m.salvoLeft <= 0) {
+    if (want && m.rocketTimer <= 0 && m.salvoLeft <= 0) {
       m.salvoLeft = rockets.salvo;
       m.salvoTimer = 0;
       m.rocketTimer = rockets.interval;
