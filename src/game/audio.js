@@ -247,6 +247,14 @@ export class Audio {
     // rather than gunpowder.
     plasma: { crackHz: 1800, sweepHz: 2600, crackGain: 0.14, tail: 0.18,
       bodyHz: 520, bodyEnd: 900, bodyGain: 0.22, bodyTail: 0.14, hp: 700 },
+    // Forty tonnes firing. Everything here is lower and longer than the hand
+    // weapons, because that is the whole difference a listener hears between
+    // a rifle and a gun bolted to eight metres of armour: not loudness, which
+    // a speaker runs out of, but weight down at the bottom of the range.
+    mechgun: { crackHz: 1900, sweepHz: 380, crackGain: 0.58, tail: 0.48,
+      bodyHz: 90, bodyEnd: 24, bodyGain: 0.5, bodyTail: 0.40, hp: 300 },
+    mechcannon: { crackHz: 1100, sweepHz: 170, crackGain: 0.72, tail: 1.05,
+      bodyHz: 62, bodyEnd: 17, bodyGain: 0.62, bodyTail: 0.78, hp: 130 },
   };
 
   gunshot(kind = 'rifle') {

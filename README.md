@@ -323,6 +323,11 @@ nearest, and out of the one you are in. The camera goes to a chase view behind
 it, because the inside of a tank is not a thing this project is going to
 model, and the gun fires wherever you are looking.
 
+Whatever you are in has a readout: what it is, what is left of its hull, how
+fast it is going, whether the gun is ready, and in the air how far it is to
+the ground. The bar goes amber under a third and red under a sixth, and one
+line underneath says what is about to go wrong.
+
 **W** is forward, **S** back, **A** and **D** steer, **Shift** brakes. When
 you climb in, the view turns to face the way the hull is pointing, and while
 you steer it turns with the hull, so forward is always into the screen. Before
@@ -556,11 +561,15 @@ have, and you can zoom from a street out to all of Berlin and back. Free travel
 across the city loads the destination during the flight and will not put you
 down until the ground is there.
 
-**The budget.** All of Berlin at these tiers is about 240 MB, and no amount of
-thinning gets 1,700 square kilometres under 25. What does fit, easily, is what
+**The budget.** All of Berlin at these tiers is 304 MB deployed and 107 MB
+over the wire, measured on 13 October 2026 with every one of the eighty one
+districts built from the live extract: 102,691 buildings over 1,717 square
+kilometres, which is 0.062 MB of download per square kilometre. No amount of
+thinning gets that under 25. What does fit, easily, is what
 a player downloads to play: the code, the index and the district they are
-standing in, which is between one and three megabytes, nine for Mitte. That is
-what the budget is now held against, and it is a reinterpretation of the
+standing in. The biggest district in the real city is 8.65 MB over the wire,
+8.89 MB with the code and the index on top of it, and most are two to five.
+That is what the budget is now held against, and it is a reinterpretation of the
 brief's rule 6, written down in `docs/PLAN.md` rather than quietly applied. The
 old reading is still available: `npm run fit -- --whole=25` cuts the city down
 to what fits as a whole. `npm run weigh` prints the table of districts with

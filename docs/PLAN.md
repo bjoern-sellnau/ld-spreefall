@@ -1045,3 +1045,170 @@ is what prompted the change.
   ground, that the chaingun takes another mech apart, and that a jump ends in
   a hole rather than in silence: the first landing did nothing at all, because
   the kerb step in the walker was catching the fall and cancelling it.
+
+## 23. The readout, the fighter, the holes and the memory
+
+- 2026-10-13: a vehicle tells you what it is doing. One panel serves all five
+  things you can get into, because the questions are the same in each case:
+  what is left of this, how fast is it going, can I fire yet, and in the air,
+  how far is it to the ground. The hull bar goes amber under a third and red
+  under a sixth, a cooldown is shown in seconds rather than as a bar because
+  what a tank wants to know is when and not how far along, an aircraft adds
+  its height above the ground under it, a mech adds its dash, and one line
+  underneath says what is about to go wrong: stall, hull critical, pull up.
+  Everything is read off the entity each frame, so the numbers on the screen
+  are the numbers the simulation is using.
+
+- 2026-10-13: the fighter would not fly, and it was two things. The ground
+  contact took fourteen per cent of the speed off every frame, which is eight
+  hundredths of it left after a second, so a fighter parked in a street could
+  never pass ten metres a second and could never reach its stall speed. It
+  rolls now, losing a third of its speed a second to the wheels, and it is off
+  the ground in about a second and a quarter. The second thing was the pitch
+  sign: looking up put the nose down. On a helicopter that only changed which
+  way it leaned, on a fighter it meant pulling back on the stick flew you into
+  the road. And because a street is not a runway, the cheat menu now hands you
+  one already in the air with you in it.
+
+- 2026-10-13: you could see through the city after an explosion. Every wall
+  and every street here is a single surface with no thickness, so once a blast
+  takes a bite out of one, the back of the next surface faces you, and a back
+  face that is culled is a hole straight through the world: sky where the
+  inside of a ruin should be. Drawing the whole city from both sides fixes it
+  and costs a quarter of the frame on the software rasteriser, which is not a
+  price worth paying for damage that is usually not on screen. So the tiles a
+  blast has touched are drawn a second time with the front faces culled, which
+  fills exactly those holes and nothing else: an undamaged city pays nothing,
+  and the inside of a ruin is a handful of tiles. The check draws the same
+  frame twice inside one animation frame, with the pass on and off, and
+  requires that every pixel it changed got darker.
+
+- 2026-10-13: and the damage is remembered across districts. One district is
+  in memory at a time, so leaving one threw away the bytes a ruin had been
+  written into and the street was whole again when you came back. A finished
+  ruin is eight numbers, so those go to the world against the district they
+  are in, and loading a district replays them through the same code the live
+  collapse ends with: same cut, same heap, same crater, same collision. A
+  street you flattened is flat when you walk back into it from the other side
+  of Berlin, and it costs a few dozen bytes a ruin rather than holding the
+  district open.
+
+- 2026-10-13: a Reaper walks round a building instead of into it. The live
+  city found this one: in Mitte it spawned seventy seven metres out, found a
+  frontage in the way and stood there for the rest of the test, having closed
+  six metres. A mech that only stops at walls never arrives. It now tries the
+  two ways along a wall it has run into, keeps whichever is clear for a second
+  and a half so it does not dither in a doorway, and slides along at four
+  fifths of its walking speed.
+
+- 2026-10-13: the whole city, measured. The city job built all eighty one
+  districts from the live extract: 102,691 buildings over 1,717 square
+  kilometres, 304 MB deployed and 107 MB over the wire, which is 0.062 MB of
+  download per square kilometre. The biggest district to walk into is 8.65 MB,
+  8.89 MB with the code and the index, so the per district budget holds with
+  room to spare. Two checks had to learn that a city with nothing left unbuilt
+  is the point rather than a failure: they pass by saying so.
+
+- 2026-10-13: the mech guns are harmonised. They sit two metres out on the
+  arms and fired straight down their own barrels, so every round went two
+  metres to the side of whatever the pilot had the crosshair on, which at
+  thirty metres is a clean miss against something three metres wide. They now
+  converge on the point the torso is looking at, found by tracing the line of
+  sight the way a gun mount is harmonised on a range. What found this was a
+  flaky check: it failed only sometimes, and when it was made to say why, it
+  said the target was thirteen metres below the muzzle, standing in a crater
+  the earlier checks had dug. Two faults in one measurement, one in the test
+  and one in the game.
+
+## 24. Titanfall
+
+- 2026-10-16: the mech was walking backwards, and it was the legs rather than
+  the animation. The legs followed the torso, and the torso follows where you
+  look, so every time you turned round or strafed the body travelled one way
+  while the legs pointed another: a walk cycle playing against the direction
+  of travel, which reads as moonwalking. The legs now turn towards the way the
+  thing is actually going, and the stride runs with the sign of the travel
+  along them, so stepping back plays the cycle backwards. The hunting ones got
+  the same treatment, which also stopped them sliding sideways round you.
+
+- 2026-10-16: a mech you call for is dropped rather than parked. The words go
+  up on the screen, forty tonnes comes down from two hundred metres at sixty
+  metres a second, and the landing is the arrival: it opens the road under it
+  with half again the radius of an ordinary stomp. It takes two and a half
+  seconds, which is about as long as it takes to look up.
+
+- 2026-10-16: the rocket pod throws its salvo at two hundred and thirty metres
+  a second rather than a hundred and fifteen, which is the difference between
+  a launch and a lob. The check that counts the salvo had to stop counting
+  what is still in the air, because at that speed the first rockets have
+  already arrived before the last has left.
+
+- 2026-10-16: the help panel scrolls. It has a line for every key now and a
+  laptop screen ran out before the list did.
+
+- 2026-10-16: a Titan carries a loadout. Five weapons instead of one, in the
+  spirit of what a Titan carries in the games this is named after: the XO
+  chaingun that hoses, a forty millimetre cannon that punches, a thermite
+  launcher that denies a street, a plasma railgun you hold to charge and
+  which goes through four machines on one bolt, and the Leadwall, fourteen
+  slugs at once at close range. Each is a row of numbers, the same way the
+  hand weapons are, with its own magazine, its own rhythm and its own kick.
+  The number row and the wheel choose between them while you are sitting in
+  it, and R reloads what it is holding. The hull now has a shield over it
+  that soaks the first fifteen hundred and comes back five seconds after
+  anybody stops shooting.
+
+- 2026-10-16: and a cockpit to fire them out of. The camera sits on the
+  torso's own line of sight, a metre and a half in front of its eye, which is
+  not a detail: the guns converge on the point that line runs into, so a
+  camera parked beside it would put the crosshair half a metre under the shot
+  at fifty paces. A check measures exactly that, level and pitched down, and
+  wants the aim point within ten centimetres of the middle of the screen. The
+  view bobs with the same walk counter the legs are drawn from, so the step
+  you feel is the step you can see, and the pilot's look is held to the same
+  limit the torso turns through, because a view that can point somewhere the
+  guns cannot is a view that lies. V swaps to the old camera over the
+  shoulder. The readout alongside it is the mech's own: the loadout down the
+  right with the live magazines, hull and shield, the pod and the dash, and
+  the charge on the railgun drawn under a reticle that goes blue while it
+  builds.
+
+- 2026-10-16: three things a blast did not do, which it now does. It did not
+  touch a mech, so a rocket at a Titan's feet took the paint off and nothing
+  else; it did not touch a parked vehicle; and a rocket flew straight through
+  a mech to go off on the wall behind it, because the list of bodies a shell
+  asks about had every actor in the city on it except the largest. The same
+  list now says what it hit as well as where, which is what the gun on a tank
+  had been reading all along and never getting. Fire reaches a mech too, at a
+  seventh of what it does to a person, which is what makes the thermite
+  launcher a way to deny a street to one.
+
+- 2026-10-16: a pilot inside forty tonnes of armour no longer burns to death.
+  The street catching light under a Titan was being charged to the man in the
+  seat, and so was the blast from a rocket that had already dented the hull:
+  both now go to the machine, which is the thing standing in them.
+
+- 2026-10-16: a mech killer. An EMP warhead with a charge behind it, on K,
+  which locks onto what it is aimed at and chases it: against a street it is
+  a heavy rocket and no more, against anything with a motor it is a pulse
+  that stops it dead, and against armour it is three thousand, which takes a
+  Reaper apart on its own and leaves a Titan on one knee with its shield
+  gone. The shield going is the EMP rather than the warhead: it is held up by
+  the same electronics the pulse has just stopped, so what the second rocket
+  lands on is bare hull. A mech stopped this way does not walk, aim, fire or
+  recharge for four and a half seconds, and the cockpit says so.
+
+- 2026-10-16: and the machines can carry one, by a toggle and a slider in the
+  cheat menu: whether any of them have it at all, and what share of them do.
+  It is rolled once when a machine walks in rather than every time it shoots,
+  so a street is a mix rather than a lottery, and one of them only reaches
+  for the warhead when what it is looking at is armour, because an anti mech
+  rocket spent on a man on foot is a rocket wasted. Theirs comes out of the
+  shoulder a metre and a half in front of the launcher: the list of bodies a
+  rocket asks about now has mechs on it, and the first version went off in
+  its own hands.
+
+- 2026-10-16: the lock could not see a mech, which made the one thing worth
+  locking a rocket onto the one thing you could not lock onto. It can now,
+  except for yours, because a dart that chases your own Titan across the
+  square is not a feature.

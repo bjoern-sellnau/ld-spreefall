@@ -67,6 +67,10 @@ export class Renderer {
     if (loc) gl.uniform3fv(loc, pal);
     this.progWorld.int('uShadow0', 4).int('uShadow1', 5).int('uDebugMode', 0);
     this.debugMode = 0;
+    // Tiles a blast has taken a bite out of. They are drawn a second time,
+    // inside out, so that a hole shows the inside of the world rather than
+    // the sky. main.js marks them; nothing else here knows about damage.
+    this.scarredTiles = new Set();
     this.progTree.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.actors = new Actors(gl, caps);
@@ -547,6 +551,32 @@ export class Renderer {
       gl.drawElements(gl.TRIANGLES, tile.count, tile.indexType, 0);
       draws++;
       tris += tile.tris;
+    }
+
+    // The inside of the city, where a blast has taken a bite out of it.
+    //
+    // Every wall and every street here is a single surface with no thickness.
+    // Once a bite is out of one, the back of the surface behind it faces you,
+    // and a back face that is culled is a hole straight through the world:
+    // you see the sky through the ground. So the tiles that have been hit are
+    // drawn a second time with the front faces culled instead, which fills
+    // exactly those holes and nothing else. It is the damaged tiles only, so
+    // an undamaged city pays nothing at all, and inside a ruin it is a few
+    // tiles of geometry rather than the whole street.
+    if (this.scarredTiles && this.scarredTiles.size) {
+      gl.cullFace(gl.FRONT);
+      this.progWorld.use();
+      this.progWorld.float('uInside', 1);
+      for (const tile of visible) {
+        if (!tile.vao || !this.scarredTiles.has(tile.index)) continue;
+        this.progWorld.vec3('uTileOrigin', tile.ox, 0, tile.oz);
+        gl.bindVertexArray(tile.vao);
+        gl.drawElements(gl.TRIANGLES, tile.count, tile.indexType, 0);
+        draws++;
+        tris += tile.tris;
+      }
+      this.progWorld.float('uInside', 0);
+      gl.cullFace(gl.BACK);
     }
 
     // Trees. Two sided, so culling off.

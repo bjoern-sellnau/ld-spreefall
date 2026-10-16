@@ -61,6 +61,8 @@ class Soldier {
     this.targetX = x;
     this.targetZ = z;
     this.slipLeft = 0;
+    this.mechKiller = false;
+    this.killerLeft = 0;
     this.deathTime = 0;
     this.gibbed = false;
     this.seed = Math.random();
@@ -99,6 +101,12 @@ export class Soldiers {
     this.beam = null;
     this.onBeam = null;
     this.onStunSpark = null;
+    // The heavy warhead some of them carry, when the cheat menu allows it:
+    // the numbers behind it, whether what they are shooting at is armour
+    // worth spending one on, and where the launch is reported to.
+    this.killer = null;
+    this.armouredTarget = false;
+    this.onMechKiller = null;
     // What is left of somebody the ion cannon burnt. Zero means they stand
     // there for the rest of the session, which is what the game did before
     // this was settable; anything else is how many seconds they hold before
@@ -518,6 +526,19 @@ export class Soldiers {
     // it does not miss by as much as a man does.
     if (s.machine) {
       s.beamCharge = (s.beamCharge || 0) + dt;
+      // One of them carrying a mech killer uses it on armour and on nothing
+      // else: the warhead is for what you are standing in, and a man on foot
+      // is not worth one. Whether what it is looking at counts as armour is
+      // the game layer's business, not this one's.
+      if (s.mechKiller && this.armouredTarget && this.onMechKiller && this.killer) {
+        s.killerLeft -= dt;
+        if (s.killerLeft <= 0 && dist < this.killer.range) {
+          s.killerLeft = this.killer.interval;
+          s.beamCharge = 0;
+          this.onMechKiller(s);
+          return;
+        }
+      }
       if (this.beam && s.beamCharge >= this.beam.charge + this.beam.interval) {
         s.beamCharge = 0;
         const falloff = 1 - Math.min(1, dist / this.beam.range) * 0.4;

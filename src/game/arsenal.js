@@ -158,6 +158,29 @@ export const WEAPONS = {
     splash: { radius: 6, damage: 14, force: 6 },
     emp: { radius: 34, seconds: 7.5 },
   },
+  mechkiller: {
+    name: 'Mech killer', short: 'MECH KILLER', kind: KIND.LAUNCH, slot: null,
+    magazine: 1, reserve: 4, reloadTime: 3.4, fireInterval: 1.4, auto: false,
+    projectile: 'rocket', muzzleSpeed: 78, range: 600,
+    spreadHip: 0.006, spreadAim: 0.0015, spreadPerShot: 0, spreadMax: 0.006,
+    spreadRecover: 0.2,
+    recoilKick: 0.036, recoilSide: 0.006, recoilRetain: 0.4,
+    aimFov: 50, sound: 'rpg',
+    // Against a street it is a heavy rocket and no more: this is not a
+    // second warhead, and four of them will not flatten a square.
+    splash: { radius: 13, damage: 240, force: 30 },
+    // Against anything with a motor it is an EMP, which is what stops the
+    // escort while the warhead deals with the thing they are escorting.
+    emp: { radius: 40, seconds: 9 },
+    // And against armour it is what it is named after. Enough to take a
+    // Reaper apart on its own, enough to put a Titan on one knee, and
+    // whatever is still standing afterwards stands there doing nothing for a
+    // few seconds, which is the opening the second one goes through.
+    mechKill: { radius: 26, damage: 3000, stun: 4.5 },
+    // It chases, because a mech walks at eleven metres a second and a rocket
+    // you have to lead is a rocket that lands where it was.
+    lock: { time: 0.8, cone: 0.2, range: 360, turn: 4.2 },
+  },
   flamer: {
     name: 'Flamethrower', short: 'FLAMER', kind: KIND.STREAM, slot: 7,
     // The magazine is fuel, and it burns down about four times a second while
@@ -198,6 +221,7 @@ WEAPONS.c4.hold = { x: 0.180, y: -0.128, z: -0.150, pitch: 0.05, yaw: 0.26, roll
 WEAPONS.banana.hold = { x: 0.175, y: -0.105, z: -0.120, pitch: 0.09, yaw: 0.30, roll: 0.16 };
 WEAPONS.emp.hold = { x: 0.178, y: -0.118, z: -0.162, pitch: 0.05, yaw: 0.24, roll: 0.07 };
 WEAPONS.incendiary.hold = { x: 0.182, y: -0.120, z: -0.168, pitch: 0.055, yaw: 0.235, roll: 0.09 };
+WEAPONS.mechkiller.hold = { x: 0.210, y: -0.138, z: -0.470, pitch: -0.014, yaw: 0.112, roll: 0.04 };
 WEAPONS.flamer.hold = { x: 0.200, y: -0.126, z: -0.330, pitch: -0.008, yaw: 0.120, roll: 0.03 };
 WEAPONS.railgun.hold = { x: 0.215, y: -0.142, z: -0.500, pitch: -0.018, yaw: 0.118, roll: 0.04 };
 WEAPONS.plasma.hold = { x: 0.220, y: -0.146, z: -0.430, pitch: -0.014, yaw: 0.130, roll: 0.05 };
@@ -206,7 +230,7 @@ WEAPONS.splinter.hold = { x: 0.215, y: -0.140, z: -0.420, pitch: -0.012, yaw: 0.
 
 export const LOADOUT = [
   'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'flamer', 'incendiary',
-  'emp', 'railgun', 'plasma', 'flak', 'splinter',
+  'emp', 'mechkiller', 'railgun', 'plasma', 'flak', 'splinter',
 ];
 
 export function weaponBySlot(slot) {

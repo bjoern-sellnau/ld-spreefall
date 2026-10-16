@@ -432,6 +432,35 @@ html, body {
   color: #d6d1c6;
   backdrop-filter: blur(3px);
 }
+/* The call. Two lines across the middle of the screen while forty tonnes
+   falls out of the sky, and gone the moment it lands. */
+#titanfall {
+  position: fixed;
+  left: 0; right: 0; top: 34%;
+  z-index: 46;
+  text-align: center;
+  pointer-events: none;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.9);
+}
+#titanfall .tfline {
+  font: 700 clamp(26px, 4.6vw, 52px)/1.05 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f2efe9;
+  animation: tfpulse 1.1s ease-in-out infinite;
+}
+#titanfall .tfsub {
+  margin-top: 10px;
+  font: 11px/1 ui-monospace, monospace;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+@keyframes tfpulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 #ridehint {
   position: absolute;
   left: 50%; top: 58%;
@@ -804,7 +833,18 @@ html, body {
   background: var(--panel);
   border: 1px solid var(--edge);
   box-shadow: 0 20px 70px rgba(0, 0, 0, 0.6);
+  /* Taller than the window on a laptop once the help has a line for every
+     key, so it scrolls rather than running off the bottom of the screen. */
+  max-height: 84vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+.panel::-webkit-scrollbar { width: 9px; }
+.panel::-webkit-scrollbar-thumb {
+  background: rgba(226, 201, 141, 0.28);
+  border-radius: 5px;
+}
+.panel::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.04); }
 .panel h2 { margin: 0 0 16px; font-size: 16px; letter-spacing: 0.06em; color: var(--accent); font-weight: 600; }
 .panel table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .panel td { padding: 5px 0; color: #cfcabf; vertical-align: top; }
@@ -930,7 +970,7 @@ html, body {
   position: absolute;
   /* Beside the vitals, where the ammunition readout sits when you are on
      foot, because it is the same piece of information: what you are firing. */
-  left: 236px; bottom: 34px;
+  left: 236px; bottom: 88px;
   font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.08em;
   color: var(--ink);
@@ -940,6 +980,39 @@ html, body {
 #vehicle #vehiclekeys {
   font-size: 11px; letter-spacing: 0.06em; color: var(--dim);
   margin: 2px 0 1px; max-width: 420px;
+}
+/* The hull bar: the same shape as the shield bar on foot, because it is the
+   same question. It goes amber under a third and red under a sixth. */
+#vehicle .vhull {
+  width: 220px; height: 5px;
+  margin: 5px 0 6px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+#vehicle .vhull i {
+  display: block; height: 100%; width: 100%;
+  background: #7fd6c9;
+  transition: width 0.12s linear;
+}
+#vehicle.hurt .vhull i { background: #e2c98d; }
+#vehicle.critical .vhull i { background: #e2705a; }
+#vehicle .vstats {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+#vehicle .vstat { display: flex; align-items: baseline; gap: 4px; font-size: 12px; }
+#vehicle .vstat b {
+  font-size: 17px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink);
+}
+#vehicle .vstat i {
+  font-style: normal; font-size: 9px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--dim);
+}
+#vehicle .vstat.cold b { color: var(--dim); }
+#vehicle .vwarn {
+  font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: #e2705a;
+  margin-bottom: 3px;
 }
 #vehicle em {
   font-style: normal;
@@ -1098,4 +1171,175 @@ html, body {
   #cardhost { bottom: 150px; width: 86vw; }
   #controls { bottom: 12px; }
   #attribution { font-size: 9.5px; max-width: 58vw; }
+}
+
+/* The cockpit. A mech of your own gets a readout of its own, because a Titan
+   carries five weapons and a shield and the vehicle panel was built to say
+   "tank, 300, ready". The loadout goes down the right where your thumb is
+   not, the hull and the shield sit under the vehicle panel on the left, and
+   the reticle is four heavy brackets rather than the thin cross you get on
+   foot: this thing is eight metres tall and the screen should know it. */
+#mechhud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+#mecharms {
+  position: absolute;
+  right: 22px; top: 56%;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 3px;
+  min-width: 206px;
+}
+#mecharms .marm {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 4px 9px;
+  background: rgba(10, 12, 16, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  opacity: 0.55;
+}
+#mecharms .marm u {
+  text-decoration: none;
+  font-size: 10px; letter-spacing: 0.18em; color: var(--dim);
+  width: 10px;
+}
+#mecharms .marm span { flex: 1; font-size: 12px; letter-spacing: 0.06em; }
+#mecharms .marm b { font-size: 13px; font-weight: 700; color: var(--dim); }
+#mecharms .marm.on {
+  opacity: 1;
+  background: rgba(226, 201, 141, 0.16);
+  box-shadow: inset 0 0 0 1px var(--edge), inset 3px 0 0 0 var(--accent);
+}
+#mecharms .marm.on b { color: var(--accent); }
+#mecharms .marm.empty b { color: #e2705a; }
+
+/* The reticle. Four brackets round a hole, with the charge of whatever is in
+   the hands drawn under it. */
+#mechreticle {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 72px; height: 72px;
+  margin: -36px 0 0 -36px;
+}
+#mechreticle .mr {
+  position: absolute;
+  background: var(--ink);
+  opacity: 0.85;
+  /* A dark edge round each bracket, because half of what a mech looks at is
+     a white wall in the sun and the other half is a shadow, and a reticle
+     that disappears into either is not a reticle. */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+/* The dot in the middle, which is the point the guns converge on. */
+#mechreticle::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 3px; height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+#mechreticle .mr.n, #mechreticle .mr.s { left: 50%; width: 2px; height: 13px; margin-left: -1px; }
+#mechreticle .mr.n { top: 0; }
+#mechreticle .mr.s { bottom: 0; }
+#mechreticle .mr.w, #mechreticle .mr.e { top: 50%; height: 2px; width: 13px; margin-top: -1px; }
+#mechreticle .mr.w { left: 0; }
+#mechreticle .mr.e { right: 0; }
+#mechhud.charging #mechreticle .mr { background: #8fd2ff; opacity: 1; }
+#mechcharge {
+  position: absolute;
+  left: 50%; bottom: -14px;
+  width: 86px; height: 3px;
+  margin-left: -43px;
+  background: rgba(255, 255, 255, 0.14);
+  display: none;
+}
+#mechhud.charging #mechcharge { display: block; }
+#mechcharge b { display: block; height: 100%; width: 0; background: #8fd2ff; }
+
+#mechstatus {
+  position: absolute;
+  /* Where the vehicle panel sits, because it is the same corner of the screen
+     and the same question. A mech with a loadout hides that panel and answers
+     all of it here instead, rather than printing the hull twice. */
+  left: 236px; bottom: 88px;
+  width: 262px;
+}
+#mechstatus #mechname {
+  display: block;
+  font-size: 19px; letter-spacing: 0.04em;
+  margin-bottom: 5px;
+}
+#mechstatus em {
+  display: block;
+  font-style: normal;
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--dim);
+  margin-top: 4px;
+}
+#hud.piloting #vehicle { display: none; }
+#mechstatus .mline {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 4px;
+}
+#mechstatus .mline span {
+  font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--dim);
+  width: 42px;
+}
+#mechstatus .mbar {
+  flex: 1; height: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+#mechstatus .mbar i { display: block; height: 100%; width: 100%; background: #7fd6c9; }
+#mechstatus .mbar.s i { background: #8fd2ff; }
+#mechstatus .mline em {
+  font-style: normal; font-size: 11px; letter-spacing: 0.04em;
+  color: var(--dim); width: 40px; text-align: right;
+}
+#mechhud.hurt #mechhull { background: #e2c98d; }
+#mechhud.critical #mechhull { background: #e2705a; }
+#mechcells { display: flex; gap: 16px; margin-top: 2px; }
+#mechcells .mcell { display: flex; align-items: baseline; gap: 4px; }
+#mechcells .mcell b { font-size: 15px; font-weight: 700; }
+#mechcells .mcell i {
+  font-style: normal; font-size: 9px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--dim);
+}
+#mechcells .mcell.cold b { color: var(--dim); }
+#mechwarn {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: #e2705a;
+}
+/* In the cockpit the ordinary crosshair is in the way of the mech's own. */
+#hud.piloting #crosshair { display: none; }
+/* Sitting inside it, the frame of the canopy is drawn round the edge of the
+   screen. It is a shadow rather than a model: eight metres of machine between
+   you and the city reads as a darker border and a line of struts, and that is
+   cheaper and steadier than any geometry hung off the camera. */
+#hud.cockpit #mechhud::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 120px 30px rgba(6, 8, 11, 0.72),
+    inset 0 -26px 60px 0 rgba(6, 8, 11, 0.6);
+}
+/* And the sill of it along the bottom, which is the one edge of a canopy you
+   would actually see from a seat behind the glass. */
+#hud.cockpit #mechhud::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 9%;
+  background: linear-gradient(180deg,
+    rgba(10, 12, 16, 0) 0%, rgba(10, 12, 16, 0.5) 55%, rgba(10, 12, 16, 0.82) 100%);
+  border-top: 1px solid rgba(226, 201, 141, 0.16);
 }

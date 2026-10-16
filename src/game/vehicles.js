@@ -55,6 +55,8 @@ export const VEHICLE = {
     // Below this it stops flying and starts falling, which is the whole
     // difference between this and the helicopter.
     stall: 38,
+    // How much speed the wheels take off a second while it is on the ground.
+    roll: 0.35,
     turn: 0.5, pitchRate: 0.85, rollRate: 2.4, bank: 1.0,
     health: 900, mass: 2,
     eye: 1.2, chase: 26, chaseUp: 6,
@@ -336,6 +338,14 @@ export class Vehicles {
       if (impact > 14) {
         if (this.onBump) this.onBump(v, impact);
         this.damage(v, impact * 12);
+      } else if (s.stall) {
+        // A fighter on the ground is rolling, not crashing. Wheels cost it a
+        // little speed a second and no more: the old line took fourteen per
+        // cent of the speed off every frame, which is eight hundredths of it
+        // left after a second, so a fighter parked in a street could never
+        // get past ten metres a second and could never take off. That is the
+        // whole of "the fighter does not fly".
+        v.speed -= v.speed * s.roll * dt;
       } else {
         v.speed *= 0.86;
       }

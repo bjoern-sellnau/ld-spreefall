@@ -66,15 +66,19 @@ jobs:
       - name: Fetch whatever districts are still missing, inside a budget
         # The deployed city is meant to be all of Berlin. Fetching all eighty
         # one from cold takes an hour and three quarters, nearly all of it
-        # waiting on Overpass, so a deploy takes what the cache gave it and
-        # spends up to twenty minutes filling the gaps. Each deploy fills a few
-        # more, the weekly city job fills the rest, and a district that is not
-        # there yet is marked unbuilt in the index rather than faked: this runs
-        # live only, so Overpass failing leaves a hole instead of writing a
-        # synthetic Berlin into the cache.
+        # waiting on Overpass, so the whole city job does that on its own time
+        # and writes the cache; a deploy restores it and spends at most seven
+        # minutes topping up whatever is still missing. Seven rather than
+        # twenty because this workflow cancels itself when the next push
+        # arrives: a deploy that takes half an hour never finishes at all, and
+        # then nothing is deployed and nothing is cached.
+        #
+        # A district that is not there yet is marked unbuilt in the index
+        # rather than faked: this runs live only, so Overpass failing leaves a
+        # hole instead of writing a synthetic Berlin into the cache.
         continue-on-error: true
         run: |
-          timeout 1200 node --max-old-space-size=6144 tools/fetch-osm.mjs --all --live-only || true
+          timeout 420 node --max-old-space-size=6144 tools/fetch-osm.mjs --all --live-only || true
           ls data/raw/*.osm 2>/dev/null | wc -l
       - name: Keep what was fetched for the next deploy
         # The restore above is shared with the weekly city job; this is the

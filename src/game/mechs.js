@@ -37,7 +37,7 @@ export const MECH = {
     // chaingun, because a salvo at twenty metres is not a fight, it is a
     // cutscene in which you die.
     rockets: {
-      salvo: 4, gap: 0.22, interval: 7.0, speed: 92, minRange: 55,
+      salvo: 4, gap: 0.22, interval: 7.0, speed: 170, minRange: 55,
       splash: { radius: 11, damage: 120, force: 16 }, muzzle: [-2.05, 6.3, -1.4],
     },
   },
@@ -46,26 +46,99 @@ export const MECH = {
     name: 'Titan',
     mine: true,
     height: 7.0, radius: 2.4, eye: 6.3,
-    // Where the camera hangs. Behind and above, like everything else you can
-    // get into here: a mech is a thing worth looking at, and the inside of
-    // one is no more modelled than the inside of a tank.
+    // Where the camera hangs when you are looking at it from outside. Behind
+    // and above, like everything else you can get into here, because a mech
+    // is a thing worth looking at.
     chase: 17, chaseUp: 9.5,
+    // And where the pilot's head is for the view from inside: this far in
+    // front of the torso's own eye, along the line the torso is looking down.
+    // On that line rather than near it, because the guns converge on what
+    // that line runs into, and a camera parked beside it would put the
+    // crosshair half a metre under the shot at fifty paces. Far enough out to
+    // clear the canopy, which is a plate two centimetres thick in the mesh
+    // and from behind is all you would see.
+    cockpit: 1.6,
     health: 3600,
     walk: 11.5, turn: 2.6, torsoTurn: 5.0, climb: 1.6, gravity: 22,
     jump: 11.5,
+    // Yours carries the five arm weapons and a shield that comes back.
+    arms: true,
+    shield: { max: 1500, rate: 300, wait: 5.0 },
     dash: { speed: 27, seconds: 0.85, cooldown: 3.6 },
     chaingun: {
       damage: 24, interval: 0.075, burst: 0, rest: 0,
       spread: 0.022, range: 260, muzzle: [2.05, 5.6, -3.2],
     },
+    // A salvo is six rockets in half a second, and they go fast enough to
+    // reach what you aimed at before it has walked out from under them. The
+    // first pass had them at a hundred and fifteen metres a second, which is
+    // a lob rather than a launch.
     rockets: {
-      salvo: 6, gap: 0.09, interval: 3.4, speed: 115,
+      salvo: 6, gap: 0.07, interval: 3.0, speed: 230,
       splash: { radius: 14, damage: 230, force: 22 }, muzzle: [-2.05, 6.3, -1.4],
     },
     // What a forty tonne landing does to whatever is standing under it.
     stomp: { radius: 11, damage: 420, force: 26, speed: 9 },
   },
 };
+
+/**
+ * What a mech of yours carries.
+ *
+ * Five primaries, one at a time, switched with the number keys or the wheel,
+ * in the spirit of the Titan loadouts: a chaingun that hoses, a cannon that
+ * punches, a thermite launcher that denies a street, a railgun you charge for
+ * one enormous shot, and a close range slug thrower. The ordnance, the rocket
+ * pod, is on the right mouse whatever is in the hands, and the dash and the
+ * landing are the rest of it.
+ *
+ * Each one is a row of numbers, the same way the hand weapons are, because
+ * every difference between a chaingun and a railgun that this game cares
+ * about is a number. `shake` is how hard it hits your own screen, which is
+ * most of what makes forty tonnes feel like forty tonnes.
+ */
+export const ARMS = [
+  {
+    id: 'chaingun', name: 'XO Chaingun', kind: 'auto', mount: 'chaingun',
+    damage: 38, interval: 0.07, spread: 0.02, range: 280,
+    magazine: 200, reload: 2.8, shake: 0.045, sound: 'mechgun',
+  },
+  {
+    id: 'cannon', name: '40 mm Cannon', kind: 'shell', mount: 'chaingun',
+    speed: 320, interval: 0.8, spread: 0.004,
+    splash: { radius: 10, damage: 320, force: 20 },
+    magazine: 12, reload: 3.2, shake: 0.34, sound: 'mechcannon',
+  },
+  {
+    id: 'thermite', name: 'Thermite Launcher', kind: 'thermite', mount: 'rockets',
+    speed: 95, interval: 1.2, spread: 0.01,
+    splash: { radius: 8, damage: 180, force: 12 },
+    fire: { radius: 22, pools: 7, burnSeconds: 12, damagePerSecond: 170 },
+    magazine: 6, reload: 3.6, shake: 0.26, sound: 'rpg',
+  },
+  {
+    id: 'railgun', name: 'Plasma Railgun', kind: 'rail', mount: 'chaingun',
+    // Held to charge. Letting go early still fires, for less: the charge is
+    // a multiplier on the hit rather than a gate in front of it.
+    charge: 1.2, damage: 420, chargedDamage: 1500, range: 900, pierce: 4,
+    interval: 0.75, magazine: 6, reload: 3.4, shake: 0.55, sound: 'rail',
+  },
+  {
+    id: 'leadwall', name: 'Leadwall', kind: 'shotgun', mount: 'chaingun',
+    pellets: 14, damage: 78, spread: 0.11, range: 75,
+    interval: 0.7, magazine: 8, reload: 2.9, shake: 0.4, sound: 'mechgun',
+  },
+];
+
+/** The arm by id, for the interface and the tests. */
+export function armById(id) { return ARMS.find((a) => a.id === id) || null; }
+
+/**
+ * How far up and down a torso turns. The pilot's view is held to the same
+ * number, so that where you are looking and where the guns are pointed cannot
+ * come apart.
+ */
+export const MECH_PITCH = 0.7;
 
 const clamp = (v, a, b) => (v < a ? a : (v > b ? b : v));
 
@@ -95,6 +168,9 @@ export class Mechs {
     this.piloted = null;
     this.enabled = true;
     this.onChaingun = null;    // fn(mech, from, dir, spec)
+    this.onArmFire = null;     // fn(mech, from, dir, arm, extra) for the loadout
+    this.onArmChange = null;   // fn(mech, arm)
+    this.onReload = null;      // fn(mech, arm)
     this.onRockets = null;     // fn(mech, from, dir, spec)
     this.onStep = null;        // fn(mech, hard)
     this.onStomp = null;       // fn(mech, spec)
@@ -151,7 +227,49 @@ export class Mechs {
     m.dashLeft = 0;
     m.dashCool = 0;
     m.stepAt = 0;
+    // The loadout, for the ones that have one. A magazine per arm, so
+    // switching away from an empty railgun and back does not refill it.
+    m.arm = 0;
+    m.armTimer = 0;
+    m.reloadLeft = 0;
+    m.charge = 0;
+    m.wasFiring = false;
+    m.mags = ARMS.map((a) => a.magazine);
+    // A shield over the hull that comes back when nothing has hit it for a
+    // few seconds. It is what lets a mech walk into a street, take the first
+    // volley and walk out again.
+    m.shield = spec.shield ? spec.shield.max : 0;
+    m.shieldMax = spec.shield ? spec.shield.max : 0;
+    m.shieldWait = 0;
+    // Stopped where it stands. An EMP warhead does this, and while it lasts
+    // nothing about the machine works: not the legs, not the guns, and not
+    // the shield, which is the whole point of putting one into it first.
+    m.stun = 0;
+    // How tall it is, on the body rather than only on the spec, because a
+    // rocket that chases reads the height off whatever it is chasing and a
+    // mech without one gets chased at the ankles.
+    m.height = spec.height;
     this.active.push(m);
+    return m;
+  }
+
+  /**
+   * Drops one out of the sky.
+   *
+   * Same mech, same spawn, with two hundred metres of air underneath it and
+   * enough speed to arrive like forty tonnes rather than settle like a leaf.
+   * The landing goes through the ordinary stomp, which opens the road, with
+   * the drop flag making it the heavier version.
+   *
+   * @returns {object|null}
+   */
+  drop(type, x, z, yaw = 0, height = 220) {
+    const m = this.spawn(type, x, z, yaw);
+    if (!m) return null;
+    m.y = this.world.groundHeight(x, z) + height;
+    m.vy = -60;
+    m.onGround = false;
+    m.dropping = true;
     return m;
   }
 
@@ -200,6 +318,33 @@ export class Mechs {
     };
   }
 
+  /**
+   * Where the guns are pointed, as a point in the world rather than as a
+   * direction: the first thing the torso's own line of sight runs into, or a
+   * long way down that line when it runs into nothing.
+   *
+   * The guns are on the arms, two metres out from the middle of the body. A
+   * gun that fired straight down its own barrel would put every round two
+   * metres to the right of whatever the pilot was looking at, which at thirty
+   * metres is a clean miss against something three metres wide. So they
+   * converge on this point instead, the way a real gun mount is harmonised,
+   * and what you are looking at is what you hit.
+   */
+  aimPoint(m, range) {
+    const a = this.aim(m);
+    const eye = { x: m.x, y: m.y + m.spec.eye, z: m.z };
+    const hit = this.world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, range);
+    const t = hit ? hit.t : range;
+    return { x: eye.x + a.x * t, y: eye.y + a.y * t, z: eye.z + a.z * t };
+  }
+
+  /** From a gun to the point the torso is looking at, as a unit vector. */
+  aimFrom(from, at) {
+    const dx = at.x - from.x, dy = at.y - from.y, dz = at.z - from.z;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    return { x: dx / l, y: dy / l, z: dz / l };
+  }
+
   /** Which way the torso is pointing, as a unit vector including the pitch. */
   aim(m) {
     const cp = Math.cos(m.pitch);
@@ -210,10 +355,41 @@ export class Mechs {
     };
   }
 
+  /**
+   * Stops one where it stands, for a while.
+   *
+   * @returns {boolean} whether it was standing to begin with
+   */
+  stunFor(m, seconds) {
+    if (!m || !m.alive || m.health <= 0) return false;
+    m.stun = Math.max(m.stun || 0, seconds);
+    // The shield goes with it. It is held up by the same electronics the
+    // pulse has just stopped, and an EMP that left it standing would be a
+    // weapon with nothing to recommend it over a shell: what this is for is
+    // taking the armour off so that whatever arrives next lands on the hull.
+    m.shield = 0;
+    // And it does not start filling again until the machine has come back.
+    m.shieldWait = Math.max(m.shieldWait, seconds);
+    m.charge = 0;
+    m.wasFiring = false;
+    m.salvoLeft = 0;
+    if (this.onStun) this.onStun(m, seconds);
+    return true;
+  }
+
   damage(m, amount) {
     if (!m.alive || m.health <= 0) return false;
-    m.health -= amount;
     m.hitFlash = 1;
+    if (m.shieldMax) {
+      m.shieldWait = m.spec.shield.wait;
+      if (m.shield > 0) {
+        const soaked = Math.min(m.shield, amount);
+        m.shield -= soaked;
+        amount -= soaked;
+        if (amount <= 0) return false;
+      }
+    }
+    m.health -= amount;
     if (m.health > 0) return false;
     m.health = 0;
     m.dying = 0.01;
@@ -282,12 +458,27 @@ export class Mechs {
     for (let i = this.active.length - 1; i >= 0; i--) {
       const m = this.active[i];
       m.hitFlash = Math.max(0, m.hitFlash - dt * 4);
+      if (m.shieldMax && m.health > 0) {
+        m.shieldWait = Math.max(0, m.shieldWait - dt);
+        if (m.shieldWait <= 0 && m.shield < m.shieldMax) {
+          m.shield = Math.min(m.shieldMax, m.shield + m.spec.shield.rate * dt);
+        }
+      }
       if (m.health <= 0) {
         // Down on one knee, then over, then gone.
         m.dying += dt;
         m.vy -= m.spec.gravity * dt;
         m.y = Math.max(this.world.groundHeight(m.x, m.z), m.y + m.vy * dt);
         if (m.dying > 12) { m.alive = false; this.active.splice(i, 1); }
+        continue;
+      }
+      if (m.stun > 0) {
+        // Dead on its feet. It still falls, and the ground still holds it up,
+        // but it does not walk, aim or fire, and the shield does not come
+        // back: the timer above was reset by the same hit that stopped it.
+        m.stun -= dt;
+        m.speed = 0;
+        this._ground(m, dt);
         continue;
       }
       if (m.occupied && controls) this._pilot(m, dt, controls, target);
@@ -300,11 +491,14 @@ export class Mechs {
 
   _pilot(m, dt, c, target) {
     const s = m.spec;
-    // The torso goes where you are looking, at once; the legs follow it, which
-    // is what makes turning feel like forty tonnes rather than like a mouse.
+    // The torso goes where you are looking, at once. The legs follow the way
+    // the thing is actually travelling rather than the way the torso faces,
+    // which is what stops it walking sideways across its own feet when you
+    // strafe and looking as though it were walking backwards every time you
+    // turned round: the legs were pointing where you looked while the body
+    // moved somewhere else.
     m.torso = c.yaw;
-    m.pitch = clamp(c.pitch, -0.7, 0.7);
-    m.yaw = turnTowards(m.yaw, m.torso, s.turn * dt);
+    m.pitch = clamp(c.pitch, -MECH_PITCH, MECH_PITCH);
 
     if (m.dashCool > 0) m.dashCool -= dt;
     if (c.dash && m.dashLeft <= 0 && m.dashCool <= 0) {
@@ -319,6 +513,8 @@ export class Mechs {
     const rx = Math.cos(m.torso), rz = -Math.sin(m.torso);
     const wx = (fx * c.forward + rx * c.strafe) * speed;
     const wz = (fz * c.forward + rz * c.strafe) * speed;
+    const going = Math.hypot(wx, wz) > 0.1 ? Math.atan2(-wx, -wz) : m.torso;
+    m.yaw = turnTowards(m.yaw, going, s.turn * dt);
     this._move(m, dt, wx, wz);
 
     if (c.jump && m.onGround) { m.vy = s.jump; m.onGround = false; }
@@ -338,21 +534,25 @@ export class Mechs {
     m.torso = turnTowards(m.torso, want, s.torsoTurn * dt);
     const eye = m.y + s.eye;
     const dy = (target.y + 1.4) - eye;
-    m.pitch = clamp(Math.atan2(dy, away), -0.7, 0.7);
+    m.pitch = clamp(Math.atan2(dy, away), -MECH_PITCH, MECH_PITCH);
 
-    // Walk in until it is close enough to be a problem, then hold.
+    // Walk in until it is close enough to be a problem, then hold. Either
+    // way the legs are turned to the way it is going rather than to the way
+    // it is looking, so it walks rather than sliding sideways.
+    let wx = 0, wz = 0;
     if (away > s.keep) {
-      m.yaw = turnTowards(m.yaw, want, s.turn * dt);
-      const fx = -Math.sin(m.yaw), fz = -Math.cos(m.yaw);
-      this._move(m, dt, fx * s.walk, fz * s.walk);
+      const fx = -Math.sin(want), fz = -Math.cos(want);
+      wx = fx * s.walk; wz = fz * s.walk;
     } else {
       // Close in, it sidesteps rather than standing still, so a mech is not a
       // wall you can lean on.
-      const side = (Math.floor(m.walk / 6) % 2 === 0) ? 1 : -1;
-      const rx = Math.cos(m.yaw) * side, rz = -Math.sin(m.yaw) * side;
-      m.yaw = turnTowards(m.yaw, want, s.turn * dt);
-      this._move(m, dt, rx * s.walk * 0.45, rz * s.walk * 0.45);
+      const side = (Math.floor(Math.abs(m.walk) / 6) % 2 === 0) ? 1 : -1;
+      wx = Math.cos(want) * side * s.walk * 0.45;
+      wz = -Math.sin(want) * side * s.walk * 0.45;
     }
+    const going = Math.hypot(wx, wz) > 0.1 ? Math.atan2(-wx, -wz) : want;
+    m.yaw = turnTowards(m.yaw, going, s.turn * dt);
+    this._move(m, dt, wx, wz);
 
     const canSee = away < s.engage && this._lineOfSight(m, target);
     const rockets = s.rockets.minRange ? away > s.rockets.minRange : true;
@@ -369,8 +569,95 @@ export class Mechs {
 
   // --- guns -----------------------------------------------------------------
 
+  /** Puts a different weapon in the hands, by index or by step. */
+  selectArm(m, index) {
+    if (!m.spec.arms) return m.arm;
+    const n = ARMS.length;
+    m.arm = ((index % n) + n) % n;
+    m.charge = 0;
+    m.reloadLeft = 0;
+    m.armTimer = Math.max(m.armTimer, 0.25);
+    if (this.onArmChange) this.onArmChange(m, ARMS[m.arm]);
+    return m.arm;
+  }
+
+  cycleArm(m, step) { return this.selectArm(m, m.arm + (step > 0 ? 1 : -1)); }
+
+  /** What is in its hands, and how much of it is left. */
+  arm(m) { return m.spec.arms ? ARMS[m.arm] : null; }
+
+  /**
+   * The arm weapons, for a mech that carries them.
+   *
+   * One weapon at a time, each with its own magazine, its own rhythm and its
+   * own way of leaving the barrel: a stream of rounds, a shell, a canister of
+   * thermite, a charged bolt, or a wall of slugs. What each of those does
+   * when it arrives is the game layer's business; this decides when, where
+   * from and how much of it.
+   */
+  _armFire(m, dt, want) {
+    const arm = ARMS[m.arm];
+    if (m.armTimer > 0) m.armTimer -= dt;
+    if (m.reloadLeft > 0) {
+      m.reloadLeft -= dt;
+      if (m.reloadLeft <= 0) m.mags[m.arm] = arm.magazine;
+      m.charge = 0;
+      m.wasFiring = false;
+      return;
+    }
+    if (m.mags[m.arm] <= 0) {
+      m.reloadLeft = arm.reload;
+      if (this.onReload) this.onReload(m, arm);
+      return;
+    }
+
+    // The railgun is the one that works differently: holding charges it and
+    // letting go fires it, and a shot let go early is a weaker shot rather
+    // than no shot at all.
+    if (arm.kind === 'rail') {
+      if (want) {
+        m.charge = Math.min(arm.charge, m.charge + dt);
+        m.wasFiring = true;
+        return;
+      }
+      // Let go and it goes off. If the weapon is still in its own interval,
+      // or has only just been brought up, the shot waits for that rather
+      // than being thrown away: a charge you have held for a second is not
+      // something to lose to a timer.
+      if (!m.wasFiring) return;
+      if (m.armTimer > 0) return;
+      const k = clamp(m.charge / arm.charge, 0, 1);
+      m.wasFiring = false;
+      m.charge = 0;
+      m.armTimer = arm.interval;
+      m.mags[m.arm]--;
+      this._leaveBarrel(m, arm, { charged: k });
+      return;
+    }
+
+    if (!want || m.armTimer > 0) return;
+    m.armTimer = arm.interval;
+    m.mags[m.arm]--;
+    this._leaveBarrel(m, arm, {});
+  }
+
+  /** Where a shot starts and which way it goes, then over to the game. */
+  _leaveBarrel(m, arm, extra) {
+    if (!this.onArmFire) return;
+    const mount = arm.mount === 'rockets' ? m.spec.rockets.muzzle : m.spec.chaingun.muzzle;
+    const from = this.muzzle(m, mount);
+    const dir = this.aimFrom(from, this.aimPoint(m, arm.range || 400));
+    this.onArmFire(m, from, dir, arm, extra);
+  }
+
   _guns(m, dt, wantGun, wantRockets) {
     const s = m.spec;
+    // A mech with a loadout fires that instead of the fixed chaingun.
+    if (s.arms) {
+      this._armFire(m, dt, wantGun);
+      this._pod(m, dt, wantRockets);
+      return;
+    }
     const gun = s.chaingun;
     if (m.gunTimer > 0) m.gunTimer -= dt;
     if (m.restLeft > 0) m.restLeft -= dt;
@@ -381,12 +668,20 @@ export class Mechs {
         m.burstLeft--;
         if (m.burstLeft <= 0) m.restLeft = gun.rest;
       }
-      if (this.onChaingun) this.onChaingun(m, this.muzzle(m, gun.muzzle), this.aim(m), gun);
+      if (this.onChaingun) {
+        const from = this.muzzle(m, gun.muzzle);
+        this.onChaingun(m, from, this.aimFrom(from, this.aimPoint(m, gun.range)), gun);
+      }
     }
 
-    const rockets = s.rockets;
+    this._pod(m, dt, wantRockets);
+  }
+
+  /** The rocket pod, which every mech has whatever is in its hands. */
+  _pod(m, dt, want) {
+    const rockets = m.spec.rockets;
     if (m.rocketTimer > 0) m.rocketTimer -= dt;
-    if (wantRockets && m.rocketTimer <= 0 && m.salvoLeft <= 0) {
+    if (want && m.rocketTimer <= 0 && m.salvoLeft <= 0) {
       m.salvoLeft = rockets.salvo;
       m.salvoTimer = 0;
       m.rocketTimer = rockets.interval;
@@ -397,7 +692,8 @@ export class Mechs {
         m.salvoTimer = rockets.gap;
         m.salvoLeft--;
         if (this.onRockets) {
-          this.onRockets(m, this.muzzle(m, rockets.muzzle), this.aim(m), rockets);
+          const from = this.muzzle(m, rockets.muzzle);
+          this.onRockets(m, from, this.aimFrom(from, this.aimPoint(m, 400)), rockets);
         }
       }
     }
@@ -405,25 +701,59 @@ export class Mechs {
 
   // --- walking --------------------------------------------------------------
 
-  /** A step across the ground, with the hull stopped by walls. */
+  /**
+   * A step across the ground, with the hull stopped by walls and walked round
+   * them rather than into them.
+   *
+   * A mech that only stops at a wall is a mech that never arrives: the real
+   * city is full of frontages, and one of these spawning two hundred metres
+   * away with a building in between used to walk into it and stay there. So
+   * when the way ahead is blocked it tries the two ways along the wall, keeps
+   * whichever is clear for a second or two so it does not dither in a
+   * doorway, and slides.
+   */
   _move(m, dt, wx, wz) {
     const s = m.spec;
     const step = Math.hypot(wx, wz) * dt;
     if (step > 0.0001) {
-      const dx = wx / (Math.hypot(wx, wz) || 1);
-      const dz = wz / (Math.hypot(wx, wz) || 1);
-      // What is in front of it, at chest height, out of the same raycast the
-      // bullets use. A mech walks over cars and kerbs and into buildings.
-      const hit = this.world.raycast(m.x, m.y + s.height * 0.5, m.z,
-        dx, 0, dz, step + s.radius);
-      if (!hit || hit.kind !== 'wall') {
+      const len = Math.hypot(wx, wz) || 1;
+      let dx = wx / len;
+      let dz = wz / len;
+      const clear = (ax, az, reach) => !this.world.raycast(
+        m.x, m.y + s.height * 0.5, m.z, ax, 0, az, reach);
+      const reach = step + s.radius + 1.5;
+      m.slideLeft = (m.slideLeft || 0) - dt;
+      if (!clear(dx, dz, reach)) {
+        // Blocked. Try along the wall, keeping the side it picked last time
+        // while that side is still open.
+        const left = [-dz, dx];
+        const right = [dz, -dx];
+        const side = m.slideLeft > 0 && m.slideSide
+          ? m.slideSide
+          : (clear(left[0], left[1], s.radius + 6) ? left
+            : (clear(right[0], right[1], s.radius + 6) ? right : null));
+        if (side && clear(side[0], side[1], s.radius + 2)) {
+          m.slideSide = side;
+          m.slideLeft = 1.6;
+          dx = side[0]; dz = side[1];
+          wx = dx * len * 0.8; wz = dz * len * 0.8;
+        } else {
+          dx = 0; dz = 0; wx = 0; wz = 0;
+        }
+      }
+      if (dx !== 0 || dz !== 0) {
         const nx = m.x + wx * dt, nz = m.z + wz * dt;
         if (!this.isSanctuary(nx, 0, nz)) { m.x = nx; m.z = nz; }
       }
       m.speed = Math.hypot(wx, wz);
-      // The stride, and a footfall twice a cycle.
+      // The stride, and a footfall twice a cycle. Its sign is the sign of the
+      // travel along the legs' own facing: going backwards plays the cycle
+      // backwards, which is the difference between stepping back and
+      // moonwalking.
+      const lx = -Math.sin(m.yaw), lz = -Math.cos(m.yaw);
+      const sense = (wx * lx + wz * lz) >= 0 ? 1 : -1;
       const was = m.walk;
-      m.walk += dt * (2.2 + m.speed * 0.26);
+      m.walk += dt * (2.2 + m.speed * 0.26) * sense;
       if (Math.floor(was / Math.PI) !== Math.floor(m.walk / Math.PI) && m.onGround) {
         if (this.onStep) this.onStep(m, m.speed > s.walk * 0.9);
       }
@@ -443,8 +773,14 @@ export class Mechs {
       const fell = m.vy;
       m.y = floor;
       m.vy = 0;
-      if (!m.onGround && s.stomp && fell < -s.stomp.speed && this.onStomp) {
-        this.onStomp(m, s.stomp);
+      if (!m.onGround && this.onStomp && (m.dropping || (s.stomp && fell < -s.stomp.speed))) {
+        // A drop lands harder than a jump, because it has come two hundred
+        // metres rather than three.
+        const stomp = s.stomp || MECH.titan.stomp;
+        this.onStomp(m, m.dropping
+          ? { ...stomp, radius: stomp.radius * 1.8, damage: stomp.damage * 1.6 }
+          : stomp, m.dropping);
+        m.dropping = false;
       }
       m.onGround = true;
     } else if (m.onGround && m.y - floor < s.climb && m.vy <= 0) {

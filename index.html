@@ -61,6 +61,11 @@
 
 <!-- Changing district. One district is in memory at a time, so crossing a
      boundary is a short wait, and a wait should say where you are going. -->
+<div id="titanfall" class="hidden">
+  <div class="tfline">Stand by for Titanfall</div>
+  <div class="tfsub" id="titanfallsub">Inbound</div>
+</div>
+
 <div id="crossing" class="overlay hidden">
   <div class="crossbox">
     <div class="crosskicker">entering</div>
@@ -98,8 +103,41 @@
   <div id="powers"></div>
   <div id="vehicle" class="hidden">
     <span id="vehiclename"></span>
+    <div class="vhull"><i id="vehiclehull"></i></div>
+    <div class="vstats">
+      <span class="vstat"><b id="vehiclespeed">0</b><i id="vehiclespeedunit">km/h</i></span>
+      <span class="vstat hidden" id="vehiclealtstat"><b id="vehiclealt">0</b><i>m up</i></span>
+      <span class="vstat"><b id="vehiclegun">ready</b><i id="vehiclegunlabel">gun</i></span>
+      <span class="vstat hidden" id="vehiclerockstat"><b id="vehiclerock">ready</b><i>rockets</i></span>
+      <span class="vstat hidden" id="vehicledashstat"><b id="vehicledash">ready</b><i>dash</i></span>
+    </div>
+    <div class="vwarn hidden" id="vehiclewarn"></div>
     <span id="vehiclekeys"></span>
     <em>F to get out</em>
+  </div>
+  <!-- The cockpit readout. Only up when you are sitting in a mech of your
+       own, and it answers what a pilot asks: what is in my hands, how much of
+       it is left, how much of me is left, and what is ready. The loadout rows
+       are built from the mech's own table rather than written out here, so
+       the screen and the simulation cannot drift apart. -->
+  <div id="mechhud" class="hidden">
+    <div id="mecharms"></div>
+    <div id="mechreticle">
+      <i class="mr n"></i><i class="mr s"></i><i class="mr w"></i><i class="mr e"></i>
+      <u id="mechcharge"><b></b></u>
+    </div>
+    <div id="mechstatus">
+      <span id="mechname">Titan</span>
+      <div class="mline"><span>hull</span><div class="mbar"><i id="mechhull"></i></div><em id="mechhullnum">0</em></div>
+      <div class="mline" id="mechshieldline"><span>shield</span><div class="mbar s"><i id="mechshield"></i></div><em id="mechshieldnum">0</em></div>
+      <div id="mechcells">
+        <span class="mcell"><b id="mechammo">0</b><i>rounds</i></span>
+        <span class="mcell"><b id="mechpod">ready</b><i>pod</i></span>
+        <span class="mcell"><b id="mechdash">ready</b><i>dash</i></span>
+      </div>
+      <b id="mechwarn" class="hidden"></b>
+      <em>1 to 5 or the wheel changes weapon, V changes the view, F to get out</em>
+    </div>
   </div>
   <div id="threat">
     <span class="tlabel">threat</span> <span id="tiernum">1</span>
@@ -161,6 +199,14 @@
       face the way it is pointing when you get in, and the view turns with it.</td></tr>
     <tr><td>flying</td><td>W S throttle, A D roll, the mouse flies it, Space climbs,
       right mouse drops, left mouse fires</td></tr>
+    <tr><td>in a mech</td><td>W A S D walks, the mouse aims the torso, left mouse fires
+      what is in its hands, right mouse empties the rocket pod, Shift dashes,
+      Space jumps and the landing opens the road</td></tr>
+    <tr><td>1 to 5, or the wheel, in a mech</td><td>chaingun, 40 mm cannon, thermite
+      launcher, plasma railgun, Leadwall. The railgun charges while you hold the
+      trigger and fires when you let go.</td></tr>
+    <tr><td>V in a mech</td><td>out of the cockpit and onto the shoulder, and back</td></tr>
+    <tr><td>R in a mech</td><td>reload what is in its hands</td></tr>
     <tr><td>F4</td><td>debug overlay</td></tr>
     <tr><td>F1 F2 F3</td><td>quality: low, medium, high</td></tr>
     <tr><td>F5 F6 F7</td><td>difficulty: easy, normal, hard</td></tr>
@@ -171,6 +217,8 @@
     <tr><td>Z</td><td>flamethrower, right mouse throws a wall of fire</td></tr>
     <tr><td>B</td><td>incendiary bomb, leaves the street burning</td></tr>
     <tr><td>X</td><td>EMP, stops a machine where it stands</td></tr>
+    <tr><td>K</td><td>mech killer: an EMP warhead with a charge behind it, which
+      locks on, stops anything with a motor and is enough to take a mech apart</td></tr>
     <tr><td>Right mouse with the launcher</td><td>hold the sight on a target to lock, then the rocket chases it</td></tr>
     <tr><td>Q</td><td>back to the last weapon</td></tr>
     <tr><td>T</td><td>blow the C4 you have put down</td></tr>

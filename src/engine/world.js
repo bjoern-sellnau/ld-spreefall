@@ -73,6 +73,11 @@ export class World {
     // Kept on the world rather than in the bundle bytes, because the bundle
     // is what a reload reads and a reload is meant to bring the city back.
     this.deadTrees = new Map();
+    // What has been knocked down, district by district. A district is thrown
+    // away when you leave it and fetched again when you come back, so without
+    // this the city quietly repairs itself behind you: these are the few
+    // numbers per ruin that let it be put back exactly as it was.
+    this.scars = new Map();        // district id -> array of scar records
     this.onTreesChanged = null;        // fn(tileIndex) when one has gone
     this.onDistrict = null;            // fn(district) when one lands
     this.onDrop = null;                // fn(district, indices) before one goes
@@ -109,6 +114,30 @@ export class World {
    * Asking for one would be a pair of four hundred and fours, so everything
    * that loads goes through here first.
    */
+  /**
+   * Writes down a ruin against the district it is in.
+   *
+   * @param {{x,z}} scar as the demolition layer records it
+   */
+  recordScar(scar) {
+    const entry = this.entryAt(scar.x, scar.z);
+    if (!entry) return null;
+    let list = this.scars.get(entry.id);
+    if (!list) { list = []; this.scars.set(entry.id, list); }
+    list.push(scar);
+    return entry.id;
+  }
+
+  /** Everything knocked down in a district, oldest first. */
+  scarsFor(id) { return this.scars.get(id) || []; }
+
+  /** How many ruins are being remembered across the whole city. */
+  get scarCount() {
+    let n = 0;
+    for (const list of this.scars.values()) n += list.length;
+    return n;
+  }
+
   isBuilt(entry) {
     const d = typeof entry === 'string' ? this.entryFor(entry) : entry;
     return !!(d && d.built !== false && d.bin && d.json);

@@ -474,7 +474,48 @@ async function run() {
         mode: s.state.mode,
       };
     }, neighbour);
-    // --- and it says no to the parts of Berlin nobody has built --------------
+    // --- what you knocked down stays down, district or no district ----------
+  const kept = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.setCheat('godmode', true);
+    s.demolition.reset();
+    const home = s.world.idAt(s.player.x, s.player.z);
+    const x = s.player.x + 60, z = s.player.z;
+    const before = s.world.groundHeight(x, z);
+    const tallBefore = s.world.tallestNear(x, z, 60);
+    s.demolition.blast(x, before, z, 170, 4000);
+    for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
+    const dug = s.world.groundHeight(x, z);
+    const tallAfter = s.world.tallestNear(x, z, 60);
+    // Out to a neighbour, which throws this district's bytes away, and back.
+    const next = s.world.catalogue.find((d) => d.built !== false && d.id !== home);
+    await s.crossInto((next.bounds.minX + next.bounds.maxX) / 2,
+      (next.bounds.minZ + next.bounds.maxZ) / 2);
+    const gone = !s.world.loaded(home);
+    await s.crossInto(x, z);
+    return {
+      scars: s.world.scarCount,
+      gone,
+      before: Number(before.toFixed(2)),
+      dug: Number(dug.toFixed(2)),
+      back: Number(s.world.groundHeight(x, z).toFixed(2)),
+      tallBefore: Math.round(tallBefore),
+      tallAfter: Math.round(tallAfter),
+      tallBack: Math.round(s.world.tallestNear(x, z, 60)),
+      here: s.world.idAt(s.player.x, s.player.z),
+    };
+  });
+  check('a district you flattened is still flat when you come back to it',
+    kept.gone && kept.dug < kept.before - 3
+      && Math.abs(kept.back - kept.dug) < 0.6,
+    `${kept.before} m became ${kept.dug} m, and ${kept.back} m after a round trip`);
+  check('and the buildings that came down are still down',
+    kept.tallAfter < kept.tallBefore - 2 && kept.tallBack <= kept.tallAfter + 1,
+    `${kept.tallBefore} m standing, ${kept.tallAfter} m after, ${kept.tallBack} m on the way back`);
+  check('and the city remembers it in a handful of numbers rather than megabytes',
+    kept.scars > 0 && kept.scars < 64, `${kept.scars} ruins written down`);
+
+  // --- and it says no to the parts of Berlin nobody has built --------------
   const unbuilt = await page.evaluate(async () => {
     const s = window.spreefall;
     const gap = s.world.catalogue.find((d) => d.built === false);
@@ -495,13 +536,18 @@ async function run() {
       loadedBefore: before, loadedAfter: s.world.loadedIds.length,
     };
   });
+  // When every district has been built there is nothing to refuse, and that
+  // is the city this is all for rather than a failure: the pair pass by
+  // saying so. They do their work on a partial city, which is what a deploy
+  // has until the whole city job has filled the cache.
   check('a district nobody has built yet refuses the trip rather than failing it',
-    !unbuilt.skip && unbuilt.armed === false && unbuilt.confirmHidden
-      && /not built/.test(unbuilt.hint),
+    unbuilt.skip || (unbuilt.armed === false && unbuilt.confirmHidden
+      && /not built/.test(unbuilt.hint)),
     unbuilt.skip ? 'every district is built' : `${unbuilt.id}: ${unbuilt.hint}`);
   check('and walking at one loads nothing',
-    !unbuilt.skip && unbuilt.loadedAfter === unbuilt.loadedBefore,
-    `${unbuilt.loadedAfter} district in memory`);
+    unbuilt.skip || unbuilt.loadedAfter === unbuilt.loadedBefore,
+    unbuilt.skip ? 'nothing left unbuilt to walk at'
+      : `${unbuilt.loadedAfter} district in memory`);
 
   check('free travel reaches a district that was not in memory when it started',
       flight.started && flight.mode === 'walk' && flight.out < 6,

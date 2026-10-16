@@ -14,7 +14,7 @@ const KEY = 'spreefall.cheats';
 
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
-  'slowBlast', 'gib', 'ragdoll', 'blood', 'ultraGore'];
+  'slowBlast', 'mechKillers', 'gib', 'ragdoll', 'blood', 'ultraGore'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -24,6 +24,7 @@ export const SWITCHES = [
   { id: 'noDrones', label: 'No drones', note: 'they stop coming and the ones up leave' },
   { id: 'cinematic', label: 'Cinematic warheads', note: 'the camera follows one down and circles what is left' },
   { id: 'slowBlast', label: 'Slow motion blasts', note: 'the world drops to a crawl while something goes off' },
+  { id: 'mechKillers', label: 'Machines carry mech killers', note: 'some of them get the EMP warhead as well, and it is meant for what you are standing in' },
 ];
 
 export const GORE = [
@@ -70,6 +71,11 @@ export const SETTINGS = [
     min: 80, max: 900, step: 10, def: 210,
   },
   {
+    id: 'mechKillerOdds', label: 'Machines with a mech killer', unit: '%',
+    note: 'how many of them carry one, when they are allowed to at all',
+    min: 5, max: 100, step: 5, def: 25,
+  },
+  {
     id: 'boneTime', label: 'Skeletons collapse after', unit: 's',
     note: 'a burnt body falls to pieces after this long; nought leaves them standing',
     min: 0, max: 120, step: 1, def: 0,
@@ -81,8 +87,8 @@ export const RIDES = [
   { id: 'jeep', label: 'Jeep', note: 'fast, open, a gun on the back' },
   { id: 'tank', label: 'Tank', note: 'slow, hard to kill, one very large gun' },
   { id: 'heli', label: 'Helicopter', note: 'hovers; space climbs, right mouse drops rockets' },
-  { id: 'jet', label: 'Fighter', note: 'will not fly below forty metres a second' },
-  { id: 'titan', label: 'Mech', note: 'yours: chaingun, rockets, a dash and a landing that opens the road' },
+  { id: 'jet', label: 'Fighter', note: 'arrives in the air with you in it; it will not fly below forty metres a second' },
+  { id: 'titan', label: 'Mech', note: 'yours: five weapons, a rocket pod, a dash and a landing that opens the road' },
 ];
 
 export class Cheats {
@@ -93,6 +99,7 @@ export class Cheats {
     this.noDrones = false;
     this.cinematic = false;
     this.slowBlast = false;
+    this.mechKillers = false;
     this.gib = false;
     this.ragdoll = false;
     this.blood = false;
@@ -110,7 +117,7 @@ export class Cheats {
   /** @returns {boolean} true when anything at all is on */
   get any() {
     return this.godmode || this.infiniteAmmo || this.nukeRain || this.noDrones
-      || this.cinematic || this.slowBlast
+      || this.cinematic || this.slowBlast || this.mechKillers
       || this.gib || this.ragdoll || this.blood || this.ultraGore
       || this.anyValue;
   }

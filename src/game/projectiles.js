@@ -124,6 +124,12 @@ export class Projectiles {
     b.bouncesLeft = spec.bounces !== undefined ? spec.bounces : Infinity;
     b.homing = o.homing || null;
     b.target = o.target || null;
+    // Two things a shot can carry on itself rather than in a weapon row,
+    // because a mech's arms are their own table and so is a warhead: the
+    // fire a thermite canister leaves behind, and the pulse an EMP puts out.
+    b.thermite = o.thermite || null;
+    b.emp = o.emp || null;
+    b.mechKill = o.mechKill || null;
     b.spin = 0;
     b.seed = Math.random();
     this.active.push(b);

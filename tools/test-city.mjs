@@ -651,6 +651,123 @@ async function run() {
     }
     return out;
   });
+  // --- the readout in front of you -----------------------------------------
+  const hud = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const read = () => ({
+      name: document.getElementById('vehiclename').textContent,
+      hull: document.getElementById('vehiclehull').style.width,
+      speed: Number(document.getElementById('vehiclespeed').textContent),
+      alt: document.getElementById('vehiclealtstat').classList.contains('hidden')
+        ? null : Number(document.getElementById('vehiclealt').textContent),
+      gun: document.getElementById('vehiclegun').textContent,
+      warn: document.getElementById('vehiclewarn').classList.contains('hidden')
+        ? '' : document.getElementById('vehiclewarn').textContent,
+      shown: !document.getElementById('vehicle').classList.contains('hidden'),
+    });
+    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    s.vehicles.reset();
+    s.look(0, 0);
+    // A tank, driven, then shot at, then fired.
+    const t = s.vehicles.spawn('tank', s.player.x + 4, s.player.z, 0);
+    s.teleport(t.x + 1.5, t.z);
+    s.toggleVehicle();
+    s.input.keys.add('KeyW');
+    // The fastest the panel ever showed, rather than whatever it reads at the
+    // end: a tank that found a wall on the way is still a tank that drove.
+    let topSpeed = 0;
+    for (let i = 0; i < 180; i++) {
+      s.fixedForTest(1 / 60);
+      if (i % 10 === 0) { await frame(); topSpeed = Math.max(topSpeed, read().speed); }
+    }
+    s.input.keys.delete('KeyW');
+    await frame();
+    const driving = read();
+    driving.topSpeed = topSpeed;
+    s.vehicles.damage(t, t.maxHealth * 0.9);
+    s.input.fire = true;
+    for (let i = 0; i < 4; i++) s.fixedForTest(1 / 60);
+    s.input.fire = false;
+    await frame();
+    const hurt = read();
+    const critical = document.getElementById('vehicle').classList.contains('critical');
+    s.toggleVehicle();
+    // And a helicopter, which has one number a tank does not.
+    s.vehicles.reset();
+    const h = s.vehicles.spawn('heli', s.player.x + 4, s.player.z, 0, 0);
+    s.teleport(h.x + 1.5, h.z);
+    s.toggleVehicle();
+    s.input.keys.add('Space');
+    s.input.jumpHeld = true;
+    for (let i = 0; i < 200; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('Space');
+    s.input.jumpHeld = false;
+    await frame();
+    const flying = read();
+    s.toggleVehicle();
+    await frame();
+    const onFoot = read();
+    return { driving, hurt, critical, flying, onFoot };
+  });
+  check('what you are driving says what it is and what is left of it',
+    hud.driving.shown && /Tank/.test(hud.driving.name) && hud.driving.hull === '100%',
+    `${hud.driving.name}, hull ${hud.driving.hull}`);
+  check('and how fast it is going and whether the gun is ready',
+    hud.driving.topSpeed > 12 && hud.hurt.gun !== 'ready',
+    `up to ${hud.driving.topSpeed} km/h, gun ${hud.hurt.gun} after firing`);
+  check('the hull bar falls with the hull, and goes red near the end',
+    parseInt(hud.hurt.hull, 10) <= 10 && hud.critical,
+    `${hud.hurt.hull} left`);
+  check('an aircraft also reads its height above the ground',
+    hud.flying.alt !== null && hud.flying.alt > 8,
+    `${hud.flying.alt} m up`);
+  check('and the panel goes away when you get out', !hud.onFoot.shown);
+
+  // --- and the fighter actually flies --------------------------------------
+  const takeoff = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.setCheat('godmode', true);
+    s.vehicles.reset();
+    // Off the ground, down a street, the way a player would have to do it.
+    const j = s.vehicles.spawn('jet', s.player.x, s.player.z, -Math.PI / 2, 0);
+    s.teleport(j.x + 2, j.z);
+    s.toggleVehicle();
+    const g = s.world.groundHeight(j.x, j.z);
+    s.input.keys.add('KeyW');
+    let rolled = 0;
+    for (let i = 0; i < 60 * 6; i++) {
+      // Nose level until it is fast enough, then pull back.
+      s.look(-90, j.speed > s.vehicleSpec.jet.stall + 4 ? 18 : 0);
+      s.fixedForTest(1 / 60);
+      // Wheels down is the spawn height, not zero: an aircraft sits on its
+      // undercarriage.
+      if (j.y - g < 4) rolled = i / 60;
+    }
+    s.input.keys.delete('KeyW');
+    const climbed = j.y - g;
+    const speed = j.speed;
+    const health = j.health;
+    if (s.state.inVehicle) s.toggleVehicle();
+    // And from the menu, which hands you one already flying.
+    const called = s.dropRide('jet');
+    const inIt = s.state.inVehicle === called;
+    const up = called ? called.y - s.world.groundHeight(called.x, called.z) : 0;
+    if (s.state.inVehicle) s.toggleVehicle();
+    return {
+      rolled: Number(rolled.toFixed(1)),
+      climbed: Math.round(climbed),
+      speed: Math.round(speed),
+      health,
+      inIt,
+      up: Math.round(up),
+    };
+  });
+  check('a fighter can take off from the street it is parked in',
+    takeoff.climbed > 60 && takeoff.speed > 60 && takeoff.health > 0,
+    `rolled ${takeoff.rolled} s, ${takeoff.climbed} m up at ${takeoff.speed} m/s`);
+  check('and the menu hands you one already in the air',
+    takeoff.inIt && takeoff.up > 100, `${takeoff.up} m up, flying`);
+
   check('forward drives where you are looking, however it was parked',
     facing.every((f) => f.towardsView > 0.97),
     facing.map((f) => f.towardsView).join(', '));

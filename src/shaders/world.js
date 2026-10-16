@@ -208,6 +208,9 @@ uniform vec4 uScars[MAX_SCARS];      // xyz centre, w radius
 uniform vec4 uScarInfo[MAX_SCARS];   // x severity 0..1, y age in seconds
 uniform int uScarCount;
 uniform int uDebugMode;   // 0 off, 1 material, 2 normals, 3 uv, 4 world position
+// 1 while the damaged tiles are drawn inside out, to fill the holes a blast
+// leaves in one sided geometry. See Renderer.renderScene.
+uniform float uInside;
 
 layout(location = 0) out vec4 fragColour;
 
@@ -727,6 +730,13 @@ void main() {
   }
 
   vec3 n = normalize(s.normal);
+  // The inside of a surface. Every wall and every street in this city is one
+  // sided, so this is what you are looking at through a hole a blast has
+  // made: the back of the ground, the back of a wall, the inside of a ruin.
+  // It is lit with the normal turned round and then taken down to almost
+  // nothing, because the inside of the world has no light in it, and a black
+  // bite reads as damage where a bright one reads as a bug.
+  float inside = (gl_FrontFacing && uInside < 0.5) ? 1.0 : 0.0;
   if (!gl_FrontFacing) n = -n;
   vec3 L = uSunDir.xyz;
   vec3 V = normalize(uCamPos.xyz - vWorld);
@@ -805,6 +815,12 @@ void main() {
   specular += mix(uSkyHorizon.rgb, uSkyZenith.rgb, upness) * fres * 0.30;
 
   vec3 colour = diffuse + specular + s.emissive;
+  // Looking at the back of the world: the broken edge of a street or the
+  // inside of a wall that has had a bite taken out of it. Nearly black, with
+  // a little of the surface left so the shape is still readable, and the fog
+  // still on top so a hole three streets away is not a black hole punched in
+  // the picture.
+  colour = mix(colour * 0.09, colour, inside);
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
                     uSkyHorizon.rgb, uSkyZenith.rgb, uFog, uSkyZenith.w);
   fragColour = vec4(colour, 1.0);
