@@ -25,6 +25,10 @@ function districtFiles() {
   const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'world.json'), 'utf8'));
   const out = [];
   for (const d of index.districts || []) {
+    // A district nobody has built yet is in the index so the map can draw the
+    // whole city, and it has no files behind it. Shipping asks only about the
+    // ones that do.
+    if (d.built === false || !d.bin || !d.json) continue;
     for (const rel of [`public/${d.bin}`, `public/${d.json}`]) {
       if (fs.existsSync(path.join(ROOT, rel))) out.push(rel);
       else { console.error(`the index lists ${rel}, which is not here`); process.exit(1); }
