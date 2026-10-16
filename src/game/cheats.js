@@ -88,7 +88,7 @@ export const RIDES = [
   { id: 'tank', label: 'Tank', note: 'slow, hard to kill, one very large gun' },
   { id: 'heli', label: 'Helicopter', note: 'hovers; space climbs, right mouse drops rockets' },
   { id: 'jet', label: 'Fighter', note: 'arrives in the air with you in it; it will not fly below forty metres a second' },
-  { id: 'titan', label: 'Mech', note: 'yours: chaingun, rockets, a dash and a landing that opens the road' },
+  { id: 'titan', label: 'Mech', note: 'yours: five weapons, a rocket pod, a dash and a landing that opens the road' },
 ];
 
 export class Cheats {
