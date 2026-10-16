@@ -563,12 +563,19 @@ async function run() {
       mineY: Number(mine.y.toFixed(1)),
       theirsY: Number(theirs.y.toFixed(1)),
     };
-    // And a salvo of rockets out of the pod.
-    const before = s.projectiles.active.length;
+    // And a salvo of rockets out of the pod. Counted as they leave rather
+    // than by looking at what is still in the air: at two hundred and thirty
+    // metres a second the first ones have already arrived.
+    let rockets = 0;
+    const realRockets = s.mechs.onRockets;
+    s.mechs.onRockets = (mm, from, dir, spec) => {
+      if (mm.mine) rockets++;
+      realRockets(mm, from, dir, spec);
+    };
     s.input.secondary = true;
     for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
     s.input.secondary = false;
-    const rockets = s.projectiles.active.length - before;
+    s.mechs.onRockets = realRockets;
     const out = { inIt, walked: Math.round(walked), hp0, hp1, rockets, torso: 0, why };
     // The torso goes where you look and the legs follow it rather than leading.
     s.look((yaw + 1.2) * 180 / Math.PI, 0);
@@ -595,6 +602,36 @@ async function run() {
     !piloted.skip && piloted.rockets >= 3, `${piloted.rockets} in the air`);
   check('the torso goes where you look and the legs follow',
     !piloted.skip && piloted.torsoSnap && piloted.legsLag && piloted.outAgain);
+
+  // --- the call ------------------------------------------------------------
+  const called = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.mechs.reset();
+    s.demolition.reset();
+    const m = s.dropRide('titan');
+    if (!m) return { skip: true };
+    const banner = !document.getElementById('titanfall').classList.contains('hidden');
+    const text = document.querySelector('#titanfall .tfline').textContent;
+    const high = Math.round(m.y - s.world.groundHeight(m.x, m.z));
+    let frames = 0;
+    for (let i = 0; i < 60 * 8 && m.y - s.world.groundHeight(m.x, m.z) > 0.5; i++) {
+      s.fixedForTest(1 / 60);
+      frames++;
+    }
+    return {
+      banner, text, high,
+      seconds: Number((frames / 60).toFixed(1)),
+      gone: document.getElementById('titanfall').classList.contains('hidden'),
+      sites: s.demolition.sites.length + s.demolition.baked,
+      walked: m.walk !== 0,
+    };
+  });
+  check('a mech you call for arrives out of the sky',
+    !called.skip && called.banner && /titanfall/i.test(called.text) && called.high > 150,
+    called.skip ? 'no room to drop one' : `"${called.text}", ${called.high} m up`);
+  check('and the landing opens the road and takes the words off the screen',
+    !called.skip && called.seconds < 5 && called.gone && called.sites > 0,
+    called.skip ? '' : `down in ${called.seconds} s, ${called.sites} places came apart`);
 
   const stomp = await page.evaluate(async () => {
     const s = window.spreefall;

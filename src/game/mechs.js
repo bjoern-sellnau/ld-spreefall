@@ -37,7 +37,7 @@ export const MECH = {
     // chaingun, because a salvo at twenty metres is not a fight, it is a
     // cutscene in which you die.
     rockets: {
-      salvo: 4, gap: 0.22, interval: 7.0, speed: 92, minRange: 55,
+      salvo: 4, gap: 0.22, interval: 7.0, speed: 170, minRange: 55,
       splash: { radius: 11, damage: 120, force: 16 }, muzzle: [-2.05, 6.3, -1.4],
     },
   },
@@ -58,8 +58,12 @@ export const MECH = {
       damage: 24, interval: 0.075, burst: 0, rest: 0,
       spread: 0.022, range: 260, muzzle: [2.05, 5.6, -3.2],
     },
+    // A salvo is six rockets in half a second, and they go fast enough to
+    // reach what you aimed at before it has walked out from under them. The
+    // first pass had them at a hundred and fifteen metres a second, which is
+    // a lob rather than a launch.
     rockets: {
-      salvo: 6, gap: 0.09, interval: 3.4, speed: 115,
+      salvo: 6, gap: 0.07, interval: 3.0, speed: 230,
       splash: { radius: 14, damage: 230, force: 22 }, muzzle: [-2.05, 6.3, -1.4],
     },
     // What a forty tonne landing does to whatever is standing under it.
@@ -152,6 +156,26 @@ export class Mechs {
     m.dashCool = 0;
     m.stepAt = 0;
     this.active.push(m);
+    return m;
+  }
+
+  /**
+   * Drops one out of the sky.
+   *
+   * Same mech, same spawn, with two hundred metres of air underneath it and
+   * enough speed to arrive like forty tonnes rather than settle like a leaf.
+   * The landing goes through the ordinary stomp, which opens the road, with
+   * the drop flag making it the heavier version.
+   *
+   * @returns {object|null}
+   */
+  drop(type, x, z, yaw = 0, height = 220) {
+    const m = this.spawn(type, x, z, yaw);
+    if (!m) return null;
+    m.y = this.world.groundHeight(x, z) + height;
+    m.vy = -60;
+    m.onGround = false;
+    m.dropping = true;
     return m;
   }
 
@@ -327,11 +351,14 @@ export class Mechs {
 
   _pilot(m, dt, c, target) {
     const s = m.spec;
-    // The torso goes where you are looking, at once; the legs follow it, which
-    // is what makes turning feel like forty tonnes rather than like a mouse.
+    // The torso goes where you are looking, at once. The legs follow the way
+    // the thing is actually travelling rather than the way the torso faces,
+    // which is what stops it walking sideways across its own feet when you
+    // strafe and looking as though it were walking backwards every time you
+    // turned round: the legs were pointing where you looked while the body
+    // moved somewhere else.
     m.torso = c.yaw;
     m.pitch = clamp(c.pitch, -0.7, 0.7);
-    m.yaw = turnTowards(m.yaw, m.torso, s.turn * dt);
 
     if (m.dashCool > 0) m.dashCool -= dt;
     if (c.dash && m.dashLeft <= 0 && m.dashCool <= 0) {
@@ -346,6 +373,8 @@ export class Mechs {
     const rx = Math.cos(m.torso), rz = -Math.sin(m.torso);
     const wx = (fx * c.forward + rx * c.strafe) * speed;
     const wz = (fz * c.forward + rz * c.strafe) * speed;
+    const going = Math.hypot(wx, wz) > 0.1 ? Math.atan2(-wx, -wz) : m.torso;
+    m.yaw = turnTowards(m.yaw, going, s.turn * dt);
     this._move(m, dt, wx, wz);
 
     if (c.jump && m.onGround) { m.vy = s.jump; m.onGround = false; }
@@ -367,19 +396,23 @@ export class Mechs {
     const dy = (target.y + 1.4) - eye;
     m.pitch = clamp(Math.atan2(dy, away), -0.7, 0.7);
 
-    // Walk in until it is close enough to be a problem, then hold.
+    // Walk in until it is close enough to be a problem, then hold. Either
+    // way the legs are turned to the way it is going rather than to the way
+    // it is looking, so it walks rather than sliding sideways.
+    let wx = 0, wz = 0;
     if (away > s.keep) {
-      m.yaw = turnTowards(m.yaw, want, s.turn * dt);
-      const fx = -Math.sin(m.yaw), fz = -Math.cos(m.yaw);
-      this._move(m, dt, fx * s.walk, fz * s.walk);
+      const fx = -Math.sin(want), fz = -Math.cos(want);
+      wx = fx * s.walk; wz = fz * s.walk;
     } else {
       // Close in, it sidesteps rather than standing still, so a mech is not a
       // wall you can lean on.
-      const side = (Math.floor(m.walk / 6) % 2 === 0) ? 1 : -1;
-      const rx = Math.cos(m.yaw) * side, rz = -Math.sin(m.yaw) * side;
-      m.yaw = turnTowards(m.yaw, want, s.turn * dt);
-      this._move(m, dt, rx * s.walk * 0.45, rz * s.walk * 0.45);
+      const side = (Math.floor(Math.abs(m.walk) / 6) % 2 === 0) ? 1 : -1;
+      wx = Math.cos(want) * side * s.walk * 0.45;
+      wz = -Math.sin(want) * side * s.walk * 0.45;
     }
+    const going = Math.hypot(wx, wz) > 0.1 ? Math.atan2(-wx, -wz) : want;
+    m.yaw = turnTowards(m.yaw, going, s.turn * dt);
+    this._move(m, dt, wx, wz);
 
     const canSee = away < s.engage && this._lineOfSight(m, target);
     const rockets = s.rockets.minRange ? away > s.rockets.minRange : true;
@@ -481,9 +514,14 @@ export class Mechs {
         if (!this.isSanctuary(nx, 0, nz)) { m.x = nx; m.z = nz; }
       }
       m.speed = Math.hypot(wx, wz);
-      // The stride, and a footfall twice a cycle.
+      // The stride, and a footfall twice a cycle. Its sign is the sign of the
+      // travel along the legs' own facing: going backwards plays the cycle
+      // backwards, which is the difference between stepping back and
+      // moonwalking.
+      const lx = -Math.sin(m.yaw), lz = -Math.cos(m.yaw);
+      const sense = (wx * lx + wz * lz) >= 0 ? 1 : -1;
       const was = m.walk;
-      m.walk += dt * (2.2 + m.speed * 0.26);
+      m.walk += dt * (2.2 + m.speed * 0.26) * sense;
       if (Math.floor(was / Math.PI) !== Math.floor(m.walk / Math.PI) && m.onGround) {
         if (this.onStep) this.onStep(m, m.speed > s.walk * 0.9);
       }
@@ -503,8 +541,14 @@ export class Mechs {
       const fell = m.vy;
       m.y = floor;
       m.vy = 0;
-      if (!m.onGround && s.stomp && fell < -s.stomp.speed && this.onStomp) {
-        this.onStomp(m, s.stomp);
+      if (!m.onGround && this.onStomp && (m.dropping || (s.stomp && fell < -s.stomp.speed))) {
+        // A drop lands harder than a jump, because it has come two hundred
+        // metres rather than three.
+        const stomp = s.stomp || MECH.titan.stomp;
+        this.onStomp(m, m.dropping
+          ? { ...stomp, radius: stomp.radius * 1.8, damage: stomp.damage * 1.6 }
+          : stomp, m.dropping);
+        m.dropping = false;
       }
       m.onGround = true;
     } else if (m.onGround && m.y - floor < s.climb && m.vy <= 0) {

@@ -75,6 +75,7 @@ const el = {
   vehicleDashStat: $('vehicledashstat'), vehicleDash: $('vehicledash'),
   vehicleWarn: $('vehiclewarn'),
   rideHint: $('ridehint'), rideHintName: $('ridehintname'),
+  titanfall: $('titanfall'), titanfallSub: $('titanfallsub'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
   targetHint: $('targethint'), cinemaHint: $('cinemahint'),
@@ -750,7 +751,14 @@ async function main() {
   // And the landing, which opens the road. This is not an explosion: it is
   // forty tonnes arriving, so it goes through the city and through whatever
   // is standing in the circle, and the pilot inside the armour is fine.
-  mechs.onStomp = (m, stomp) => {
+  mechs.onStomp = (m, stomp, dropped = false) => {
+    if (dropped) {
+      el.titanfall.classList.add('hidden');
+      state.titanInbound = null;
+      state.flash = Math.min(0.5, state.flash + 0.22);
+      feed(`<b>${m.spec.name.toLowerCase()} down</b> ready to board`);
+      toast(`${m.spec.name} is down. F to get in.`);
+    }
     audio.explosion();
     effects.blast(m.x, m.y + 0.4, m.z, stomp.radius);
     effects.dust(m.x, m.y, m.z, stomp.radius * 0.7);
@@ -1276,9 +1284,9 @@ async function main() {
     if (state.mode !== 'walk') return null;
     cheats.used = true;
     applyCheats();
-    // A mech needs more room than a jeep and is not in the vehicle table at
-    // all, so it goes out through its own spawner.
-    if (MECH[type]) return spawnMech(type, 14);
+    // A mech is not in the vehicle table at all, and it does not walk out of
+    // a side street: it is dropped.
+    if (MECH[type]) return callTitan(type);
     // A fighter needs a runway, and a street is not one. Asked for from the
     // menu it arrives in the air, already flying, with you in it: the cheat
     // is the take off. It can still be taken off the ground if you find
@@ -1326,6 +1334,31 @@ async function main() {
   }
 
   /**
+   * Calls one down.
+   *
+   * It picks a clear spot a little way off, puts the words on the screen, and
+   * drops forty tonnes from two hundred metres. The landing is the arrival:
+   * it opens the road under it, and anything standing there is standing in
+   * the wrong place.
+   *
+   * @param {string} type a key of MECH
+   * @returns {object|null} the mech on its way down
+   */
+  function callTitan(type) {
+    const spot = mechSpot(26);
+    if (!spot) { toast('no room to drop one here'); return null; }
+    const yaw = Math.atan2(-(player.x - spot.x), -(player.z - spot.z));
+    const m = mechs.drop(type, spot.x, spot.z, yaw);
+    if (!m) return null;
+    el.titanfallSub.textContent = `${m.spec.name} inbound`;
+    el.titanfall.classList.remove('hidden');
+    state.titanInbound = m;
+    audio.machineCall(0, true);
+    feed('<b>standby for titanfall</b>');
+    return m;
+  }
+
+  /**
    * Puts a mech on the street near you, in the first place one fits.
    *
    * It is a bigger thing than a jeep, so the search is wider and it asks for
@@ -1337,6 +1370,20 @@ async function main() {
    * @returns {object|null}
    */
   function spawnMech(type, away = 14) {
+    const spot = mechSpot(away);
+    if (!spot) return null;
+    return mechs.spawn(type, spot.x, spot.z, spot.a + Math.PI);
+  }
+
+  /**
+   * Somewhere near you with room for eight metres of machine: loaded ground,
+   * nothing within seven metres in any of the four directions, so it is not
+   * dropped into a courtyard it cannot walk out of.
+   *
+   * @param {number} away how far out to look
+   * @returns {{x,z,a}|null}
+   */
+  function mechSpot(away = 14) {
     for (let i = 0; i < 28; i++) {
       const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
       const r = away * (0.8 + Math.random() * 0.6);
@@ -1350,8 +1397,7 @@ async function main() {
         }
       }
       if (boxed) continue;
-      const m = mechs.spawn(type, x, z, a + Math.PI);
-      if (m) return m;
+      return { x, z, a };
     }
     return null;
   }

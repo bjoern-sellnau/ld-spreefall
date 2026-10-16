@@ -432,6 +432,35 @@ html, body {
   color: #d6d1c6;
   backdrop-filter: blur(3px);
 }
+/* The call. Two lines across the middle of the screen while forty tonnes
+   falls out of the sky, and gone the moment it lands. */
+#titanfall {
+  position: fixed;
+  left: 0; right: 0; top: 34%;
+  z-index: 46;
+  text-align: center;
+  pointer-events: none;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.9);
+}
+#titanfall .tfline {
+  font: 700 clamp(26px, 4.6vw, 52px)/1.05 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f2efe9;
+  animation: tfpulse 1.1s ease-in-out infinite;
+}
+#titanfall .tfsub {
+  margin-top: 10px;
+  font: 11px/1 ui-monospace, monospace;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+@keyframes tfpulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 #ridehint {
   position: absolute;
   left: 50%; top: 58%;
@@ -804,7 +833,18 @@ html, body {
   background: var(--panel);
   border: 1px solid var(--edge);
   box-shadow: 0 20px 70px rgba(0, 0, 0, 0.6);
+  /* Taller than the window on a laptop once the help has a line for every
+     key, so it scrolls rather than running off the bottom of the screen. */
+  max-height: 84vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+.panel::-webkit-scrollbar { width: 9px; }
+.panel::-webkit-scrollbar-thumb {
+  background: rgba(226, 201, 141, 0.28);
+  border-radius: 5px;
+}
+.panel::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.04); }
 .panel h2 { margin: 0 0 16px; font-size: 16px; letter-spacing: 0.06em; color: var(--accent); font-weight: 600; }
 .panel table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .panel td { padding: 5px 0; color: #cfcabf; vertical-align: top; }

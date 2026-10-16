@@ -1119,3 +1119,29 @@ is what prompted the change.
   said the target was thirteen metres below the muzzle, standing in a crater
   the earlier checks had dug. Two faults in one measurement, one in the test
   and one in the game.
+
+## 24. Titanfall
+
+- 2026-10-16: the mech was walking backwards, and it was the legs rather than
+  the animation. The legs followed the torso, and the torso follows where you
+  look, so every time you turned round or strafed the body travelled one way
+  while the legs pointed another: a walk cycle playing against the direction
+  of travel, which reads as moonwalking. The legs now turn towards the way the
+  thing is actually going, and the stride runs with the sign of the travel
+  along them, so stepping back plays the cycle backwards. The hunting ones got
+  the same treatment, which also stopped them sliding sideways round you.
+
+- 2026-10-16: a mech you call for is dropped rather than parked. The words go
+  up on the screen, forty tonnes comes down from two hundred metres at sixty
+  metres a second, and the landing is the arrival: it opens the road under it
+  with half again the radius of an ordinary stomp. It takes two and a half
+  seconds, which is about as long as it takes to look up.
+
+- 2026-10-16: the rocket pod throws its salvo at two hundred and thirty metres
+  a second rather than a hundred and fifteen, which is the difference between
+  a launch and a lob. The check that counts the salvo had to stop counting
+  what is still in the air, because at that speed the first rockets have
+  already arrived before the last has left.
+
+- 2026-10-16: the help panel scrolls. It has a line for every key now and a
+  laptop screen ran out before the list did.
