@@ -38,6 +38,11 @@ export const MACHINES = {
   beam: { damage: 18, interval: 1.15, charge: 0.45, range: 190 },
   // What an EMP does to one.
   stun: { seconds: 7.5, radius: 34, damageMultiplier: 4 },
+  // And the warhead some of them carry when the cheat menu lets them: how
+  // long between launches, and how far out they will take the shot. It is an
+  // anti armour weapon, so one of these only comes off the shoulder when the
+  // thing it is looking at is armour.
+  killer: { interval: 7.5, range: 240 },
   // And the heavy ones. Two at a time is plenty: a Reaper is eight metres of
   // walking gun and the city is not wide enough for a herd of them.
   mechs: 2,
@@ -104,8 +109,13 @@ export class Machines {
  * takes cover, it loses you behind a wall. What changes is what it is made of
  * and what it shoots with.
  */
-export function makeMachine(s) {
+export function makeMachine(s, mechKiller = false) {
   s.machine = true;
+  // Whether this one is carrying a mech killer. Off unless the cheat menu
+  // says otherwise, and decided once when it walks in rather than every time
+  // it shoots, so a street is a mix rather than a lottery.
+  s.mechKiller = !!mechKiller;
+  s.killerLeft = 1.5 + Math.random() * 3;
   // The body is the skeleton the ion cannon leaves, and it is steel rather
   // than bone because of the flag, not because of a second mesh.
   s.charred = 1;

@@ -579,20 +579,65 @@ async function main() {
       incendiaryBurst(x, world.groundHeight(x, z), z, body.thermite);
     }
     // An EMP: a blue ring, a rising whine, and everything with a motor in it
-    // inside the radius stops where it stands.
-    if (body && body.weapon && WEAPONS[body.weapon] && WEAPONS[body.weapon].emp) {
-      const spec = WEAPONS[body.weapon].emp;
-      const caught = empBurst(soldiers.active, drones.active, x, y, z, spec.radius);
+    // inside the radius stops where it stands. The numbers come off the
+    // weapon that threw it, or off the body itself when the thing that fired
+    // it was not holding one of ours.
+    const row = body && body.weapon ? WEAPONS[body.weapon] : null;
+    const empSpec = (body && body.emp) || (row && row.emp) || null;
+    if (empSpec) {
+      const caught = empBurst(soldiers.active, drones.active, x, y, z, empSpec.radius);
+      // A mech has a motor in it too. It is the largest thing an EMP can
+      // catch and the one it was worth building for.
+      let heavy = 0;
+      for (const mk of [...mechs.active]) {
+        if (Math.hypot(mk.x - x, mk.z - z) > empSpec.radius) continue;
+        if (mechs.stunFor(mk, empSpec.seconds)) heavy++;
+      }
       audio.emp(dist);
-      effects.flash(x, y + 1.5, z, spec.radius * 0.5, 0.35, 0.7, 1.0, 0.5);
+      effects.flash(x, y + 1.5, z, empSpec.radius * 0.5, 0.35, 0.7, 1.0, 0.5);
       for (let i = 0; i < 30; i++) {
         const a = (i / 30) * Math.PI * 2;
-        const r = spec.radius * (0.3 + Math.random() * 0.7);
+        const r = empSpec.radius * (0.3 + Math.random() * 0.7);
         effects.spark(x + Math.cos(a) * r, y + 0.6 + Math.random() * 2,
           z + Math.sin(a) * r, 0.4, 0.75, 1.0);
       }
-      renderer.addScar(x, y, z, spec.radius * 0.4, 0.3);
-      if (caught) feed(`<b>EMP</b> ${caught} down`);
+      renderer.addScar(x, y, z, empSpec.radius * 0.4, 0.3);
+      if (caught + heavy) feed(`<b>EMP</b> ${caught + heavy} down`);
+    }
+
+    // And the warhead behind the EMP, which is the part that is meant for
+    // armour. It goes off against the machine rather than against the
+    // street: the blast above has already dealt with the street, and what
+    // this adds is enough to take a Reaper apart in one and to put a Titan
+    // on one knee. Whatever is left standing is stopped for a few seconds,
+    // which is the opening a second one goes through.
+    const killSpec = (body && body.mechKill) || (row && row.mechKill) || null;
+    if (killSpec) {
+      effects.flash(x, y + 2.0, z, killSpec.radius * 0.8, 0.8, 0.9, 1.0, 0.35);
+      effects.shake = Math.min(2.0, effects.shake
+        + Math.max(0, 1 - dist / (killSpec.radius * 3)) * 1.2);
+      for (const mk of [...mechs.active]) {
+        if (!mk.alive || mk.health <= 0) continue;
+        const mid = mk.y + mk.spec.height * 0.72;
+        const r = Math.hypot(mk.x - x, mid - y, mk.z - z);
+        if (r > killSpec.radius) continue;
+        // It falls off with distance, but not by much: a warhead that only
+        // works on a direct hit is a warhead that mostly does nothing, and
+        // a rocket at a mech's feet is as much of a hit as anybody gets.
+        const dmg = killSpec.damage * (1 - 0.35 * (r / killSpec.radius));
+        mechs.stunFor(mk, killSpec.stun);
+        for (let i = 0; i < 12; i++) {
+          effects.spark(mk.x + (Math.random() - 0.5) * 4,
+            mk.y + 2 + Math.random() * 5,
+            mk.z + (Math.random() - 0.5) * 4, 0.45, 0.8, 1.0);
+        }
+        if (mechs.damage(mk, dmg)) {
+          creditTarget(mk, true, 'mech');
+          feed('<b>mech killer</b> one down');
+        } else if (mk === state.inMech) {
+          toast('systems jammed');
+        }
+      }
     }
 
     // And what it did to the city itself. Small blasts add up on a grid and
@@ -1005,6 +1050,48 @@ async function main() {
     if (killed) creditTarget(best.target, best.core, best.kind);
     return best;
   }
+
+  /**
+   * One of theirs putting a mech killer into what you are standing in.
+   *
+   * The same warhead you carry, out of a shoulder tube rather than a
+   * launcher, and it chases: a Titan walks at eleven metres a second and a
+   * rocket that has to be led is a rocket that lands behind it.
+   */
+  soldiers.onMechKiller = (sd) => {
+    const spec = WEAPONS.mechkiller;
+    const ride = state.inMech || state.inVehicle;
+    const to = ride
+      ? { x: ride.x, y: ride.y + (ride.spec.height || 2) * 0.6, z: ride.z }
+      : { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    // Out in front of it rather than out of the middle of it. The list of
+    // bodies a rocket asks about has the firing machine on it, and a warhead
+    // that starts inside its own launcher goes off in its own hands.
+    const eye = { x: sd.x, y: sd.y + 1.5, z: sd.z };
+    const dx = to.x - eye.x, dy = to.y - eye.y, dz = to.z - eye.z;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    const from = {
+      x: eye.x + dx / l * 1.8, y: eye.y + dy / l * 1.8, z: eye.z + dz / l * 1.8,
+    };
+    projectiles.launch('rocket', {
+      x: from.x, y: from.y, z: from.z,
+      vx: dx / l * spec.muzzleSpeed,
+      vy: dy / l * spec.muzzleSpeed,
+      vz: dz / l * spec.muzzleSpeed,
+      splash: spec.splash,
+      weapon: 'mechkiller',
+      // Carried on the body rather than read off the weapon row, because the
+      // row belongs to what you are holding and this one left somebody
+      // else's shoulder.
+      emp: spec.emp,
+      mechKill: spec.mechKill,
+      homing: spec.lock ? { turn: spec.lock.turn * 0.6, range: spec.lock.range } : null,
+      target: ride || { x: player.x, y: player.y, z: player.z, height: 1.8, alive: true },
+    });
+    audio.gunshot('rpg');
+    effects.flash(from.x, from.y, from.z, 2.0, 1.0, 0.6, 0.25, 0.1);
+    feed('<b>mech killer</b> inbound');
+  };
 
   soldiers.onStunSpark = (s) => {
     effects.spark(s.x + (Math.random() - 0.5), s.y + 0.8 + Math.random() * 0.9,
@@ -1498,7 +1585,8 @@ async function main() {
     }
 
     let warn = '';
-    if (hull < 0.16) warn = 'hull critical';
+    if (m.stun > 0) warn = `systems jammed ${m.stun.toFixed(1)}s`;
+    else if (hull < 0.16) warn = 'hull critical';
     else if (m.reloadLeft > 0) warn = 'reloading';
     else if (m.mags[m.arm] <= 0) warn = 'empty';
     el.mechWarn.textContent = warn;
@@ -2003,12 +2091,25 @@ async function main() {
    * Rise of the Machines, while it is running: keep the streets populated,
    * drop warheads on the skyline, and hold the sky where the mode wants it.
    */
+  /**
+   * Whether the machine walking in now is one of the ones carrying a mech
+   * killer. Rolled when it arrives rather than when it shoots, so what a
+   * street holds is settled and a given one either has one or does not.
+   */
+  function rollMechKiller() {
+    if (!cheats.mechKillers) return false;
+    return Math.random() < cheats.value('mechKillerOdds') / 100;
+  }
+
   function machinesTick(dt) {
     if (!machines.active || state.mode !== 'walk') return;
+    // What they are looking at. A warhead meant for armour is not spent on a
+    // man on foot, and this is the only place that knows the difference.
+    soldiers.armouredTarget = !!(state.inMech || state.inVehicle);
     const standing = soldiers.active.filter((s) => s.machine && s.alive).length;
     if (machines.tickSpawn(dt, standing)) {
       const made = soldiers.spawnNear(player.x, player.z, MACHINES.spawnFrom, MACHINES.spawnTo);
-      if (made) makeMachine(made);
+      if (made) makeMachine(made, rollMechKiller());
     }
     // And the heavy ones, walking in from further out.
     const heavies = mechs.active.filter((m) => !m.mine && m.health > 0).length;
@@ -2058,11 +2159,13 @@ async function main() {
       renderer.fogDensity = MACHINES.fog;
       renderer.armageddon = 1;
       soldiers.beam = MACHINES.beam;
+      soldiers.killer = MACHINES.killer;
       el.hud.classList.add('machines');
     } else {
       renderer.fogDensity = 0.00075;
       renderer.armageddon = 0;
       soldiers.beam = null;
+      soldiers.killer = null;
       el.hud.classList.remove('machines');
     }
   }
@@ -3108,6 +3211,7 @@ async function main() {
       case 'KeyZ': weapon.select('flamer'); break;
       case 'KeyB': weapon.select('incendiary'); break;
       case 'KeyX': weapon.select('emp'); break;
+      case 'KeyK': weapon.select('mechkiller'); break;
       case 'KeyT': {
         const n = weapon.detonate();
         if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
@@ -3905,7 +4009,10 @@ async function main() {
     fireWalls,
     burningGround: burning,
     machines, machineSpec: MACHINES,
-    makeMachine(s) { return makeMachine(s); },
+    // The same way one arrives in the mode: with the warhead rolled for it,
+    // so a check sees what a player would see.
+    makeMachine(s, killer = rollMechKiller()) { return makeMachine(s, killer); },
+    mechKillerRoll() { return rollMechKiller(); },
     machinesTick(dt) { machinesTick(dt); },
     machineMuzzle(s) { return machineMuzzle(s); },
     setMode(name) { machines.set(name === 'machines'); applyMachineLook(); return machines.active; },

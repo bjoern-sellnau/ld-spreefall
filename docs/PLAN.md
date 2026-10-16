@@ -1187,3 +1187,28 @@ is what prompted the change.
   The street catching light under a Titan was being charged to the man in the
   seat, and so was the blast from a rocket that had already dented the hull:
   both now go to the machine, which is the thing standing in them.
+
+- 2026-10-16: a mech killer. An EMP warhead with a charge behind it, on K,
+  which locks onto what it is aimed at and chases it: against a street it is
+  a heavy rocket and no more, against anything with a motor it is a pulse
+  that stops it dead, and against armour it is three thousand, which takes a
+  Reaper apart on its own and leaves a Titan on one knee with its shield
+  gone. The shield going is the EMP rather than the warhead: it is held up by
+  the same electronics the pulse has just stopped, so what the second rocket
+  lands on is bare hull. A mech stopped this way does not walk, aim, fire or
+  recharge for four and a half seconds, and the cockpit says so.
+
+- 2026-10-16: and the machines can carry one, by a toggle and a slider in the
+  cheat menu: whether any of them have it at all, and what share of them do.
+  It is rolled once when a machine walks in rather than every time it shoots,
+  so a street is a mix rather than a lottery, and one of them only reaches
+  for the warhead when what it is looking at is armour, because an anti mech
+  rocket spent on a man on foot is a rocket wasted. Theirs comes out of the
+  shoulder a metre and a half in front of the launcher: the list of bodies a
+  rocket asks about now has mechs on it, and the first version went off in
+  its own hands.
+
+- 2026-10-16: the lock could not see a mech, which made the one thing worth
+  locking a rocket onto the one thing you could not lock onto. It can now,
+  except for yours, because a dart that chases your own Titan across the
+  square is not a feature.

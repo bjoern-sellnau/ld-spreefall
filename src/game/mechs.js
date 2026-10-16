@@ -241,6 +241,14 @@ export class Mechs {
     m.shield = spec.shield ? spec.shield.max : 0;
     m.shieldMax = spec.shield ? spec.shield.max : 0;
     m.shieldWait = 0;
+    // Stopped where it stands. An EMP warhead does this, and while it lasts
+    // nothing about the machine works: not the legs, not the guns, and not
+    // the shield, which is the whole point of putting one into it first.
+    m.stun = 0;
+    // How tall it is, on the body rather than only on the spec, because a
+    // rocket that chases reads the height off whatever it is chasing and a
+    // mech without one gets chased at the ankles.
+    m.height = spec.height;
     this.active.push(m);
     return m;
   }
@@ -347,6 +355,28 @@ export class Mechs {
     };
   }
 
+  /**
+   * Stops one where it stands, for a while.
+   *
+   * @returns {boolean} whether it was standing to begin with
+   */
+  stunFor(m, seconds) {
+    if (!m || !m.alive || m.health <= 0) return false;
+    m.stun = Math.max(m.stun || 0, seconds);
+    // The shield goes with it. It is held up by the same electronics the
+    // pulse has just stopped, and an EMP that left it standing would be a
+    // weapon with nothing to recommend it over a shell: what this is for is
+    // taking the armour off so that whatever arrives next lands on the hull.
+    m.shield = 0;
+    // And it does not start filling again until the machine has come back.
+    m.shieldWait = Math.max(m.shieldWait, seconds);
+    m.charge = 0;
+    m.wasFiring = false;
+    m.salvoLeft = 0;
+    if (this.onStun) this.onStun(m, seconds);
+    return true;
+  }
+
   damage(m, amount) {
     if (!m.alive || m.health <= 0) return false;
     m.hitFlash = 1;
@@ -440,6 +470,15 @@ export class Mechs {
         m.vy -= m.spec.gravity * dt;
         m.y = Math.max(this.world.groundHeight(m.x, m.z), m.y + m.vy * dt);
         if (m.dying > 12) { m.alive = false; this.active.splice(i, 1); }
+        continue;
+      }
+      if (m.stun > 0) {
+        // Dead on its feet. It still falls, and the ground still holds it up,
+        // but it does not walk, aim or fire, and the shield does not come
+        // back: the timer above was reset by the same hit that stopped it.
+        m.stun -= dt;
+        m.speed = 0;
+        this._ground(m, dt);
         continue;
       }
       if (m.occupied && controls) this._pilot(m, dt, controls, target);

@@ -129,6 +129,7 @@ export class Projectiles {
     // fire a thermite canister leaves behind, and the pulse an EMP puts out.
     b.thermite = o.thermite || null;
     b.emp = o.emp || null;
+    b.mechKill = o.mechKill || null;
     b.spin = 0;
     b.seed = Math.random();
     this.active.push(b);

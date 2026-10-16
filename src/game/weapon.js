@@ -436,7 +436,11 @@ export class Weapon {
 
   fire(eye, dir) {
     const spec = this.spec;
-    if (!this.infiniteAmmo) this.ammo--;
+    // Never below empty. The trigger upstairs will not let a shot through
+    // without a round behind it, but the checks fire this directly, and a
+    // magazine that reads minus one on the screen is a bug wherever it came
+    // from.
+    if (!this.infiniteAmmo) this.ammo = Math.max(0, this.ammo - 1);
     this.cooldown = spec.fireInterval * this.rateScale;
     this.shotsFired++;
 
@@ -591,6 +595,13 @@ export class Weapon {
     }
     if (this.jets) for (const j of this.jets.active) {
       if (j.alive && j.state !== 4) consider(j, j.x, j.y, j.z);
+    }
+    // And a mech, which is the one thing worth locking a rocket onto and was
+    // the one thing the lock could not see.
+    if (this.mechs) for (const m of this.mechs.active) {
+      if (m.alive && m.health > 0 && !m.mine) {
+        consider(m, m.x, m.y + m.spec.height * 0.6, m.z);
+      }
     }
     return best;
   }
