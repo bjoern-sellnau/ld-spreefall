@@ -1415,3 +1415,15 @@ is what prompted the change.
   for blasts that happened while it was off. A switch here says what happens
   next, which is the only promise it can keep once a ruin has been written
   into the city's own bytes.
+
+- 2026-10-17: and underneath both of those was a loop that believed a frame
+  which took less than no time. The clock was started from one reading and
+  the frames were stamped with another: a browser stamps a frame callback
+  with the time that frame began, so switching the loop on in the middle of a
+  three second frame put the clock seconds ahead of the stamp that followed
+  it. The accumulator went that far into the red, and until the wall clock
+  caught up the simulation ran not at all while the city kept drawing. It is
+  worst right after the loading screen, which is exactly where the frames are
+  slowest. The clock now comes from the first frame callback, a negative
+  frame is treated as no time at all, and `tools/test/loop.test.mjs` drives
+  the loop by hand to prove it.

@@ -33,7 +33,11 @@ export class Loop {
   start() {
     if (this.running) return;
     this.running = true;
-    this.last = performance.now();
+    // The clock is taken from the first frame callback rather than from here.
+    // They are not the same reading: a callback is stamped with the time its
+    // frame began, and switching the loop on in the middle of a slow frame
+    // put `last` a long way ahead of the stamp that came after it.
+    this.last = 0;
     this._raf = requestAnimationFrame(this._tick);
   }
 
@@ -46,9 +50,17 @@ export class Loop {
   _tick(now) {
     if (!this.running) return;
     this._raf = requestAnimationFrame(this._tick);
+    if (!this.last) this.last = now;
     let elapsed = (now - this.last) / 1000;
     this.last = now;
     if (elapsed > this.maxFrame) elapsed = this.maxFrame;
+    // A frame cannot have taken less than no time, and one that says it did
+    // used to be believed: the accumulator went seconds into the red and the
+    // simulation stood still, rendering all the while, until the wall clock
+    // had caught up with it. That is what a city that kept drawing while
+    // nothing in it moved was, and it was worst in the first seconds after
+    // the loading screen, which is when the frames are slowest.
+    if (elapsed < 0) elapsed = 0;
 
     this.accumulator += elapsed;
     // The cap has to cover a whole clamped frame, otherwise a slow machine runs
