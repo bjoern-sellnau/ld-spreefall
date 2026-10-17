@@ -233,6 +233,8 @@ visits.
 | Ragdoll | they fall with the momentum of the shot rather than on a timer |
 | Blood | hits spray |
 | Ultra gore | the three above, considerably more of it |
+| Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
+| Slow motion on the last kill | killing the last one standing near you drops the world to a crawl |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not
@@ -245,7 +247,7 @@ it brings the block down onto a street that stays level. Both are honoured by
 the picture, by the collision and by the ruin that is written into the city
 afterwards, so what you walk on is always what you can see.
 
-What the four gore switches actually are:
+What the five gore switches actually are:
 
 - **Tearing apart** replaces the death animation with its absence. There is no
   body to fall, so the soldier leaves the fight at once and a dozen chunks
@@ -269,6 +271,25 @@ What the four gore switches actually are:
 - **Ultra gore** is a multiplier over the other three rather than a fourth
   effect, which is both what it means and the only way to make it feel like
   more rather than different.
+- **Ultra gore, and then some** is that multiplier again, set at the ceiling
+  of what there is to spend: a hundred and thirty drops a spray instead of
+  seventy six, stains out to five metres, and a shot that throws a body
+  across the street rather than onto its back. It is the one gore switch that
+  does not tear anybody apart, and that is on purpose: coming apart is the
+  absence of a death, so there would be no body left to throw. Turn the
+  tearing switch on as well and you get both, with every one of the ninety
+  six pieces the pool holds on a single body. Past this the pools are empty,
+  so there is no switch above it.
+
+And the last kill:
+
+- **Slow motion on the last kill** waits until the one you just killed was
+  the last one on his feet within a hundred and fifty metres, and then runs
+  the world at a quarter speed for a little over two seconds. It fires on
+  that kill and no other, because a flourish on every kill is not a flourish,
+  it is a stutter. Your own machine does not count as company, and neither
+  does a body still falling: a soldier with no health left is on his own time
+  already.
 
 And the warhead:
 

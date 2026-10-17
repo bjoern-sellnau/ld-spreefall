@@ -63,7 +63,8 @@ async function run() {
   check('the menu opens and closes', menu.open && menu.closed);
   check('every switch the brief asked for is in it',
     ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic', 'slowBlast',
-      'wreckBuildings', 'wreckGround', 'gib', 'ragdoll', 'blood', 'ultraGore']
+      'wreckBuildings', 'wreckGround', 'lastKill',
+      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
   check('and every button',
@@ -287,9 +288,10 @@ async function run() {
     // they are switched back on with the budget at zero, which runs everyone
     // already on the field and spawns nobody new.
     const budget = s.soldiers.budget;
-    const fall = (ragdoll) => {
+    const fall = (ragdoll, top) => {
       s.cheats.reset(); s.soldiers.reset();
       if (ragdoll) s.setCheat('ragdoll', true);
+      if (top) s.setCheat('maxGore', true);
       s.soldiers.enabled = true;
       s.soldiers.budget = 0;
       const v = s.spawnSoldier(-18, 0);
@@ -319,8 +321,9 @@ async function run() {
     };
     const off = fall(false);
     const on = fall(true);
+    const top = fall(true, true);
     s.cheats.reset(); s.soldiers.reset();
-    return { off, on };
+    return { off, on, top };
   });
   check('without ragdoll a body falls straight down and barely moves',
     doll.off.lean > 1.4 && doll.off.roll === 0 && doll.off.thrown < 0.6,
@@ -328,6 +331,9 @@ async function run() {
   check('with it on the shot throws them, lifts them and turns them',
     doll.on.thrown > 1.2 && doll.on.roll > 0.4 && doll.on.air > 0.05 && doll.on.lean > 1.0,
     `turned ${doll.on.roll} rad, ${doll.on.air} m off the ground, ${doll.on.thrown} m back`);
+  check('and the switch above ultra gore throws them half again as far',
+    doll.top.thrown > doll.on.thrown * 1.3,
+    `${doll.on.thrown} m becomes ${doll.top.thrown} m`);
 
   const blood = await page.evaluate(() => {
     const s = window.spreefall;
@@ -354,13 +360,17 @@ async function run() {
     const on = hit();
     s.setCheat('ultraGore', true);
     const ultra = hit();
+    s.setCheat('maxGore', true);
+    const max = hit();
     s.cheats.reset(); s.soldiers.reset(); s.effects.clear();
-    return { off, on, ultra };
+    return { off, on, ultra, max };
   });
   check('a hit throws no blood with the switch off', blood.off === 0);
   check('and does with it on', blood.on > 14, `${blood.on} drops`);
   check('and ultra gore throws considerably more of it', blood.ultra > blood.on * 1.8,
     `${blood.on} to ${blood.ultra}`);
+  check('and the switch above it more again', blood.max > blood.ultra * 1.25,
+    `${blood.ultra} to ${blood.max}`);
 
   // Blood is drawn over the frame rather than added to it, which is the whole
   // reason it reads as blood and not as embers, and it leaves the street
@@ -401,6 +411,53 @@ async function run() {
   check('with the blood on its own alpha blended pass',
     stains.alpha > 0 && stains.additive > 0,
     `${stains.additive} additive, ${stains.alpha} alpha`);
+
+  // --- the last kill -------------------------------------------------------
+  // Killed through the weapon rather than by calling damage, because the
+  // slow motion hangs off the credit and the credit comes from the shot.
+  const lastKill = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const kill = async (on, others) => {
+      s.cheats.reset();
+      s.soldiers.reset(); s.drones.reset(); s.combat.reset();
+      s.state.killSlow = 0; s.state.blastSlow = 0;
+      if (on) s.setCheat('lastKill', true);
+      // Company, far enough off to be somebody else and near enough to count.
+      for (let i = 0; i < others; i++) s.spawnSoldier(-40 - i * 5, 14 + i * 3);
+      const v = s.spawnSoldier(-16, 1);
+      const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+      const vx = v.x - ex, vy = v.y + 1.1 - ey, vz = v.z - ez;
+      const l = Math.hypot(vx, vy, vz);
+      s.look(Math.atan2(-vx, -vz) * 180 / Math.PI, Math.asin(vy / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+      s.weapon.select('railgun');
+      for (let i = 0; i < 4 && v.alive; i++) {
+        s.weapon.cooldown = 0; s.weapon.spread = 0; s.shoot();
+      }
+      const slow = s.state.killSlow;
+      // And what the world actually did with it, which is the point of it.
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => requestAnimationFrame(r));
+      const scale = s.state.timeScale;
+      s.cheats.reset(); s.soldiers.reset(); s.weapon.reset();
+      s.state.killSlow = 0;
+      return { dead: !v.alive, slow: Number(slow.toFixed(2)), scale: Number(scale.toFixed(2)) };
+    };
+    return {
+      alone: await kill(true, 0),
+      company: await kill(true, 3),
+      off: await kill(false, 0),
+    };
+  });
+  check('the last one standing goes down in slow motion',
+    lastKill.alone.dead && lastKill.alone.slow > 1 && lastKill.alone.scale < 0.4,
+    `${lastKill.alone.slow} s left, world at ${lastKill.alone.scale} of real time`);
+  check('and a kill with three of them still up does not slow anything',
+    lastKill.company.dead && lastKill.company.slow === 0 && lastKill.company.scale === 1,
+    `${lastKill.company.slow} s, world at ${lastKill.company.scale}`);
+  check('nor does the last kill with the switch off',
+    lastKill.off.dead && lastKill.off.slow === 0 && lastKill.off.scale === 1,
+    `${lastKill.off.slow} s, world at ${lastKill.off.scale}`);
 
   // --- more of them, on demand ---------------------------------------------
   const waves = await page.evaluate(() => {

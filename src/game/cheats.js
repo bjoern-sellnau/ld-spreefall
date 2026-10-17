@@ -14,8 +14,8 @@ const KEY = 'spreefall.cheats';
 
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
-  'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround',
-  'gib', 'ragdoll', 'blood', 'ultraGore'];
+  'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill',
+  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -33,6 +33,7 @@ export const SWITCHES = [
   // a slow machine can be given one less thing to do.
   { id: 'wreckBuildings', label: 'Buildings can be destroyed', note: 'blasts cut frontages back and bring them down; off leaves the city standing', def: true },
   { id: 'wreckGround', label: 'Ground can be cratered', note: 'warheads dig a hole where they land; off keeps the street level', def: true },
+  { id: 'lastKill', label: 'Slow motion on the last kill', note: 'killing the last one standing near you drops the world to a crawl for a moment' },
 ];
 
 export const GORE = [
@@ -40,6 +41,7 @@ export const GORE = [
   { id: 'ragdoll', label: 'Ragdoll', note: 'they fall with the momentum of the shot' },
   { id: 'blood', label: 'Blood', note: 'hits spray, and it lands on the street' },
   { id: 'ultraGore', label: 'Ultra gore', note: 'all of the above, considerably more of it' },
+  { id: 'maxGore', label: 'Ultra gore, and then some', note: 'as much blood as the pools can hold and a shot that throws a body across the street; add the tearing switch and every piece the game owns comes with it' },
 ];
 
 /**
@@ -125,6 +127,7 @@ export class Cheats {
     this.ragdoll = false;
     this.blood = false;
     this.ultraGore = false;
+    this.maxGore = false;
     // The numeric settings, by id, starting at what the game ships with.
     this.values = {};
     for (const s of SETTINGS) this.values[s.id] = s.def;
@@ -144,13 +147,22 @@ export class Cheats {
    * How much of everything the gore settings ask for. Ultra gore is not a
    * fourth effect, it is a multiplier over the other three, which is both what
    * it means and the only way to make it feel like more rather than different.
+   * The switch above it is the same multiplier again, set where the pools
+   * run out: past this there is nothing left to spend.
    */
-  get goreScale() { return this.ultraGore ? 4.2 : 1; }
+  get goreScale() {
+    if (this.maxGore) return 7.5;
+    return this.ultraGore ? 4.2 : 1;
+  }
 
   /** True when a kill should come apart rather than fall over. */
+  // Deliberately not the top switch. Coming apart is the absence of a death:
+  // there is no body left to throw, so a switch whose whole point is the
+  // throw cannot also be the one that takes the body away. Turn on the
+  // tearing switch as well and you get both, with every piece the pool has.
   get gibbing() { return this.gib || this.ultraGore; }
-  get bleeding() { return this.blood || this.ultraGore; }
-  get tumbling() { return this.ragdoll || this.ultraGore; }
+  get bleeding() { return this.blood || this.ultraGore || this.maxGore; }
+  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore; }
 
   set(id, on) {
     if (!(id in this) || typeof this[id] !== 'boolean') return false;

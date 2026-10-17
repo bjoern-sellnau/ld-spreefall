@@ -1427,3 +1427,34 @@ is what prompted the change.
   slowest. The clock now comes from the first frame callback, a negative
   frame is treated as no time at all, and `tools/test/loop.test.mjs` drives
   the loop by hand to prove it.
+
+## 28. The last kill, and the switch above ultra gore
+
+- 2026-10-17: a sixth step on the gore ladder, and it is the last one there
+  can be. Ultra gore multiplies the other three by four and a fifth; this
+  multiplies them by seven and a half, which is exactly where the pools run
+  out. A spray was capped at seventy six drops and is now a hundred and
+  thirty, the spark pool went from five hundred and twelve to seven hundred
+  and sixty eight so that three sprays at once do not leave the tracers with
+  nothing, a single body now takes every one of the ninety six pieces the
+  gib pool holds when the tearing switch is on with it, and the throw on a
+  ragdoll goes from two and a tenth to five and a third. It is the one gore
+  switch that does not tear anybody apart on its own, which the first run of
+  its check made obvious: the body it was measuring the throw of had been
+  turned into ninety six pieces, and nought metres is how far a body that no
+  longer exists travels. Coming apart is the absence of a death, so the
+  switch whose point is the throw cannot also be the one that removes what is
+  thrown. The renderer draws blood in its own instanced
+  pass of five hundred and twelve, so none of this costs a draw call.
+
+- 2026-10-17: slow motion on the last kill. It hangs off the one place every
+  kill in the game is credited, counts what is still standing within a
+  hundred and fifty metres, and only runs when the answer is none: drones,
+  soldiers, jets and any machine that is not yours, all of them measured by
+  having health left rather than by being on a list, because a body on its
+  way down is already gone. A quarter speed for two and a fifth seconds,
+  which is a shade faster than the slow motion a blast gets, because what
+  you are watching is a body rather than a building. The checks kill one man
+  three ways: alone with the switch on, with three of his friends up, and
+  with the switch off, and read both the timer and what the world actually
+  did with it.

@@ -6,8 +6,9 @@ import { SURFACE_CLEARANCE } from '../shared/constants.js';
 // The sparks are additive billboards drawn in one instanced call, so the only
 // real cost of a bigger pool is the buffer. A warhead alone wants a hundred
 // and fifty of them, and starving the rest of the game of tracers while one
-// goes off would be a poor trade.
-const MAX = 512;
+// goes off would be a poor trade. The top gore switch asks for three sprays
+// of a hundred and thirty at once, hence the room above that.
+const MAX = 768;
 // How many stains the street may carry at once. Past this the oldest goes.
 const MAX_POOLS = 64;
 
@@ -478,8 +479,10 @@ export class Effects {
    * @param {number} amount a multiplier from the gore settings
    */
   blood(x, y, z, nx, ny, nz, amount = 1) {
-    const k = Math.min(4.2, amount);
-    const n = Math.min(90, Math.round(18 * k));
+    // The ceiling is where the top gore switch lands. Everything under it
+    // asks for less and gets exactly what it asked for.
+    const k = Math.min(7.5, amount);
+    const n = Math.min(130, Math.round(18 * k));
     for (let i = 0; i < n; i++) {
       const s = this._get();
       s.alive = true;

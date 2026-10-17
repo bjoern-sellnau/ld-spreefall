@@ -395,6 +395,10 @@ async function main() {
     inSanctuary: false,
     targeting: false,
     blastSlow: 0,
+    // Seconds of slow motion left over a kill that emptied the street. Kept
+    // apart from blastSlow because they are different switches and either
+    // may be on without the other.
+    killSlow: 0,
     mapMode: 'nuke',
     pendingNuke: null,
     travelTo: null,
@@ -751,6 +755,24 @@ async function main() {
   }
 
   /** One kill, however it was made: by a bullet, a blast or a fall. */
+  /**
+   * How many of them are still up and anywhere near you. Dying is not up: a
+   * soldier on his way down has no health left and is on his own time.
+   *
+   * @param {number} reach metres, beyond which it is somebody else's fight
+   */
+  function hostilesAlive(x, z, reach = 150) {
+    let n = 0;
+    const near = (a) => Math.hypot(a.x - x, a.z - z) <= reach;
+    for (const d of drones.active) if (d.health > 0 && near(d)) n++;
+    for (const sd of soldiers.active) if (sd.health > 0 && near(sd)) n++;
+    for (const j of jets.active) if (j.health > 0 && near(j)) n++;
+    // Your own machine is not a hostile, whether you are sitting in it or
+    // have left it standing in the road.
+    for (const m of mechs.active) if (!m.mine && m.alive && m.health > 0 && near(m)) n++;
+    return n;
+  }
+
   function creditTarget(target, core, kind) {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
@@ -759,6 +781,14 @@ async function main() {
     audio.droneDown();
     const name = kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
     feed(`<b>${name} down</b> ${Math.round(dist)} m${core ? ' <i>core</i>' : ''}`);
+    // The last kill, in slow motion. It fires only when this one emptied the
+    // street: a flourish on every kill is not a flourish, it is a stutter,
+    // and the whole point of the switch is the quiet after the last of them
+    // goes down.
+    if (cheats.lastKill && state.mode === 'walk' && hostilesAlive(player.x, player.z) === 0) {
+      state.killSlow = 2.2;
+      feed('<i>last kill</i>');
+    }
   }
   weapon.onDryFire = () => audio.dryFire();
   weapon.onReloadStart = (seconds) => audio.reload(seconds);
@@ -3441,6 +3471,12 @@ async function main() {
     if (state.blastSlow > 0) {
       state.blastSlow = Math.max(0, state.blastSlow - dt);
       scale = Math.min(scale, 0.18);
+    }
+    // The last one standing, going down slowly. A shade faster than a blast,
+    // because what you are watching is a body rather than a building.
+    if (state.killSlow > 0) {
+      state.killSlow = Math.max(0, state.killSlow - dt);
+      scale = Math.min(scale, 0.25);
     }
     if (state.mode === 'cinema') {
       scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
