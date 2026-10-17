@@ -120,6 +120,51 @@ export class Gibs {
     return n;
   }
 
+  /**
+   * Bones. What is left of somebody who has been burnt down to them and is
+   * then shot, or who has stood there long enough to come apart on his own.
+   * Bigger pieces than a gib burst, lighter, nothing wet about them, and no
+   * blood: there is none left in a skeleton.
+   *
+   * @returns {number} how many pieces went up
+   */
+  bones(x, y, z, dir, scale = 1) {
+    const n = Math.min(MAX, Math.round(11 * Math.min(7.5, scale)));
+    const push = 1 + 0.3 * Math.min(7.5, scale);
+    for (let i = 0; i < n; i++) {
+      const g = this._free();
+      g.alive = true;
+      const up = 0.2 + Math.random() * 1.6;
+      g.x = x + (Math.random() - 0.5) * 0.5;
+      g.y = y + up;
+      g.z = z + (Math.random() - 0.5) * 0.5;
+      const a = Math.random() * Math.PI * 2;
+      const b = Math.acos(2 * Math.random() - 1);
+      const speed = (2.0 + Math.random() * 5.5) * push;
+      g.vx = Math.sin(b) * Math.cos(a) * speed + (dir ? dir.x : 0) * 3.4 * push;
+      g.vy = Math.cos(b) * speed * 0.65 + 3.2 + Math.random() * 2.6;
+      g.vz = Math.sin(b) * Math.sin(a) * speed + (dir ? dir.z : 0) * 3.4 * push;
+      g.yaw = Math.random() * 6.28;
+      g.pitch = Math.random() * 6.28;
+      g.roll = Math.random() * 6.28;
+      g.spinY = (Math.random() - 0.5) * 18;
+      g.spinX = (Math.random() - 0.5) * 18;
+      g.spinZ = (Math.random() - 0.5) * 18;
+      g.scale = 0.7 + Math.random() * 1.1;
+      // Mostly bone, with the odd pale scrap of what he was wearing.
+      g.part = Math.random() < 0.82 ? 23 : 20;
+      g.maxLife = 14 + Math.random() * 8;
+      g.life = g.maxLife;
+      g.resting = false;
+      g.mass = 0.8;
+      g.heap = null;
+      g.dripAt = 0;
+      g.wet = false;
+      this.active.push(g);
+    }
+    return n;
+  }
+
   burst(x, y, z, dir, scale = 1) {
     // Past the top gore switch there is nothing left to give: sixteen pieces
     // a point of scale runs the pool dry at six, and the throw keeps going a

@@ -183,6 +183,49 @@ async function run() {
     `${bedrock.withoutFloor}% of the frame was sky with no floor under it, `
       + `${bedrock.withFloor}% with one at ${bedrock.y} m`);
 
+  // --- a tile that is not there --------------------------------------------
+  // Every tile with nothing in it, and every district still on the wire, used
+  // to answer nought metres when asked how high the ground was. Nought is sea
+  // level, and a district standing forty metres above it is then a forty
+  // metre hole with you at the bottom of it: that is what falling through the
+  // floor was. The neighbours are put on a hill here so that nought would be
+  // obvious, and then the tile under the question is taken away.
+  const missing = await page.evaluate(() => {
+    const s = window.spreefall;
+    const w = s.world;
+    const x = s.player.x + 220, z = s.player.z + 60;
+    const index = w.tileIndex(x, z);
+    const tx = index % w.nx, tz = (index / w.nx) | 0;
+    // Forty metres up, on every tile around the one we are about to remove.
+    const raised = [];
+    for (let j = -1; j <= 1; j++) {
+      for (let i = -1; i <= 1; i++) {
+        const idx = (tz + j) * w.nx + (tx + i);
+        const hf = w.heightField(idx);
+        if (!hf) continue;
+        hf.fill(40 * 256);
+        raised.push(idx);
+      }
+    }
+    const before = w.groundHeight(x, z);
+    const rec = w.tiles[index];
+    w.tiles[index] = null;
+    w.heightCache.delete(index);
+    const after = w.groundHeight(x, z);
+    // And put the city back the way it was.
+    w.tiles[index] = rec;
+    for (const idx of raised) w.heightCache.delete(idx);
+    w.heightCache.delete(index);
+    return {
+      neighbours: raised.length,
+      before: Number(before.toFixed(2)),
+      after: Number(after.toFixed(2)),
+    };
+  });
+  check('a tile that is not there is not a hole you fall through',
+    missing.neighbours >= 4 && Math.abs(missing.after - missing.before) < 1.5,
+    `${missing.before} m with the tile, ${missing.after} m without it`);
+
   // --- damage adds up ------------------------------------------------------
   const adds = await page.evaluate(() => {
     const s = window.spreefall;

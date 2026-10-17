@@ -65,10 +65,23 @@ class Soldier {
     this.killerLeft = 0;
     this.deathTime = 0;
     this.gibbed = false;
+    // Coming up out of the street. For as long as this is running he is
+    // under it, he does nothing and he sees nothing: the sphere he arrived
+    // in is still closing.
+    this.rise = RISE_TIME;
+    // Under the street from the first frame he exists, so nobody ever sees
+    // one standing in the open waiting for the sphere to finish.
+    this.y = y - RISE_DEPTH;
+    this.charred = 0;
     this.seed = Math.random();
     return this;
   }
 }
+
+/** How long one of them takes to come up out of the ground. */
+const RISE_TIME = 1.0;
+/** How far under the street he starts. */
+const RISE_DEPTH = 1.9;
 
 export class Soldiers {
   /**
@@ -108,11 +121,16 @@ export class Soldiers {
     this.armouredTarget = false;
     this.onMechKiller = null;
     // What is left of somebody the ion cannon burnt. Zero means they stand
-    // there for the rest of the session, which is what the game did before
-    // this was settable; anything else is how many seconds they hold before
-    // they come apart.
-    this.boneTime = 0;
+    // there for the rest of the session, which the game used to do by
+    // default and which reads, fairly, as dead men standing about; anything
+    // else is how many seconds they hold before they come apart.
+    this.boneTime = 18;
     this.onCrumble = null;     // fn(soldier) when a skeleton goes down
+    // fn(soldier) the moment one arrives, for the sphere of light it comes
+    // up through.
+    this.onArrive = null;
+    // fn(soldier, dir) when a standing skeleton is shot to pieces.
+    this.onShatter = null;
     this.hazards = () => [];
     // Scaled by the difficulty: how often their aimed shot is actually aimed.
     this.accuracyScale = 1;
@@ -158,15 +176,44 @@ export class Soldiers {
       if (boxed) continue;
       s.spawn(x, g, z, this.tier);
       this.active.push(s);
+      if (this.onArrive) this.onArrive(s);
       return s;
     }
     return null;
   }
 
   /**
+   * Is this one a skeleton standing there waiting for something to happen to
+   * it? Burnt to the bone, on its feet, and nothing else is going to move it.
+   */
+  isBones(s) {
+    return !!s && s.alive && s.state === STATE.DYING && (s.charred || 0) >= 0.95;
+  }
+
+  /**
+   * Shoot a skeleton and it comes apart. There is nothing left to kill, so
+   * this is not damage and credits nobody: it is a pile of bones that used
+   * to be standing up.
+   *
+   * @returns {boolean} whether there was a skeleton there to break
+   */
+  shatter(s, from) {
+    if (!this.isBones(s)) return false;
+    if (this.onShatter) this.onShatter(s, from || { x: 0, y: 0, z: 0 });
+    this._retire(s);
+    return true;
+  }
+
+  /**
    * @returns {boolean} true when this killed them
    */
   damage(s, amount, from) {
+    // A skeleton has no health left to take off, but it is still standing in
+    // the way of a bullet, and a bullet through a skeleton takes it apart.
+    if (this.isBones(s)) {
+      this.shatter(s, from);
+      return false;            // already dead: a heap of bones credits nobody
+    }
     if (!s.alive || s.state === STATE.DYING) return false;
     s.health -= amount;
     s.hitFlash = 1;
@@ -174,6 +221,10 @@ export class Soldiers {
     // into a fight.
     if (s.state === STATE.PATROL) { s.state = STATE.ADVANCE; s.stateTime = 0; }
     if (s.health <= 0) {
+      // Whatever he was in the middle of, he is not doing it now. Without
+      // this a man killed while he was still coming up out of the street
+      // went on coming up for ever, because the rise runs before the dying.
+      s.rise = 0;
       const dir = from || { x: 0, y: 0, z: 0 };
       // Coming apart is not a death animation, it is the absence of one: there
       // is no body left to lie down, so they leave the active list here and
@@ -223,7 +274,10 @@ export class Soldiers {
     let best = maxDist;
     let hit = null;
     for (const s of this.active) {
-      if (!s.alive || s.state === STATE.DYING) continue;
+      if (!s.alive) continue;
+      // A body on its way down is not a target. A skeleton standing there
+      // is: it is in the way of the bullet, and the bullet takes it apart.
+      if (s.state === STATE.DYING && !this.isBones(s)) continue;
       // The head first, because it is worth more and sits inside the capsule's
       // own span at the top.
       const hx = s.x - ox, hy = s.y + SPEC.headY - oy, hz = s.z - oz;
@@ -290,6 +344,17 @@ export class Soldiers {
         s.walk = 0;
         s.beamCharge = 0;
         if (this.onStunSpark && Math.random() < dt * 5) this.onStunSpark(s);
+        continue;
+      }
+
+      // Still coming up. Nothing thinks, nothing shoots and nothing walks
+      // until it is on its feet.
+      if (s.rise > 0) {
+        s.rise -= dt;
+        const k = Math.max(0, Math.min(1, s.rise / RISE_TIME));
+        s.y = w.groundHeight(s.x, s.z) - RISE_DEPTH * k * k;
+        s.walk = 0;
+        s.vx = 0; s.vz = 0;
         continue;
       }
 

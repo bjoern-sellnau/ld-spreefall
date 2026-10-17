@@ -1541,3 +1541,85 @@ is what prompted the change.
   materials on half of them. The whole lot costs eleven thousand triangles
   across eight districts, one and a half per cent, and two hundred kilobytes
   of the download budget.
+
+## 31. Standing dead men, a hole in the world, and the cockpit
+
+- 2026-10-17: the last kill never fired. It asked for nobody alive within a
+  hundred and fifty metres, and in a live fight something is always alive
+  somewhere in a circle that size, so the slow motion was a switch that did
+  nothing. Sixty five metres is the piece of city you are actually in; the
+  one you killed has to have been in it too, or a rocket across the district
+  would do it; and there is five seconds between flourishes, because clearing
+  a square one body at a time is a stutter rather than a flourish. The check
+  now kills a man with three of his friends standing a street and a half
+  away, which is the case that was reported.
+
+- 2026-10-17: dead men standing. A soldier burnt to the bone stayed on his
+  feet for the rest of the session, because the timer that takes a skeleton
+  down shipped at nought, which means never. It ships at eighteen seconds
+  now, and nought still means never for anybody who wants a field of them.
+
+- 2026-10-17: and a skeleton is a thing you can shoot. It used to be out of
+  the raycast with the rest of the dying, so bullets went through it: now a
+  standing one is a target, a hit takes it apart into bone rather than flesh,
+  and it credits nobody, because whoever that was died when the fire went
+  through. Bones are their own burst: eleven pieces a point of scale, bigger
+  and lighter than gibs, nothing wet about them.
+
+- 2026-10-17: falling through the floor. Asked for the height of the ground
+  on a tile that is not there, the world answered nought. Nought is sea
+  level, and a district standing forty metres above it is then a forty metre
+  hole with you at the bottom: that is the whole bug. It now answers with the
+  nearest ground there is, searching a ring of tiles outwards, so the city
+  ends in a plateau rather than in a pit. The check puts the neighbours on a
+  forty metre hill, takes the tile in the middle away, and asks again.
+
+- 2026-10-17: a mech walking over somebody puts him into the pavement. The
+  foot is the hull's radius and a bit, anybody standing well above it is on
+  something else, and what is left is a wide flat stain rather than a body.
+
+- 2026-10-17: and the view out of a mech. Eight rays at head height: when
+  nearly all of them are stopped within a few metres the machine is standing
+  inside the building rather than against it, the cockpit would be the inside
+  of a wall, and the shoulder view takes over until it is not. The pull in
+  along the aim line only ever helped when the eye started outside.
+
+- 2026-10-17: three keys. The number row past the end of a mech's loadout
+  used to reach the pilot's own weapons, so six put a banana on the screen of
+  something eight metres tall; now nothing on his back exists while he is in
+  there. The cockpit view moved off V, which is the travel map everywhere
+  else in the game and was unreachable from a cockpit, onto Y. And a mech
+  runs on the pilot's clock rather than the world's, so the reflex is worth
+  having in one: a machine slowed by exactly as much as everything around it
+  is a reflex that does nothing at all.
+
+- 2026-10-17: travelling takes your machine with you. Leaving a Titan on the
+  other side of Berlin because you used the map is not travel.
+
+## 32. Just a Walk, and a sphere of light
+
+- 2026-10-17: a third mode. Nothing is sent after you, and the way it is done
+  is worth writing down: the budgets are held at nought every step rather
+  than the layers being switched off. A layer that is off does not update
+  what is already in it, so anything the cheat menu brought out would freeze
+  where it stood; a budget of nought means nothing new is sent and everything
+  already here is a real enemy with a real fight in it, which is exactly what
+  was asked for. It is remembered between visits.
+
+- 2026-10-17: and nobody walks round a corner any more. A sphere of light
+  stands on the street, a shell of sparks falling inwards rather than blowing
+  outwards, which is the whole difference between something arriving and
+  something exploding, with arcs off the pavement and a scorch mark under it.
+  The soldier comes up through the street over a second: he starts one and
+  nine tenths of a metre under it and is blind and harmless until he is on
+  his feet, which is in the soldier layer rather than in the picture, so it
+  is true for the fight as well as for the eye. The test handle that puts a
+  man exactly where a check needs him skips all of it.
+
+- 2026-10-17: two checks in the machines suite were measuring the city rather
+  than the thing they are named after, and the rebuilt city is what showed it.
+  The flamethrower check stood the player whereever the suite had left him,
+  which by then was a heap of rubble three metres up, and the stream tests the
+  height of what it lands on: it now puts him back down on the street first.
+  The bite check blasted a frontage and counted the pixels of hole: a mansard
+  leaves less sky behind it than a flat roof, so the bite is bigger now.

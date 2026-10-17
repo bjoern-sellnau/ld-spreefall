@@ -243,7 +243,7 @@ visits.
 | Blood | hits spray |
 | Ultra gore | the three above, considerably more of it |
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
-| Slow motion on the last kill | killing the last one standing near you drops the world to a crawl |
+| Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not
@@ -293,12 +293,13 @@ What the five gore switches actually are:
 And the last kill:
 
 - **Slow motion on the last kill** waits until the one you just killed was
-  the last one on his feet within a hundred and fifty metres, and then runs
-  the world at a quarter speed for a little over two seconds. It fires on
+  the last one on his feet within sixty five metres, and then runs the world
+  at a quarter speed for a little over two seconds. It fires on
   that kill and no other, because a flourish on every kill is not a flourish,
-  it is a stutter. Your own machine does not count as company, and neither
-  does a body still falling: a soldier with no health left is on his own time
-  already.
+  it is a stutter, and there is five seconds between them. Your own machine
+  does not count as company, and neither does a body still falling: a soldier
+  with no health left is on his own time already. A fight going on two
+  streets away is somebody else's.
 
 And the warhead:
 
@@ -353,6 +354,24 @@ a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
 vertex shader collapses one set of parts or the other to nothing depending on
 how burnt they are, so a person and a skeleton are the same mesh and the same
 draw call.
+
+## Just a Walk
+
+A third mode on the title screen, next to Berlin and Rise of the Machines.
+Nothing is sent after you: no soldiers, no drones, no jets, no machines, and
+the whole of the city to walk about in. The cheat menu still brings anything
+out by hand, and what it brings out is a real enemy with a real fight in it;
+it simply is not replaced when it goes down. The mode is remembered between
+visits, because it is a choice about what you came for rather than a setting.
+
+## How they arrive
+
+Nobody walks round a corner into this fight. A sphere of light stands on the
+street for a moment, a shell of it falling inwards rather than blowing out,
+with arcs crawling up off the pavement and a scorch mark left under it, and
+the soldier comes up through the street into it. For the second that takes he
+is under the pavement, blind and harmless. A machine arrives the same way, in
+a sphere the size of the thing inside it.
 
 ## Vehicles
 

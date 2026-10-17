@@ -463,6 +463,44 @@ export class World {
     const cz = Math.min(this.maxZ - 0.001, Math.max(this.minZ, z));
     const index = this.tileIndex(cx, cz);
     if (index < 0) return 0;
+    if (!this.heightField(index)) return this._edgeHeight(index, cx, cz);
+    return this._sampleGround(index, cx, cz);
+  }
+
+  /**
+   * The ground where there is no tile: off the edge of what has been built,
+   * or on a district that has not arrived yet. This used to answer nought,
+   * and nought in a district standing forty metres above sea level is a
+   * forty metre hole with you at the bottom of it, which is what falling
+   * through the floor was. It answers with the nearest ground there is
+   * instead, so the city ends in a plateau rather than in a pit.
+   */
+  _edgeHeight(index, x, z) {
+    const tx = index % this.nx;
+    const tz = (index / this.nx) | 0;
+    for (let r = 1; r <= 3; r++) {
+      let best = null, bestD = Infinity;
+      for (let j = -r; j <= r; j++) {
+        for (let i = -r; i <= r; i++) {
+          if (Math.max(Math.abs(i), Math.abs(j)) !== r) continue;
+          const ox = tx + i, oz = tz + j;
+          if (ox < 0 || oz < 0 || ox >= this.nx || oz >= this.nz) continue;
+          const idx = oz * this.nx + ox;
+          if (!this.tiles[idx]) continue;
+          const [cxx, czz] = this.tileOrigin(idx);
+          const px = Math.min(cxx + this.tileSize - 0.01, Math.max(cxx, x));
+          const pz = Math.min(czz + this.tileSize - 0.01, Math.max(czz, z));
+          const d = Math.hypot(px - x, pz - z);
+          if (d < bestD) { bestD = d; best = [idx, px, pz]; }
+        }
+      }
+      if (best) return this._sampleGround(best[0], best[1], best[2]);
+    }
+    return 0;
+  }
+
+  /** Bilinear read out of one tile's height field, which has to be there. */
+  _sampleGround(index, cx, cz) {
     const hf = this.heightField(index);
     if (!hf) return 0;
     const [ox, oz] = this.tileOrigin(index);
