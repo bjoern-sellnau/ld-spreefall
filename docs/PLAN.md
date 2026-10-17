@@ -1221,3 +1221,23 @@ is what prompted the change.
   because a tab left open since the morning should still start this
   afternoon, and moving the slider stops all of that: a time somebody has
   chosen is a setting rather than a default.
+
+## 25. The city, the drop and the pulse
+
+- 2026-10-17: the cockpit went solid whenever you turned towards something.
+  The head sits a metre and a half in front of the torso's eye, which is the
+  whole reason the view is worth having, and nothing stopped it going through
+  a wall: a mech fighting down a street stands with its shoulder against a
+  frontage, and looking at that frontage put the camera inside it. The city
+  gets a say now, the same way it does over the shoulder, and the camera
+  slides back along the aim line until the wall is in front of it again.
+  Pulled all the way in it is back inside the torso, which draws as nothing
+  at all. Every one of those positions is on the aim line rather than beside
+  it, so the crosshair still says where the shot goes.
+
+- 2026-10-17: the check for it had to move to the top of the suite. It stands
+  a mech a metre from a frontage and asks whether the camera stayed on this
+  side of it, and at the end of the suite there is no frontage left within
+  three hundred metres: the checks above it spend several minutes flattening
+  the district, and the first version of this one failed with a hundred and
+  forty four rays finding nothing at all.

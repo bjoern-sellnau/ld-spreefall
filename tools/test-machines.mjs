@@ -52,6 +52,93 @@ async function run() {
   });
   await page.waitForTimeout(4000);
 
+  // --- a mech in a street that still has walls in it -----------------------
+  // First, because it is the one check in here that needs the city standing:
+  // everything below this line spends the next few minutes taking it apart.
+  // The head of a mech sits out in front of the hull, which is what you want
+  // until it is stood against a frontage and you turn to look at it: then the
+  // head is inside the wall and the screen goes solid.
+  // And the view against the city. The head sits out in front of the hull,
+  // which is what you want until the mech is stood against a frontage and you
+  // turn to look at it: then the head is inside the wall and the screen goes
+  // solid. This turns the torso onto the nearest wall there is and asks
+  // whether the camera stayed on this side of it.
+  const walled = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.mechs.reset();
+    const m = s.spawnMech('titan', 12);
+    if (!m) return { skip: true, why: 'no room for one' };
+    s.teleport(m.x + 3, m.z);
+    s.toggleVehicle();
+    if (s.state.inMech !== m) return { skip: true, why: 'could not get in' };
+    const was = { x: m.x, y: m.y + m.spec.eye, z: m.z };
+    let rays = 0, tooNear = 0, steep = 0;
+    // The nearest thing anywhere round it that is still standing at the
+    // height of its own head, found by sweeping the horizon a long way out:
+    // by this point in the suite the streets here are rubble, and a ruin two
+    // metres high is not a wall you can put your head into. The ray is at
+    // eye height, so whatever answers is tall enough by construction.
+    let near = null;
+    for (let i = 0; i < 144; i++) {
+      const yaw = (i / 144) * Math.PI * 2;
+      const d = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
+      const hit = s.world.raycast(was.x, was.y, was.z, d.x, d.y, d.z, 300);
+      if (hit) rays++;
+      if (!hit) continue;
+      if (hit.t < 4) { tooNear++; continue; }
+      // On ground near its own level, or the walk up to it is a climb and
+      // the wall is somewhere else by the time it arrives.
+      const px = was.x + d.x * (hit.t - 1.2);
+      const pz = was.z + d.z * (hit.t - 1.2);
+      if (Math.abs(s.world.groundHeight(px, pz) - m.y) > 3) { steep++; continue; }
+      if (!near || hit.t < near.t) near = { t: hit.t, d, yaw };
+    }
+    // When nothing answers, say what the city looked like from in there:
+    // the first version of this check ran at the end of the suite, by which
+    // time the whole district was two metres high and there was nothing left
+    // to lean on for three hundred metres in any direction.
+    if (!near) {
+      return {
+        skip: true,
+        why: `${rays} rays hit, ${tooNear} too near, ${steep} off the level, `
+          + `tallest within 80 m is ${s.world.tallestNear(m.x, m.z, 80).toFixed(1)} m`,
+      };
+    }
+    // Its nose a metre and a bit off the frontage, which is where a mech
+    // ends up every time it fights down a street.
+    const step = near.t - 1.2;
+    m.x = was.x + near.d.x * step;
+    m.z = was.z + near.d.z * step;
+    m.y = s.world.groundHeight(m.x, m.z);
+    s.teleport(m.x, m.z);
+    const eye = { x: m.x, y: m.y + m.spec.eye, z: m.z };
+    s.look(near.yaw * 180 / Math.PI, 0);
+    s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(r));
+    const out = Math.hypot(s.camera.position[0] - eye.x,
+      s.camera.position[1] - eye.y, s.camera.position[2] - eye.z);
+    // Where the wall is now that the torso has turned onto it.
+    const a = s.mechs.aim(m);
+    const wall = s.world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, 8);
+    const got = {
+      skip: false,
+      wall: wall ? Number(wall.t.toFixed(2)) : null,
+      out: Number(out.toFixed(2)),
+    };
+    // And back out, and back to where the suite starts, because everything
+    // after this measures the city from there.
+    s.toggleVehicle();
+    s.mechs.reset();
+    s.teleport(81, 0);
+    s.look(90, -3);
+    return got;
+  });
+  check('and the wall you are stood against does not end up inside your head',
+    !walled.skip && walled.wall !== null && walled.out <= walled.wall - 0.2,
+    walled.skip ? `nothing to lean on: ${walled.why}`
+      : `camera ${walled.out} m out, wall at ${walled.wall} m`);
+
+
   // --- damage that stays done ---------------------------------------------
   const baked = await page.evaluate(async () => {
     const s = window.spreefall;

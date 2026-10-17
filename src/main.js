@@ -3595,13 +3595,25 @@ async function main() {
       const m = state.inMech;
       const ms = m.spec;
       const a = mechs.aim(m);
-      const lead = ms.cockpit;
+      // How far out in front of the eye the head sits. The head is outside
+      // the hull, which is the point of it, and a mech standing with its
+      // shoulder against a frontage turns that head into the frontage: the
+      // view went solid every time you looked at the building you were
+      // stood next to. So the city gets a say, the same way it does over
+      // the shoulder. Pulled all the way in the camera is back inside the
+      // torso, which draws as nothing at all, and the shot still goes where
+      // the crosshair is, because every one of these points is on the aim
+      // line rather than beside it.
+      const eye = { x: m.x, y: m.y + ms.eye, z: m.z };
+      let lead = ms.cockpit;
+      const blocked = world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, lead + 0.4);
+      if (blocked) lead = Math.max(0, blocked.t - 0.4);
       const stride = Math.sin(m.walk * 2) * (m.onGround ? 1 : 0.2);
       const sway = Math.cos(m.walk) * (m.onGround ? 1 : 0.2);
       const moving = Math.min(1, m.speed / ms.walk);
-      camera.position[0] = m.x + a.x * lead + Math.cos(m.torso) * sway * 0.10 * moving;
-      camera.position[1] = m.y + ms.eye + a.y * lead + stride * 0.16 * moving;
-      camera.position[2] = m.z + a.z * lead - Math.sin(m.torso) * sway * 0.10 * moving;
+      camera.position[0] = eye.x + a.x * lead + Math.cos(m.torso) * sway * 0.10 * moving;
+      camera.position[1] = eye.y + a.y * lead + stride * 0.16 * moving;
+      camera.position[2] = eye.z + a.z * lead - Math.sin(m.torso) * sway * 0.10 * moving;
     } else if (state.inMech) {
       // Or from over the shoulder: behind and above, with the look you are
       // holding, pulled in when a wall gets between. The same camera a tank
