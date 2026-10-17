@@ -242,6 +242,15 @@ async function run() {
     // far end of a cone the stream only reaches a third of the time.
     const sd = s.soldiers.spawnNear(s.player.x + f[0] * 5, s.player.z + f[2] * 5, 0.5, 1.5);
     if (!sd) return { skip: true };
+    // Pointed at him rather than at wherever the last check left the view: a
+    // flamethrower is a cone, and three degrees of pitch at five metres is
+    // the difference between a man on fire and a scorch mark in front of him.
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const to = { x: sd.x - eye.x, y: (sd.y + 1.0) - eye.y, z: sd.z - eye.z };
+    const far = Math.hypot(to.x, to.y, to.z) || 1;
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI,
+      Math.asin(to.y / far) * 180 / Math.PI);
+    s.camera.update(16 / 9);
     const fuel0 = s.weapon.ammo;
     const hp0 = sd.health;
     // Held for a stretch of simulated time rather than a number of frames or
@@ -411,6 +420,65 @@ async function run() {
     return { put: near.length, stunned: stunned.length, moved: Math.round(moved * 10) / 10,
       left: stunned[0] ? Math.round(stunned[0].stunLeft) : 0 };
   });
+  // And the launcher it comes out of now. The pulse was a bomb you lobbed at
+  // your own feet; this checks that it leaves the barrel, travels, and stops
+  // what it lands among.
+  const launcher = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.projectiles.clear();
+    // The street first: the mode keeps twenty two machines walking and the
+    // pool holds twenty four, so there is no room to stand a group of four
+    // anywhere until some of them are taken off it.
+    s.soldiers.reset();
+    const spec = s.weapons.emp;
+    // Four of them in a group, out where a thrown bomb would never have
+    // reached, somewhere there is room for four and a clear line to it.
+    const eye0 = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const group = [];
+    for (let step = 0; step < 24 && group.length < 2; step++) {
+      const a = (step % 12) / 12 * Math.PI * 2;
+      const d = 60 - Math.floor(step / 12) * 20;
+      const px = s.player.x - Math.sin(a) * d, pz = s.player.z - Math.cos(a) * d;
+      const dx = px - eye0.x, dz = pz - eye0.z;
+      const len = Math.hypot(dx, dz) || 1;
+      if (s.world.raycast(eye0.x, eye0.y, eye0.z, dx / len, 0, dz / len, len)) continue;
+      for (let i = 0; i < 4; i++) {
+        const sd = s.soldiers.spawnNear(px, pz, 2, 9);
+        if (sd) { s.makeMachine(sd); sd.stunLeft = 0; group.push(sd); }
+      }
+    }
+    if (group.length < 2) return { skip: true };
+    const stood = group.map((m) => ({ m, x: m.x, z: m.z }));
+    const mid = stood.reduce((a, p) => [a[0] + p.x / stood.length, a[1] + p.z / stood.length], [0, 0]);
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const to = { x: mid[0] - eye.x, y: (s.world.groundHeight(mid[0], mid[1]) + 1) - eye.y, z: mid[1] - eye.z };
+    const l = Math.hypot(to.x, to.y, to.z) || 1;
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+    s.camera.update(16 / 9);
+    const picked = s.weapon.select('emp') || s.weapon.id === 'emp';
+    s.weapon.carried.emp.ammo = spec.magazine;
+    s.weapon.cooldown = 0;
+    s.weapon.spread = 0;
+    s.shoot();
+    const flying = s.projectiles.count > 0;
+    const away = Math.round(l);
+    for (let i = 0; i < 60 * 4 && s.projectiles.count; i++) {
+      for (const p of stood) { p.m.x = p.x; p.m.z = p.z; }
+      s.fixedForTest(1 / 60);
+    }
+    return {
+      skip: false, picked, flying, away,
+      kind: spec.kind,
+      stopped: group.filter((m) => m.stunLeft > 0).length,
+      put: group.length,
+    };
+  });
+  check('the EMP is a launcher, and the pulse arrives where you pointed it',
+    !launcher.skip && launcher.picked && launcher.kind === 'launch' && launcher.flying
+      && launcher.stopped >= launcher.put - 1,
+    launcher.skip ? 'no room for a group'
+      : `${launcher.stopped} of ${launcher.put} stopped at ${launcher.away} m`);
+
   // --- the gun, and where its shot comes from ------------------------------
   const gun = await page.evaluate(async () => {
     const s = window.spreefall;

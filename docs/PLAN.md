@@ -1294,3 +1294,21 @@ is what prompted the change.
   black pixels looking straight down. The renderer learned one switch for it,
   which is worth having anyway: with the sky off, every hole in the world
   shows as a hole.
+
+- 2026-10-17: the EMP is a launcher now, and it lands like one. It was a bomb
+  you lobbed at your own feet on an arc you had to judge, with a fuse that
+  went off late and a radius you could not put where you wanted it; it is now
+  a rocket at seventy metres a second that goes off on what it hits, two in
+  the magazine, and it reaches thirty eight metres round the impact.
+
+  The pulse itself had almost no weight to it: a blue flash, thirty sparks
+  and a rising whine. It now draws as what it is. A ring travels out along
+  the ground to exactly the radius it reaches, so what it caught and what it
+  missed is on the screen rather than in the kill feed; arcs stand in the
+  middle of it; the frame goes white and the view shakes, both falling off
+  with distance; and the sound got the thing it was missing, which is seventy
+  hertz falling out from under the whine. It answers as well: a hit marker, a
+  line in the feed and a count of what it stopped, with mechs called out
+  separately because stopping one of those is the shot you fired it for.
+  Vehicles caught in it lose their speed, mechs stand there with their shield
+  down for seven and a half seconds.

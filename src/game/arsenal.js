@@ -145,18 +145,23 @@ export const WEAPONS = {
     incendiary: { radius: 26, pools: 7, burnSeconds: 9, damagePerSecond: 110 },
   },
   emp: {
-    name: 'EMP bomb', short: 'EMP', kind: KIND.THROW, slot: null,
-    magazine: 1, reserve: 5, reloadTime: 1.0, fireInterval: 1.1, auto: false,
-    projectile: 'incendiary', muzzleSpeed: 22, fuse: 1.6, range: 110,
-    spreadHip: 0.005, spreadAim: 0.002, spreadPerShot: 0, spreadMax: 0.005,
+    // A launcher rather than a bomb you lob at your feet. The pulse was
+    // always the point and the delivery was always the problem: an arc you
+    // had to judge, a fuse that went off late, and a radius you could not
+    // put where you wanted it. This one goes where you are pointing, at
+    // seventy metres a second, and goes off on what it hits.
+    name: 'EMP launcher', short: 'EMP', kind: KIND.LAUNCH, slot: null,
+    magazine: 2, reserve: 8, reloadTime: 2.4, fireInterval: 0.9, auto: false,
+    projectile: 'rocket', muzzleSpeed: 70, range: 400,
+    spreadHip: 0.006, spreadAim: 0.002, spreadPerShot: 0, spreadMax: 0.006,
     spreadRecover: 0.2,
-    recoilKick: 0.004, recoilSide: 0.001, recoilRetain: 0.06,
-    aimFov: 58, sound: 'throw',
+    recoilKick: 0.022, recoilSide: 0.004, recoilRetain: 0.3,
+    aimFov: 52, sound: 'rpg',
     // It does almost nothing to a person and almost nothing to a wall. What
     // it does is stop everything with a motor in it, long enough to walk up
     // and put something in it.
-    splash: { radius: 6, damage: 14, force: 6 },
-    emp: { radius: 34, seconds: 7.5 },
+    splash: { radius: 7, damage: 20, force: 8 },
+    emp: { radius: 38, seconds: 7.5 },
   },
   mechkiller: {
     name: 'Mech killer', short: 'MECH KILLER', kind: KIND.LAUNCH, slot: null,
@@ -219,7 +224,7 @@ WEAPONS.rpg.hold = { x: 0.205, y: -0.132, z: -0.430, pitch: -0.012, yaw: 0.115, 
 WEAPONS.grenade.hold = { x: 0.185, y: -0.118, z: -0.175, pitch: 0.06, yaw: 0.22, roll: 0.10 };
 WEAPONS.c4.hold = { x: 0.180, y: -0.128, z: -0.150, pitch: 0.05, yaw: 0.26, roll: 0.08 };
 WEAPONS.banana.hold = { x: 0.175, y: -0.105, z: -0.120, pitch: 0.09, yaw: 0.30, roll: 0.16 };
-WEAPONS.emp.hold = { x: 0.178, y: -0.118, z: -0.162, pitch: 0.05, yaw: 0.24, roll: 0.07 };
+WEAPONS.emp.hold = { x: 0.208, y: -0.134, z: -0.440, pitch: -0.012, yaw: 0.116, roll: 0.04 };
 WEAPONS.incendiary.hold = { x: 0.182, y: -0.120, z: -0.168, pitch: 0.055, yaw: 0.235, roll: 0.09 };
 WEAPONS.mechkiller.hold = { x: 0.210, y: -0.138, z: -0.470, pitch: -0.014, yaw: 0.112, roll: 0.04 };
 WEAPONS.flamer.hold = { x: 0.200, y: -0.126, z: -0.330, pitch: -0.008, yaw: 0.120, roll: 0.03 };

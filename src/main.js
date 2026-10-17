@@ -593,16 +593,32 @@ async function main() {
         if (Math.hypot(mk.x - x, mk.z - z) > empSpec.radius) continue;
         if (mechs.stunFor(mk, empSpec.seconds)) heavy++;
       }
-      audio.emp(dist);
-      effects.flash(x, y + 1.5, z, empSpec.radius * 0.5, 0.35, 0.7, 1.0, 0.5);
-      for (let i = 0; i < 30; i++) {
-        const a = (i / 30) * Math.PI * 2;
-        const r = empSpec.radius * (0.3 + Math.random() * 0.7);
-        effects.spark(x + Math.cos(a) * r, y + 0.6 + Math.random() * 2,
-          z + Math.sin(a) * r, 0.4, 0.75, 1.0);
+      // And a vehicle, which is a motor with seats round it.
+      for (const v of [...vehicles.active]) {
+        if (!v.alive || Math.hypot(v.x - x, v.z - z) > empSpec.radius) continue;
+        v.speed *= 0.2;
       }
+      audio.emp(dist);
+      // The pulse, drawn as a pulse: a ring that travels out to exactly the
+      // radius it reaches, so what it caught and what it missed is on the
+      // screen rather than in the kill feed. The first version of this was a
+      // blue flash and a handful of sparks, and it read as nothing at all.
+      effects.emp(x, world.groundHeight(x, z), z, empSpec.radius);
+      // What it does to the screen you are looking at, falling off with
+      // distance: close enough and the frame goes white for a moment.
+      const near = Math.max(0, 1 - dist / (empSpec.radius * 2.2));
+      state.flash = Math.min(0.85, state.flash + 0.55 * near * near);
+      effects.shake = Math.min(1.6, effects.shake + 0.7 * near);
       renderer.addScar(x, y, z, empSpec.radius * 0.4, 0.3);
-      if (caught + heavy) feed(`<b>EMP</b> ${caught + heavy} down`);
+      const stopped = caught + heavy;
+      if (stopped) {
+        audio.hitMarker(heavy > 0);
+        showHitmarker(heavy > 0 ? 'core' : '');
+        feed(`<b>EMP</b> ${stopped} stopped`);
+        toast(heavy
+          ? `${stopped} down, ${heavy} of them heavy`
+          : `${stopped} stopped where ${stopped === 1 ? 'it' : 'they'} stood`);
+      }
     }
 
     // And the warhead behind the EMP, which is the part that is meant for
