@@ -1241,3 +1241,20 @@ is what prompted the change.
   three hundred metres: the checks above it spend several minutes flattening
   the district, and the first version of this one failed with a hundred and
   forty four rays finding nothing at all.
+
+- 2026-10-17: a titanfall takes half a minute. The words went up and the
+  machine arrived two and a half seconds later, which is a delivery rather
+  than a drop. Calling one now buys a promise and a place: twenty five
+  seconds of countdown on the banner with a column of light standing on the
+  piece of road it is coming down on, and then three hundred and twenty
+  metres of falling, which works out at four seconds under the same gravity
+  everything else here falls at. Nothing exists on the ground until the clock
+  runs out. A call is lost if you walk out of the district it was aimed at or
+  if the run ends while it is on its way, because a machine landing on a
+  corpse helps nobody, and the street can also fill up in the meantime, in
+  which case the drop is waved off rather than wedged in.
+
+- 2026-10-17: the spot it lands on is found over several rings rather than
+  one. A single ring at a fixed distance answered no about one call in three
+  from a square with craters in it, and a Titan you cannot call because of
+  where you happen to be standing is a Titan you do not have.

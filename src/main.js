@@ -34,7 +34,7 @@ import { FireWalls } from './game/firewall.js';
 import { Machines, MACHINES, makeMachine, empBurst } from './game/machines.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
-import { Mechs, MECH, ARMS, MECH_PITCH } from './game/mechs.js';
+import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
@@ -1739,14 +1739,84 @@ async function main() {
     const spot = mechSpot(26);
     if (!spot) { toast('no room to drop one here'); return null; }
     const yaw = Math.atan2(-(player.x - spot.x), -(player.z - spot.z));
-    const m = mechs.drop(type, spot.x, spot.z, yaw);
-    if (!m) return null;
-    el.titanfallSub.textContent = `${m.spec.name} inbound`;
+    // Nothing is spawned yet. What exists is a promise and a place: the
+    // machine is somewhere above the weather for the next half minute, and
+    // the only thing on the ground is the mark it is coming down on.
+    state.titanInbound = {
+      type, x: spot.x, z: spot.z, yaw,
+      left: TITANFALL.wait, mark: 0, mech: null,
+    };
+    el.titanfallSub.textContent = `${MECH[type].name} inbound ${TITANFALL.wait}`;
     el.titanfall.classList.remove('hidden');
-    state.titanInbound = m;
     audio.machineCall(0, true);
     feed('<b>standby for titanfall</b>');
-    return m;
+    toast(`${MECH[type].name} inbound. Stand clear.`);
+    return state.titanInbound;
+  }
+
+  /**
+   * The wait, while it is on its way.
+   *
+   * Counts down on the screen, marks the road it is coming down on, and when
+   * the clock runs out puts the thing in the sky above that mark. From there
+   * the ordinary fall takes over, and the landing clears the banner.
+   */
+  function titanTick(dt) {
+    const call = state.titanInbound;
+    if (!call) return;
+    // Already falling: the banner stays up until it lands, which the stomp
+    // takes care of.
+    if (call.mech) {
+      if (!call.mech.alive) { el.titanfall.classList.add('hidden'); state.titanInbound = null; }
+      return;
+    }
+    // Two ways a call is lost before anything leaves the sky: you have gone
+    // somewhere else, so the ground it was coming down on is not loaded any
+    // more, or you are dead, and a machine landing on a corpse helps nobody.
+    if (!world.isLoaded(call.x, call.z) || combat.health <= 0) {
+      el.titanfall.classList.add('hidden');
+      state.titanInbound = null;
+      return;
+    }
+    call.left -= dt;
+    const name = MECH[call.type].name;
+    el.titanfallSub.textContent = call.left > 0
+      ? `${name} inbound ${Math.ceil(call.left)}`
+      : `${name} coming down`;
+
+    // The mark on the road: a column of light standing where it will land,
+    // which opens out in the last few seconds, and a ring of sparks turning
+    // in the bottom of it. Anybody near enough to be flattened can see what
+    // is about to happen to them, which is the difference between a drop and
+    // an accident. The column is re-emitted every step by design: a beam is
+    // a thing that is there until it is not.
+    const y = world.groundHeight(call.x, call.z);
+    const close = call.left < TITANFALL.beacon;
+    effects.beam(call.x, y + 0.1, call.z,
+      close ? 220 : 130, close ? 3.4 : 1.2, 1.0, 0.80, 0.32, 7);
+    call.mark -= dt;
+    if (call.mark <= 0) {
+      call.mark = close ? 0.1 : 0.3;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + state.time;
+        effects.spark(call.x + Math.cos(a) * 3.4, y + 0.4 + Math.random(),
+          call.z + Math.sin(a) * 3.4, 1.0, 0.82, 0.35);
+      }
+    }
+    if (call.left > 0) return;
+
+    // Down it comes. If the street has filled up in the meantime there is
+    // nowhere to put it, and the call is simply lost: better than dropping
+    // forty tonnes into a space it cannot stand in.
+    const m = mechs.drop(call.type, call.x, call.z, call.yaw);
+    if (!m) {
+      el.titanfall.classList.add('hidden');
+      state.titanInbound = null;
+      toast('the drop was waved off');
+      return;
+    }
+    call.mech = m;
+    audio.machineCall(0, true);
   }
 
   /**
@@ -1775,20 +1845,27 @@ async function main() {
    * @returns {{x,z,a}|null}
    */
   function mechSpot(away = 14) {
-    for (let i = 0; i < 28; i++) {
-      const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
-      const r = away * (0.8 + Math.random() * 0.6);
-      const x = player.x + Math.cos(a) * r;
-      const z = player.z + Math.sin(a) * r;
-      if (!world.isLoaded(x, z)) continue;
-      let boxed = false;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, 7)) {
-          boxed = true; break;
+    // Several rings rather than one. A single ring at a fixed distance is a
+    // coin toss in a street with anything in it: the first version of this
+    // answered no about one call in three from a cratered square, and a
+    // Titan that cannot be called because of where you happen to be standing
+    // is a Titan you do not have.
+    for (const scale of [1, 0.7, 1.4, 1.9, 0.5, 2.4]) {
+      for (let i = 0; i < 28; i++) {
+        const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+        const r = away * scale * (0.9 + Math.random() * 0.2);
+        const x = player.x + Math.cos(a) * r;
+        const z = player.z + Math.sin(a) * r;
+        if (!world.isLoaded(x, z)) continue;
+        let boxed = false;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, 7)) {
+            boxed = true; break;
+          }
         }
+        if (boxed) continue;
+        return { x, z, a };
       }
-      if (boxed) continue;
-      return { x, z, a };
     }
     return null;
   }
@@ -2011,7 +2088,10 @@ async function main() {
       b.innerHTML = `<b>${ride.label}</b><i>${ride.note}</i>`;
       b.addEventListener('click', () => {
         const v = dropRide(ride.id);
-        toast(v ? `${v.spec.name} outside. F to get in.` : 'no room for one here');
+        // A mech is not parked outside: it is half a minute away and says so
+        // itself, on the banner and on the road.
+        if (!v) toast('no room for one here');
+        else if (!MECH[ride.id]) toast(`${v.spec.name} outside. F to get in.`);
       });
       el.cheatRides.appendChild(b);
     }
@@ -3497,6 +3577,7 @@ async function main() {
       mechs.update(worldDt, { x: player.x, y: player.y, z: player.z }, null);
     }
     rainTick(worldDt);
+    titanTick(worldDt);
     machinesTick(worldDt);
     drones.update(worldDt, eye, state.time);
     soldiers.update(worldDt, eye, state.time);

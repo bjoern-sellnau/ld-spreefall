@@ -1285,22 +1285,121 @@ async function run() {
           : `, nearest ${theirs.nearest} m, ${theirs.stun} s of stun`));
 
   // --- the call ------------------------------------------------------------
+  // A picture of one on its way: the words up, the clock running down and a
+  // column of light standing on the piece of road it is coming down on.
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.mechs.reset();
+    // Back on your feet and out of the fire. The warhead checks above leave
+    // the street burning and the run can have ended in it, and a mech is not
+    // called down onto a corpse: the game cancels the call, which is the
+    // right answer to the wrong situation for this check.
+    const down = document.getElementById('down');
+    if (down && !down.classList.contains('hidden')) {
+      document.getElementById('downbtn').click();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    s.burningGround.length = 0;
+    s.fires.reset();
+    s.combat.health = 100;
+    // Nothing may kill the run while the clock is counting down: half a
+    // minute standing in a district this suite has set fire to twice is more
+    // than the game asks of anybody.
+    s.setCheat('godmode', true);
+    // Back to the wide street the suite starts in. By now the player is
+    // wherever the last mech was parked, which can be a courtyard, and this
+    // is about the drop rather than about the street.
+    s.teleport(81, 0);
+    const call = s.dropRide('titan');
+    if (!call) return;
+    s.look(Math.atan2(-(call.x - s.player.x), -(call.z - s.player.z)) * 180 / Math.PI, 3);
+    // Held at the part worth looking at rather than standing through the
+    // whole wait: the beacon goes up in the last few seconds, and the clock
+    // is pushed back every frame so that it is still counting down while the
+    // picture is taken. A browser drawing this through a software renderer
+    // takes its time over both.
+    for (let i = 0; i < 30; i++) {
+      call.left = 7.5;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    // The pool is five hundred and twelve pieces of smoke, flame and dust,
+    // and by this point in the suite it is full of the district burning: the
+    // beacon goes in, gets recycled by the next thing that wants a slot, and
+    // never reaches the frame. Emptied once, the last few frames are the
+    // column and the sparks turning in the bottom of it.
+    s.effects.clear();
+    for (let i = 0; i < 4; i++) {
+      call.left = 7.5;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    call.left = 7.5;
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'mech-04-titanfall.png') });
+
   const called = await page.evaluate(async () => {
     const s = window.spreefall;
     s.mechs.reset();
     s.demolition.reset();
-    const m = s.dropRide('titan');
-    if (!m) return { skip: true };
+    // Back on your feet and out of the fire. The warhead checks above leave
+    // the street burning and the run can have ended in it, and a mech is not
+    // called down onto a corpse: the game cancels the call, which is the
+    // right answer to the wrong situation for this check.
+    const down = document.getElementById('down');
+    if (down && !down.classList.contains('hidden')) {
+      document.getElementById('downbtn').click();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    s.burningGround.length = 0;
+    s.fires.reset();
+    s.combat.health = 100;
+    // Nothing may kill the run while the clock is counting down: half a
+    // minute standing in a district this suite has set fire to twice is more
+    // than the game asks of anybody.
+    s.setCheat('godmode', true);
+    s.teleport(81, 0);
+    const call = s.dropRide('titan');
+    if (!call) {
+      return {
+        skip: true,
+        why: `mode ${s.state.mode}, in a mech ${!!s.state.inMech}, `
+          + `at ${s.player.x.toFixed(0)},${s.player.z.toFixed(0)} `
+          + `loaded ${s.world.isLoaded(s.player.x, s.player.z)}, `
+          + `health ${Math.round(s.combat.health)}`,
+      };
+    }
     const banner = !document.getElementById('titanfall').classList.contains('hidden');
     const text = document.querySelector('#titanfall .tfline').textContent;
-    const high = Math.round(m.y - s.world.groundHeight(m.x, m.z));
+    const sub = () => document.getElementById('titanfallsub').textContent;
+    // Nothing is on the road yet: what has been promised is a machine, and
+    // for the next half minute it is somewhere above the weather.
+    const emptyAtFirst = s.mechs.active.length === 0;
+    const firstSub = sub();
     let frames = 0;
-    for (let i = 0; i < 60 * 8 && m.y - s.world.groundHeight(m.x, m.z) > 0.5; i++) {
+    let stillEmpty = true;
+    for (let i = 0; i < 60 * 60 && !call.mech; i++) {
+      s.fixedForTest(1 / 60);
+      frames++;
+      if (frames < 60 * 20 && s.mechs.active.length) stillEmpty = false;
+    }
+    const waited = Number((frames / 60).toFixed(1));
+    const m = call.mech;
+    if (!m) {
+      return {
+        skip: true,
+        why: `nothing came down in ${waited} s: still inbound `
+          + `${!!s.state.titanInbound}, health ${Math.round(s.combat.health)}, `
+          + `mode ${s.state.mode}, left ${call.left.toFixed(1)}`,
+      };
+    }
+    const floor = s.world.groundHeight(m.x, m.z);
+    const high = Math.round(m.y - floor);
+    for (let i = 0; i < 60 * 12 && m.y - s.world.groundHeight(m.x, m.z) > 0.5; i++) {
       s.fixedForTest(1 / 60);
       frames++;
     }
     return {
-      banner, text, high,
+      banner, text, high, waited, emptyAtFirst, stillEmpty, firstSub,
+      fell: Number(((frames / 60) - waited).toFixed(1)),
       seconds: Number((frames / 60).toFixed(1)),
       gone: document.getElementById('titanfall').classList.contains('hidden'),
       sites: s.demolition.sites.length + s.demolition.baked,
@@ -1308,11 +1407,16 @@ async function run() {
     };
   });
   check('a mech you call for arrives out of the sky',
-    !called.skip && called.banner && /titanfall/i.test(called.text) && called.high > 150,
-    called.skip ? 'no room to drop one' : `"${called.text}", ${called.high} m up`);
+    !called.skip && called.banner && /titanfall/i.test(called.text) && called.high > 250,
+    called.skip ? `no room to drop one: ${called.why || ''}` : `"${called.text}", ${called.high} m up`);
+  check('and the whole thing takes about half a minute',
+    !called.skip && called.emptyAtFirst && called.stillEmpty
+      && called.seconds > 25 && called.seconds < 36 && called.fell > 2,
+    called.skip ? ''
+      : `${called.waited} s of "${called.firstSub}", then ${called.fell} s of falling`);
   check('and the landing opens the road and takes the words off the screen',
-    !called.skip && called.seconds < 5 && called.gone && called.sites > 0,
-    called.skip ? '' : `down in ${called.seconds} s, ${called.sites} places came apart`);
+    !called.skip && called.gone && called.sites > 0,
+    called.skip ? '' : `${called.sites} places came apart`);
 
   const stomp = await page.evaluate(async () => {
     const s = window.spreefall;
