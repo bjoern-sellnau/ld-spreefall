@@ -6,8 +6,9 @@ import { SURFACE_CLEARANCE } from '../shared/constants.js';
 // The sparks are additive billboards drawn in one instanced call, so the only
 // real cost of a bigger pool is the buffer. A warhead alone wants a hundred
 // and fifty of them, and starving the rest of the game of tracers while one
-// goes off would be a poor trade.
-const MAX = 512;
+// goes off would be a poor trade. The top gore switch asks for three sprays
+// of a hundred and thirty at once, hence the room above that.
+const MAX = 768;
 // How many stains the street may carry at once. Past this the oldest goes.
 const MAX_POOLS = 64;
 
@@ -180,6 +181,59 @@ export class Effects {
       s.bx = 0; s.by = 0; s.bz = 0;
     }
     this.shake = Math.min(1.4, this.shake + 0.4);
+  }
+
+  /**
+   * An electromagnetic pulse going off.
+   *
+   * Not an explosion, and it should not look like one: no fire, no smoke, no
+   * debris. What it has instead is a hard white core, a blue ring that
+   * travels out along the ground to exactly the radius the pulse reaches, so
+   * you can see what it caught and what it missed, and a crackle of arcs
+   * standing in the middle of it. The ring is the important part: an EMP that
+   * reads as a flash and a noise tells you nothing about where its edge was.
+   *
+   * @param {number} radius how far the pulse reaches, in metres
+   */
+  emp(x, y, z, radius) {
+    this.flash(x, y + 1.2, z, radius * 0.5, 0.75, 0.92, 1.0, 0.18);
+    this.flash(x, y + 1.2, z, radius * 0.22, 1.0, 1.0, 1.0, 0.10);
+    // The ring. Flat, and it arrives at the edge as it fades, so what you
+    // see is the shape of the thing rather than a glow.
+    const n = Math.min(84, 30 + Math.round(radius));
+    for (let i = 0; i < n; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.08;
+      const life = 0.42 + Math.random() * 0.12;
+      const speed = radius / life;
+      s.ax = x; s.ay = y + 0.5 + Math.random() * 0.6; s.az = z;
+      s.vx = Math.cos(a) * speed;
+      s.vy = 0.4;
+      s.vz = Math.sin(a) * speed;
+      s.gravity = 0;
+      s.maxLife = life;
+      s.life = life;
+      s.r = 0.42; s.g = 0.78; s.b = 1.0;
+      s.size = 0.22 + Math.random() * 0.3;
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    // And the arcs, which are what a pulse sounds like drawn as lines.
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = radius * (0.1 + Math.random() * 0.5);
+      const up = 1 + Math.random() * 7;
+      this.lance(x, y + 0.3, z,
+        x + Math.cos(a) * r, y + up, z + Math.sin(a) * r, 0.6, 0.86, 1.0);
+    }
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = radius * Math.sqrt(Math.random());
+      this.spark(x + Math.cos(a) * r, y + 0.4 + Math.random() * 2.5,
+        z + Math.sin(a) * r, 0.5, 0.82, 1.0);
+    }
+    this.shake = Math.min(1.4, this.shake + 0.5);
   }
 
   /**
@@ -425,8 +479,10 @@ export class Effects {
    * @param {number} amount a multiplier from the gore settings
    */
   blood(x, y, z, nx, ny, nz, amount = 1) {
-    const k = Math.min(4.2, amount);
-    const n = Math.min(90, Math.round(18 * k));
+    // The ceiling is where the top gore switch lands. Everything under it
+    // asks for less and gets exactly what it asked for.
+    const k = Math.min(7.5, amount);
+    const n = Math.min(130, Math.round(18 * k));
     for (let i = 0; i < n; i++) {
       const s = this._get();
       s.alive = true;

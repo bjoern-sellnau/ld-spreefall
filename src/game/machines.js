@@ -43,6 +43,12 @@ export const MACHINES = {
   // anti armour weapon, so one of these only comes off the shoulder when the
   // thing it is looking at is armour.
   killer: { interval: 7.5, range: 240 },
+  // The far end of the time slider, and the step it moves in. The mode's
+  // clock is held to both, because a time the slider cannot show is a time
+  // the screen and the world disagree about. The same two numbers are on the
+  // input in index.html.
+  timeMax: 23.9,
+  timeStep: 0.1,
   // And the heavy ones. Two at a time is plenty: a Reaper is eight metres of
   // walking gun and the city is not wide enough for a herd of them.
   mechs: 2,
@@ -52,17 +58,57 @@ export const MACHINES = {
 };
 
 /**
+ * The clock on the wall, as a fractional hour.
+ *
+ * Local time rather than UTC, because the question this answers is what the
+ * light is doing outside the window of whoever is playing.
+ */
+export function clockHours(now = new Date()) {
+  return now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+}
+
+/**
  * The mode. It holds no entities of its own: it turns things on and off and
  * answers questions about what the world should look like while it is on.
  */
 export class Machines {
   constructor() {
     this.active = false;
-    this.timeOfDay = 20.2;
+    // The end of the world happens now, not at a quarter past eight in the
+    // evening for ever. The slider is still there for anybody who would
+    // rather have it dark, and once it has been moved this stops following
+    // the clock: a setting somebody has chosen is not a default any more.
+    this.timePicked = false;
+    this.timeOfDay = 0;
+    this.syncClock();
     this.spawnTimer = 0;
     this.rainTimer = 0;
     this.mechTimer = 6;
     this.kills = 0;
+  }
+
+  /**
+   * Put the time back on the clock, unless somebody has moved the slider.
+   *
+   * Called when the mode is picked rather than only when the page loads: a
+   * tab left open since the morning should still start the mode at the hour
+   * it actually is.
+   *
+   * @returns {number} the time the mode will start at
+   */
+  syncClock() {
+    if (this.timePicked) return this.timeOfDay;
+    const step = MACHINES.timeStep;
+    this.timeOfDay = Math.min(MACHINES.timeMax,
+      Math.round(clockHours() / step) * step);
+    return this.timeOfDay;
+  }
+
+  /** The slider. From here on the time is a choice rather than a default. */
+  setTime(hours) {
+    this.timeOfDay = hours;
+    this.timePicked = true;
+    return this.timeOfDay;
   }
 
   /** @param {boolean} on */

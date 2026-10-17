@@ -64,6 +64,14 @@ export const FACADE_FLAG = {
   // buffers for good, so the fragment shader keeps treating it as rubble long
   // after the collapse that made it has given up its uniform slot.
   RUBBLE: 32,
+  // The fallback plane that fills whatever the rest of the city did not draw.
+  // It lies nine centimetres under everything, and nine centimetres is less
+  // than a twenty four bit depth buffer can tell apart past about six hundred
+  // metres, so out there it used to swap places with the road on top of it
+  // and shimmer. The vertex shader sinks anything carrying this flag further
+  // the further away it is, by about what the depth buffer loses, and a plane
+  // nobody can see is a plane that can go as deep as it likes.
+  BASE: 64,
 };
 
 export const SPAWN = {

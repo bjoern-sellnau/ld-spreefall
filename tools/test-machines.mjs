@@ -52,6 +52,93 @@ async function run() {
   });
   await page.waitForTimeout(4000);
 
+  // --- a mech in a street that still has walls in it -----------------------
+  // First, because it is the one check in here that needs the city standing:
+  // everything below this line spends the next few minutes taking it apart.
+  // The head of a mech sits out in front of the hull, which is what you want
+  // until it is stood against a frontage and you turn to look at it: then the
+  // head is inside the wall and the screen goes solid.
+  // And the view against the city. The head sits out in front of the hull,
+  // which is what you want until the mech is stood against a frontage and you
+  // turn to look at it: then the head is inside the wall and the screen goes
+  // solid. This turns the torso onto the nearest wall there is and asks
+  // whether the camera stayed on this side of it.
+  const walled = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.mechs.reset();
+    const m = s.spawnMech('titan', 12);
+    if (!m) return { skip: true, why: 'no room for one' };
+    s.teleport(m.x + 3, m.z);
+    s.toggleVehicle();
+    if (s.state.inMech !== m) return { skip: true, why: 'could not get in' };
+    const was = { x: m.x, y: m.y + m.spec.eye, z: m.z };
+    let rays = 0, tooNear = 0, steep = 0;
+    // The nearest thing anywhere round it that is still standing at the
+    // height of its own head, found by sweeping the horizon a long way out:
+    // by this point in the suite the streets here are rubble, and a ruin two
+    // metres high is not a wall you can put your head into. The ray is at
+    // eye height, so whatever answers is tall enough by construction.
+    let near = null;
+    for (let i = 0; i < 144; i++) {
+      const yaw = (i / 144) * Math.PI * 2;
+      const d = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
+      const hit = s.world.raycast(was.x, was.y, was.z, d.x, d.y, d.z, 300);
+      if (hit) rays++;
+      if (!hit) continue;
+      if (hit.t < 4) { tooNear++; continue; }
+      // On ground near its own level, or the walk up to it is a climb and
+      // the wall is somewhere else by the time it arrives.
+      const px = was.x + d.x * (hit.t - 1.2);
+      const pz = was.z + d.z * (hit.t - 1.2);
+      if (Math.abs(s.world.groundHeight(px, pz) - m.y) > 3) { steep++; continue; }
+      if (!near || hit.t < near.t) near = { t: hit.t, d, yaw };
+    }
+    // When nothing answers, say what the city looked like from in there:
+    // the first version of this check ran at the end of the suite, by which
+    // time the whole district was two metres high and there was nothing left
+    // to lean on for three hundred metres in any direction.
+    if (!near) {
+      return {
+        skip: true,
+        why: `${rays} rays hit, ${tooNear} too near, ${steep} off the level, `
+          + `tallest within 80 m is ${s.world.tallestNear(m.x, m.z, 80).toFixed(1)} m`,
+      };
+    }
+    // Its nose a metre and a bit off the frontage, which is where a mech
+    // ends up every time it fights down a street.
+    const step = near.t - 1.2;
+    m.x = was.x + near.d.x * step;
+    m.z = was.z + near.d.z * step;
+    m.y = s.world.groundHeight(m.x, m.z);
+    s.teleport(m.x, m.z);
+    const eye = { x: m.x, y: m.y + m.spec.eye, z: m.z };
+    s.look(near.yaw * 180 / Math.PI, 0);
+    s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(r));
+    const out = Math.hypot(s.camera.position[0] - eye.x,
+      s.camera.position[1] - eye.y, s.camera.position[2] - eye.z);
+    // Where the wall is now that the torso has turned onto it.
+    const a = s.mechs.aim(m);
+    const wall = s.world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, 8);
+    const got = {
+      skip: false,
+      wall: wall ? Number(wall.t.toFixed(2)) : null,
+      out: Number(out.toFixed(2)),
+    };
+    // And back out, and back to where the suite starts, because everything
+    // after this measures the city from there.
+    s.toggleVehicle();
+    s.mechs.reset();
+    s.teleport(81, 0);
+    s.look(90, -3);
+    return got;
+  });
+  check('and the wall you are stood against does not end up inside your head',
+    !walled.skip && walled.wall !== null && walled.out <= walled.wall - 0.2,
+    walled.skip ? `nothing to lean on: ${walled.why}`
+      : `camera ${walled.out} m out, wall at ${walled.wall} m`);
+
+
   // --- damage that stays done ---------------------------------------------
   const baked = await page.evaluate(async () => {
     const s = window.spreefall;
@@ -151,8 +238,19 @@ async function run() {
     s.weapon.giveAll();
     const chose = s.weapon.select('flamer');
     const f = s.camera.forward;
-    const sd = s.soldiers.spawnNear(s.player.x + f[0] * 9, s.player.z + f[2] * 9, 0.5, 1.5);
+    // Five metres, which is the range this weapon is for. Nine put him at the
+    // far end of a cone the stream only reaches a third of the time.
+    const sd = s.soldiers.spawnNear(s.player.x + f[0] * 5, s.player.z + f[2] * 5, 0.5, 1.5);
     if (!sd) return { skip: true };
+    // Pointed at him rather than at wherever the last check left the view: a
+    // flamethrower is a cone, and three degrees of pitch at five metres is
+    // the difference between a man on fire and a scorch mark in front of him.
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const to = { x: sd.x - eye.x, y: (sd.y + 1.0) - eye.y, z: sd.z - eye.z };
+    const far = Math.hypot(to.x, to.y, to.z) || 1;
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI,
+      Math.asin(to.y / far) * 180 / Math.PI);
+    s.camera.update(16 / 9);
     const fuel0 = s.weapon.ammo;
     const hp0 = sd.health;
     // Held for a stretch of simulated time rather than a number of frames or
@@ -161,7 +259,18 @@ async function run() {
     // game runs slower than the clock on the wall.
     const t0 = s.loop.simTime;
     const wall = performance.now();
-    while (s.loop.simTime - t0 < 3 && performance.now() - wall < 60000) {
+    // Held where he was put. He is a live soldier with somewhere better to
+    // be, and a man who walks out of the stream halfway through measures his
+    // own footwork rather than the flamethrower.
+    const stood = { x: sd.x, z: sd.z };
+    // Six seconds rather than three. The stream puts three puffs a frame at
+    // random distances down the cone, so a man standing at nine metres is in
+    // perhaps a third of it, and three seconds of that left him alive at
+    // about half health: close enough to the line that the check passed or
+    // failed on the weather.
+    while (s.loop.simTime - t0 < 6 && performance.now() - wall < 90000) {
+      sd.x = stood.x;
+      sd.z = stood.z;
       s.holdFire(true);
       await new Promise((r) => requestAnimationFrame(r));
     }
@@ -239,6 +348,20 @@ async function run() {
     const wasCheated = s.cheats.used;
     const btn = [...document.querySelectorAll('.diff.mode')].find((b) => b.dataset.mode === 'machines');
     if (btn) btn.click();
+    // The clock on the wall, read at the moment the mode was picked.
+    const now = new Date();
+    const wall = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+    const preset = s.machines.timeOfDay;
+    const slider = parseFloat(document.getElementById('modetime').value);
+    // And then moved by hand, which is a choice rather than a default: from
+    // there on it stays where it was put even when the mode is picked again.
+    s.machines.setTime(3.5);
+    if (btn) btn.click();
+    const kept = s.machines.timeOfDay;
+    // And back to the early afternoon for everything after this. The mode
+    // holds the light while it is running, and the rest of the suite takes
+    // its pictures in it: at half past three in the morning they are black.
+    s.machines.setTime(14.2);
     s.soldiers.active.length = 0;
     for (let i = 0; i < 60 * 12; i++) s.machinesTick(1 / 60);
     const standing = s.soldiers.active.filter((x) => x.machine);
@@ -249,10 +372,19 @@ async function run() {
       machines: standing.length,
       health: standing[0] ? standing[0].health : 0,
       timeShown: !document.getElementById('timepick').classList.contains('hidden'),
+      wall: Number(wall.toFixed(2)),
+      preset: Number(preset.toFixed(2)),
+      slider: Number(slider.toFixed(1)),
+      kept: Number(kept.toFixed(2)),
     };
   });
   check('Rise of the Machines is picked on the title screen', mode.on && mode.timeShown,
     'with the time of day to go with it');
+  check('and it starts at the hour it actually is',
+    Math.abs(mode.preset - mode.wall) < 0.12 && Math.abs(mode.slider - mode.preset) < 0.1,
+    `${mode.preset} against a clock reading ${mode.wall}`);
+  check('unless the slider has been moved, which is a choice rather than a default',
+    mode.kept === 3.5, `${mode.kept} held through picking the mode again`);
   check('and it is a mode, not a cheat', !mode.cheated && !mode.wasCheated,
     'the run is not marked');
   check('the sky goes with it', mode.armageddon === 1 && mode.fog > 0.0015,
@@ -288,6 +420,109 @@ async function run() {
     return { put: near.length, stunned: stunned.length, moved: Math.round(moved * 10) / 10,
       left: stunned[0] ? Math.round(stunned[0].stunLeft) : 0 };
   });
+  // And the launcher it comes out of now. The pulse was a bomb you lobbed at
+  // your own feet; this checks that it leaves the barrel, travels, and stops
+  // what it lands among.
+  const launcher = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.projectiles.clear();
+    // The street first: the mode keeps twenty two machines walking and the
+    // pool holds twenty four, so there is no room to stand a group of four
+    // anywhere until some of them are taken off it. The mode goes quiet for
+    // the same reason the other warhead checks turn it off: it drops a nuke
+    // on the skyline every two and a half seconds, and a check that waits
+    // for the air to clear waits for one of those instead.
+    const modeWas = s.machines.active;
+    s.machines.active = false;
+    s.soldiers.reset();
+    const spec = s.weapons.emp;
+    // Four of them in a group, out where a thrown bomb would never have
+    // reached, somewhere there is room for four and a clear line to it.
+    const eye0 = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const group = [];
+    for (let step = 0; step < 24 && group.length < 2; step++) {
+      const a = (step % 12) / 12 * Math.PI * 2;
+      const d = 60 - Math.floor(step / 12) * 20;
+      const px = s.player.x - Math.sin(a) * d, pz = s.player.z - Math.cos(a) * d;
+      // The line the rocket will actually fly, not a level one: it leaves the
+      // eye and comes down on the ground where they are standing, and a kerb
+      // in between is a rocket that goes off in the wrong street.
+      const py = s.world.groundHeight(px, pz) + 1.2;
+      if (Math.abs(py - (s.player.y + 1.2)) > 4) continue;
+      const dx = px - eye0.x, dy = py - eye0.y, dz = pz - eye0.z;
+      const len = Math.hypot(dx, dy, dz) || 1;
+      if (s.world.raycast(eye0.x, eye0.y, eye0.z, dx / len, dy / len, dz / len, len)) continue;
+      for (let i = 0; i < 4; i++) {
+        const sd = s.soldiers.spawnNear(px, pz, 2, 9);
+        if (sd) { s.makeMachine(sd); sd.stunLeft = 0; group.push(sd); }
+      }
+    }
+    if (group.length < 2) { s.machines.active = modeWas; return { skip: true }; }
+    const stood = group.map((m) => ({ m, x: m.x, z: m.z }));
+    const mid = stood.reduce((a, p) => [a[0] + p.x / stood.length, a[1] + p.z / stood.length], [0, 0]);
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    // At the road just short of them rather than at the group itself. A
+    // rocket aimed at a man at sixty metres either hits him or sails over
+    // his head, and which of the two it does depends on where the man was
+    // standing when the aim was taken; aimed at the ground in front of him
+    // it lands, which is what a pulse wants.
+    const aimX = s.player.x + (mid[0] - s.player.x) * 0.85;
+    const aimZ = s.player.z + (mid[1] - s.player.z) * 0.85;
+    const to = { x: aimX - eye.x, y: (s.world.groundHeight(aimX, aimZ) + 0.2) - eye.y, z: aimZ - eye.z };
+    const l = Math.hypot(mid[0] - eye.x, mid[1] - eye.z) || 1;
+    const aimLen = Math.hypot(to.x, to.y, to.z) || 1;
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI,
+      Math.asin(to.y / aimLen) * 180 / Math.PI);
+    s.camera.update(16 / 9);
+    const picked = s.weapon.select('emp') || s.weapon.id === 'emp';
+    s.weapon.carried.emp.ammo = spec.magazine;
+    s.weapon.cooldown = 0;
+    s.weapon.spread = 0;
+    s.shoot();
+    // The one that just left the barrel, watched by itself: anything else in
+    // the air belongs to somebody else.
+    const rocket = s.projectiles.active[s.projectiles.active.length - 1] || null;
+    const flying = !!rocket;
+    const away = Math.round(l);
+    let nearest = 999;
+    let last = null;
+    for (let i = 0; i < 60 * 4 && rocket && rocket.alive; i++) {
+      for (const p of stood) { p.m.x = p.x; p.m.z = p.z; }
+      nearest = Math.min(nearest, Math.hypot(rocket.x - mid[0], rocket.z - mid[1]));
+      last = {
+        over: Math.round(rocket.y - s.world.groundHeight(rocket.x, rocket.z)),
+        age: +rocket.age.toFixed(1),
+      };
+      s.fixedForTest(1 / 60);
+    }
+    // Where the warhead actually went off, which is the first thing to know
+    // when nothing was stopped.
+    s.machines.active = modeWas;
+    return {
+      skip: false, picked, flying, away,
+      kind: spec.kind,
+      stopped: group.filter((m) => m.stunLeft > 0).length,
+      put: group.length,
+      nearest: Math.round(nearest),
+      still: rocket && rocket.alive ? 1 : 0,
+      last,
+      alive: group.filter((m) => m.alive).length,
+    };
+  });
+  check('the EMP is a launcher, and the pulse arrives where you pointed it',
+    !launcher.skip && launcher.picked && launcher.kind === 'launch' && launcher.flying
+      && launcher.stopped >= launcher.put - 1,
+    launcher.skip ? 'no room for a group'
+      : `${launcher.stopped} of ${launcher.put} stopped at ${launcher.away} m`
+        + (launcher.stopped >= launcher.put - 1 ? ''
+          // When it misses, where the warhead went is the whole story: the
+          // first version of this aimed at the men rather than at the road
+          // in front of them, and the rocket sailed over their heads and
+          // went off eighty metres past them.
+          : `, ${launcher.alive} alive, the warhead passed within `
+            + `${launcher.nearest} m of them, ${launcher.still} still in the air`
+            + (launcher.last ? `, last seen ${launcher.last.over} m up at ${launcher.last.age} s` : '')));
+
   // --- the gun, and where its shot comes from ------------------------------
   const gun = await page.evaluate(async () => {
     const s = window.spreefall;
@@ -1175,22 +1410,121 @@ async function run() {
           : `, nearest ${theirs.nearest} m, ${theirs.stun} s of stun`));
 
   // --- the call ------------------------------------------------------------
+  // A picture of one on its way: the words up, the clock running down and a
+  // column of light standing on the piece of road it is coming down on.
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.mechs.reset();
+    // Back on your feet and out of the fire. The warhead checks above leave
+    // the street burning and the run can have ended in it, and a mech is not
+    // called down onto a corpse: the game cancels the call, which is the
+    // right answer to the wrong situation for this check.
+    const down = document.getElementById('down');
+    if (down && !down.classList.contains('hidden')) {
+      document.getElementById('downbtn').click();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    s.burningGround.length = 0;
+    s.fires.reset();
+    s.combat.health = 100;
+    // Nothing may kill the run while the clock is counting down: half a
+    // minute standing in a district this suite has set fire to twice is more
+    // than the game asks of anybody.
+    s.setCheat('godmode', true);
+    // Back to the wide street the suite starts in. By now the player is
+    // wherever the last mech was parked, which can be a courtyard, and this
+    // is about the drop rather than about the street.
+    s.teleport(81, 0);
+    const call = s.dropRide('titan');
+    if (!call) return;
+    s.look(Math.atan2(-(call.x - s.player.x), -(call.z - s.player.z)) * 180 / Math.PI, 3);
+    // Held at the part worth looking at rather than standing through the
+    // whole wait: the beacon goes up in the last few seconds, and the clock
+    // is pushed back every frame so that it is still counting down while the
+    // picture is taken. A browser drawing this through a software renderer
+    // takes its time over both.
+    for (let i = 0; i < 30; i++) {
+      call.left = 7.5;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    // The pool is five hundred and twelve pieces of smoke, flame and dust,
+    // and by this point in the suite it is full of the district burning: the
+    // beacon goes in, gets recycled by the next thing that wants a slot, and
+    // never reaches the frame. Emptied once, the last few frames are the
+    // column and the sparks turning in the bottom of it.
+    s.effects.clear();
+    for (let i = 0; i < 4; i++) {
+      call.left = 7.5;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    call.left = 7.5;
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'mech-04-titanfall.png') });
+
   const called = await page.evaluate(async () => {
     const s = window.spreefall;
     s.mechs.reset();
     s.demolition.reset();
-    const m = s.dropRide('titan');
-    if (!m) return { skip: true };
+    // Back on your feet and out of the fire. The warhead checks above leave
+    // the street burning and the run can have ended in it, and a mech is not
+    // called down onto a corpse: the game cancels the call, which is the
+    // right answer to the wrong situation for this check.
+    const down = document.getElementById('down');
+    if (down && !down.classList.contains('hidden')) {
+      document.getElementById('downbtn').click();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    s.burningGround.length = 0;
+    s.fires.reset();
+    s.combat.health = 100;
+    // Nothing may kill the run while the clock is counting down: half a
+    // minute standing in a district this suite has set fire to twice is more
+    // than the game asks of anybody.
+    s.setCheat('godmode', true);
+    s.teleport(81, 0);
+    const call = s.dropRide('titan');
+    if (!call) {
+      return {
+        skip: true,
+        why: `mode ${s.state.mode}, in a mech ${!!s.state.inMech}, `
+          + `at ${s.player.x.toFixed(0)},${s.player.z.toFixed(0)} `
+          + `loaded ${s.world.isLoaded(s.player.x, s.player.z)}, `
+          + `health ${Math.round(s.combat.health)}`,
+      };
+    }
     const banner = !document.getElementById('titanfall').classList.contains('hidden');
     const text = document.querySelector('#titanfall .tfline').textContent;
-    const high = Math.round(m.y - s.world.groundHeight(m.x, m.z));
+    const sub = () => document.getElementById('titanfallsub').textContent;
+    // Nothing is on the road yet: what has been promised is a machine, and
+    // for the next half minute it is somewhere above the weather.
+    const emptyAtFirst = s.mechs.active.length === 0;
+    const firstSub = sub();
     let frames = 0;
-    for (let i = 0; i < 60 * 8 && m.y - s.world.groundHeight(m.x, m.z) > 0.5; i++) {
+    let stillEmpty = true;
+    for (let i = 0; i < 60 * 60 && !call.mech; i++) {
+      s.fixedForTest(1 / 60);
+      frames++;
+      if (frames < 60 * 20 && s.mechs.active.length) stillEmpty = false;
+    }
+    const waited = Number((frames / 60).toFixed(1));
+    const m = call.mech;
+    if (!m) {
+      return {
+        skip: true,
+        why: `nothing came down in ${waited} s: still inbound `
+          + `${!!s.state.titanInbound}, health ${Math.round(s.combat.health)}, `
+          + `mode ${s.state.mode}, left ${call.left.toFixed(1)}`,
+      };
+    }
+    const floor = s.world.groundHeight(m.x, m.z);
+    const high = Math.round(m.y - floor);
+    for (let i = 0; i < 60 * 12 && m.y - s.world.groundHeight(m.x, m.z) > 0.5; i++) {
       s.fixedForTest(1 / 60);
       frames++;
     }
     return {
-      banner, text, high,
+      banner, text, high, waited, emptyAtFirst, stillEmpty, firstSub,
+      fell: Number(((frames / 60) - waited).toFixed(1)),
       seconds: Number((frames / 60).toFixed(1)),
       gone: document.getElementById('titanfall').classList.contains('hidden'),
       sites: s.demolition.sites.length + s.demolition.baked,
@@ -1198,11 +1532,16 @@ async function run() {
     };
   });
   check('a mech you call for arrives out of the sky',
-    !called.skip && called.banner && /titanfall/i.test(called.text) && called.high > 150,
-    called.skip ? 'no room to drop one' : `"${called.text}", ${called.high} m up`);
+    !called.skip && called.banner && /titanfall/i.test(called.text) && called.high > 250,
+    called.skip ? `no room to drop one: ${called.why || ''}` : `"${called.text}", ${called.high} m up`);
+  check('and the whole thing takes about half a minute',
+    !called.skip && called.emptyAtFirst && called.stillEmpty
+      && called.seconds > 25 && called.seconds < 36 && called.fell > 2,
+    called.skip ? ''
+      : `${called.waited} s of "${called.firstSub}", then ${called.fell} s of falling`);
   check('and the landing opens the road and takes the words off the screen',
-    !called.skip && called.seconds < 5 && called.gone && called.sites > 0,
-    called.skip ? '' : `down in ${called.seconds} s, ${called.sites} places came apart`);
+    !called.skip && called.gone && called.sites > 0,
+    called.skip ? '' : `${called.sites} places came apart`);
 
   const stomp = await page.evaluate(async () => {
     const s = window.spreefall;

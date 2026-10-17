@@ -79,6 +79,10 @@ export function settle(p, isGround, height, site) {
   if (bite <= 0) return 0;
   const level = collapseLocal(site.level, bite);
   if (level <= 0) return 0;
+  // A site made while the buildings switch was off carries the crater and
+  // nothing else: the hole is written into the street and every wall around
+  // it is left exactly as it was.
+  if (!isGround && site.walls === false) return 0;
 
   if (isGround) {
     p.y += craterShape(p.x, p.z, site, level);

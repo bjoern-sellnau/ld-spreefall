@@ -121,8 +121,11 @@ export class Gibs {
   }
 
   burst(x, y, z, dir, scale = 1) {
-    const n = Math.min(MAX, Math.round(16 * Math.min(4.2, scale)));
-    const push = 1 + 0.35 * Math.min(4.2, scale);
+    // Past the top gore switch there is nothing left to give: sixteen pieces
+    // a point of scale runs the pool dry at six, and the throw keeps going a
+    // little further than that.
+    const n = Math.min(MAX, Math.round(16 * Math.min(7.5, scale)));
+    const push = 1 + 0.35 * Math.min(7.5, scale);
     for (let i = 0; i < n; i++) {
       const g = this._free();
       g.alive = true;

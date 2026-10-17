@@ -16,7 +16,7 @@ export const MAX_COLLAPSE = 16;
 
 export const COLLAPSE = `
 uniform vec4 uCollapse[${16}];      // xyz centre at ground level, w collapse radius
-uniform vec4 uCollapseInfo[${16}];  // x level, y crater depth, z crater radius, w heap
+uniform vec4 uCollapseInfo[${16}];  // x level, y crater depth, z crater radius, w heap (negative: crater only)
 uniform int uCollapseCount;
 
 // How far the fall runs ahead of itself at the middle of a site. A whole
@@ -93,6 +93,12 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
       continue;
     }
 
+    // A negative heap means this site digs its crater and leaves every wall
+    // in it standing: the buildings switch in the cheat menu was off when it
+    // opened. The sign carries it because both uniform vectors are full and
+    // a heap of rubble is never less than nothing.
+    if (uCollapseInfo[i].w < 0.0) continue;
+
     // Where this building has been cut back to. At a quarter gone it is the
     // top quarter that is missing; at one it is the whole thing.
     float above = p.y - site.y;
@@ -160,6 +166,17 @@ void main() {
   // A ruin that was baked into the buffers is rubble for good, whether or not
   // the site that made it still has a slot.
   if ((aPacked.w & ${FACADE_FLAG.RUBBLE}u) != 0u) vFall = max(vFall, 1.0);
+  // The fallback plane, pushed down by about what the depth buffer loses at
+  // this distance. A twenty four bit buffer resolves roughly the square of
+  // the distance over the near plane, so the correction is quadratic too: a
+  // couple of centimetres down the street, a quarter of a metre at three
+  // hundred, and never more than a metre and a half. Nothing is ever meant to
+  // see this plane, and where it is exposed it is the ground far enough away
+  // that a metre of it is a pixel.
+  if ((aPacked.w & ${FACADE_FLAG.BASE}u) != 0u) {
+    float away = distance(p.xz, uCamPos.xz);
+    p.y -= min(1.5, away * away * 2.5e-6);
+  }
   vWorld = p;
   vNormal = nrm;
   vAo = clamp(aNormal.w * 2.0, 0.0, 1.0);

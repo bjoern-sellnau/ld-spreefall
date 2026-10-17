@@ -268,6 +268,12 @@ function hippedRoof(mesh, ring, y, rh, mat, seed) {
  */
 export function ribbon(mesh, line, half, mat, yAt, opts = {}) {
   if (line.length < 2) return;
+  // Long straight runs are cut up for the same reason the ground polygons
+  // are: a vertex is a sixteen bit offset from its tile and a quad five
+  // hundred metres long comes back from that clamp bent. Both edges of the
+  // strip are cut at the same places, so the strip stays watertight, and the
+  // extra points let a road follow the ground it is laid on.
+  line = subdivideLine(line, opts.piece || GROUND_PIECE);
   const lift = opts.lift || 0;
   // A road, a pavement, a railway bed: all of them ground. See groundPolygon.
   const flags = (opts.flags || 0) | FACADE_FLAG.GROUND;
@@ -298,6 +304,102 @@ export function ribbon(mesh, line, half, mat, yAt, opts = {}) {
   }
 }
 
+/** A polyline with no segment longer than the given step. */
+function subdivideLine(line, step) {
+  const out = [line[0]];
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1], b = line[i];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const n = Math.ceil(len / step);
+    for (let k = 1; k < n; k++) {
+      out.push([a[0] + (b[0] - a[0]) * (k / n), a[1] + (b[1] - a[1]) * (k / n)]);
+    }
+    out.push(b);
+  }
+  return out;
+}
+
+/**
+ * How big a piece of ground is allowed to get, in metres.
+ *
+ * A vertex is stored as a sixteen bit offset from its tile's origin at a
+ * sixty fourth of a metre, which runs out at five hundred and twelve metres,
+ * and anything past that is clamped. The Tiergarten came out of the
+ * triangulator as a handful of triangles six hundred metres across, the clamp
+ * pulled their corners in, and the park was left with a hole in it you could
+ * see the sky through while standing on ground the collision layer called
+ * solid. Fifty metres also nests inside the hundred metre tiles, so a piece
+ * of ground belongs to the tile it is drawn in rather than to one three
+ * streets away, and it lets the ground follow the terrain instead of being
+ * one flat sheet laid over a city that is not flat.
+ */
+export const GROUND_PIECE = 50;
+
+/**
+ * A triangle cut into the pieces of a grid, as a list of convex polygons.
+ *
+ * The cut is done with the same arithmetic on both sides of every grid line,
+ * so two triangles that share an edge come out of this sharing it still:
+ * there are no T junctions and no hairline cracks along the cuts.
+ */
+function clipToGrid(tri, grid) {
+  const xs = [tri[0][0], tri[1][0], tri[2][0]];
+  const zs = [tri[0][1], tri[1][1], tri[2][1]];
+  const gx0 = Math.floor(Math.min(...xs) / grid);
+  const gx1 = Math.floor((Math.max(...xs) - 1e-9) / grid);
+  const gz0 = Math.floor(Math.min(...zs) / grid);
+  const gz1 = Math.floor((Math.max(...zs) - 1e-9) / grid);
+  if (gx0 === gx1 && gz0 === gz1) return [tri];
+  const out = [];
+  for (let gz = gz0; gz <= gz1; gz++) {
+    for (let gx = gx0; gx <= gx1; gx++) {
+      const piece = clipToBox(tri, gx * grid, gz * grid, (gx + 1) * grid, (gz + 1) * grid);
+      if (piece.length >= 3) out.push(piece);
+    }
+  }
+  return out;
+}
+
+/** Sutherland Hodgman against an axis aligned box in x and z. */
+function clipToBox(poly, minX, minZ, maxX, maxZ) {
+  const edges = [
+    (p) => p[0] >= minX, (p) => p[0] <= maxX,
+    (p) => p[1] >= minZ, (p) => p[1] <= maxZ,
+  ];
+  const cuts = [
+    (a, b) => cutAt(a, b, 0, minX), (a, b) => cutAt(a, b, 0, maxX),
+    (a, b) => cutAt(a, b, 1, minZ), (a, b) => cutAt(a, b, 1, maxZ),
+  ];
+  let ring = poly;
+  for (let e = 0; e < 4 && ring.length; e++) {
+    const inside = edges[e];
+    const cut = cuts[e];
+    const next = [];
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[j], b = ring[i];
+      const ina = inside(a), inb = inside(b);
+      if (ina && inb) next.push(b);
+      else if (ina && !inb) next.push(cut(a, b));
+      else if (!ina && inb) { next.push(cut(a, b)); next.push(b); }
+    }
+    ring = next;
+  }
+  // Points that landed on top of each other help nobody.
+  const out = [];
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i], q = ring[(i + 1) % ring.length];
+    if (Math.abs(p[0] - q[0]) > 1e-6 || Math.abs(p[1] - q[1]) > 1e-6) out.push(p);
+  }
+  return out.length >= 3 ? out : [];
+}
+
+/** Where the segment crosses a line of constant x (axis 0) or z (axis 1). */
+function cutAt(a, b, axis, value) {
+  const da = a[axis], db = b[axis];
+  const t = Math.abs(db - da) < 1e-12 ? 0 : (value - da) / (db - da);
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
 /** A polygon area laid on the ground, uv in world metres. */
 export function groundPolygon(mesh, outer, holes, mat, yAt, opts = {}) {
   const { verts, indices } = triangulate(outer, holes || []);
@@ -307,9 +409,18 @@ export function groundPolygon(mesh, outer, holes, mat, yAt, opts = {}) {
   // that is what the collapse code tests to decide whether a vertex belongs
   // in a crater or in a wall.
   const flags = (opts.flags || 0) | FACADE_FLAG.GROUND;
-  const map = verts.map((p) => mesh.vertex(p[0], yAt(p[0], p[1]) + lift, p[1], 0, 1, 0, p[0], p[1], mat, opts.seed || 0, 0, flags, 0, 255));
+  const seed = opts.seed || 0;
+  const grid = opts.grid || GROUND_PIECE;
+  const put = (p) => mesh.vertex(p[0], yAt(p[0], p[1]) + lift, p[1], 0, 1, 0,
+    p[0], p[1], mat, seed, 0, flags, 0, 255);
   for (let i = 0; i < indices.length; i += 3) {
-    mesh.tri(map[indices[i]], map[indices[i + 2]], map[indices[i + 1]]);
+    // The winding the triangulator hands back is the other way round from the
+    // one this engine draws, which is why b and c are swapped here.
+    const tri = [verts[indices[i]], verts[indices[i + 2]], verts[indices[i + 1]]];
+    for (const piece of clipToGrid(tri, grid)) {
+      const ids = piece.map(put);
+      for (let k = 2; k < ids.length; k++) mesh.tri(ids[0], ids[k - 1], ids[k]);
+    }
   }
 }
 

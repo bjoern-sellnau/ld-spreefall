@@ -606,6 +606,37 @@ export class Audio {
     hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
     hiss.connect(hp); hp.connect(hg); hg.connect(this.master);
     hiss.start(t + 0.24); hiss.stop(t + 0.95);
+
+    // The part that had been missing: the thump. A pulse that is only a whine
+    // and a hiss is a sound effect; a pulse with sixty hertz falling out from
+    // under it is a weapon going off. The crack on top gives it an edge, so
+    // it reads as electrical rather than as a drum.
+    const body = ctx.createOscillator();
+    body.type = 'sine';
+    body.frequency.setValueAtTime(70, t);
+    body.frequency.exponentialRampToValueAtTime(21, t + 0.5);
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0.0001, t);
+    bg.gain.exponentialRampToValueAtTime(0.62 * near, t + 0.012);
+    bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.62);
+    body.connect(bg); bg.connect(this.master);
+    body.start(t); body.stop(t + 0.64);
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = this._noiseBuffer;
+    crack.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(5200, t);
+    bp.frequency.exponentialRampToValueAtTime(900, t + 0.14);
+    bp.Q.value = 0.7;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, t);
+    cg.gain.exponentialRampToValueAtTime(0.4 * near, t + 0.006);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    crack.connect(bp).connect(cg).connect(this.master);
+    crack.start(t, Math.random() * 3, 0.34);
+    crack.stop(t + 0.34);
   }
 
   flameWall() {

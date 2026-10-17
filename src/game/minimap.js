@@ -119,7 +119,13 @@ export class Minimap {
     // The districts, under everything, on the big map only. Berlin inside the
     // Ring is twenty four of them and only a few are ever in memory, so the
     // ones that are not say so rather than reading as empty ground.
-    if (this.big) this.drawDistricts(ctx, scale);
+    if (this.big) {
+      this.drawDistrictBoxes(ctx, scale);
+      this.drawSketches(ctx, scale);
+      // Names last of the three, so a street drawn across the city does not
+      // go through the label of the district it belongs to.
+      this.drawDistrictNames(ctx, scale);
+    }
 
     // Water first.
     ctx.fillStyle = '#16303c';
@@ -322,7 +328,57 @@ export class Minimap {
    * @param {CanvasRenderingContext2D} ctx in world space already
    * @param {number} scale canvas pixels per metre, for hairlines and text
    */
-  drawDistricts(ctx, scale) {
+  /**
+   * The city the map cannot see.
+   *
+   * Only the district you are standing in has its streets in memory, so every
+   * other one used to be a labelled grey rectangle: eighty one of them, which
+   * is not a city anybody can pick a target on. The index carries a sketch of
+   * each district built, a few hundred bytes of big roads, water and parks,
+   * and this draws them. It is one path per kind rather than one per road,
+   * because eighty one districts is thousands of little strokes and the map
+   * is redrawn on every drag.
+   */
+  drawSketches(ctx, scale) {
+    const list = this.world.catalogue || [];
+    if (!list.length) return;
+    const ring = (path, flat) => {
+      path.moveTo(flat[0], flat[1]);
+      for (let i = 2; i < flat.length; i += 2) path.lineTo(flat[i], flat[i + 1]);
+      path.closePath();
+    };
+    const water = new Path2D();
+    const green = new Path2D();
+    const roads = new Path2D();
+    let any = false;
+    for (const d of list) {
+      // The one you are in draws itself, in full, out of its own manifest.
+      if (!d.sketch || this.world.loaded(d.id)) continue;
+      any = true;
+      for (const w of d.sketch.water) ring(water, w);
+      for (const g of d.sketch.green) ring(green, g);
+      for (const r of d.sketch.roads) {
+        roads.moveTo(r[0], r[1]);
+        for (let i = 2; i < r.length; i += 2) roads.lineTo(r[i], r[i + 1]);
+      }
+    }
+    if (!any) return;
+    ctx.save();
+    // Dimmer than the district you are in, because this is a sketch of a
+    // place you are not standing in and the map should say which is which.
+    ctx.fillStyle = '#132a34';
+    ctx.fill(water);
+    ctx.fillStyle = '#16200f';
+    ctx.fill(green);
+    ctx.strokeStyle = 'rgba(140, 147, 156, 0.42)';
+    ctx.lineWidth = Math.max(0.8, 1.25 / scale * this.dpr);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke(roads);
+    ctx.restore();
+  }
+
+  drawDistrictBoxes(ctx, scale) {
     const list = this.world.catalogue || [];
     if (!list.length) return;
     ctx.save();
@@ -343,7 +399,11 @@ export class Minimap {
       ctx.strokeRect(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
     }
     ctx.restore();
-    // Names, upright and at a readable size whatever the zoom is.
+  }
+
+  /** Names, upright and at a readable size whatever the zoom is. */
+  drawDistrictNames(ctx, scale) {
+    const list = this.world.catalogue || [];
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const W = this.canvas.width, H = this.canvas.height;

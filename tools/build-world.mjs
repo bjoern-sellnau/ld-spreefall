@@ -434,12 +434,6 @@ function buildDistrict(district) {
   const mesh = new Mesh();
   const collision = [];    // {x1,z1,x2,z2,base,top,surface}
 
-  // --- ground base --------------------------------------------------------
-  // The fallback surface under everything, as a quad grid. It has to be fine
-  // enough that its linear interpolation of the terrain never rises above the
-  // road ribbons drawn a hundred millimetres below the true ground, so 12.5 m,
-  // and cells that something else already covers are simply not emitted. That
-  // second part removes about a third of the world's triangles.
   // What each part of the city costs in vertices. Printed at the end,
   // because the first real build showed the roads were two thirds of the
   // geometry and nobody had asked where the bytes were going.
@@ -447,27 +441,6 @@ function buildDistrict(district) {
   let mark = 0;
   const since = (name) => { spent[name] = (spent[name] || 0) + (mesh.vertexCount - mark); mark = mesh.vertexCount; };
   mark = mesh.vertexCount;
-  const gstep = tier.groundStep;
-  const gnx = Math.ceil(world.width / gstep);
-  const gnz = Math.ceil(world.depth / gstep);
-  const cover = buildCoverage(world, roads, areas, greens, waterPolys, buildings, memorials);
-  let groundCells = 0, skippedCells = 0;
-  for (let iz = 0; iz < gnz; iz++) {
-    for (let ix = 0; ix < gnx; ix++) {
-      const x0 = world.minX + ix * gstep, x1 = x0 + gstep;
-      const z0 = world.minZ + iz * gstep, z1 = z0 + gstep;
-      if (cover.cellCovered(x0, z0, gstep)) { skippedCells++; continue; }
-      // Nine centimetres down. The grid interpolates the terrain linearly over
-      // 12.5 m and the terrain is not linear, so a base plane drawn at the true
-      // height pokes through the roads and squares laid on top of it. Ninety
-      // millimetres clears that error and is far too small a step to see where
-      // the base plane is actually exposed.
-      groundPolygon(mesh, [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], [], MAT.PAVEMENT, yAt, { lift: -0.09 });
-      groundCells++;
-    }
-  }
-  console.log(`ground: ${groundCells} base cells drawn, ${skippedCells} skipped as already covered`);
-  since('ground');
 
   // --- green -------------------------------------------------------------
   for (const g of greens) {
@@ -651,6 +624,49 @@ function buildDistrict(district) {
   }
 
   since('stelae');
+  // --- ground base --------------------------------------------------------
+  // The fallback surface under everything, as a quad grid, laid last because
+  // what it has to fill is whatever the rest of the city did not.
+  //
+  // It has to be fine enough that its linear interpolation of the terrain
+  // never rises above the road ribbons drawn a hundred millimetres below the
+  // true ground, so 12.5 m, and cells that something else has already drawn
+  // are simply not emitted. That second part removes about a third of the
+  // world's triangles.
+  //
+  // What counts as already drawn is read off the triangles in the mesh rather
+  // than off the polygons they came from, and that is the whole point. The
+  // first version of this asked the source data: it filled a park's outline
+  // into a mask and skipped the base ground under it, including under the
+  // holes in that park, which are exactly the parts the park does not draw.
+  // The result was a hole in the world you could see the sky through,
+  // standing on ground the collision layer said was solid. A polygon that
+  // fails to triangulate, a ring clipped away at a district edge and a
+  // building footprint that is not ground at all were all the same mistake.
+  // Asking the mesh cannot be wrong about this, because the mesh is the
+  // picture.
+  const gstep = tier.groundStep;
+  const gnx = Math.ceil(world.width / gstep);
+  const gnz = Math.ceil(world.depth / gstep);
+  const cover = drawnGroundCoverage(world, mesh, yAt);
+  let groundCells = 0, skippedCells = 0;
+  for (let iz = 0; iz < gnz; iz++) {
+    for (let ix = 0; ix < gnx; ix++) {
+      const x0 = world.minX + ix * gstep, x1 = x0 + gstep;
+      const z0 = world.minZ + iz * gstep, z1 = z0 + gstep;
+      if (cover.cellCovered(x0, z0, gstep)) { skippedCells++; continue; }
+      // Nine centimetres down. The grid interpolates the terrain linearly over
+      // 12.5 m and the terrain is not linear, so a base plane drawn at the true
+      // height pokes through the roads and squares laid on top of it. Ninety
+      // millimetres clears that error and is far too small a step to see where
+      // the base plane is actually exposed.
+      groundPolygon(mesh, [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], [], MAT.PAVEMENT, yAt,
+        { lift: -0.09, flags: FACADE_FLAG.BASE });
+      groundCells++;
+    }
+  }
+  console.log(`ground: ${groundCells} base cells drawn, ${skippedCells} skipped as already drawn`);
+  since('ground');
   // --- trees --------------------------------------------------------------
   const treeList = [];
   for (const t of trees) {
@@ -739,6 +755,7 @@ function buildDistrict(district) {
 
   const binBytes = bundle.buffer.length;
   const jsonBytes = fs.statSync(path.join(OUT_DIR, jsonName)).size;
+  const sketch = citySketch(roadLines, manifest.waterOutlines, manifest.greenOutlines);
   const gz = gzipSize(path.join(OUT_DIR, binName)) + gzipSize(path.join(OUT_DIR, jsonName));
   updateIndex(district, {
     name, tier: district.tier,
@@ -753,6 +770,7 @@ function buildDistrict(district) {
     waterLevel,
     landmarks: manifest.landmarks.length,
     sight: pickSight(manifest.landmarks, manifest.stations, world),
+    sketch,
     builtAt: new Date().toISOString(),
   });
 
@@ -938,6 +956,77 @@ function updateIndex(district, entry) {
   fs.writeFileSync(INDEX_FILE, JSON.stringify(index));
 }
 
+/**
+ * A district drawn in a few hundred bytes, for the map of the whole city.
+ *
+ * The map can only draw the district you are standing in, because that is the
+ * only one whose streets are in memory, and every other one was a labelled
+ * rectangle: eighty one grey boxes, which is not a city you can pick a target
+ * on. This goes into the index instead, which is loaded before anything else
+ * and weighs nothing: the big roads, the water and the parks, flattened to
+ * whole metres and simplified hard, because at the scale the whole of Berlin
+ * fits on a screen a kerb is a tenth of a pixel.
+ */
+function citySketch(roadLines, waterOutlines, greenOutlines) {
+  const KEEP = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link',
+    'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary',
+    'residential', 'unclassified', 'pedestrian', 'living_street']);
+  const pairs = (flat) => {
+    const out = [];
+    for (let i = 0; i < flat.length; i += 2) out.push([flat[i], flat[i + 1]]);
+    return out;
+  };
+  const whole = (pts) => {
+    const out = [];
+    for (const p of pts) {
+      const x = Math.round(p[0]), z = Math.round(p[1]);
+      // Rounding to the metre puts neighbouring points on top of each other,
+      // and a run of identical points is bytes for nothing.
+      if (out.length >= 2 && out[out.length - 2] === x && out[out.length - 1] === z) continue;
+      out.push(x, z);
+    }
+    return out;
+  };
+  let roads = [];
+  for (const r of roadLines) {
+    if (!KEEP.has(r.cls)) continue;
+    const line = whole(simplify(pairs(r.pts), 30));
+    if (line.length >= 4) roads.push(line);
+  }
+  // A cap, so that one dense district cannot run away with the index. The
+  // longest ones are the ones that read as a city from above.
+  if (roads.length > 220) {
+    const len = (l) => {
+      let d = 0;
+      for (let i = 2; i < l.length; i += 2) d += Math.hypot(l[i] - l[i - 2], l[i + 1] - l[i - 1]);
+      return d;
+    };
+    roads = roads.map((l) => [len(l), l]).sort((a, b) => b[0] - a[0]).slice(0, 220)
+      .map((p) => p[1]);
+  }
+  const water = [];
+  for (const w of waterOutlines) {
+    const ring = whole(simplify(pairs(w), 25));
+    if (ring.length >= 8) water.push(ring);
+  }
+  const green = [];
+  for (const g of greenOutlines) {
+    const ring = whole(simplify(pairs(g), 35));
+    // Anything smaller than a city block is a shrub at this scale.
+    if (ring.length >= 8 && flatRingArea(ring) > 20000) green.push(ring);
+  }
+  return { roads, water, green };
+}
+
+/** The area of a ring given as a flat run of coordinates. */
+function flatRingArea(flat) {
+  let a = 0;
+  for (let i = 0, j = flat.length - 2; i < flat.length; j = i, i += 2) {
+    a += flat[j] * flat[i + 1] - flat[i] * flat[j + 1];
+  }
+  return Math.abs(a) / 2;
+}
+
 /** The budget table: what the whole city costs, district by district. */
 function writeIndexSummary() {
   const index = readIndex();
@@ -1095,48 +1184,59 @@ function lerpTo(a, b, t) {
 function round2(v) { return Math.round(v * 100) / 100; }
 
 /**
- * A coverage raster of everything that draws its own ground: roads and their
- * pavements, pedestrian areas, parks, water, building footprints and the
- * memorial. Used to drop base ground cells nobody will ever see.
+ * A coverage raster of the ground the city has actually drawn.
+ *
+ * Every triangle in the mesh that is flagged as ground and lies at ground
+ * level is rasterised into a three metre grid. Roads, pavements, parks,
+ * water, squares and the memorial floor all end up in here because all of
+ * them are laid flat and say so; a roof does not, and neither does the
+ * viaduct the Stadtbahn runs on six metres up, which is what the height test
+ * is for. What is left over is where the base plane has to go.
  */
-function buildCoverage(world, roads, areas, greens, waterPolys, buildings, memorials) {
-  const step = 3.125;
+function drawnGroundCoverage(world, mesh, yAt) {
+  // Three quarters of a metre, which is sixteen samples across a base cell.
+  // The first version of this rasterised at 3.125 m and left the holes it was
+  // written to close: a path through a park is a three metre gap in the park
+  // polygon with a two metre ribbon drawn down the middle of it, and the half
+  // metre of nothing either side fell between the samples. A grid this fine
+  // costs twenty megabytes for the largest district and nothing at all at
+  // runtime, because it is thrown away when the build ends.
+  const step = 0.78125;
   const nx = Math.ceil(world.width / step) + 2;
   const nz = Math.ceil(world.depth / step) + 2;
   const data = new Uint8Array(nx * nz);
-  const put = (x, z) => {
-    const ix = Math.round((x - world.minX) / step);
-    const iz = Math.round((z - world.minZ) / step);
-    if (ix < 0 || iz < 0 || ix >= nx || iz >= nz) return;
-    data[iz * nx + ix] = 1;
-  };
-  const fillRing = (ring, grow = 0) => {
-    const bb = bboxOf(ring);
-    for (let z = bb.minZ - grow; z <= bb.maxZ + grow; z += step) {
-      for (let x = bb.minX - grow; x <= bb.maxX + grow; x += step) {
-        if (grow > 0 ? pointNearRing(x, z, ring, grow) : pointInRing(x, z, ring)) put(x, z);
-      }
-    }
-  };
-  for (const g of greens) fillRing(g.ring);
-  for (const w of waterPolys) fillRing(w.ring);
-  for (const a of areas) fillRing(a.ring);
-  for (const m of memorials) fillRing(m.ring);
-  for (const b of buildings) if (b.outer.length >= 3) fillRing(b.outer, 1.5);
-  for (const r of roads) {
-    const cls = r.tags.highway;
-    const explicit = parseLength(r.tags.width);
-    const width = Number.isFinite(explicit) && explicit > 1 ? explicit : (ROAD_WIDTH[cls] || 6);
-    const half = width / 2 + 3.6;
-    for (let i = 1; i < r.line.length; i++) {
-      const a = r.line[i - 1], b = r.line[i];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-      const steps = Math.max(1, Math.ceil(len / step));
-      const nx2 = -(b[1] - a[1]) / len, nz2 = (b[0] - a[0]) / len;
-      for (let k = 0; k <= steps; k++) {
-        const t = k / steps;
-        const px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t;
-        for (let o = -half; o <= half; o += step) put(px + nx2 * o, pz + nz2 * o);
+  const ix = (x) => Math.round((x - world.minX) / step);
+  const iz = (z) => Math.round((z - world.minZ) / step);
+  for (let i = 0; i < mesh.idx.length; i += 3) {
+    const a = mesh.idx[i], b = mesh.idx[i + 1], c = mesh.idx[i + 2];
+    if (!(mesh.flags[a] & FACADE_FLAG.GROUND)) continue;
+    const ax = mesh.px[a], az = mesh.pz[a];
+    const bx = mesh.px[b], bz = mesh.pz[b];
+    const cx = mesh.px[c], cz = mesh.pz[c];
+    // At ground level, or below it: water sits in its own bed and a sunken
+    // square is still a square. Anything standing well above the terrain is
+    // a surface with a view, not a surface you walk on.
+    const my = (mesh.py[a] + mesh.py[b] + mesh.py[c]) / 3;
+    const mx = (ax + bx + cx) / 3, mz = (az + bz + cz) / 3;
+    if (my - yAt(mx, mz) > 1.5) continue;
+    const x0 = ix(Math.min(ax, bx, cx)), x1 = ix(Math.max(ax, bx, cx));
+    const z0 = iz(Math.min(az, bz, cz)), z1 = iz(Math.max(az, bz, cz));
+    if (x1 < 0 || z1 < 0 || x0 >= nx || z0 >= nz) continue;
+    // Edge functions once, then the sign of each sample against them.
+    const e0x = bx - ax, e0z = bz - az;
+    const e1x = cx - bx, e1z = cz - bz;
+    const e2x = ax - cx, e2z = az - cz;
+    const area = e0x * (cz - az) - e0z * (cx - ax);
+    if (Math.abs(area) < 1e-9) continue;
+    const sign = area > 0 ? 1 : -1;
+    for (let j = Math.max(0, z0); j <= Math.min(nz - 1, z1); j++) {
+      const pz = world.minZ + j * step;
+      for (let k = Math.max(0, x0); k <= Math.min(nx - 1, x1); k++) {
+        const px = world.minX + k * step;
+        if ((e0x * (pz - az) - e0z * (px - ax)) * sign < 0) continue;
+        if ((e1x * (pz - bz) - e1z * (px - bx)) * sign < 0) continue;
+        if ((e2x * (pz - cz) - e2z * (px - cx)) * sign < 0) continue;
+        data[j * nx + k] = 1;
       }
     }
   }
@@ -1148,30 +1248,14 @@ function buildCoverage(world, roads, areas, greens, waterPolys, buildings, memor
         for (let i = 0; i <= n; i++) {
           const x = x0 + (size * i) / n;
           const z = z0 + (size * j) / n;
-          const ix = Math.round((x - world.minX) / step);
-          const iz = Math.round((z - world.minZ) / step);
-          if (ix < 0 || iz < 0 || ix >= nx || iz >= nz) return false;
-          if (!data[iz * nx + ix]) return false;
+          const px = ix(x), pz = iz(z);
+          if (px < 0 || pz < 0 || px >= nx || pz >= nz) return false;
+          if (!data[pz * nx + px]) return false;
         }
       }
       return true;
     },
   };
-}
-
-function pointNearRing(x, z, ring, r) {
-  if (pointInRing(x, z, ring)) return true;
-  const r2 = r * r;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[j], b = ring[i];
-    const ex = b[0] - a[0], ez = b[1] - a[1];
-    const ee = ex * ex + ez * ez;
-    let t = ee > 1e-9 ? ((x - a[0]) * ex + (z - a[1]) * ez) / ee : 0;
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    const dx = x - (a[0] + ex * t), dz = z - (a[1] + ez * t);
-    if (dx * dx + dz * dz <= r2) return true;
-  }
-  return false;
 }
 
 function flatRing(ring) {

@@ -14,7 +14,8 @@ const KEY = 'spreefall.cheats';
 
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
-  'slowBlast', 'mechKillers', 'gib', 'ragdoll', 'blood', 'ultraGore'];
+  'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill',
+  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -25,6 +26,14 @@ export const SWITCHES = [
   { id: 'cinematic', label: 'Cinematic warheads', note: 'the camera follows one down and circles what is left' },
   { id: 'slowBlast', label: 'Slow motion blasts', note: 'the world drops to a crawl while something goes off' },
   { id: 'mechKillers', label: 'Machines carry mech killers', note: 'some of them get the EMP warhead as well, and it is meant for what you are standing in' },
+  // The two destruction switches are the only ones here that start on,
+  // because they are the game as it ships: a city that comes down is the
+  // point of it. They are in the menu so that you can have the other half,
+  // which is a Berlin that stays standing while you fight in it, and so that
+  // a slow machine can be given one less thing to do.
+  { id: 'wreckBuildings', label: 'Buildings can be destroyed', note: 'blasts cut frontages back and bring them down; off leaves the city standing', def: true },
+  { id: 'wreckGround', label: 'Ground can be cratered', note: 'warheads dig a hole where they land; off keeps the street level', def: true },
+  { id: 'lastKill', label: 'Slow motion on the last kill', note: 'killing the last one standing near you drops the world to a crawl for a moment' },
 ];
 
 export const GORE = [
@@ -32,7 +41,19 @@ export const GORE = [
   { id: 'ragdoll', label: 'Ragdoll', note: 'they fall with the momentum of the shot' },
   { id: 'blood', label: 'Blood', note: 'hits spray, and it lands on the street' },
   { id: 'ultraGore', label: 'Ultra gore', note: 'all of the above, considerably more of it' },
+  { id: 'maxGore', label: 'Ultra gore, and then some', note: 'as much blood as the pools can hold and a shot that throws a body across the street; add the tearing switch and every piece the game owns comes with it' },
 ];
+
+/**
+ * What every switch is before anybody touches the menu. Nearly all of them
+ * are off, and the two destruction switches are on, so "has this run been
+ * cheated" is a comparison against this rather than a test for true.
+ */
+const DEFAULTS = {};
+for (const id of KEYS) {
+  const spec = SWITCHES.find((s) => s.id === id) || GORE.find((s) => s.id === id);
+  DEFAULTS[id] = !!(spec && spec.def);
+}
 
 /** The one shot buttons. The handlers are wired up by the game layer. */
 export const ACTIONS = [
@@ -100,10 +121,13 @@ export class Cheats {
     this.cinematic = false;
     this.slowBlast = false;
     this.mechKillers = false;
+    this.wreckBuildings = true;
+    this.wreckGround = true;
     this.gib = false;
     this.ragdoll = false;
     this.blood = false;
     this.ultraGore = false;
+    this.maxGore = false;
     // The numeric settings, by id, starting at what the game ships with.
     this.values = {};
     for (const s of SETTINGS) this.values[s.id] = s.def;
@@ -116,28 +140,34 @@ export class Cheats {
 
   /** @returns {boolean} true when anything at all is on */
   get any() {
-    return this.godmode || this.infiniteAmmo || this.nukeRain || this.noDrones
-      || this.cinematic || this.slowBlast || this.mechKillers
-      || this.gib || this.ragdoll || this.blood || this.ultraGore
-      || this.anyValue;
+    return KEYS.some((id) => this[id] !== DEFAULTS[id]) || this.anyValue;
   }
 
   /**
    * How much of everything the gore settings ask for. Ultra gore is not a
    * fourth effect, it is a multiplier over the other three, which is both what
    * it means and the only way to make it feel like more rather than different.
+   * The switch above it is the same multiplier again, set where the pools
+   * run out: past this there is nothing left to spend.
    */
-  get goreScale() { return this.ultraGore ? 4.2 : 1; }
+  get goreScale() {
+    if (this.maxGore) return 7.5;
+    return this.ultraGore ? 4.2 : 1;
+  }
 
   /** True when a kill should come apart rather than fall over. */
+  // Deliberately not the top switch. Coming apart is the absence of a death:
+  // there is no body left to throw, so a switch whose whole point is the
+  // throw cannot also be the one that takes the body away. Turn on the
+  // tearing switch as well and you get both, with every piece the pool has.
   get gibbing() { return this.gib || this.ultraGore; }
-  get bleeding() { return this.blood || this.ultraGore; }
-  get tumbling() { return this.ragdoll || this.ultraGore; }
+  get bleeding() { return this.blood || this.ultraGore || this.maxGore; }
+  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore; }
 
   set(id, on) {
     if (!(id in this) || typeof this[id] !== 'boolean') return false;
     this[id] = !!on;
-    if (this[id]) this.used = true;
+    if (this[id] !== DEFAULTS[id]) this.used = true;
     this.save();
     if (this.onChange) this.onChange(id, this[id]);
     return true;
@@ -177,7 +207,7 @@ export class Cheats {
 
   /** Everything off. Does not clear the mark on the run. */
   reset() {
-    for (const id of KEYS) this[id] = false;
+    for (const id of KEYS) this[id] = DEFAULTS[id];
     for (const s of SETTINGS) this.values[s.id] = s.def;
     this.save();
     if (this.onChange) this.onChange(null, false);

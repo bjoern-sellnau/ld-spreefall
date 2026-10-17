@@ -34,7 +34,7 @@ import { FireWalls } from './game/firewall.js';
 import { Machines, MACHINES, makeMachine, empBurst } from './game/machines.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
-import { Mechs, MECH, ARMS, MECH_PITCH } from './game/mechs.js';
+import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
 
@@ -395,6 +395,10 @@ async function main() {
     inSanctuary: false,
     targeting: false,
     blastSlow: 0,
+    // Seconds of slow motion left over a kill that emptied the street. Kept
+    // apart from blastSlow because they are different switches and either
+    // may be on without the other.
+    killSlow: 0,
     mapMode: 'nuke',
     pendingNuke: null,
     travelTo: null,
@@ -593,16 +597,32 @@ async function main() {
         if (Math.hypot(mk.x - x, mk.z - z) > empSpec.radius) continue;
         if (mechs.stunFor(mk, empSpec.seconds)) heavy++;
       }
-      audio.emp(dist);
-      effects.flash(x, y + 1.5, z, empSpec.radius * 0.5, 0.35, 0.7, 1.0, 0.5);
-      for (let i = 0; i < 30; i++) {
-        const a = (i / 30) * Math.PI * 2;
-        const r = empSpec.radius * (0.3 + Math.random() * 0.7);
-        effects.spark(x + Math.cos(a) * r, y + 0.6 + Math.random() * 2,
-          z + Math.sin(a) * r, 0.4, 0.75, 1.0);
+      // And a vehicle, which is a motor with seats round it.
+      for (const v of [...vehicles.active]) {
+        if (!v.alive || Math.hypot(v.x - x, v.z - z) > empSpec.radius) continue;
+        v.speed *= 0.2;
       }
+      audio.emp(dist);
+      // The pulse, drawn as a pulse: a ring that travels out to exactly the
+      // radius it reaches, so what it caught and what it missed is on the
+      // screen rather than in the kill feed. The first version of this was a
+      // blue flash and a handful of sparks, and it read as nothing at all.
+      effects.emp(x, world.groundHeight(x, z), z, empSpec.radius);
+      // What it does to the screen you are looking at, falling off with
+      // distance: close enough and the frame goes white for a moment.
+      const near = Math.max(0, 1 - dist / (empSpec.radius * 2.2));
+      state.flash = Math.min(0.85, state.flash + 0.55 * near * near);
+      effects.shake = Math.min(1.6, effects.shake + 0.7 * near);
       renderer.addScar(x, y, z, empSpec.radius * 0.4, 0.3);
-      if (caught + heavy) feed(`<b>EMP</b> ${caught + heavy} down`);
+      const stopped = caught + heavy;
+      if (stopped) {
+        audio.hitMarker(heavy > 0);
+        showHitmarker(heavy > 0 ? 'core' : '');
+        feed(`<b>EMP</b> ${stopped} stopped`);
+        toast(heavy
+          ? `${stopped} down, ${heavy} of them heavy`
+          : `${stopped} stopped where ${stopped === 1 ? 'it' : 'they'} stood`);
+      }
     }
 
     // And the warhead behind the EMP, which is the part that is meant for
@@ -735,6 +755,24 @@ async function main() {
   }
 
   /** One kill, however it was made: by a bullet, a blast or a fall. */
+  /**
+   * How many of them are still up and anywhere near you. Dying is not up: a
+   * soldier on his way down has no health left and is on his own time.
+   *
+   * @param {number} reach metres, beyond which it is somebody else's fight
+   */
+  function hostilesAlive(x, z, reach = 150) {
+    let n = 0;
+    const near = (a) => Math.hypot(a.x - x, a.z - z) <= reach;
+    for (const d of drones.active) if (d.health > 0 && near(d)) n++;
+    for (const sd of soldiers.active) if (sd.health > 0 && near(sd)) n++;
+    for (const j of jets.active) if (j.health > 0 && near(j)) n++;
+    // Your own machine is not a hostile, whether you are sitting in it or
+    // have left it standing in the road.
+    for (const m of mechs.active) if (!m.mine && m.alive && m.health > 0 && near(m)) n++;
+    return n;
+  }
+
   function creditTarget(target, core, kind) {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
@@ -743,6 +781,14 @@ async function main() {
     audio.droneDown();
     const name = kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
     feed(`<b>${name} down</b> ${Math.round(dist)} m${core ? ' <i>core</i>' : ''}`);
+    // The last kill, in slow motion. It fires only when this one emptied the
+    // street: a flourish on every kill is not a flourish, it is a stutter,
+    // and the whole point of the switch is the quiet after the last of them
+    // goes down.
+    if (cheats.lastKill && state.mode === 'walk' && hostilesAlive(player.x, player.z) === 0) {
+      state.killSlow = 2.2;
+      feed('<i>last kill</i>');
+    }
   }
   weapon.onDryFire = () => audio.dryFire();
   weapon.onReloadStart = (seconds) => audio.reload(seconds);
@@ -1739,14 +1785,84 @@ async function main() {
     const spot = mechSpot(26);
     if (!spot) { toast('no room to drop one here'); return null; }
     const yaw = Math.atan2(-(player.x - spot.x), -(player.z - spot.z));
-    const m = mechs.drop(type, spot.x, spot.z, yaw);
-    if (!m) return null;
-    el.titanfallSub.textContent = `${m.spec.name} inbound`;
+    // Nothing is spawned yet. What exists is a promise and a place: the
+    // machine is somewhere above the weather for the next half minute, and
+    // the only thing on the ground is the mark it is coming down on.
+    state.titanInbound = {
+      type, x: spot.x, z: spot.z, yaw,
+      left: TITANFALL.wait, mark: 0, mech: null,
+    };
+    el.titanfallSub.textContent = `${MECH[type].name} inbound ${TITANFALL.wait}`;
     el.titanfall.classList.remove('hidden');
-    state.titanInbound = m;
     audio.machineCall(0, true);
     feed('<b>standby for titanfall</b>');
-    return m;
+    toast(`${MECH[type].name} inbound. Stand clear.`);
+    return state.titanInbound;
+  }
+
+  /**
+   * The wait, while it is on its way.
+   *
+   * Counts down on the screen, marks the road it is coming down on, and when
+   * the clock runs out puts the thing in the sky above that mark. From there
+   * the ordinary fall takes over, and the landing clears the banner.
+   */
+  function titanTick(dt) {
+    const call = state.titanInbound;
+    if (!call) return;
+    // Already falling: the banner stays up until it lands, which the stomp
+    // takes care of.
+    if (call.mech) {
+      if (!call.mech.alive) { el.titanfall.classList.add('hidden'); state.titanInbound = null; }
+      return;
+    }
+    // Two ways a call is lost before anything leaves the sky: you have gone
+    // somewhere else, so the ground it was coming down on is not loaded any
+    // more, or you are dead, and a machine landing on a corpse helps nobody.
+    if (!world.isLoaded(call.x, call.z) || combat.health <= 0) {
+      el.titanfall.classList.add('hidden');
+      state.titanInbound = null;
+      return;
+    }
+    call.left -= dt;
+    const name = MECH[call.type].name;
+    el.titanfallSub.textContent = call.left > 0
+      ? `${name} inbound ${Math.ceil(call.left)}`
+      : `${name} coming down`;
+
+    // The mark on the road: a column of light standing where it will land,
+    // which opens out in the last few seconds, and a ring of sparks turning
+    // in the bottom of it. Anybody near enough to be flattened can see what
+    // is about to happen to them, which is the difference between a drop and
+    // an accident. The column is re-emitted every step by design: a beam is
+    // a thing that is there until it is not.
+    const y = world.groundHeight(call.x, call.z);
+    const close = call.left < TITANFALL.beacon;
+    effects.beam(call.x, y + 0.1, call.z,
+      close ? 220 : 130, close ? 3.4 : 1.2, 1.0, 0.80, 0.32, 7);
+    call.mark -= dt;
+    if (call.mark <= 0) {
+      call.mark = close ? 0.1 : 0.3;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + state.time;
+        effects.spark(call.x + Math.cos(a) * 3.4, y + 0.4 + Math.random(),
+          call.z + Math.sin(a) * 3.4, 1.0, 0.82, 0.35);
+      }
+    }
+    if (call.left > 0) return;
+
+    // Down it comes. If the street has filled up in the meantime there is
+    // nowhere to put it, and the call is simply lost: better than dropping
+    // forty tonnes into a space it cannot stand in.
+    const m = mechs.drop(call.type, call.x, call.z, call.yaw);
+    if (!m) {
+      el.titanfall.classList.add('hidden');
+      state.titanInbound = null;
+      toast('the drop was waved off');
+      return;
+    }
+    call.mech = m;
+    audio.machineCall(0, true);
   }
 
   /**
@@ -1775,20 +1891,27 @@ async function main() {
    * @returns {{x,z,a}|null}
    */
   function mechSpot(away = 14) {
-    for (let i = 0; i < 28; i++) {
-      const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
-      const r = away * (0.8 + Math.random() * 0.6);
-      const x = player.x + Math.cos(a) * r;
-      const z = player.z + Math.sin(a) * r;
-      if (!world.isLoaded(x, z)) continue;
-      let boxed = false;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, 7)) {
-          boxed = true; break;
+    // Several rings rather than one. A single ring at a fixed distance is a
+    // coin toss in a street with anything in it: the first version of this
+    // answered no about one call in three from a cratered square, and a
+    // Titan that cannot be called because of where you happen to be standing
+    // is a Titan you do not have.
+    for (const scale of [1, 0.7, 1.4, 1.9, 0.5, 2.4]) {
+      for (let i = 0; i < 28; i++) {
+        const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+        const r = away * scale * (0.9 + Math.random() * 0.2);
+        const x = player.x + Math.cos(a) * r;
+        const z = player.z + Math.sin(a) * r;
+        if (!world.isLoaded(x, z)) continue;
+        let boxed = false;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, 7)) {
+            boxed = true; break;
+          }
         }
+        if (boxed) continue;
+        return { x, z, a };
       }
-      if (boxed) continue;
-      return { x, z, a };
     }
     return null;
   }
@@ -1982,6 +2105,11 @@ async function main() {
       drones.enabled = !cheats.noDrones;
       if (cheats.noDrones) drones.reset();
     }
+    // What a blast is allowed to take with it. Both on is the game as it
+    // ships; either one off stops that half of it from here on, and leaves
+    // whatever has already come down exactly where it fell.
+    demolition.buildings = cheats.wreckBuildings;
+    demolition.ground = cheats.wreckGround;
     soldiers.gore.gib = cheats.gibbing;
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;
@@ -2011,7 +2139,10 @@ async function main() {
       b.innerHTML = `<b>${ride.label}</b><i>${ride.note}</i>`;
       b.addEventListener('click', () => {
         const v = dropRide(ride.id);
-        toast(v ? `${v.spec.name} outside. F to get in.` : 'no room for one here');
+        // A mech is not parked outside: it is half a minute away and says so
+        // itself, on the banner and on the road.
+        if (!v) toast('no room for one here');
+        else if (!MECH[ride.id]) toast(`${v.spec.name} outside. F to get in.`);
       });
       el.cheatRides.appendChild(b);
     }
@@ -2091,6 +2222,55 @@ async function main() {
    * Rise of the Machines, while it is running: keep the streets populated,
    * drop warheads on the skyline, and hold the sky where the mode wants it.
    */
+  /**
+   * The floor of last resort, put under whatever district you are in.
+   *
+   * Nothing should ever see it: the streets, the parks and the water are all
+   * above it and between them they cover the ground completely. What it is
+   * for is the times when they do not. A gap in the ground mesh, a tile that
+   * has not arrived yet, the void past the edge of a district, a hole left by
+   * something that came down: all of those show the sky otherwise, and from
+   * inside a city the sky at your feet reads as a white hole in the world
+   * that flickers as you walk past it.
+   *
+   * Fourteen metres under the lowest ground in the district, which is three
+   * metres deeper than the deepest crater this game can dig, so a crater is
+   * still a crater and not a hole with a floor painted across it. It is
+   * worked out once per district and costs two triangles a frame.
+   */
+  let bedrockFor = null;
+  function updateBedrock() {
+    const entry = world.entryAt(player.x, player.z);
+    // The loaded state is part of the key as well as the district: asked
+    // before the bytes arrive, the ground answers nought everywhere, and a
+    // floor worked out from that would stay at nought for a district built
+    // on a hill.
+    const key = entry ? `${entry.id}:${world.loaded(entry.id) ? 'in' : 'out'}` : null;
+    if (bedrockFor === key) return;
+    bedrockFor = key;
+    if (!entry) { renderer.bedrock = null; return; }
+    const b = entry.bounds;
+    let low = Infinity;
+    const n = 24;
+    for (let j = 0; j <= n; j++) {
+      for (let i = 0; i <= n; i++) {
+        const x = b.minX + (b.maxX - b.minX) * (i / n);
+        const z = b.minZ + (b.maxZ - b.minZ) * (j / n);
+        const g = world.groundHeight(x, z);
+        if (Number.isFinite(g) && g < low) low = g;
+      }
+    }
+    if (!Number.isFinite(low)) low = 0;
+    // Out past the district's own edge as well, because the void beyond a
+    // district you have not walked into yet is the same hole seen sideways.
+    const pad = 1200;
+    renderer.bedrock = {
+      y: low - 14,
+      minX: b.minX - pad, minZ: b.minZ - pad,
+      maxX: b.maxX + pad, maxZ: b.maxZ + pad,
+    };
+  }
+
   /**
    * Whether the machine walking in now is one of the ones carrying a mech
    * killer. Rolled when it arrives rather than when it shoots, so what a
@@ -3006,6 +3186,7 @@ async function main() {
       state.mode = 'walk';
       state.walking = true;
     } else {
+      intro.restart();
       state.mode = 'intro';
       state.dronePose = intro.sample(performance.now() / 1000);
     }
@@ -3031,15 +3212,25 @@ async function main() {
   for (const b of modeButtons) {
     b.addEventListener('click', () => {
       machines.set(b.dataset.mode === 'machines');
+      // Picking the mode puts the clock back on the hour it actually is,
+      // unless the slider has been moved: a tab left open since the morning
+      // should still start the end of the world at this afternoon.
+      machines.syncClock();
+      showModeTime();
       showMode();
     });
   }
   el.modeTime.addEventListener('input', () => {
-    machines.timeOfDay = parseFloat(el.modeTime.value);
+    machines.setTime(parseFloat(el.modeTime.value));
     el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
     if (machines.active) renderer.timeOfDay = machines.timeOfDay;
   });
-  el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
+  /** The slider and its label, from whatever the mode's time is now. */
+  function showModeTime() {
+    el.modeTime.value = String(machines.timeOfDay.toFixed(1));
+    el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
+  }
+  showModeTime();
   showMode();
 
   const diffButtons = [...document.querySelectorAll('.difficulty .diff')];
@@ -3281,6 +3472,12 @@ async function main() {
       state.blastSlow = Math.max(0, state.blastSlow - dt);
       scale = Math.min(scale, 0.18);
     }
+    // The last one standing, going down slowly. A shade faster than a blast,
+    // because what you are watching is a body rather than a building.
+    if (state.killSlow > 0) {
+      state.killSlow = Math.max(0, state.killSlow - dt);
+      scale = Math.min(scale, 0.25);
+    }
     if (state.mode === 'cinema') {
       scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
     }
@@ -3291,6 +3488,7 @@ async function main() {
     state.timeScale = scale;
     state.time += worldDt;
     input.poll();
+    updateBedrock();
 
     if (state.mode === 'intro' || state.mode === 'landing') return;
 
@@ -3487,6 +3685,7 @@ async function main() {
       mechs.update(worldDt, { x: player.x, y: player.y, z: player.z }, null);
     }
     rainTick(worldDt);
+    titanTick(worldDt);
     machinesTick(worldDt);
     drones.update(worldDt, eye, state.time);
     soldiers.update(worldDt, eye, state.time);
@@ -3565,7 +3764,11 @@ async function main() {
     } else if (state.mode === 'title' || state.mode === 'intro'
       || state.mode === 'landing' || state.mode === 'travel'
       || state.mode === 'cinema') {
-      const p = state.dronePose || intro.sample(performance.now() / 1000);
+      // The title screen holds the first frame of the drone arc. It used to
+      // sample the flight instead, which started its clock: read the title
+      // for longer than the flight lasts and pressing play skipped straight
+      // to the pavement.
+      const p = state.dronePose || intro.pose(0);
       camera.position[0] = p.x;
       camera.position[1] = p.y;
       camera.position[2] = p.z;
@@ -3585,13 +3788,25 @@ async function main() {
       const m = state.inMech;
       const ms = m.spec;
       const a = mechs.aim(m);
-      const lead = ms.cockpit;
+      // How far out in front of the eye the head sits. The head is outside
+      // the hull, which is the point of it, and a mech standing with its
+      // shoulder against a frontage turns that head into the frontage: the
+      // view went solid every time you looked at the building you were
+      // stood next to. So the city gets a say, the same way it does over
+      // the shoulder. Pulled all the way in the camera is back inside the
+      // torso, which draws as nothing at all, and the shot still goes where
+      // the crosshair is, because every one of these points is on the aim
+      // line rather than beside it.
+      const eye = { x: m.x, y: m.y + ms.eye, z: m.z };
+      let lead = ms.cockpit;
+      const blocked = world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, lead + 0.4);
+      if (blocked) lead = Math.max(0, blocked.t - 0.4);
       const stride = Math.sin(m.walk * 2) * (m.onGround ? 1 : 0.2);
       const sway = Math.cos(m.walk) * (m.onGround ? 1 : 0.2);
       const moving = Math.min(1, m.speed / ms.walk);
-      camera.position[0] = m.x + a.x * lead + Math.cos(m.torso) * sway * 0.10 * moving;
-      camera.position[1] = m.y + ms.eye + a.y * lead + stride * 0.16 * moving;
-      camera.position[2] = m.z + a.z * lead - Math.sin(m.torso) * sway * 0.10 * moving;
+      camera.position[0] = eye.x + a.x * lead + Math.cos(m.torso) * sway * 0.10 * moving;
+      camera.position[1] = eye.y + a.y * lead + stride * 0.16 * moving;
+      camera.position[2] = eye.z + a.z * lead - Math.sin(m.torso) * sway * 0.10 * moving;
     } else if (state.inMech) {
       // Or from over the shoulder: behind and above, with the look you are
       // holding, pulled in when a wall gets between. The same camera a tank

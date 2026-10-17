@@ -83,6 +83,22 @@ export const MECH = {
 };
 
 /**
+ * Calling one down.
+ *
+ * The wait is most of it. A Titan you can have the instant you ask for one is
+ * not a thing you call for, it is a thing you carry, and the words on the
+ * screen are a promise rather than an announcement: half a minute of standing
+ * in the open knowing it is coming, with a mark on the road where it will
+ * land, and then four seconds of watching three hundred metres of sky turn
+ * into forty tonnes.
+ *
+ * Three hundred and twenty metres at thirty six metres a second, under the
+ * same gravity everything else falls at, works out at four seconds: long
+ * enough to look up, short enough that the thing arrives rather than settles.
+ */
+export const TITANFALL = { wait: 25, height: 320, speed: 36, beacon: 8 };
+
+/**
  * What a mech of yours carries.
  *
  * Five primaries, one at a time, switched with the number keys or the wheel,
@@ -263,11 +279,11 @@ export class Mechs {
    *
    * @returns {object|null}
    */
-  drop(type, x, z, yaw = 0, height = 220) {
+  drop(type, x, z, yaw = 0, height = TITANFALL.height, speed = TITANFALL.speed) {
     const m = this.spawn(type, x, z, yaw);
     if (!m) return null;
     m.y = this.world.groundHeight(x, z) + height;
-    m.vy = -60;
+    m.vy = -speed;
     m.onGround = false;
     m.dropping = true;
     return m;

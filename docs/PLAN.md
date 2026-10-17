@@ -1212,3 +1212,249 @@ is what prompted the change.
   locking a rocket onto the one thing you could not lock onto. It can now,
   except for yours, because a dart that chases your own Titan across the
   square is not a feature.
+
+- 2026-10-17: Rise of the Machines starts at the hour it actually is. The
+  mode held the light at a quarter past eight in the evening whatever the
+  clock said; it now reads the clock on the wall when the mode is picked,
+  rounded to the step the slider moves in so that the screen and the world
+  cannot disagree about what time it is. Picking the mode again re-reads it,
+  because a tab left open since the morning should still start this
+  afternoon, and moving the slider stops all of that: a time somebody has
+  chosen is a setting rather than a default.
+
+## 25. The city, the drop and the pulse
+
+- 2026-10-17: the cockpit went solid whenever you turned towards something.
+  The head sits a metre and a half in front of the torso's eye, which is the
+  whole reason the view is worth having, and nothing stopped it going through
+  a wall: a mech fighting down a street stands with its shoulder against a
+  frontage, and looking at that frontage put the camera inside it. The city
+  gets a say now, the same way it does over the shoulder, and the camera
+  slides back along the aim line until the wall is in front of it again.
+  Pulled all the way in it is back inside the torso, which draws as nothing
+  at all. Every one of those positions is on the aim line rather than beside
+  it, so the crosshair still says where the shot goes.
+
+- 2026-10-17: the check for it had to move to the top of the suite. It stands
+  a mech a metre from a frontage and asks whether the camera stayed on this
+  side of it, and at the end of the suite there is no frontage left within
+  three hundred metres: the checks above it spend several minutes flattening
+  the district, and the first version of this one failed with a hundred and
+  forty four rays finding nothing at all.
+
+- 2026-10-17: a titanfall takes half a minute. The words went up and the
+  machine arrived two and a half seconds later, which is a delivery rather
+  than a drop. Calling one now buys a promise and a place: twenty five
+  seconds of countdown on the banner with a column of light standing on the
+  piece of road it is coming down on, and then three hundred and twenty
+  metres of falling, which works out at four seconds under the same gravity
+  everything else here falls at. Nothing exists on the ground until the clock
+  runs out. A call is lost if you walk out of the district it was aimed at or
+  if the run ends while it is on its way, because a machine landing on a
+  corpse helps nobody, and the street can also fill up in the meantime, in
+  which case the drop is waved off rather than wedged in.
+
+- 2026-10-17: the spot it lands on is found over several rings rather than
+  one. A single ring at a fixed distance answered no about one call in three
+  from a square with craters in it, and a Titan you cannot call because of
+  where you happen to be standing is a Titan you do not have.
+
+- 2026-10-17: the holes in the ground, and what they were. The city had
+  patches you could see the sky through while standing on ground the
+  collision layer called solid: a long strip across the Tiergarten was the
+  one that gave it away. Three faults, found by switching the sky off and
+  flying over the district looking straight down, because with nothing drawn
+  behind the city a hole is black and the Spree is not.
+
+  The first is the one that made the hole. A vertex is stored as a sixteen
+  bit offset from its tile's origin at a sixty fourth of a metre, which runs
+  out at five hundred and twelve metres, and anything further is clamped. The
+  park came out of the triangulator as a handful of triangles six hundred
+  metres across, the clamp pulled their corners in, and what was left was a
+  gap. Ground polygons are now cut to a fifty metre grid before they are laid
+  down, and road ribbons have their long runs cut the same way. The cut is
+  done with the same arithmetic on both sides of every grid line, so there
+  are no T junctions and no hairline cracks, it nests inside the hundred
+  metre tiles so a piece of ground belongs to the tile it is drawn in, and as
+  a bonus the ground now follows the terrain instead of being a flat sheet
+  laid over a city that is not flat. It costs six per cent more triangles and
+  four per cent more download.
+
+  The second is the mask that decides where the base plane goes. It was built
+  from the source polygons rather than from what was drawn, so a park was
+  marked as covering its own holes, a polygon that failed to triangulate was
+  marked as covering what it never drew, and a building footprint, which is
+  not ground at all, was marked as covering the ground under it. It now
+  rasterises the triangles in the mesh, at three quarters of a metre, and
+  nothing else: what the base plane fills is exactly what the rest of the
+  city did not draw.
+
+  The third is the check that was not there. The city suite now flies over
+  twenty five places in the district with the sky switched off and counts the
+  black pixels looking straight down. The renderer learned one switch for it,
+  which is worth having anyway: with the sky off, every hole in the world
+  shows as a hole.
+
+- 2026-10-17: the EMP is a launcher now, and it lands like one. It was a bomb
+  you lobbed at your own feet on an arc you had to judge, with a fuse that
+  went off late and a radius you could not put where you wanted it; it is now
+  a rocket at seventy metres a second that goes off on what it hits, two in
+  the magazine, and it reaches thirty eight metres round the impact.
+
+  The pulse itself had almost no weight to it: a blue flash, thirty sparks
+  and a rising whine. It now draws as what it is. A ring travels out along
+  the ground to exactly the radius it reaches, so what it caught and what it
+  missed is on the screen rather than in the kill feed; arcs stand in the
+  middle of it; the frame goes white and the view shakes, both falling off
+  with distance; and the sound got the thing it was missing, which is seventy
+  hertz falling out from under the whine. It answers as well: a hit marker, a
+  line in the feed and a count of what it stopped, with mechs called out
+  separately because stopping one of those is the shot you fired it for.
+  Vehicles caught in it lose their speed, mechs stand there with their shield
+  down for seven and a half seconds.
+
+- 2026-10-17: Berlin on the map of Berlin. Only the district you are standing
+  in has its streets in memory, so the map of the whole city was one district
+  of detail in the middle of eighty labelled grey rectangles, which is not a
+  city anybody can pick a warhead target on. Every district now bakes a
+  sketch of itself into the index: its big roads, its water and its parks,
+  simplified hard and rounded to whole metres, because at the scale the whole
+  city fits on a screen a kerb is a tenth of a pixel. It costs a few hundred
+  bytes a district, the index is loaded before anything else anyway, and a
+  dense district is capped at two hundred and twenty lines so that one of
+  them cannot run away with it. The map draws them as one path per kind
+  rather than one per road, because eighty one districts is thousands of
+  little strokes and the thing is redrawn on every drag, and it draws them
+  dimmer than the district you are in, which still draws itself in full. A
+  district nobody has built yet is still unsurveyed ground, because the map
+  does not promise a street it does not have.
+
+## 26. Nothing you can see through
+
+- 2026-10-17: a floor of last resort. The holes in the ground were fixed in
+  the pipeline, but a hole is the one fault in this project the collision
+  layer cannot see, and the city is eighty one districts built from live data
+  that nobody can check by hand. So there is now a single quad a dozen metres
+  under the lowest ground in the district, drawn before the city and covered
+  by it everywhere. Nothing is meant to see it. What it is for is the times
+  when something does: a gap in the mesh, a tile that has not arrived yet, the
+  void past the edge of a district, a hole left by whatever came down. All of
+  those showed the sky, and from inside a city the sky at your feet reads as a
+  white hole in the world that flickers as you walk past it. Now they show
+  dark ground a long way down, which reads as a pit, and a pit in a city that
+  has been shelled is not a bug. It costs two triangles and no buffers: the
+  corners come out of the vertex id, the fog is the same fog as everything
+  else, and it sits fourteen metres down, three metres deeper than the deepest
+  crater this game can dig, so a crater is still a crater.
+
+- 2026-10-17: the check for it punches a hole on purpose. It throws away the
+  three by three tiles under the camera, looks straight down with the sky
+  switched off, and asks what is there: ninety nine and a half per cent of the
+  frame was sky with no floor under it, and none at all with one.
+
+- 2026-10-17: the near plane moved from eight centimetres to twenty five, and
+  that is a rendering fix rather than a camera one. A twenty four bit depth
+  buffer resolves about the square of the distance divided by the near plane,
+  so eight centimetres bought a tenth of a millimetre at the end of the street
+  and twenty centimetres at half a kilometre: every road laid on every
+  pavement in this city is a few centimetres apart, and out there they were
+  swapping places. Twenty five centimetres is three times the precision at
+  every distance and still clears the player's own collision radius of thirty
+  five.
+
+- 2026-10-17: and the fallback plane sinks with distance. It lies nine
+  centimetres under everything, which is less than the depth buffer can tell
+  apart past about six hundred metres, so it fought with the roads above it.
+  It now carries a flag of its own and the vertex shader pushes it down by
+  roughly what the buffer loses: a couple of centimetres down the street, a
+  quarter of a metre at three hundred, never more than a metre and a half. A
+  plane nobody can see is a plane that can go as deep as it likes.
+
+- 2026-10-17: two measurements that were thrown away, because a check that
+  cannot be trusted is worse than no check. Moving the camera a centimetre and
+  diffing the frames measures parallax, not z fighting; moving the far plane
+  instead moves the horizon, and the horizon then reads as the sky fighting
+  the ground. Rendering the same frame twice with nothing changed at all still
+  differs, because the render path emits particles and they are random. The
+  checks that stayed are the ones that read a single frame and ask a question
+  about it.
+
+## 27. The title screen, and what a blast is allowed to take
+
+- 2026-10-17: pressing play did not always fly the drone shot, and the reason
+  was that the title screen was flying it already. The title camera asked the
+  intro where the drone was, and that question is what starts the intro's
+  clock, so a player who read the title for longer than the flight lasts
+  pressed play, the flight was thirteen seconds past its end, and they were
+  put straight down on the pavement. The title now holds the first frame of
+  the arc and nothing else, and pressing play winds the clock back. The test
+  suite had been catching this for a while as an intro that was there on one
+  run and gone on the next.
+
+- 2026-10-17: the same morning's other test failure was the suite's fault
+  rather than the game's. Under a software rasteriser one frame of this city
+  can take longer than a second, and a check that waited fourteen hundred
+  milliseconds and then read the screen was reading it before a single fixed
+  step had run at the new position. The waits that care now wait for the
+  simulation to advance by so many seconds of its own time, which is the
+  thing they were always trying to say.
+
+- 2026-10-17: two switches in the cheat menu for the two halves of
+  destruction, and they are the only ones in there that start on, because
+  they are the game as it ships. Buildings off and a warhead digs its crater
+  in a square with every frontage still standing; ground off and the block
+  comes down onto a street that stays level. They are separate all the way
+  through: the shader, the collision and the ruin that is written into the
+  city afterwards all read the same per site flag, so what you walk on is
+  what you can see whichever way the switches are set. The flag reaches the
+  shader on the sign of the rubble heap, because both uniform vectors are
+  full and a heap is never negative.
+
+- 2026-10-17: what is already down stays down. Turning the buildings switch
+  off does not put a frontage back up, and turning it on does not go looking
+  for blasts that happened while it was off. A switch here says what happens
+  next, which is the only promise it can keep once a ruin has been written
+  into the city's own bytes.
+
+- 2026-10-17: and underneath both of those was a loop that believed a frame
+  which took less than no time. The clock was started from one reading and
+  the frames were stamped with another: a browser stamps a frame callback
+  with the time that frame began, so switching the loop on in the middle of a
+  three second frame put the clock seconds ahead of the stamp that followed
+  it. The accumulator went that far into the red, and until the wall clock
+  caught up the simulation ran not at all while the city kept drawing. It is
+  worst right after the loading screen, which is exactly where the frames are
+  slowest. The clock now comes from the first frame callback, a negative
+  frame is treated as no time at all, and `tools/test/loop.test.mjs` drives
+  the loop by hand to prove it.
+
+## 28. The last kill, and the switch above ultra gore
+
+- 2026-10-17: a sixth step on the gore ladder, and it is the last one there
+  can be. Ultra gore multiplies the other three by four and a fifth; this
+  multiplies them by seven and a half, which is exactly where the pools run
+  out. A spray was capped at seventy six drops and is now a hundred and
+  thirty, the spark pool went from five hundred and twelve to seven hundred
+  and sixty eight so that three sprays at once do not leave the tracers with
+  nothing, a single body now takes every one of the ninety six pieces the
+  gib pool holds when the tearing switch is on with it, and the throw on a
+  ragdoll goes from two and a tenth to five and a third. It is the one gore
+  switch that does not tear anybody apart on its own, which the first run of
+  its check made obvious: the body it was measuring the throw of had been
+  turned into ninety six pieces, and nought metres is how far a body that no
+  longer exists travels. Coming apart is the absence of a death, so the
+  switch whose point is the throw cannot also be the one that removes what is
+  thrown. The renderer draws blood in its own instanced
+  pass of five hundred and twelve, so none of this costs a draw call.
+
+- 2026-10-17: slow motion on the last kill. It hangs off the one place every
+  kill in the game is credited, counts what is still standing within a
+  hundred and fifty metres, and only runs when the answer is none: drones,
+  soldiers, jets and any machine that is not yours, all of them measured by
+  having health left rather than by being on a list, because a body on its
+  way down is already gone. A quarter speed for two and a fifth seconds,
+  which is a shade faster than the slow motion a blast gets, because what
+  you are watching is a body rather than a building. The checks kill one man
+  three ways: alone with the switch on, with three of his friends up, and
+  with the switch off, and read both the timer and what the world actually
+  did with it.

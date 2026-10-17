@@ -63,7 +63,8 @@ async function run() {
   check('the menu opens and closes', menu.open && menu.closed);
   check('every switch the brief asked for is in it',
     ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic', 'slowBlast',
-      'gib', 'ragdoll', 'blood', 'ultraGore']
+      'wreckBuildings', 'wreckGround', 'lastKill',
+      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
   check('and every button',
@@ -147,6 +148,90 @@ async function run() {
   check('and reload everything tops up what you are holding',
     refill.ammo === 30 && refill.reserve > 3, `${refill.ammo} + ${refill.reserve}`);
 
+  // --- what a blast is allowed to take -------------------------------------
+  // Three warheads, each on its own building, each read for both halves of
+  // the destruction: how much of the frontage is left, and how far the
+  // street under it moved. Measured off the collision rather than off the
+  // picture, because the collision is what the two switches have to keep in
+  // step with what you can see.
+  await page.evaluate(() => {
+    window.W = {
+      /** A building to drop one on, near the offset and out of the memorial. */
+      spot(ox) {
+        const s = window.spreefall;
+        for (let d = 10; d < 240; d += 6) {
+          for (let i = 0; i < 48; i++) {
+            const a = (i / 48) * Math.PI * 2;
+            const x = s.player.x + ox + Math.cos(a) * d;
+            const z = s.player.z + Math.sin(a) * d;
+            if (s.world.tallestNear(x, z, 8) > 14 && !s.combat.isSanctuary(x, 0, z)) {
+              return { x, z };
+            }
+          }
+        }
+        return null;
+      },
+      /** One warhead, and what it left behind once the dust had settled. */
+      hit(at) {
+        const s = window.spreefall;
+        const y = s.world.groundHeight(at.x, at.z);
+        // How tall the frontage is, measured from the street as it was
+        // before any of this. The world measures a wall from the ground
+        // under it, and the ground under this one is about to drop ten
+        // metres, which on its own would read as a building that grew.
+        const tall = () => {
+          const h = s.world.tallestNear(at.x, at.z, 8);
+          return h > 0 ? h + s.world.groundHeight(at.x, at.z) - y : 0;
+        };
+        const tallBefore = tall();
+        s.demolition.blast(at.x, y, at.z, 170, 4000);
+        const site = s.demolition.sites[0] || null;
+        const crater = site ? Math.round(site.craterRadius) : 0;
+        // Long enough for the fall to finish and the ruin to be written into
+        // the city, so these are readings off the baked bytes.
+        for (let i = 0; i < 400; i++) s.demolition.update(1 / 60);
+        return {
+          crater,
+          lost: Number((tallBefore - tall()).toFixed(1)),
+          sank: Number((y - s.world.groundHeight(at.x, at.z)).toFixed(2)),
+        };
+      },
+    };
+  });
+
+  const wreck = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    for (const [name, ox, buildings, ground] of [
+      ['both', -340, true, true],
+      ['noBuildings', 0, false, true],
+      ['noGround', 340, true, false],
+    ]) {
+      s.demolition.reset(); s.renderer.clearCollapses();
+      s.setCheat('wreckBuildings', buildings);
+      s.setCheat('wreckGround', ground);
+      const at = window.W.spot(ox);
+      out[name] = at ? window.W.hit(at) : null;
+    }
+    s.setCheat('wreckBuildings', true);
+    s.setCheat('wreckGround', true);
+    s.demolition.reset(); s.renderer.clearCollapses();
+    return out;
+  });
+  check('with both switches on a warhead takes the frontage and the street',
+    !!wreck.both && wreck.both.lost > 5 && wreck.both.sank > 1,
+    wreck.both ? `${wreck.both.lost} m of wall gone, street down ${wreck.both.sank} m`
+      : 'no building found');
+  check('with the buildings switch off the frontage stays up and the hole is still dug',
+    !!wreck.noBuildings && wreck.noBuildings.lost <= 0.1 && wreck.noBuildings.sank > 1,
+    wreck.noBuildings ? `${wreck.noBuildings.lost} m of wall gone, street down ${wreck.noBuildings.sank} m`
+      : 'no building found');
+  check('and with the ground switch off the street stays level and the buildings still come down',
+    !!wreck.noGround && wreck.noGround.crater === 0 && wreck.noGround.sank === 0
+      && wreck.noGround.lost > 5,
+    wreck.noGround ? `${wreck.noGround.lost} m of wall gone, street down ${wreck.noGround.sank} m`
+      : 'no building found');
+
   // --- the gore switches ---------------------------------------------------
   // Each of these is checked twice: once with the switch off, to show the game
   // without it is the game it always was, and once with it on.
@@ -203,9 +288,10 @@ async function run() {
     // they are switched back on with the budget at zero, which runs everyone
     // already on the field and spawns nobody new.
     const budget = s.soldiers.budget;
-    const fall = (ragdoll) => {
+    const fall = (ragdoll, top) => {
       s.cheats.reset(); s.soldiers.reset();
       if (ragdoll) s.setCheat('ragdoll', true);
+      if (top) s.setCheat('maxGore', true);
       s.soldiers.enabled = true;
       s.soldiers.budget = 0;
       const v = s.spawnSoldier(-18, 0);
@@ -235,8 +321,9 @@ async function run() {
     };
     const off = fall(false);
     const on = fall(true);
+    const top = fall(true, true);
     s.cheats.reset(); s.soldiers.reset();
-    return { off, on };
+    return { off, on, top };
   });
   check('without ragdoll a body falls straight down and barely moves',
     doll.off.lean > 1.4 && doll.off.roll === 0 && doll.off.thrown < 0.6,
@@ -244,6 +331,9 @@ async function run() {
   check('with it on the shot throws them, lifts them and turns them',
     doll.on.thrown > 1.2 && doll.on.roll > 0.4 && doll.on.air > 0.05 && doll.on.lean > 1.0,
     `turned ${doll.on.roll} rad, ${doll.on.air} m off the ground, ${doll.on.thrown} m back`);
+  check('and the switch above ultra gore throws them half again as far',
+    doll.top.thrown > doll.on.thrown * 1.3,
+    `${doll.on.thrown} m becomes ${doll.top.thrown} m`);
 
   const blood = await page.evaluate(() => {
     const s = window.spreefall;
@@ -270,13 +360,17 @@ async function run() {
     const on = hit();
     s.setCheat('ultraGore', true);
     const ultra = hit();
+    s.setCheat('maxGore', true);
+    const max = hit();
     s.cheats.reset(); s.soldiers.reset(); s.effects.clear();
-    return { off, on, ultra };
+    return { off, on, ultra, max };
   });
   check('a hit throws no blood with the switch off', blood.off === 0);
   check('and does with it on', blood.on > 14, `${blood.on} drops`);
   check('and ultra gore throws considerably more of it', blood.ultra > blood.on * 1.8,
     `${blood.on} to ${blood.ultra}`);
+  check('and the switch above it more again', blood.max > blood.ultra * 1.25,
+    `${blood.ultra} to ${blood.max}`);
 
   // Blood is drawn over the frame rather than added to it, which is the whole
   // reason it reads as blood and not as embers, and it leaves the street
@@ -317,6 +411,53 @@ async function run() {
   check('with the blood on its own alpha blended pass',
     stains.alpha > 0 && stains.additive > 0,
     `${stains.additive} additive, ${stains.alpha} alpha`);
+
+  // --- the last kill -------------------------------------------------------
+  // Killed through the weapon rather than by calling damage, because the
+  // slow motion hangs off the credit and the credit comes from the shot.
+  const lastKill = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const kill = async (on, others) => {
+      s.cheats.reset();
+      s.soldiers.reset(); s.drones.reset(); s.combat.reset();
+      s.state.killSlow = 0; s.state.blastSlow = 0;
+      if (on) s.setCheat('lastKill', true);
+      // Company, far enough off to be somebody else and near enough to count.
+      for (let i = 0; i < others; i++) s.spawnSoldier(-40 - i * 5, 14 + i * 3);
+      const v = s.spawnSoldier(-16, 1);
+      const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+      const vx = v.x - ex, vy = v.y + 1.1 - ey, vz = v.z - ez;
+      const l = Math.hypot(vx, vy, vz);
+      s.look(Math.atan2(-vx, -vz) * 180 / Math.PI, Math.asin(vy / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+      s.weapon.select('railgun');
+      for (let i = 0; i < 4 && v.alive; i++) {
+        s.weapon.cooldown = 0; s.weapon.spread = 0; s.shoot();
+      }
+      const slow = s.state.killSlow;
+      // And what the world actually did with it, which is the point of it.
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => requestAnimationFrame(r));
+      const scale = s.state.timeScale;
+      s.cheats.reset(); s.soldiers.reset(); s.weapon.reset();
+      s.state.killSlow = 0;
+      return { dead: !v.alive, slow: Number(slow.toFixed(2)), scale: Number(scale.toFixed(2)) };
+    };
+    return {
+      alone: await kill(true, 0),
+      company: await kill(true, 3),
+      off: await kill(false, 0),
+    };
+  });
+  check('the last one standing goes down in slow motion',
+    lastKill.alone.dead && lastKill.alone.slow > 1 && lastKill.alone.scale < 0.4,
+    `${lastKill.alone.slow} s left, world at ${lastKill.alone.scale} of real time`);
+  check('and a kill with three of them still up does not slow anything',
+    lastKill.company.dead && lastKill.company.slow === 0 && lastKill.company.scale === 1,
+    `${lastKill.company.slow} s, world at ${lastKill.company.scale}`);
+  check('nor does the last kill with the switch off',
+    lastKill.off.dead && lastKill.off.slow === 0 && lastKill.off.scale === 1,
+    `${lastKill.off.slow} s, world at ${lastKill.off.scale}`);
 
   // --- more of them, on demand ---------------------------------------------
   const waves = await page.evaluate(() => {
@@ -586,6 +727,60 @@ async function run() {
       shown: Math.round(shown),
     };
   });
+  // Berlin, on the map of Berlin. Only the district you are standing in has
+  // its streets in memory; every other built one is drawn from the sketch in
+  // the index, and this counts the pixels inside one of those rectangles to
+  // say whether anything was drawn there at all.
+  const sketched = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.openTargeting();
+    s.settleMap();
+    const c = document.getElementById('targetmap');
+    const ctx = c.getContext('2d');
+    const built = (s.world.catalogue || []).filter((d) => d.built !== false
+      && !s.world.loaded(d.id) && d.sketch);
+    if (!built.length) { s.closeTargeting(); return { skip: true }; }
+    // The one with the most in its sketch, which is the one a reader would
+    // look at first.
+    built.sort((a, b) => b.sketch.roads.length - a.sketch.roads.length);
+    const d = built[0];
+    const r = c.getBoundingClientRect();
+    // The district's rectangle in canvas pixels, pulled in a little so the
+    // border of the box itself is not counted.
+    const corner = (x, z) => {
+      const v = s.targetMap._view;
+      return {
+        px: (c.width / 2 + (x - v.originX) * v.scale),
+        py: (c.height / 2 + (z - v.originZ) * v.scale),
+      };
+    };
+    const a = corner(d.bounds.minX, d.bounds.minZ);
+    const b = corner(d.bounds.maxX, d.bounds.maxZ);
+    const x0 = Math.max(0, Math.min(a.px, b.px) + 3);
+    const x1 = Math.min(c.width, Math.max(a.px, b.px) - 3);
+    const z0 = Math.max(0, Math.min(a.py, b.py) + 3);
+    const z1 = Math.min(c.height, Math.max(a.py, b.py) - 3);
+    const w = Math.round(x1 - x0), h = Math.round(z1 - z0);
+    if (w < 8 || h < 8) { s.closeTargeting(); return { skip: true }; }
+    const data = ctx.getImageData(Math.round(x0), Math.round(z0), w, h).data;
+    // The box is filled with a flat dark colour. Anything brighter than that
+    // is something the sketch drew.
+    let drawn = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] + data[i + 1] + data[i + 2] > 110) drawn++;
+    }
+    const share = (drawn / (w * h)) * 100;
+    s.closeTargeting();
+    return {
+      skip: false, id: d.id, roads: d.sketch.roads.length,
+      share: Number(share.toFixed(2)), w, h,
+    };
+  });
+  check('a district you are not standing in is still drawn as streets',
+    !sketched.skip && sketched.share > 1,
+    sketched.skip ? 'nothing built outside this district'
+      : `${sketched.id}: ${sketched.roads} roads, ${sketched.share}% of its box`);
+
   const zoomed = await page.evaluate(() => {
     const s = window.spreefall;
     s.openTargeting();
