@@ -428,7 +428,12 @@ async function run() {
     s.projectiles.clear();
     // The street first: the mode keeps twenty two machines walking and the
     // pool holds twenty four, so there is no room to stand a group of four
-    // anywhere until some of them are taken off it.
+    // anywhere until some of them are taken off it. The mode goes quiet for
+    // the same reason the other warhead checks turn it off: it drops a nuke
+    // on the skyline every two and a half seconds, and a check that waits
+    // for the air to clear waits for one of those instead.
+    const modeWas = s.machines.active;
+    s.machines.active = false;
     s.soldiers.reset();
     const spec = s.weapons.emp;
     // Four of them in a group, out where a thrown bomb would never have
@@ -439,45 +444,84 @@ async function run() {
       const a = (step % 12) / 12 * Math.PI * 2;
       const d = 60 - Math.floor(step / 12) * 20;
       const px = s.player.x - Math.sin(a) * d, pz = s.player.z - Math.cos(a) * d;
-      const dx = px - eye0.x, dz = pz - eye0.z;
-      const len = Math.hypot(dx, dz) || 1;
-      if (s.world.raycast(eye0.x, eye0.y, eye0.z, dx / len, 0, dz / len, len)) continue;
+      // The line the rocket will actually fly, not a level one: it leaves the
+      // eye and comes down on the ground where they are standing, and a kerb
+      // in between is a rocket that goes off in the wrong street.
+      const py = s.world.groundHeight(px, pz) + 1.2;
+      if (Math.abs(py - (s.player.y + 1.2)) > 4) continue;
+      const dx = px - eye0.x, dy = py - eye0.y, dz = pz - eye0.z;
+      const len = Math.hypot(dx, dy, dz) || 1;
+      if (s.world.raycast(eye0.x, eye0.y, eye0.z, dx / len, dy / len, dz / len, len)) continue;
       for (let i = 0; i < 4; i++) {
         const sd = s.soldiers.spawnNear(px, pz, 2, 9);
         if (sd) { s.makeMachine(sd); sd.stunLeft = 0; group.push(sd); }
       }
     }
-    if (group.length < 2) return { skip: true };
+    if (group.length < 2) { s.machines.active = modeWas; return { skip: true }; }
     const stood = group.map((m) => ({ m, x: m.x, z: m.z }));
     const mid = stood.reduce((a, p) => [a[0] + p.x / stood.length, a[1] + p.z / stood.length], [0, 0]);
     const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
-    const to = { x: mid[0] - eye.x, y: (s.world.groundHeight(mid[0], mid[1]) + 1) - eye.y, z: mid[1] - eye.z };
-    const l = Math.hypot(to.x, to.y, to.z) || 1;
-    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+    // At the road just short of them rather than at the group itself. A
+    // rocket aimed at a man at sixty metres either hits him or sails over
+    // his head, and which of the two it does depends on where the man was
+    // standing when the aim was taken; aimed at the ground in front of him
+    // it lands, which is what a pulse wants.
+    const aimX = s.player.x + (mid[0] - s.player.x) * 0.85;
+    const aimZ = s.player.z + (mid[1] - s.player.z) * 0.85;
+    const to = { x: aimX - eye.x, y: (s.world.groundHeight(aimX, aimZ) + 0.2) - eye.y, z: aimZ - eye.z };
+    const l = Math.hypot(mid[0] - eye.x, mid[1] - eye.z) || 1;
+    const aimLen = Math.hypot(to.x, to.y, to.z) || 1;
+    s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI,
+      Math.asin(to.y / aimLen) * 180 / Math.PI);
     s.camera.update(16 / 9);
     const picked = s.weapon.select('emp') || s.weapon.id === 'emp';
     s.weapon.carried.emp.ammo = spec.magazine;
     s.weapon.cooldown = 0;
     s.weapon.spread = 0;
     s.shoot();
-    const flying = s.projectiles.count > 0;
+    // The one that just left the barrel, watched by itself: anything else in
+    // the air belongs to somebody else.
+    const rocket = s.projectiles.active[s.projectiles.active.length - 1] || null;
+    const flying = !!rocket;
     const away = Math.round(l);
-    for (let i = 0; i < 60 * 4 && s.projectiles.count; i++) {
+    let nearest = 999;
+    let last = null;
+    for (let i = 0; i < 60 * 4 && rocket && rocket.alive; i++) {
       for (const p of stood) { p.m.x = p.x; p.m.z = p.z; }
+      nearest = Math.min(nearest, Math.hypot(rocket.x - mid[0], rocket.z - mid[1]));
+      last = {
+        over: Math.round(rocket.y - s.world.groundHeight(rocket.x, rocket.z)),
+        age: +rocket.age.toFixed(1),
+      };
       s.fixedForTest(1 / 60);
     }
+    // Where the warhead actually went off, which is the first thing to know
+    // when nothing was stopped.
+    s.machines.active = modeWas;
     return {
       skip: false, picked, flying, away,
       kind: spec.kind,
       stopped: group.filter((m) => m.stunLeft > 0).length,
       put: group.length,
+      nearest: Math.round(nearest),
+      still: rocket && rocket.alive ? 1 : 0,
+      last,
+      alive: group.filter((m) => m.alive).length,
     };
   });
   check('the EMP is a launcher, and the pulse arrives where you pointed it',
     !launcher.skip && launcher.picked && launcher.kind === 'launch' && launcher.flying
       && launcher.stopped >= launcher.put - 1,
     launcher.skip ? 'no room for a group'
-      : `${launcher.stopped} of ${launcher.put} stopped at ${launcher.away} m`);
+      : `${launcher.stopped} of ${launcher.put} stopped at ${launcher.away} m`
+        + (launcher.stopped >= launcher.put - 1 ? ''
+          // When it misses, where the warhead went is the whole story: the
+          // first version of this aimed at the men rather than at the road
+          // in front of them, and the rocket sailed over their heads and
+          // went off eighty metres past them.
+          : `, ${launcher.alive} alive, the warhead passed within `
+            + `${launcher.nearest} m of them, ${launcher.still} still in the air`
+            + (launcher.last ? `, last seen ${launcher.last.over} m up at ${launcher.last.age} s` : '')));
 
   // --- the gun, and where its shot comes from ------------------------------
   const gun = await page.evaluate(async () => {
