@@ -754,6 +754,7 @@ function buildDistrict(district) {
 
   const binBytes = bundle.buffer.length;
   const jsonBytes = fs.statSync(path.join(OUT_DIR, jsonName)).size;
+  const sketch = citySketch(roadLines, manifest.waterOutlines, manifest.greenOutlines);
   const gz = gzipSize(path.join(OUT_DIR, binName)) + gzipSize(path.join(OUT_DIR, jsonName));
   updateIndex(district, {
     name, tier: district.tier,
@@ -768,6 +769,7 @@ function buildDistrict(district) {
     waterLevel,
     landmarks: manifest.landmarks.length,
     sight: pickSight(manifest.landmarks, manifest.stations, world),
+    sketch,
     builtAt: new Date().toISOString(),
   });
 
@@ -951,6 +953,77 @@ function updateIndex(district, entry) {
   index.districts.sort((a, b) => (a.row - b.row) || (a.col - b.col));
   index.builtAt = new Date().toISOString();
   fs.writeFileSync(INDEX_FILE, JSON.stringify(index));
+}
+
+/**
+ * A district drawn in a few hundred bytes, for the map of the whole city.
+ *
+ * The map can only draw the district you are standing in, because that is the
+ * only one whose streets are in memory, and every other one was a labelled
+ * rectangle: eighty one grey boxes, which is not a city you can pick a target
+ * on. This goes into the index instead, which is loaded before anything else
+ * and weighs nothing: the big roads, the water and the parks, flattened to
+ * whole metres and simplified hard, because at the scale the whole of Berlin
+ * fits on a screen a kerb is a tenth of a pixel.
+ */
+function citySketch(roadLines, waterOutlines, greenOutlines) {
+  const KEEP = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link',
+    'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary',
+    'residential', 'unclassified', 'pedestrian', 'living_street']);
+  const pairs = (flat) => {
+    const out = [];
+    for (let i = 0; i < flat.length; i += 2) out.push([flat[i], flat[i + 1]]);
+    return out;
+  };
+  const whole = (pts) => {
+    const out = [];
+    for (const p of pts) {
+      const x = Math.round(p[0]), z = Math.round(p[1]);
+      // Rounding to the metre puts neighbouring points on top of each other,
+      // and a run of identical points is bytes for nothing.
+      if (out.length >= 2 && out[out.length - 2] === x && out[out.length - 1] === z) continue;
+      out.push(x, z);
+    }
+    return out;
+  };
+  let roads = [];
+  for (const r of roadLines) {
+    if (!KEEP.has(r.cls)) continue;
+    const line = whole(simplify(pairs(r.pts), 30));
+    if (line.length >= 4) roads.push(line);
+  }
+  // A cap, so that one dense district cannot run away with the index. The
+  // longest ones are the ones that read as a city from above.
+  if (roads.length > 220) {
+    const len = (l) => {
+      let d = 0;
+      for (let i = 2; i < l.length; i += 2) d += Math.hypot(l[i] - l[i - 2], l[i + 1] - l[i - 1]);
+      return d;
+    };
+    roads = roads.map((l) => [len(l), l]).sort((a, b) => b[0] - a[0]).slice(0, 220)
+      .map((p) => p[1]);
+  }
+  const water = [];
+  for (const w of waterOutlines) {
+    const ring = whole(simplify(pairs(w), 25));
+    if (ring.length >= 8) water.push(ring);
+  }
+  const green = [];
+  for (const g of greenOutlines) {
+    const ring = whole(simplify(pairs(g), 35));
+    // Anything smaller than a city block is a shrub at this scale.
+    if (ring.length >= 8 && flatRingArea(ring) > 20000) green.push(ring);
+  }
+  return { roads, water, green };
+}
+
+/** The area of a ring given as a flat run of coordinates. */
+function flatRingArea(flat) {
+  let a = 0;
+  for (let i = 0, j = flat.length - 2; i < flat.length; j = i, i += 2) {
+    a += flat[j] * flat[i + 1] - flat[i] * flat[j + 1];
+  }
+  return Math.abs(a) / 2;
 }
 
 /** The budget table: what the whole city costs, district by district. */

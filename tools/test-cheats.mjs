@@ -586,6 +586,60 @@ async function run() {
       shown: Math.round(shown),
     };
   });
+  // Berlin, on the map of Berlin. Only the district you are standing in has
+  // its streets in memory; every other built one is drawn from the sketch in
+  // the index, and this counts the pixels inside one of those rectangles to
+  // say whether anything was drawn there at all.
+  const sketched = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.openTargeting();
+    s.settleMap();
+    const c = document.getElementById('targetmap');
+    const ctx = c.getContext('2d');
+    const built = (s.world.catalogue || []).filter((d) => d.built !== false
+      && !s.world.loaded(d.id) && d.sketch);
+    if (!built.length) { s.closeTargeting(); return { skip: true }; }
+    // The one with the most in its sketch, which is the one a reader would
+    // look at first.
+    built.sort((a, b) => b.sketch.roads.length - a.sketch.roads.length);
+    const d = built[0];
+    const r = c.getBoundingClientRect();
+    // The district's rectangle in canvas pixels, pulled in a little so the
+    // border of the box itself is not counted.
+    const corner = (x, z) => {
+      const v = s.targetMap._view;
+      return {
+        px: (c.width / 2 + (x - v.originX) * v.scale),
+        py: (c.height / 2 + (z - v.originZ) * v.scale),
+      };
+    };
+    const a = corner(d.bounds.minX, d.bounds.minZ);
+    const b = corner(d.bounds.maxX, d.bounds.maxZ);
+    const x0 = Math.max(0, Math.min(a.px, b.px) + 3);
+    const x1 = Math.min(c.width, Math.max(a.px, b.px) - 3);
+    const z0 = Math.max(0, Math.min(a.py, b.py) + 3);
+    const z1 = Math.min(c.height, Math.max(a.py, b.py) - 3);
+    const w = Math.round(x1 - x0), h = Math.round(z1 - z0);
+    if (w < 8 || h < 8) { s.closeTargeting(); return { skip: true }; }
+    const data = ctx.getImageData(Math.round(x0), Math.round(z0), w, h).data;
+    // The box is filled with a flat dark colour. Anything brighter than that
+    // is something the sketch drew.
+    let drawn = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] + data[i + 1] + data[i + 2] > 110) drawn++;
+    }
+    const share = (drawn / (w * h)) * 100;
+    s.closeTargeting();
+    return {
+      skip: false, id: d.id, roads: d.sketch.roads.length,
+      share: Number(share.toFixed(2)), w, h,
+    };
+  });
+  check('a district you are not standing in is still drawn as streets',
+    !sketched.skip && sketched.share > 1,
+    sketched.skip ? 'nothing built outside this district'
+      : `${sketched.id}: ${sketched.roads} roads, ${sketched.share}% of its box`);
+
   const zoomed = await page.evaluate(() => {
     const s = window.spreefall;
     s.openTargeting();

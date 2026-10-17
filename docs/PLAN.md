@@ -1312,3 +1312,19 @@ is what prompted the change.
   separately because stopping one of those is the shot you fired it for.
   Vehicles caught in it lose their speed, mechs stand there with their shield
   down for seven and a half seconds.
+
+- 2026-10-17: Berlin on the map of Berlin. Only the district you are standing
+  in has its streets in memory, so the map of the whole city was one district
+  of detail in the middle of eighty labelled grey rectangles, which is not a
+  city anybody can pick a warhead target on. Every district now bakes a
+  sketch of itself into the index: its big roads, its water and its parks,
+  simplified hard and rounded to whole metres, because at the scale the whole
+  city fits on a screen a kerb is a tenth of a pixel. It costs a few hundred
+  bytes a district, the index is loaded before anything else anyway, and a
+  dense district is capped at two hundred and twenty lines so that one of
+  them cannot run away with it. The map draws them as one path per kind
+  rather than one per road, because eighty one districts is thousands of
+  little strokes and the thing is redrawn on every drag, and it draws them
+  dimmer than the district you are in, which still draws itself in full. A
+  district nobody has built yet is still unsurveyed ground, because the map
+  does not promise a street it does not have.
