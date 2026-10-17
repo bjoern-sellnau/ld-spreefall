@@ -160,6 +160,17 @@ void main() {
   // A ruin that was baked into the buffers is rubble for good, whether or not
   // the site that made it still has a slot.
   if ((aPacked.w & ${FACADE_FLAG.RUBBLE}u) != 0u) vFall = max(vFall, 1.0);
+  // The fallback plane, pushed down by about what the depth buffer loses at
+  // this distance. A twenty four bit buffer resolves roughly the square of
+  // the distance over the near plane, so the correction is quadratic too: a
+  // couple of centimetres down the street, a quarter of a metre at three
+  // hundred, and never more than a metre and a half. Nothing is ever meant to
+  // see this plane, and where it is exposed it is the ground far enough away
+  // that a metre of it is a pixel.
+  if ((aPacked.w & ${FACADE_FLAG.BASE}u) != 0u) {
+    float away = distance(p.xz, uCamPos.xz);
+    p.y -= min(1.5, away * away * 2.5e-6);
+  }
   vWorld = p;
   vNormal = nrm;
   vAo = clamp(aNormal.w * 2.0, 0.0, 1.0);

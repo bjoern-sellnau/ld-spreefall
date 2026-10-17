@@ -1328,3 +1328,53 @@ is what prompted the change.
   dimmer than the district you are in, which still draws itself in full. A
   district nobody has built yet is still unsurveyed ground, because the map
   does not promise a street it does not have.
+
+## 26. Nothing you can see through
+
+- 2026-10-17: a floor of last resort. The holes in the ground were fixed in
+  the pipeline, but a hole is the one fault in this project the collision
+  layer cannot see, and the city is eighty one districts built from live data
+  that nobody can check by hand. So there is now a single quad a dozen metres
+  under the lowest ground in the district, drawn before the city and covered
+  by it everywhere. Nothing is meant to see it. What it is for is the times
+  when something does: a gap in the mesh, a tile that has not arrived yet, the
+  void past the edge of a district, a hole left by whatever came down. All of
+  those showed the sky, and from inside a city the sky at your feet reads as a
+  white hole in the world that flickers as you walk past it. Now they show
+  dark ground a long way down, which reads as a pit, and a pit in a city that
+  has been shelled is not a bug. It costs two triangles and no buffers: the
+  corners come out of the vertex id, the fog is the same fog as everything
+  else, and it sits fourteen metres down, three metres deeper than the deepest
+  crater this game can dig, so a crater is still a crater.
+
+- 2026-10-17: the check for it punches a hole on purpose. It throws away the
+  three by three tiles under the camera, looks straight down with the sky
+  switched off, and asks what is there: ninety nine and a half per cent of the
+  frame was sky with no floor under it, and none at all with one.
+
+- 2026-10-17: the near plane moved from eight centimetres to twenty five, and
+  that is a rendering fix rather than a camera one. A twenty four bit depth
+  buffer resolves about the square of the distance divided by the near plane,
+  so eight centimetres bought a tenth of a millimetre at the end of the street
+  and twenty centimetres at half a kilometre: every road laid on every
+  pavement in this city is a few centimetres apart, and out there they were
+  swapping places. Twenty five centimetres is three times the precision at
+  every distance and still clears the player's own collision radius of thirty
+  five.
+
+- 2026-10-17: and the fallback plane sinks with distance. It lies nine
+  centimetres under everything, which is less than the depth buffer can tell
+  apart past about six hundred metres, so it fought with the roads above it.
+  It now carries a flag of its own and the vertex shader pushes it down by
+  roughly what the buffer loses: a couple of centimetres down the street, a
+  quarter of a metre at three hundred, never more than a metre and a half. A
+  plane nobody can see is a plane that can go as deep as it likes.
+
+- 2026-10-17: two measurements that were thrown away, because a check that
+  cannot be trusted is worse than no check. Moving the camera a centimetre and
+  diffing the frames measures parallax, not z fighting; moving the far plane
+  instead moves the horizon, and the horizon then reads as the sky fighting
+  the ground. Rendering the same frame twice with nothing changed at all still
+  differs, because the render path emits particles and they are random. The
+  checks that stayed are the ones that read a single frame and ask a question
+  about it.

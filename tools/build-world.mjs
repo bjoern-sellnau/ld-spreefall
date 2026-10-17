@@ -660,7 +660,8 @@ function buildDistrict(district) {
       // height pokes through the roads and squares laid on top of it. Ninety
       // millimetres clears that error and is far too small a step to see where
       // the base plane is actually exposed.
-      groundPolygon(mesh, [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], [], MAT.PAVEMENT, yAt, { lift: -0.09 });
+      groundPolygon(mesh, [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], [], MAT.PAVEMENT, yAt,
+        { lift: -0.09, flags: FACADE_FLAG.BASE });
       groundCells++;
     }
   }

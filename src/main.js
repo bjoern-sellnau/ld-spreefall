@@ -2188,6 +2188,51 @@ async function main() {
    * drop warheads on the skyline, and hold the sky where the mode wants it.
    */
   /**
+   * The floor of last resort, put under whatever district you are in.
+   *
+   * Nothing should ever see it: the streets, the parks and the water are all
+   * above it and between them they cover the ground completely. What it is
+   * for is the times when they do not. A gap in the ground mesh, a tile that
+   * has not arrived yet, the void past the edge of a district, a hole left by
+   * something that came down: all of those show the sky otherwise, and from
+   * inside a city the sky at your feet reads as a white hole in the world
+   * that flickers as you walk past it.
+   *
+   * Fourteen metres under the lowest ground in the district, which is three
+   * metres deeper than the deepest crater this game can dig, so a crater is
+   * still a crater and not a hole with a floor painted across it. It is
+   * worked out once per district and costs two triangles a frame.
+   */
+  let bedrockFor = null;
+  function updateBedrock() {
+    const entry = world.entryAt(player.x, player.z);
+    const key = entry ? entry.id : null;
+    if (bedrockFor === key) return;
+    bedrockFor = key;
+    if (!entry) { renderer.bedrock = null; return; }
+    const b = entry.bounds;
+    let low = Infinity;
+    const n = 24;
+    for (let j = 0; j <= n; j++) {
+      for (let i = 0; i <= n; i++) {
+        const x = b.minX + (b.maxX - b.minX) * (i / n);
+        const z = b.minZ + (b.maxZ - b.minZ) * (j / n);
+        const g = world.groundHeight(x, z);
+        if (Number.isFinite(g) && g < low) low = g;
+      }
+    }
+    if (!Number.isFinite(low)) low = 0;
+    // Out past the district's own edge as well, because the void beyond a
+    // district you have not walked into yet is the same hole seen sideways.
+    const pad = 1200;
+    renderer.bedrock = {
+      y: low - 14,
+      minX: b.minX - pad, minZ: b.minZ - pad,
+      maxX: b.maxX + pad, maxZ: b.maxZ + pad,
+    };
+  }
+
+  /**
    * Whether the machine walking in now is one of the ones carrying a mech
    * killer. Rolled when it arrives rather than when it shoots, so what a
    * street holds is settled and a given one either has one or does not.
@@ -3397,6 +3442,7 @@ async function main() {
     state.timeScale = scale;
     state.time += worldDt;
     input.poll();
+    updateBedrock();
 
     if (state.mode === 'intro' || state.mode === 'landing') return;
 

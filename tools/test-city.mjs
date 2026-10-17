@@ -116,6 +116,73 @@ async function run() {
     `${floor.places} places, worst ${floor.worst}% of the frame`
       + (floor.at ? ` at ${floor.at[0]},${floor.at[1]}` : ''));
 
+  // --- and a floor under the floor -----------------------------------------
+  // The ground will have a hole in it again one day: a district that has not
+  // arrived, a polygon the triangulator gave up on, a tile evicted while you
+  // turned round. What must never happen again is the sky showing through it,
+  // because from inside a city the sky at your feet reads as a white hole in
+  // the world and it flickers as you walk. So there is a floor of last resort
+  // a dozen metres down, and this punches a hole on purpose to see it work.
+  const bedrock = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const w = s.world;
+    s.renderer.drawSky = false;
+    const sky = async () => {
+      const gl = s.renderer.gl;
+      const bw = gl.drawingBufferWidth, bh = gl.drawingBufferHeight;
+      const buf = new Uint8Array(bw * bh * 4);
+      await new Promise((r) => requestAnimationFrame(() => {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.readPixels(0, 0, bw, bh, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+        r();
+      }));
+      let black = 0, total = 0;
+      for (let i = 0; i < buf.length; i += 4) {
+        total++;
+        if (buf[i] < 12 && buf[i + 1] < 12 && buf[i + 2] < 12) black++;
+      }
+      return +(black / total * 100).toFixed(2);
+    };
+    const x = s.player.x, z = s.player.z;
+    const ix = Math.floor((x - w.minX) / w.tileSize);
+    const iz = Math.floor((z - w.minZ) / w.tileSize);
+    const doomed = [];
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) doomed.push((iz + dz) * w.nx + (ix + dx));
+    }
+    // Hanging over the hole, looking straight down at it.
+    const y = w.groundHeight(x, z) + 90;
+    const hold = async () => {
+      s.state.mode = 'cinema';
+      for (let i = 0; i < 10; i++) {
+        s.state.dronePose = { x, y, z, yaw: 0, pitch: -Math.PI / 2 + 0.001 };
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+    };
+    await hold();
+    const whole = await sky();
+    // Nothing may be uploaded again while the hole is open.
+    const uploads = s.tiles.uploadsPerFrame;
+    s.tiles.uploadsPerFrame = 0;
+    const kept = s.renderer.bedrock;
+    for (const t of doomed) s.tiles.evict(t);
+    await hold();
+    const withFloor = await sky();
+    s.renderer.bedrock = null;
+    for (const t of doomed) s.tiles.evict(t);
+    await hold();
+    const withoutFloor = await sky();
+    s.renderer.bedrock = kept;
+    s.tiles.uploadsPerFrame = uploads;
+    s.state.mode = 'walk';
+    s.renderer.drawSky = true;
+    return { whole, withFloor, withoutFloor, y: kept ? Math.round(kept.y) : null };
+  });
+  check('a hole in the ground shows dark ground, not sky',
+    bedrock.whole < 0.2 && bedrock.withoutFloor > 50 && bedrock.withFloor < 0.2,
+    `${bedrock.withoutFloor}% of the frame was sky with no floor under it, `
+      + `${bedrock.withFloor}% with one at ${bedrock.y} m`);
+
   // --- damage adds up ------------------------------------------------------
   const adds = await page.evaluate(() => {
     const s = window.spreefall;

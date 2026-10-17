@@ -6,6 +6,7 @@ import {
 } from '../engine/gl.js';
 import { mat4, vec3, Frustum, clamp } from '../engine/math.js';
 import { SKY_VS, SKY_FS } from '../shaders/sky.js';
+import { BEDROCK_VS, BEDROCK_FS } from '../shaders/bedrock.js';
 import { WORLD_VS, WORLD_FS, SHADOW_VS, SHADOW_FS, MAX_COLLAPSE } from '../shaders/world.js';
 import { TREE_VS, TREE_FS, TREE_SHADOW_VS, TREE_SHADOW_FS, MAX_FIRES } from '../shaders/trees.js';
 import { FULLSCREEN_VS, BRIGHT_FS, BLUR_FS, COMPOSITE_FS } from '../shaders/post.js';
@@ -42,6 +43,10 @@ export class Renderer {
 
     this.progWorld = createProgram(gl, WORLD_VS, WORLD_FS, 'world');
     this.progSky = createProgram(gl, SKY_VS, SKY_FS, 'sky');
+    this.progBedrock = createProgram(gl, BEDROCK_VS, BEDROCK_FS, 'bedrock');
+    // Where the floor of last resort lies, set by the game layer when a
+    // district arrives: {y, minX, minZ, maxX, maxZ}. Null draws nothing.
+    this.bedrock = null;
     this.progShadow = createProgram(gl, SHADOW_VS, SHADOW_FS, 'shadow');
     this.progTree = createProgram(gl, TREE_VS, TREE_FS, 'tree');
     this.progTreeShadow = createProgram(gl, TREE_SHADOW_VS, TREE_SHADOW_FS, 'treeShadow');
@@ -543,6 +548,22 @@ export class Renderer {
     gl.activeTexture(gl.TEXTURE0);
 
     let draws = 0, tris = 0;
+
+    // The floor of last resort, under everything and before everything. Two
+    // triangles; the city draws over all of it except where the city has a
+    // hole, which is the entire point.
+    if (this.bedrock) {
+      const b = this.bedrock;
+      this.progBedrock.use()
+        .vec4('uBedBox', b.minX, b.minZ, b.maxX, b.maxZ)
+        .float('uBedY', b.y);
+      gl.disable(gl.CULL_FACE);
+      gl.bindVertexArray(this.emptyVao);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.enable(gl.CULL_FACE);
+      draws++;
+    }
+
     this.progWorld.use();
     this.progWorld.int('uDebugMode', this.debugMode);
     this._uploadScars();

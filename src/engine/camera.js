@@ -10,7 +10,16 @@ export class Camera {
     this.yaw = 0;
     this.pitch = 0;
     this.fov = 68 * Math.PI / 180;
-    this.near = 0.08;
+    // Eight centimetres was a camera that could be put inside a wall and see
+    // out of it, and it cost the whole city its depth precision: with a
+    // twenty four bit buffer the smallest difference the depth test can tell
+    // apart grows with the square of the distance divided by the near plane,
+    // which at half a kilometre was twenty centimetres and at the horizon was
+    // metres. Surfaces laid a few centimetres apart, which is every road on
+    // every pavement in this city, were swapping places out there. A quarter
+    // of a metre is three times the precision at every distance and still
+    // clears the player's own collision radius of thirty five centimetres.
+    this.near = 0.25;
     this.far = 4200;
     this.aspect = 1;
     this.position = vec3.create(0, 1.7, 0);
