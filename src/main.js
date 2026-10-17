@@ -2075,6 +2075,11 @@ async function main() {
       drones.enabled = !cheats.noDrones;
       if (cheats.noDrones) drones.reset();
     }
+    // What a blast is allowed to take with it. Both on is the game as it
+    // ships; either one off stops that half of it from here on, and leaves
+    // whatever has already come down exactly where it fell.
+    demolition.buildings = cheats.wreckBuildings;
+    demolition.ground = cheats.wreckGround;
     soldiers.gore.gib = cheats.gibbing;
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;

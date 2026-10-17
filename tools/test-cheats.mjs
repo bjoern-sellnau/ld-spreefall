@@ -63,7 +63,7 @@ async function run() {
   check('the menu opens and closes', menu.open && menu.closed);
   check('every switch the brief asked for is in it',
     ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic', 'slowBlast',
-      'gib', 'ragdoll', 'blood', 'ultraGore']
+      'wreckBuildings', 'wreckGround', 'gib', 'ragdoll', 'blood', 'ultraGore']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
   check('and every button',
@@ -146,6 +146,90 @@ async function run() {
   });
   check('and reload everything tops up what you are holding',
     refill.ammo === 30 && refill.reserve > 3, `${refill.ammo} + ${refill.reserve}`);
+
+  // --- what a blast is allowed to take -------------------------------------
+  // Three warheads, each on its own building, each read for both halves of
+  // the destruction: how much of the frontage is left, and how far the
+  // street under it moved. Measured off the collision rather than off the
+  // picture, because the collision is what the two switches have to keep in
+  // step with what you can see.
+  await page.evaluate(() => {
+    window.W = {
+      /** A building to drop one on, near the offset and out of the memorial. */
+      spot(ox) {
+        const s = window.spreefall;
+        for (let d = 10; d < 240; d += 6) {
+          for (let i = 0; i < 48; i++) {
+            const a = (i / 48) * Math.PI * 2;
+            const x = s.player.x + ox + Math.cos(a) * d;
+            const z = s.player.z + Math.sin(a) * d;
+            if (s.world.tallestNear(x, z, 8) > 14 && !s.combat.isSanctuary(x, 0, z)) {
+              return { x, z };
+            }
+          }
+        }
+        return null;
+      },
+      /** One warhead, and what it left behind once the dust had settled. */
+      hit(at) {
+        const s = window.spreefall;
+        const y = s.world.groundHeight(at.x, at.z);
+        // How tall the frontage is, measured from the street as it was
+        // before any of this. The world measures a wall from the ground
+        // under it, and the ground under this one is about to drop ten
+        // metres, which on its own would read as a building that grew.
+        const tall = () => {
+          const h = s.world.tallestNear(at.x, at.z, 8);
+          return h > 0 ? h + s.world.groundHeight(at.x, at.z) - y : 0;
+        };
+        const tallBefore = tall();
+        s.demolition.blast(at.x, y, at.z, 170, 4000);
+        const site = s.demolition.sites[0] || null;
+        const crater = site ? Math.round(site.craterRadius) : 0;
+        // Long enough for the fall to finish and the ruin to be written into
+        // the city, so these are readings off the baked bytes.
+        for (let i = 0; i < 400; i++) s.demolition.update(1 / 60);
+        return {
+          crater,
+          lost: Number((tallBefore - tall()).toFixed(1)),
+          sank: Number((y - s.world.groundHeight(at.x, at.z)).toFixed(2)),
+        };
+      },
+    };
+  });
+
+  const wreck = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    for (const [name, ox, buildings, ground] of [
+      ['both', -340, true, true],
+      ['noBuildings', 0, false, true],
+      ['noGround', 340, true, false],
+    ]) {
+      s.demolition.reset(); s.renderer.clearCollapses();
+      s.setCheat('wreckBuildings', buildings);
+      s.setCheat('wreckGround', ground);
+      const at = window.W.spot(ox);
+      out[name] = at ? window.W.hit(at) : null;
+    }
+    s.setCheat('wreckBuildings', true);
+    s.setCheat('wreckGround', true);
+    s.demolition.reset(); s.renderer.clearCollapses();
+    return out;
+  });
+  check('with both switches on a warhead takes the frontage and the street',
+    !!wreck.both && wreck.both.lost > 5 && wreck.both.sank > 1,
+    wreck.both ? `${wreck.both.lost} m of wall gone, street down ${wreck.both.sank} m`
+      : 'no building found');
+  check('with the buildings switch off the frontage stays up and the hole is still dug',
+    !!wreck.noBuildings && wreck.noBuildings.lost <= 0.1 && wreck.noBuildings.sank > 1,
+    wreck.noBuildings ? `${wreck.noBuildings.lost} m of wall gone, street down ${wreck.noBuildings.sank} m`
+      : 'no building found');
+  check('and with the ground switch off the street stays level and the buildings still come down',
+    !!wreck.noGround && wreck.noGround.crater === 0 && wreck.noGround.sank === 0
+      && wreck.noGround.lost > 5,
+    wreck.noGround ? `${wreck.noGround.lost} m of wall gone, street down ${wreck.noGround.sank} m`
+      : 'no building found');
 
   // --- the gore switches ---------------------------------------------------
   // Each of these is checked twice: once with the switch off, to show the game

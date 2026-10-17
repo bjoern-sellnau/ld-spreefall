@@ -1378,3 +1378,40 @@ is what prompted the change.
   differs, because the render path emits particles and they are random. The
   checks that stayed are the ones that read a single frame and ask a question
   about it.
+
+## 27. The title screen, and what a blast is allowed to take
+
+- 2026-10-17: pressing play did not always fly the drone shot, and the reason
+  was that the title screen was flying it already. The title camera asked the
+  intro where the drone was, and that question is what starts the intro's
+  clock, so a player who read the title for longer than the flight lasts
+  pressed play, the flight was thirteen seconds past its end, and they were
+  put straight down on the pavement. The title now holds the first frame of
+  the arc and nothing else, and pressing play winds the clock back. The test
+  suite had been catching this for a while as an intro that was there on one
+  run and gone on the next.
+
+- 2026-10-17: the same morning's other test failure was the suite's fault
+  rather than the game's. Under a software rasteriser one frame of this city
+  can take longer than a second, and a check that waited fourteen hundred
+  milliseconds and then read the screen was reading it before a single fixed
+  step had run at the new position. The waits that care now wait for the
+  simulation to advance by so many seconds of its own time, which is the
+  thing they were always trying to say.
+
+- 2026-10-17: two switches in the cheat menu for the two halves of
+  destruction, and they are the only ones in there that start on, because
+  they are the game as it ships. Buildings off and a warhead digs its crater
+  in a square with every frontage still standing; ground off and the block
+  comes down onto a street that stays level. They are separate all the way
+  through: the shader, the collision and the ruin that is written into the
+  city afterwards all read the same per site flag, so what you walk on is
+  what you can see whichever way the switches are set. The flag reaches the
+  shader on the sign of the rubble heap, because both uniform vectors are
+  full and a heap is never negative.
+
+- 2026-10-17: what is already down stays down. Turning the buildings switch
+  off does not put a frontage back up, and turning it on does not go looking
+  for blasts that happened while it was off. A switch here says what happens
+  next, which is the only promise it can keep once a ruin has been written
+  into the city's own bytes.

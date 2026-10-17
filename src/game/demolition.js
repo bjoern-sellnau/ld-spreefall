@@ -125,6 +125,7 @@ export function scarOf(site) {
     x: site.x, y: site.y, z: site.z,
     radius: site.radius,
     level: site.level,
+    walls: site.walls !== false,
     craterRadius: site.craterRadius,
     depth: site.depth,
     rubble: site.rubble,
@@ -155,6 +156,13 @@ export class Demolition {
     this.onScar = null;
     this.baked = 0;              // how many sites have been made permanent
     this.enabled = true;
+    // The two destruction switches from the cheat menu. Both on is the game
+    // as it ships. They are separate because they are separate in the
+    // picture as well: a warhead that digs a crater in a square with every
+    // frontage round it still standing is a thing somebody might want, and
+    // so is a street that caves in while the buildings hold.
+    this.buildings = true;
+    this.ground = true;
   }
 
   reset() {
@@ -178,6 +186,9 @@ export class Demolition {
    */
   blast(x, y, z, radius, damage) {
     if (!this.enabled) return [];
+    // With both switches off the blast is still a blast, with the fire and
+    // the noise and the dead; it simply leaves the city as it found it.
+    if (!this.buildings && !this.ground) return [];
     const made = [];
     if (radius >= DEMO.bigBlast) {
       // A warhead takes the whole circle at once, and digs a hole a fraction
@@ -186,6 +197,9 @@ export class Demolition {
       if (site) made.push(site);
       return made;
     }
+    // Everything smaller than a warhead only ever cuts walls, so with the
+    // buildings switch off there is nothing left for it to do.
+    if (!this.buildings) return made;
     const c = DEMO.cell;
     const i0 = Math.floor((x - radius) / c), i1 = Math.floor((x + radius) / c);
     const j0 = Math.floor((z - radius) / c), j1 = Math.floor((z + radius) / c);
@@ -236,7 +250,7 @@ export class Demolition {
   _open(x, z, radius, level, blastRadius) {
     if (this.isSanctuary(x, 0, z)) return null;
     const y = this.world.groundHeight(x, z);
-    const crater = blastRadius >= DEMO.craterFrom
+    const crater = this.ground && blastRadius >= DEMO.craterFrom
       ? Math.min(DEMO.maxCraterRadius, blastRadius * DEMO.craterOfBlast) : 0;
 
     for (const site of this.sites) {
@@ -253,6 +267,10 @@ export class Demolition {
 
     const site = {
       x, y, z, radius,
+      // Whether this one takes the walls with it. Read by the shader, by the
+      // collision and by the baker, so all three agree about a site opened
+      // while the buildings switch was off.
+      walls: this.buildings,
       level: 0,
       shown: 0,
       from: 0,
@@ -383,6 +401,7 @@ export class Demolition {
       x: rec.x, y: rec.y, z: rec.z,
       radius: rec.radius,
       level: rec.level, shown: rec.level, from: rec.level,
+      walls: rec.walls !== false,
       craterRadius: rec.craterRadius, depth: rec.depth,
       rubble: rec.rubble,
       opened: true, dugLevel: 0, dugShape: null,
@@ -417,6 +436,7 @@ export class Demolition {
    * @returns {number} how many segments moved
    */
   lowerWalls(site) {
+    if (site.walls === false) return 0;
     const w = this.world;
     const r = site.radius;
     let touched = 0;

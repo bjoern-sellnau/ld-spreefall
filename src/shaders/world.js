@@ -16,7 +16,7 @@ export const MAX_COLLAPSE = 16;
 
 export const COLLAPSE = `
 uniform vec4 uCollapse[${16}];      // xyz centre at ground level, w collapse radius
-uniform vec4 uCollapseInfo[${16}];  // x level, y crater depth, z crater radius, w heap
+uniform vec4 uCollapseInfo[${16}];  // x level, y crater depth, z crater radius, w heap (negative: crater only)
 uniform int uCollapseCount;
 
 // How far the fall runs ahead of itself at the middle of a site. A whole
@@ -92,6 +92,12 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
                       min(1.0, uCollapseInfo[i].x));
       continue;
     }
+
+    // A negative heap means this site digs its crater and leaves every wall
+    // in it standing: the buildings switch in the cheat menu was off when it
+    // opened. The sign carries it because both uniform vectors are full and
+    // a heap of rubble is never less than nothing.
+    if (uCollapseInfo[i].w < 0.0) continue;
 
     // Where this building has been cut back to. At a quarter gone it is the
     // top quarter that is missing; at one it is the whole thing.

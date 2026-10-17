@@ -245,7 +245,11 @@ export class Renderer {
       this.collapseInfo[i * 4] = s.shown;
       this.collapseInfo[i * 4 + 1] = s.depth;
       this.collapseInfo[i * 4 + 2] = s.craterRadius;
-      this.collapseInfo[i * 4 + 3] = s.rubble;
+      // The heap goes in negative for a site that digs its hole and leaves
+      // the walls alone, which is the buildings switch turned off. The world
+      // shader reads the sign; see the comment there.
+      this.collapseInfo[i * 4 + 3] = s.walls === false
+        ? -Math.max(0.01, s.rubble) : s.rubble;
     }
     this.collapseCount = n;
   }

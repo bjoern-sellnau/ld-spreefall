@@ -210,8 +210,9 @@ What is under the hood:
 
 ## Cheats
 
-Press **C**. Nothing in here is on by default and all of it is remembered
-between visits.
+Press **C**. Everything here is off by default except the two destruction
+switches, which are the game as it ships, and all of it is remembered between
+visits.
 
 | | |
 |---|---|
@@ -226,13 +227,23 @@ between visits.
 | No drones | they stop coming, and whatever is up leaves |
 | Cinematic warheads | the camera follows one down and circles the hole |
 | Slow motion blasts | the world drops to a crawl for a few seconds after anything large |
+| Buildings can be destroyed | on as the game ships; off leaves every frontage standing whatever lands on it |
+| Ground can be cratered | on as the game ships; off keeps the street level under a warhead |
 | Tear enemies apart | a killing hit takes them to pieces instead of laying them down |
 | Ragdoll | they fall with the momentum of the shot rather than on a timer |
 | Blood | hits spray |
 | Ultra gore | the three above, considerably more of it |
 
-A run with any of them on is marked `cheated` on the interface, and the end
-screen says so. Switching them off again does not clear the mark.
+A run with any of them moved off what the game ships with is marked `cheated`
+on the interface, and the end screen says so. Switching them back does not
+clear the mark.
+
+The two destruction switches are separate because the two halves of a blast
+are separate: a warhead with the buildings switch off digs its crater in a
+square where every frontage is still standing, and with the ground switch off
+it brings the block down onto a street that stays level. Both are honoured by
+the picture, by the collision and by the ruin that is written into the city
+afterwards, so what you walk on is always what you can see.
 
 What the four gore switches actually are:
 
