@@ -31,6 +31,25 @@ const SPEC = {
 };
 export const SOLDIER_SPEC = SPEC;
 
+/**
+ * Somebody who lives here. They are soldiers in the one sense that matters to
+ * the engine: the same walking, the same ground under them, the same capsule
+ * to hit and the same one draw call. Everything else about them is in
+ * civilianStep, and it comes to about fifteen lines, because a passer by has
+ * exactly two things on his mind.
+ */
+const CIVIL = {
+  health: 45,
+  walkSpeed: 1.5,
+  runSpeed: 5.0,
+  // How long they keep running after something frightened them, and how far
+  // away a noise still counts as something frightening.
+  panic: 7.5,
+  // A new place to be, when they get where they were going.
+  errand: [16, 55],
+};
+export const CIVILIAN_SPEC = CIVIL;
+
 const rand = (a, b) => a + Math.random() * (b - a);
 
 class Soldier {
@@ -65,6 +84,11 @@ class Soldier {
     this.killerLeft = 0;
     this.deathTime = 0;
     this.gibbed = false;
+    // Out of the same pool as everybody else, so whatever the last one was
+    // has to be forgotten here rather than left to surprise somebody.
+    this.civilian = false;
+    this.panicLeft = 0;
+    this.who = 0;
     // Coming up out of the street. For as long as this is running he is
     // under it, he does nothing and he sees nothing: the sphere he arrived
     // in is still closing.
@@ -129,6 +153,12 @@ export class Soldiers {
     // fn(soldier) the moment one arrives, for the sphere of light it comes
     // up through.
     this.onArrive = null;
+    // Passers by: how many should be about, and the timer that brings the
+    // next one in. Nought is a city with nobody in it, which is what every
+    // mode but Just a Walk is.
+    this.civilianBudget = 0;
+    this.civilianTimer = 0;
+    this.onPanic = null;       // fn(soldier) the first moment one bolts
     // fn(soldier, dir) when a standing skeleton is shot to pieces.
     this.onShatter = null;
     this.hazards = () => [];
@@ -180,6 +210,93 @@ export class Soldiers {
       return s;
     }
     return null;
+  }
+
+  /** How many of the people about the place are the ones who live here. */
+  get civilianCount() {
+    let n = 0;
+    for (const s of this.active) if (s.civilian && s.health > 0) n++;
+    return n;
+  }
+
+  /**
+   * Somebody on his way somewhere. No sphere and no rising out of the
+   * pavement: he was here before you were, and he walks in from the next
+   * street like anybody else.
+   */
+  spawnCivilianNear(px, pz, minR, maxR) {
+    const s = this.spawnNear(px, pz, minR, maxR);
+    if (!s) return null;
+    s.civilian = true;
+    s.rise = 0;
+    s.y = this.world.groundHeight(s.x, s.z);
+    s.health = CIVIL.health;
+    s.maxHealth = CIVIL.health;
+    s.panicLeft = 0;
+    // Which coat he has on, which the shader reads out of the fraction.
+    s.who = Math.random();
+    this._errand(s);
+    return s;
+  }
+
+  /** Somewhere else to be, a street or two away. */
+  _errand(s) {
+    const a = Math.random() * Math.PI * 2;
+    const r = rand(CIVIL.errand[0], CIVIL.errand[1]);
+    this.sendTo(s, s.x + Math.cos(a) * r, s.z + Math.sin(a) * r);
+  }
+
+  /**
+   * A noise everybody within earshot runs away from: a shot, a blast, a
+   * machine arriving. They do not know what it was and they do not look.
+   *
+   * @param {number} radius how far it was heard
+   * @returns {number} how many of them took to their heels
+   */
+  scare(x, z, radius) {
+    let n = 0;
+    for (const s of this.active) {
+      if (!s.civilian || s.health <= 0) continue;
+      if (Math.hypot(s.x - x, s.z - z) > radius) continue;
+      const first = s.panicLeft <= 0;
+      s.panicLeft = CIVIL.panic;
+      s.fleeX = x; s.fleeZ = z;
+      if (first && this.onPanic) this.onPanic(s);
+      n++;
+    }
+    return n;
+  }
+
+  /**
+   * A passer by, in full. Away from whatever frightened him while it is
+   * still ringing in his ears, and otherwise about his business.
+   */
+  _civilianStep(s, dt, player) {
+    const w = this.world;
+    // The ones behind you are somebody else's neighbours now. Without this
+    // they pile up in the streets you have left and the budget keeps every
+    // one of them walking a kilometre away.
+    if (player && Math.hypot(s.x - player.x, s.z - player.z) > 260) {
+      this._retire(s);
+      return;
+    }
+    s.panicLeft = Math.max(0, (s.panicLeft || 0) - dt);
+    const running = s.panicLeft > 0;
+    if (running) {
+      // Straight away from it, picked fresh each step so that turning a
+      // corner does not send him back towards the noise.
+      let dx = s.x - (s.fleeX || 0), dz = s.z - (s.fleeZ || 0);
+      const l = Math.hypot(dx, dz) || 1;
+      this.sendTo(s, s.x + (dx / l) * 50, s.z + (dz / l) * 50);
+    } else if (Math.hypot(s.targetX - s.x, s.targetZ - s.z) < 2.2) {
+      this._errand(s);
+    }
+    this._move(s, dt, running ? CIVIL.runSpeed : CIVIL.walkSpeed);
+    s.yaw = Math.atan2(-(s.targetX - s.x), -(s.targetZ - s.z));
+    s.y = w.groundHeight(s.x, s.z);
+    // He is not in the fight and never was: no aim, no burst, no state to
+    // speak of, and nothing counts him as a contact.
+    s.canSee = false;
   }
 
   /**
@@ -316,6 +433,15 @@ export class Soldiers {
     if (!this.enabled) return;
     const w = this.world;
 
+    // The people who live here. They keep walking whatever else is going on,
+    // and they are brought in on a timer of their own so that a city with
+    // nobody hunting you is still a city with somebody in it.
+    this.civilianTimer -= dt;
+    if (this.civilianTimer <= 0 && this.civilianCount < this.civilianBudget) {
+      this.civilianTimer = 1.6;
+      this.spawnCivilianNear(player.x, player.z, 30, 120);
+    }
+
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0 && this.active.length < this.budget) {
       this.spawnTimer = Math.max(0.9, 2.8 - this.tier * 0.22);
@@ -414,6 +540,12 @@ export class Soldiers {
         if (s.deathTime > 8) { this._retire(s); }
         continue;
       }
+
+      // Somebody who lives here, and who is still alive: nothing below this
+      // line is his. He has no state, no aim, no burst and no quarrel with
+      // anybody. Dying, on the other hand, is the same for everybody, which
+      // is why this sits under it rather than over it.
+      if (s.civilian) { this._civilianStep(s, dt, player); continue; }
 
       const dx = player.x - s.x, dz = player.z - s.z;
       const dist = Math.hypot(dx, dz);
@@ -533,6 +665,13 @@ export class Soldiers {
       // Too far behind you and not engaged: recycle rather than simulate.
       if (dist > 320 && !s.canSee) { this._retire(s); }
     }
+  }
+
+  /** Somewhere to walk to, kept inside the city. */
+  sendTo(s, x, z) {
+    const w = this.world;
+    s.targetX = Math.min(w.maxX - 15, Math.max(w.minX + 15, x));
+    s.targetZ = Math.min(w.maxZ - 15, Math.max(w.minZ + 15, z));
   }
 
   _pickPatrol(s, px, pz) {

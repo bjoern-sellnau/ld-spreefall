@@ -1632,3 +1632,32 @@ is what prompted the change.
   half, and below that takes whatever loaded ground there is, because a
   machine standing with its shoulder in a wall is better than a machine you
   cannot call.
+
+## 33. The people who live here
+
+- 2026-10-17: passers by, in Just a Walk. They go in the soldier layer with a
+  flag of their own rather than in a layer of their own, and that is the whole
+  design decision: the walking, the wall sliding, the ground under them, the
+  capsule you can hit, the dying, the ragdoll and the one instanced draw call
+  are all there already and all of them are the same for a man on his way to
+  work. What is his own comes to fifteen lines: somewhere to be, somewhere
+  else to be when he gets there, and running away from a noise.
+
+- 2026-10-17: a shot inside seventy metres, a blast heard three times its own
+  radius, or anything arriving in a sphere of light sends them off for seven
+  and a half seconds, straight away from where it came from, picked fresh each
+  step so that turning a corner does not send them back into it. Measured:
+  three of three within earshot bolted and all three were further away two
+  seconds later.
+
+- 2026-10-17: in the picture they are the same figure with the helmet and the
+  rifle collapsed into it, the way the cloth collapses on a man who burns, and
+  the cloth and boots recoloured out of a fraction carried in the one instance
+  slot that was still spare. Four coats, picked per person, because a pavement
+  of them in one colour is a squad.
+
+- 2026-10-17: two checks elsewhere had to learn about them. Just a Walk counts
+  what was sent after you, which is now everybody in the layer who is not a
+  civilian; and the arrival check has to switch the layer on, because the
+  second a soldier spends coming up out of the street is counted in the
+  soldier update, which is where it belongs.

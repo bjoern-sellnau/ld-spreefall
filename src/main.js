@@ -502,6 +502,8 @@ async function main() {
       audio.gunshot(spec.sound);
       effects.shake = Math.min(1, effects.shake + (spec.kind === 'hitscan' ? 0.07 : 0.16));
       state.muzzle = 1;
+      // Everybody within earshot who is not in this fight gets out of it.
+      soldiers.scare(player.x, player.z, 70);
     }
     const m = muzzlePoint(shot.from);
     if (shot.end) {
@@ -539,6 +541,8 @@ async function main() {
    */
   function explode(x, y, z, splash, body) {
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
+    // Heard a great deal further than a rifle, and run from accordingly.
+    soldiers.scare(x, z, Math.max(90, splash.radius * 3));
     if (splash.nuke) {
       // A warhead is the same code path as a grenade with different numbers,
       // which is the point of having the numbers in one place. What it gets of
@@ -1972,6 +1976,9 @@ async function main() {
    */
   function arriveAt(x, z, radius, scale = 1) {
     const y = world.groundHeight(x, z);
+    // Whatever just appeared on the street, the people on it do not wait to
+    // find out what it is.
+    soldiers.scare(x, z, 20 + radius * 9);
     effects.arrival(x, y, z, radius, scale);
     renderer.addScar(x, y, z, radius * 1.1, 0.45);
     const away = Math.hypot(player.x - x, player.z - z);
@@ -2212,6 +2219,11 @@ async function main() {
   // --- cheats -------------------------------------------------------------
   // The menu is built from the tables in cheats.js rather than written out in
   // the HTML, so adding a switch is adding a row there and nothing else.
+
+  // How many people are about the place in Just a Walk. Enough that a street
+  // has somebody on it and a square has a few, and few enough that the pool
+  // the soldiers come out of is not full of them when you call a squad in.
+  const CIVILIANS = 10;
 
   const NUKE = {
     // The numbers a warhead is made of. The radius is the one that matters:
@@ -3641,6 +3653,10 @@ async function main() {
       soldiers.budget = 0;
       jets.budget = 0;
     }
+    // And who is about. A city with nobody hunting you is still a city with
+    // people in it; one that is being shelled is not, and the ones who were
+    // there have already gone.
+    soldiers.civilianBudget = state.peaceful ? CIVILIANS : 0;
 
     if (state.mode === 'intro' || state.mode === 'landing') return;
 

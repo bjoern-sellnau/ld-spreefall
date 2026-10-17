@@ -225,6 +225,23 @@ void main() {
     metal = 0.85;
   }
 
+  // Somebody who lives here, in the clothes he left the house in. The cloth
+  // and the boots take a colour of their own, four coats picked per person
+  // out of the fraction the instance carries, so a pavement with a dozen
+  // people on it is not a squad in uniform. Everything else about the figure
+  // is the same figure, which is the whole reason they cost one draw call.
+  if (vCivil > 0.5 && vPart > 3.5 && vPart < 6.5) {
+    float who = fract(vCivil);
+    vec3 coat = vec3(0.21, 0.19, 0.17);
+    if (who < 0.25) coat = vec3(0.26, 0.11, 0.09);
+    else if (who < 0.5) coat = vec3(0.09, 0.14, 0.24);
+    else if (who < 0.75) coat = vec3(0.23, 0.21, 0.13);
+    albedo = vPart < 4.5 ? coat : coat * 0.4;
+    rough = 0.93;
+    metal = 0.0;
+    emissive = vec3(0.0);
+  }
+
   vec3 L = uSunDir.xyz;
   float ndl = max(dot(n, L), 0.0);
   float shadow = shadowFactor(vWorld, ndl, vViewDist);
@@ -366,8 +383,10 @@ void main() {
 // The drones and everything else that is not a soldier can never be charred,
 // so their build of the shader has the term compiled out rather than reading
 // a varying nothing writes.
-export const DRONE_FS = bodyFS('#define vCharred 0.0\n#define vMachine 0.0\n#define vStun 0.0');
-export const SOLDIER_FS = bodyFS('flat in float vCharred;\nflat in float vMachine;\nflat in float vStun;');
+export const DRONE_FS = bodyFS(
+  '#define vCharred 0.0\n#define vMachine 0.0\n#define vStun 0.0\n#define vCivil 0.0');
+export const SOLDIER_FS = bodyFS(
+  'flat in float vCharred;\nflat in float vMachine;\nflat in float vStun;\nflat in float vCivil;');
 
 // Soldiers share the drone's fragment shader and its instance layout, and
 // differ only in what the vertex stage does with the transform: a walk cycle
@@ -382,7 +401,10 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aInfo;     // x part id
 layout(location = 5) in vec4 iPosYaw;   // xyz feet position, w yaw
 layout(location = 6) in vec4 iState;    // x fall, y roll, z hit flash, w walk phase
-layout(location = 7) in vec4 iExtra;    // x charred 0..1, y machine, z stunned
+layout(location = 7) in vec4 iExtra;    // x charred 0..1, y machine, z stunned,
+                                        // w nought for a soldier, one plus
+                                        // which coat he has on for somebody
+                                        // who lives here
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -391,6 +413,7 @@ flat out float vFlash;
 flat out float vCharred;
 flat out float vMachine;
 flat out float vStun;
+flat out float vCivil;
 out float vViewDist;
 
 mat3 rotY(float a) {
@@ -414,6 +437,7 @@ void main() {
   vCharred = charred;
   vMachine = iExtra.y;
   vStun = iExtra.z;
+  vCivil = iExtra.w;
 
   // Burnt to the bone. The cloth, the webbing and the helmet shrink into
   // nothing and the skeleton inside them comes out. Both sets of parts are in
@@ -425,6 +449,11 @@ void main() {
   // soldier burnt to the skeleton by the ion cannon is still a dead man, not
   // a machine, and does not stand there holding a gun he never had.
   if (aInfo.x > 25.5) keep = iExtra.y;
+  // Somebody on his way to work carries no rifle and wears no helmet. Both
+  // shrink into the figure the same way the cloth does on a man who burns,
+  // which costs nothing: the parts are in the mesh either way.
+  if (iExtra.w > 0.5 && (aInfo.x > 4.5 && aInfo.x < 5.5)) keep = 0.0;
+  if (iExtra.w > 0.5 && (aInfo.x > 6.5 && aInfo.x < 7.5)) keep = 0.0;
   if (keep < 0.999) {
     // Collapse towards the body's own centre line rather than towards the
     // origin, so what shrinks goes into the figure instead of into its feet.

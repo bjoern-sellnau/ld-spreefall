@@ -539,7 +539,10 @@ async function run() {
     s.soldiers.budget = 8; s.drones.budget = 6; s.jets.budget = 2;
     const t0 = s.loop.simTime;
     while (s.loop.simTime - t0 < 12) await new Promise((r) => requestAnimationFrame(r));
-    const sent = s.soldiers.active.length + s.drones.active.length + s.jets.active.length;
+    // The people who live here do not count: they are not sent after you,
+    // they were here first.
+    const sent = s.soldiers.active.filter((v) => !v.civilian).length
+      + s.drones.active.length + s.jets.active.length;
 
     // And by hand.
     const made = s.spawnWave('drones', 4);
@@ -561,11 +564,64 @@ async function run() {
     quiet.made === 4 && quiet.up === 4 && quiet.moved && quiet.stillUp === 4,
     `${quiet.up} up, ${quiet.moved ? 'flying' : 'frozen'}`);
 
+  // --- the people who live here --------------------------------------------
+  const folk = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset();
+    s.state.peaceful = true;
+    s.soldiers.enabled = true;
+    const t0 = s.loop.simTime;
+    while (s.loop.simTime - t0 < 14 && s.soldiers.civilianCount < 6) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    const out = { count: s.soldiers.civilianCount };
+    const who = s.soldiers.active.filter((v) => v.civilian);
+    out.armed = who.filter((v) => v.state === 1 || v.state === 2).length;
+    // They walk: a stretch of simulation moves them about the place.
+    const before = who.map((v) => `${v.x.toFixed(1)},${v.z.toFixed(1)}`);
+    const t1 = s.loop.simTime;
+    while (s.loop.simTime - t1 < 2) await new Promise((r) => requestAnimationFrame(r));
+    out.moved = who.filter((v, i) => `${v.x.toFixed(1)},${v.z.toFixed(1)}` !== before[i]).length;
+
+    // And a shot sends them running away from it rather than towards it.
+    const near = who.filter((v) => Math.hypot(v.x - s.player.x, v.z - s.player.z) < 70);
+    const away0 = near.map((v) => Math.hypot(v.x - s.player.x, v.z - s.player.z));
+    s.weapon.select('m16'); s.weapon.cooldown = 0; s.weapon.spread = 0;
+    s.shoot();
+    out.scared = near.filter((v) => v.panicLeft > 0).length;
+    out.heard = near.length;
+    const t2 = s.loop.simTime;
+    while (s.loop.simTime - t2 < 2.5) await new Promise((r) => requestAnimationFrame(r));
+    out.further = near.filter((v, i) =>
+      Math.hypot(v.x - s.player.x, v.z - s.player.z) > away0[i] + 1.5).length;
+
+    s.state.peaceful = false;
+    s.soldiers.civilianBudget = 0;
+    s.soldiers.enabled = false;
+    s.soldiers.reset(); s.weapon.reset();
+    return out;
+  });
+  check('people are about the place in Just a Walk',
+    folk.count >= 6 && folk.armed === 0, `${folk.count} of them, none in the fight`);
+  check('and they are going somewhere', folk.moved > 0, `${folk.moved} on the move`);
+  check('a shot sends everybody within earshot running',
+    folk.heard > 0 && folk.scared === folk.heard,
+    `${folk.scared} of ${folk.heard} bolted`);
+  check('and they run away from it rather than past it',
+    folk.further >= Math.ceil(folk.heard * 0.6),
+    `${folk.further} of ${folk.heard} further off two seconds later`);
+
   // --- how they arrive -----------------------------------------------------
   const arrival = await page.evaluate(async () => {
     const s = window.spreefall;
     s.soldiers.reset(); s.effects.clear();
     s.state.peaceful = false;
+    // The layer has to be running, or nobody comes up out of anything: the
+    // rise is in the soldier update, which is where it belongs.
+    const was = s.soldiers.enabled;
+    s.soldiers.enabled = true;
+    s.soldiers.budget = 0;
     const made = s.spawnWave('soldiers', 2);
     const v = s.soldiers.active[0];
     if (!v) return { skip: true };
@@ -575,6 +631,7 @@ async function run() {
     const t0 = s.loop.simTime;
     while (s.loop.simTime - t0 < 1.4) await new Promise((r) => requestAnimationFrame(r));
     const standing = Number(Math.abs(v.y - s.world.groundHeight(v.x, v.z)).toFixed(2));
+    s.soldiers.enabled = was;
     s.soldiers.reset(); s.effects.clear();
     return { made, sphere, under, standing };
   });

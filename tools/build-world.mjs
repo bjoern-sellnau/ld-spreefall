@@ -592,7 +592,18 @@ function buildDistrict(district) {
   // the outline is a rough envelope that is not meant to be drawn once the
   // pieces are there. Drawing both is what turned every tower in this city
   // into the box around it, which is what you were looking at before.
-  const parentsWithParts = markBuildingParts(buildings);
+  const parentsWithParts = markBuildingParts(buildings, (b) => {
+    // Only a piece that is itself going to be built may take its outline out
+    // of the picture. A piece under the district's smallest building, or one
+    // whose middle falls outside the box, is dropped by the loop below, and
+    // without this test it took the whole building with it: the outline was
+    // not drawn because the piece had claimed it, and the piece was not
+    // drawn either, so what stood there was nothing at all.
+    if (ringArea(b.outer) < tier.minArea) return false;
+    const [bx, bz] = ringCentroid(b.outer);
+    return bx >= world.minX - 60 && bx <= world.maxX + 60
+      && bz >= world.minZ - 60 && bz <= world.maxZ + 60;
+  });
   let buildingCount = 0;
   const landmarkIndex = [];
   const palette = new Palette(BERLIN_PALETTE, { frozen: true });
@@ -1426,9 +1437,11 @@ function ringInside(inner, outer) {
  *
  * @param {Array<{outer:Array,tags:Object,part:boolean}>} list every building
  *   and piece in the district, in the order they were read
+ * @param {(piece)=>boolean} buildable whether a piece will actually be drawn.
+ *   One that will not may not claim an outline, or the building disappears.
  * @returns {number} how many outlines were taken over by their pieces
  */
-function markBuildingParts(list) {
+export function markBuildingParts(list, buildable = () => true) {
   const CELL = 120;
   const grid = new Map();
   const key = (i, j) => `${i},${j}`;
@@ -1450,6 +1463,7 @@ function markBuildingParts(list) {
   let taken = 0;
   for (const p of list) {
     if (!p.part || p.outer.length < 3) continue;
+    if (!buildable(p)) continue;
     const [px, pz] = ringCentroid(p.outer);
     const cell = grid.get(key(Math.floor(px / CELL), Math.floor(pz / CELL)));
     if (!cell) continue;

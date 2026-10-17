@@ -364,6 +364,18 @@ out by hand, and what it brings out is a real enemy with a real fight in it;
 it simply is not replaced when it goes down. The mode is remembered between
 visits, because it is a choice about what you came for rather than a setting.
 
+## The people who live here
+
+In Just a Walk the streets have somebody on them. They are soldiers in the one
+sense that matters to the engine, which is the walking, the ground under them,
+the capsule you can hit and the single draw call; everything else about them is
+about fifteen lines. They carry nothing, wear no helmet, have a coat in one of
+four colours picked per person, and walk from somewhere to somewhere else. A
+shot inside seventy metres, a blast, or anything arriving in a sphere of light
+sends every one of them running straight away from it for seven seconds, and
+then they go back about their business. They are not in the fight, nothing
+counts them as a contact, and nobody is hunting them.
+
 ## How they arrive
 
 Nobody walks round a corner into this fight. A sphere of light stands on the
