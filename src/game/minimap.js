@@ -14,6 +14,27 @@ const CLASS_STYLE = {
   pedestrian: ['#4a463c', 1.6],
 };
 
+// How much of the city the enlarged map opens on, in metres across the
+// canvas. The whole of Berlin at once is a diagram rather than a map: it
+// opens on the streets you are standing in, and the wheel takes it out from
+// there.
+const OPEN_SPAN = 700;
+
+// As far in as the wheel goes, in metres across the canvas. A ceiling in
+// zoom units cannot be written down here: a zoom is a ratio against the
+// whole city fitted to the canvas, and the city is forty six kilometres
+// across, so the same number means a street in one place and a district in
+// another.
+const TIGHTEST_SPAN = 140;
+
+// Which streets get their name written first when two labels want the same
+// patch of screen. A main road beats a side street, which is how a paper map
+// does it as well.
+const LABEL_RANK = {
+  motorway: 0, trunk: 1, primary: 2, secondary: 3, tertiary: 4,
+  pedestrian: 5, residential: 6, unclassified: 7, living_street: 8, service: 9,
+};
+
 // What each kind of pad shows as on the map. The same five colours the pads
 // themselves glow in, so the map and the street agree.
 const PAD_COLOUR = {
@@ -40,7 +61,19 @@ export class Minimap {
     // fitted to the canvas; above that it is a window on it, and centre says
     // where that window is.
     this.zoom = 1;
+    // Metres across that the map should fit while it is in span mode, which
+    // is how it opens. The zoom is worked out from this on every draw until
+    // the wheel is touched, because the canvas is still its small size on
+    // the first frame after the map is opened and a zoom worked out against
+    // that one is wrong by whatever the two sizes differ by.
+    this.openSpan = 0;
     this.centre = null;
+    // How many street names the last draw managed to fit on, which is a
+    // number the tests read.
+    this.labelsDrawn = 0;
+    // As far in as the wheel may go on this canvas, worked out on each draw
+    // from TIGHTEST_SPAN.
+    this.maxZoom = 40;
     // The weapons free zones, so the map can show where nothing may be aimed.
     this.sanctuaries = [];
     // The transform the last draw used, so a click can be turned back into a
@@ -69,7 +102,9 @@ export class Minimap {
     this.big = !this.big;
     if (this.big && at) {
       this.centre = { x: at.x, z: at.z };
-      if (this.zoom <= 1) this.zoom = 5;
+      // Held as a span rather than as a zoom until the wheel is touched: see
+      // the field.
+      if (this.zoom <= 1) this.openSpan = OPEN_SPAN;
     }
     this.canvas.classList.toggle('big', this.big);
     requestAnimationFrame(() => this._sizeCanvas());
@@ -91,6 +126,13 @@ export class Minimap {
     // Enlarged, the map shows the whole playable box, north up, fitted to the
     // canvas. Small, it is a heading up window around the player.
     const fit = Math.min(W / (wm.maxX - wm.minX), H / (wm.maxZ - wm.minZ)) * 0.94;
+    // In span mode the zoom follows the canvas, so the map shows the same
+    // piece of city whatever size it has been given.
+    // How far the wheel may go, worked out against this canvas and this city.
+    this.maxZoom = Math.max(2, (W / TIGHTEST_SPAN) / fit);
+    if (this.big && this.openSpan) {
+      this.zoom = Math.min(this.maxZoom, Math.max(1, (W / this.openSpan) / fit));
+    }
     const scale = this.big ? fit * this.zoom : 0.16 * this.dpr;
     if (this.big && this.centre) this.clampCentre(W, H, scale);
     const originX = this.big ? (this.centre ? this.centre.x : (wm.minX + wm.maxX) / 2) : px;
@@ -237,6 +279,11 @@ export class Minimap {
     }
     ctx.restore();
 
+    // The street names, in screen pixels rather than in metres: text that is
+    // scaled with the map is either a hairline or a billboard, and never the
+    // size you can read.
+    this.drawStreetNames(W, H, scale, originX, originZ);
+
     // The player: at the centre on the small map, at their real position on the
     // enlarged one.
     ctx.save();
@@ -310,6 +357,81 @@ export class Minimap {
    * an axis, that axis stays centred; zoomed in, the edge of the city is as
    * far as the window may go.
    */
+  /**
+   * The name of every street that there is room for, lying along the road it
+   * belongs to. Only on the enlarged map, and only once it is zoomed in far
+   * enough that the names are worth reading: the whole city at once is one
+   * illegible grey smear, so below about a metre to the pixel they are left
+   * off and the map is roads and districts as before.
+   *
+   * A label is kept only if nothing has already been written where it would
+   * go, measured as a box around the text, and the main roads are offered
+   * their places first. That is the whole of the layout: a map that writes
+   * every name it has is a map with no names on it.
+   *
+   * @param {number} W @param {number} H the canvas, in device pixels
+   * @param {number} scale device pixels per metre
+   * @param {number} originX @param {number} originZ what is at the middle
+   */
+  drawStreetNames(W, H, scale, originX, originZ) {
+    this.labelsDrawn = 0;
+    const all = this.world.manifest.streets;
+    if (!this.big || !all || !all.length) return;
+    if (scale < 0.9 * this.dpr) return;
+    const ctx = this.ctx;
+    const cx = W / 2, cy = H / 2;
+    // Nearest first and main roads before side streets, so the names that go
+    // on are the ones you would have asked for.
+    const order = [];
+    const halfW = W / 2 / scale + 60, halfH = H / 2 / scale + 60;
+    for (const l of all) {
+      if (Math.abs(l.x - originX) > halfW || Math.abs(l.z - originZ) > halfH) continue;
+      order.push(l);
+    }
+    order.sort((a, b) => (LABEL_RANK[a.c] ?? 9) - (LABEL_RANK[b.c] ?? 9));
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const placed = [];
+    for (const l of order) {
+      const rank = LABEL_RANK[l.c] ?? 9;
+      const size = (rank <= 2 ? 12 : rank <= 4 ? 11 : 10) * this.dpr;
+      ctx.font = `${size}px ui-sans-serif, system-ui, sans-serif`;
+      const w = ctx.measureText(l.n).width + 6 * this.dpr;
+      const h = size + 4 * this.dpr;
+      const sx = cx + (l.x - originX) * scale;
+      const sy = cy + (l.z - originZ) * scale;
+      if (sx < -w || sx > W + w || sy < -h || sy > H + h) continue;
+      // The box is measured without the turn, which is a little generous for
+      // a street running across the map and costs nothing but a gap.
+      let free = true;
+      for (const b of placed) {
+        if (Math.abs(sx - b.x) * 2 < w + b.w && Math.abs(sy - b.y) * 2 < h + b.h) {
+          free = false;
+          break;
+        }
+      }
+      if (!free) continue;
+      placed.push({ x: sx, y: sy, w, h });
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(l.a);
+      ctx.strokeStyle = 'rgba(8,9,11,0.9)';
+      ctx.lineWidth = 3 * this.dpr;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(l.n, 0, 0);
+      ctx.fillStyle = rank <= 2 ? 'rgba(206,201,190,0.95)' : 'rgba(170,168,160,0.85)';
+      ctx.fillText(l.n, 0, 0);
+      ctx.restore();
+      this.labelsDrawn++;
+    }
+    ctx.restore();
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+  }
+
   clampCentre(W, H, scale) {
     const wm = this.world;
     const halfW = W / 2 / scale, halfH = H / 2 / scale;
@@ -441,8 +563,11 @@ export class Minimap {
    */
   zoomAt(clientX, clientY, factor) {
     if (!this.big || !this._view) return;
+    // The wheel takes the map out of span mode: from here the zoom is
+    // whatever the player has asked for.
+    this.openSpan = 0;
     const before = this.worldAt(clientX, clientY);
-    this.zoom = Math.min(14, Math.max(1, this.zoom * factor));
+    this.zoom = Math.min(this.maxZoom, Math.max(1, this.zoom * factor));
     if (!this.centre) {
       this.centre = {
         x: (this.world.minX + this.world.maxX) / 2,
@@ -481,6 +606,7 @@ export class Minimap {
   /** Back to the whole city. */
   resetView() {
     this.zoom = 1;
+    this.openSpan = 0;
     this.centre = null;
   }
 

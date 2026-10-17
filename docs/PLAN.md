@@ -1458,3 +1458,35 @@ is what prompted the change.
   three ways: alone with the switch on, with three of his friends up, and
   with the switch off, and read both the timer and what the world actually
   did with it.
+
+## 29. A map you can read the streets on
+
+- 2026-10-17: the enlarged map opened on two and a half kilometres of city,
+  which on a canvas eleven hundred pixels wide is a diagram of a district
+  rather than a map of a street. It now opens on seven hundred metres around
+  you. The ceiling on the wheel went with it, and for a reason worth writing
+  down: the zoom is a ratio against the whole city fitted to the canvas, and
+  the city is forty six kilometres across rather than the twelve the old
+  ceiling of fourteen was picked for, so the same number meant a district in
+  one place and a street in another. Both the opening and the ceiling are
+  written in metres across the canvas now, and the zoom is worked out from
+  them against whatever canvas there is.
+
+- 2026-10-17: and that opening is held as a span rather than converted to a
+  zoom at the moment the map is opened, because at that moment the canvas is
+  still its small size: the first run put the map at eighteen times the
+  whole city, which on the enlarged canvas was twelve hundred metres across
+  rather than seven hundred. The span survives until the wheel is touched.
+
+- 2026-10-17: street names. They come off the `name` on each OSM way, one
+  label every two hundred and forty metres along it with the angle of the
+  piece it sits on, written by the builder into the district's own manifest
+  and nowhere else: the district you are standing in is the one whose names
+  you can read, and a city of eighty one districts pays nothing for the
+  eighty it is not in. Mitte has a hundred and seventy three labels over
+  sixty streets and the json grew by about six kilobytes. On the map they are
+  drawn in screen pixels rather than in metres, turned to lie along the road
+  and never upside down, main roads first, and a label is kept only if
+  nothing has been written where it would go. Ten of the hundred and seventy
+  three fit on the opening view, which is the point: a map that writes every
+  name it has is a map with no names on it.

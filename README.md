@@ -54,7 +54,7 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | Touch | drag left to walk, drag right to look |
 | Gamepad | left stick walks, right stick looks, A jumps, L3 runs |
 | P | photo mode: hides the interface, unlocks the clock, saves a PNG |
-| M | enlarge the map |
+| M | enlarge the map, on the streets around you |
 | N | sound on and off |
 | H | help |
 | 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |
@@ -110,6 +110,15 @@ Jumping while it runs spends a slice of it and throws you most of a storey up.
 ground, found by asking the world where a person could actually stand rather
 than by anyone authoring a list of coordinates. Run over one and it is yours;
 it comes back on a timer, so the map is something you learn to move around.
+
+The enlarged map opens on seven hundred metres of city around you rather than
+on all forty six kilometres of it, and at that range it writes the street
+names along the streets, from the `name` on the way in OpenStreetMap. A name
+goes on every two hundred and forty metres of road and only if nothing has
+already been written where it would go, with the main roads offered their
+places first, which is how a paper map does it too. The wheel takes it out to
+the whole city and in to a hundred and forty metres across; the names fade out
+on the way out, at about a metre to the pixel.
 Ammunition fills the weapon in your hands and tops up the rest of the loadout.
 A medical kit puts fifty five back. Then the three that have a clock on them
 and a chip on the interface counting it down:

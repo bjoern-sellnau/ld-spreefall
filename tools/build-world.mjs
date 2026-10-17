@@ -475,6 +475,10 @@ function buildDistrict(district) {
   let roadMetres = 0;
   let roadPoints = 0;
   const roadLines = [];
+  // Where the street names go on the map. Only the district you are in
+  // carries them, which is both what you want to read and the reason they
+  // cost nothing on a city of eighty one of these.
+  const streetNames = [];
   for (const r of roads) {
     const cls = r.tags.highway;
     const explicit = parseLength(r.tags.width);
@@ -498,6 +502,7 @@ function buildDistrict(district) {
         w: width,
         pts: simplify(r.line, 1.5).flatMap((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]),
       });
+      if (r.tags.name) streetNames.push(...streetLabels(r.tags.name, r.line, cls));
     }
   }
   for (const a of areas) {
@@ -729,6 +734,7 @@ function buildDistrict(district) {
     landmarks: buildLandmarkCards(attractions, landmarkIndex),
     stations: stations.map((s) => ({ name: s.tags.name || '', x: round2(s.p[0]), z: round2(s.p[1]), kind: s.tags.railway })),
     roadLines,
+    streets: streetNames,
     waterOutlines: waterPolys.map((w) => flatRing(simplify(w.ring, 2.5))),
     greenOutlines: greens.map((g) => flatRing(simplify(g.ring, 3.0))),
     surfaceGrid: {
@@ -1338,6 +1344,55 @@ function polylineLength(pts) {
   let s = 0;
   for (let i = 1; i < pts.length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
   return s;
+}
+
+// How far apart the name of a street is written along it, and the shortest
+// piece of road worth writing on at all. A street is many ways in OSM and
+// each one is labelled on its own, which is what you want on a map: the name
+// is near you wherever on it you are standing.
+const LABEL_SPACING = 240;
+const LABEL_SHORTEST = 30;
+
+/**
+ * Where to write a street's name, and at what angle. One label every so many
+ * metres along the way, sitting on the piece of it that is there, so the
+ * text lies along the road rather than across it.
+ *
+ * @param {string} name what it is called
+ * @param {Array<[number,number]>} line the way, in world metres
+ * @param {string} cls the OSM highway class, which decides the size
+ * @returns {Array<{n:string,x:number,z:number,a:number,c:string}>}
+ */
+function streetLabels(name, line, cls) {
+  const total = polylineLength(line);
+  if (total < LABEL_SHORTEST) return [];
+  const out = [];
+  const count = Math.max(1, Math.round(total / LABEL_SPACING));
+  // Spread over the way rather than from one end, so two labels are never on
+  // top of each other at a junction.
+  for (let k = 0; k < count; k++) {
+    const want = total * (k + 0.5) / count;
+    let run = 0;
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1], b = line[i];
+      const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (run + seg < want) { run += seg; continue; }
+      const t = seg > 0 ? (want - run) / seg : 0;
+      let ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      // Never upside down: a name read from the other end is the same name.
+      if (ang > Math.PI / 2) ang -= Math.PI;
+      if (ang < -Math.PI / 2) ang += Math.PI;
+      out.push({
+        n: name,
+        x: Math.round(a[0] + (b[0] - a[0]) * t),
+        z: Math.round(a[1] + (b[1] - a[1]) * t),
+        a: Math.round(ang * 100) / 100,
+        c: cls,
+      });
+      break;
+    }
+  }
+  return out;
 }
 
 function offsetLine(pts, off) {

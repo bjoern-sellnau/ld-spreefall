@@ -95,6 +95,9 @@ export class World {
       landmarks: [],
       stations: [],
       roadLines: [],
+      // Street name labels, from whichever districts are in memory. The
+      // district you are standing in is the one whose names you can read.
+      streets: [],
       waterOutlines: [],
       greenOutlines: [],
       totals: { triangles: 0, vertices: 0, buildings: 0, stelae: 0, trees: 0, roadKm: 0, collisionSegments: 0 },
@@ -311,7 +314,7 @@ export class World {
   _mergeManifest(district, sign) {
     const m = this.manifest;
     const d = district.manifest;
-    const lists = ['landmarks', 'stations', 'roadLines', 'waterOutlines', 'greenOutlines'];
+    const lists = ['landmarks', 'stations', 'roadLines', 'streets', 'waterOutlines', 'greenOutlines'];
     if (sign > 0) {
       for (const key of lists) {
         for (const item of (d[key] || [])) {

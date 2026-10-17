@@ -110,8 +110,28 @@ async function run() {
 
   // --- minimap ------------------------------------------------------------
   await page.keyboard.press('KeyM');
-  await page.waitForTimeout(700);
+  // Drawn at least twice before it is measured: the canvas is still its
+  // small size on the frame the map opens on, and the view the map reports
+  // is the one the last draw used.
+  await simulate(page, 0.6);
   check('M enlarges the map', await page.evaluate(() => document.getElementById('minimap').classList.contains('big')));
+  // It opens on the streets you are standing in rather than on the whole of
+  // Berlin, and once it is in that far the names are worth writing.
+  const mapView = await page.evaluate(() => {
+    const s = window.spreefall;
+    const v = s.minimap._view;
+    return {
+      span: v ? Math.round(s.minimap.canvas.width / v.scale) : 0,
+      labels: s.minimap.labelsDrawn,
+      known: s.world.manifest.streets.length,
+      names: [...new Set(s.world.manifest.streets.map((l) => l.n))].length,
+    };
+  });
+  check('and it opens on the streets around you rather than on all of Berlin',
+    mapView.span > 450 && mapView.span < 1000, `${mapView.span} m across the canvas`);
+  check('with their names written along them',
+    mapView.labels > 4 && mapView.names > 8,
+    `${mapView.labels} of ${mapView.known} labels drawn, ${mapView.names} streets named`);
   await page.screenshot({ path: path.join(SHOTS, 'ui-04-map.png') });
   await page.keyboard.press('KeyM');
   await page.waitForTimeout(400);
