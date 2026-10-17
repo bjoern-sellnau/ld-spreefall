@@ -1992,22 +1992,37 @@ async function main() {
     // answered no about one call in three from a cratered square, and a
     // Titan that cannot be called because of where you happen to be standing
     // is a Titan you do not have.
-    for (const scale of [1, 0.7, 1.4, 1.9, 0.5, 2.4]) {
-      for (let i = 0; i < 28; i++) {
-        const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
-        const r = away * scale * (0.9 + Math.random() * 0.2);
-        const x = player.x + Math.cos(a) * r;
-        const z = player.z + Math.sin(a) * r;
-        if (!world.isLoaded(x, z)) continue;
-        let boxed = false;
-        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, 7)) {
-            boxed = true; break;
+    // And the room it asks for is given up a bit at a time. Seven metres
+    // clear on four sides is a comfortable place to put one down; in a
+    // street that has been shelled flat there may be nowhere like that at
+    // all, and a machine that cannot be called because of where you happen
+    // to be standing is a machine you do not have. So the first pass asks
+    // for seven, the next for four and a half, the last for two and a half,
+    // and below that it takes whatever loaded ground it can find.
+    for (const clear of [7, 4.5, 2.5]) {
+      for (const scale of [1, 0.7, 1.4, 1.9, 0.5, 2.4]) {
+        for (let i = 0; i < 28; i++) {
+          const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+          const r = away * scale * (0.9 + Math.random() * 0.2);
+          const x = player.x + Math.cos(a) * r;
+          const z = player.z + Math.sin(a) * r;
+          if (!world.isLoaded(x, z)) continue;
+          let boxed = false;
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, clear)) {
+              boxed = true; break;
+            }
           }
+          if (boxed) continue;
+          return { x, z, a };
         }
-        if (boxed) continue;
-        return { x, z, a };
       }
+    }
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const x = player.x + Math.cos(a) * away;
+      const z = player.z + Math.sin(a) * away;
+      if (world.isLoaded(x, z)) return { x, z, a };
     }
     return null;
   }

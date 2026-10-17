@@ -990,6 +990,41 @@ async function run() {
   check('and the man standing nine metres off is left alone',
     !trampled.skip && trampled.bystander === true);
 
+  // The keys a pilot keeps. The view moved off V so that the travel map is
+  // the same key everywhere in the game, and the reflex has to be worth
+  // having in a machine, which means the machine keeps its own speed while
+  // the world slows rather than being slowed with it.
+  const was = await page.evaluate(() => window.spreefall.state.cockpit);
+  await page.keyboard.press('KeyY');
+  const viewKey = await page.evaluate(() => window.spreefall.state.cockpit);
+  check('Y changes the view from inside a mech', viewKey !== was,
+    `${was ? 'cockpit' : 'shoulder'} became ${viewKey ? 'cockpit' : 'shoulder'}`);
+  await page.keyboard.press('KeyY');
+  await page.keyboard.press('KeyV');
+  const travelKey = await page.evaluate(async () => {
+    const s = window.spreefall;
+    await new Promise((r) => requestAnimationFrame(r));
+    const open = !!s.state.targeting
+      || !document.getElementById('nuketarget').classList.contains('hidden');
+    s.closeTargeting(true);
+    await new Promise((r) => requestAnimationFrame(r));
+    return open;
+  });
+  check('and V still opens the travel map in there', travelKey);
+  const banana = await page.evaluate(() => {
+    const s = window.spreefall;
+    const before = s.weapon.id;
+    return { before };
+  });
+  await page.keyboard.press('Digit6');
+  const sixth = await page.evaluate(() => {
+    const s = window.spreefall;
+    return { weapon: s.weapon.id, arm: s.state.inMech ? s.state.inMech.arm : -1 };
+  });
+  check('and the number row cannot reach the pilot\'s own weapons',
+    sixth.weapon === banana.before,
+    `still holding the ${sixth.weapon}`);
+
   // The view out of the canopy. The thing worth measuring is not where the
   // camera is but whether it tells the truth: the guns converge on the point
   // the torso's own line of sight runs into, so that point has to sit on the

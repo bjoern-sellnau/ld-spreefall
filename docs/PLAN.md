@@ -1623,3 +1623,12 @@ is what prompted the change.
   height of what it lands on: it now puts him back down on the street first.
   The bite check blasted a frontage and counted the pixels of hole: a mansard
   leaves less sky behind it than a flat roof, so the bite is bigger now.
+
+- 2026-10-17: and a mech you call has somewhere to stand. The spot search
+  asked for seven metres clear on four sides, which in a street that has been
+  shelled flat does not exist, and then answered no: the whole mech half of
+  the suite failed on one call that found nowhere to put one. It now gives up
+  the room a bit at a time, seven metres then four and a half then two and a
+  half, and below that takes whatever loaded ground there is, because a
+  machine standing with its shoulder in a wall is better than a machine you
+  cannot call.
