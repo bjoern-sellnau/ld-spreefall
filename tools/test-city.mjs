@@ -50,6 +50,72 @@ async function run() {
   });
   await page.waitForTimeout(4000);
 
+  // --- the city has a floor everywhere -------------------------------------
+  // Holes in the ground are the one fault in this project that the collision
+  // layer cannot see: you cannot fall through one, you just look down and
+  // find the sky where the street should be. So the check is taken from the
+  // picture, and with the sky switched off, because against a blue sky a hole
+  // and the Spree are the same handful of blue pixels. With nothing drawn
+  // behind the city, a hole is black and nothing else is.
+  const floor = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.renderer.drawSky = false;
+    const w = s.world;
+    const worst = { sky: 0, at: null };
+    let total = 0, places = 0;
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const x = 81 + dx * 260, z = dz * 260;
+        if (!w.isLoaded(x, z)) continue;
+        s.teleport(x, z);
+        // Everything within sight has to be on the card before this means
+        // anything, so the streaming is given as long as it needs.
+        let quiet = 0;
+        for (let i = 0; i < 400 && quiet < 4; i++) {
+          await new Promise((r) => requestAnimationFrame(r));
+          quiet = s.tiles.stats.uploads === 0 ? quiet + 1 : 0;
+        }
+        const y = w.groundHeight(x, z) + 220;
+        s.state.mode = 'cinema';
+        for (let i = 0; i < 12; i++) {
+          s.state.dronePose = { x, y, z, yaw: 0, pitch: -Math.PI / 2 + 0.001 };
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+        const gl = s.renderer.gl;
+        const bw = gl.drawingBufferWidth, bh = gl.drawingBufferHeight;
+        const buf = new Uint8Array(bw * bh * 4);
+        await new Promise((r) => requestAnimationFrame(() => {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.readPixels(0, 0, bw, bh, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+          r();
+        }));
+        let black = 0, seen = 0;
+        for (let i = 0; i < buf.length; i += 4) {
+          seen++;
+          if (buf[i] < 12 && buf[i + 1] < 12 && buf[i + 2] < 12) black++;
+        }
+        const share = (black / seen) * 100;
+        total += share;
+        places++;
+        if (share > worst.sky) { worst.sky = share; worst.at = [Math.round(x), Math.round(z)]; }
+      }
+    }
+    s.state.mode = 'walk';
+    s.renderer.drawSky = true;
+    s.teleport(81, 0);
+    s.look(90, -2);
+    return {
+      places,
+      worst: Number(worst.sky.toFixed(2)),
+      at: worst.at,
+      mean: places ? Number((total / places).toFixed(2)) : 0,
+    };
+  });
+  check('looking straight down anywhere in the district, there is ground under you',
+    floor.places >= 9 && floor.worst < 0.2,
+    `${floor.places} places, worst ${floor.worst}% of the frame`
+      + (floor.at ? ` at ${floor.at[0]},${floor.at[1]}` : ''));
+
   // --- damage adds up ------------------------------------------------------
   const adds = await page.evaluate(() => {
     const s = window.spreefall;
@@ -574,8 +640,15 @@ async function run() {
 
   const fly = await page.evaluate(async () => {
     const s = window.spreefall;
-    const heli = s.vehicles.active.find((v) => v.type === 'heli');
-    const jet = s.vehicles.active.find((v) => v.type === 'jet');
+    // A live one. The checks above shoot at what is parked here, and a blast
+    // beside a helicopter now takes a piece out of it, so by this point the
+    // one from earlier can be a wreck: a wreck does not climb, and that is
+    // not what this is asking about.
+    const live = (kind) => s.vehicles.active.find((v) => v.type === kind && v.health > 0);
+    if (!live('heli') || !live('jet')) s.parkVehicles();
+    const heli = live('heli');
+    const jet = live('jet');
+    if (!heli || !jet) return { climbed: -1, stalled: -1, stall: 0 };
     s.teleport(heli.x + 2, heli.z);
     s.toggleVehicle();
     const y0 = heli.y;
@@ -732,6 +805,7 @@ async function run() {
     const j = s.vehicles.spawn('jet', s.player.x, s.player.z, -Math.PI / 2, 0);
     s.teleport(j.x + 2, j.z);
     s.toggleVehicle();
+    const aboard = s.state.inVehicle === j;
     const g = s.world.groundHeight(j.x, j.z);
     s.input.keys.add('KeyW');
     let rolled = 0;
@@ -759,12 +833,14 @@ async function run() {
       speed: Math.round(speed),
       health,
       inIt,
+      aboard,
       up: Math.round(up),
     };
   });
   check('a fighter can take off from the street it is parked in',
     takeoff.climbed > 60 && takeoff.speed > 60 && takeoff.health > 0,
-    `rolled ${takeoff.rolled} s, ${takeoff.climbed} m up at ${takeoff.speed} m/s`);
+    `rolled ${takeoff.rolled} s, ${takeoff.climbed} m up at ${takeoff.speed} m/s`
+      + (takeoff.aboard ? '' : ', nobody got in'));
   check('and the menu hands you one already in the air',
     takeoff.inIt && takeoff.up > 100, `${takeoff.up} m up, flying`);
 

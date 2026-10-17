@@ -238,7 +238,9 @@ async function run() {
     s.weapon.giveAll();
     const chose = s.weapon.select('flamer');
     const f = s.camera.forward;
-    const sd = s.soldiers.spawnNear(s.player.x + f[0] * 9, s.player.z + f[2] * 9, 0.5, 1.5);
+    // Five metres, which is the range this weapon is for. Nine put him at the
+    // far end of a cone the stream only reaches a third of the time.
+    const sd = s.soldiers.spawnNear(s.player.x + f[0] * 5, s.player.z + f[2] * 5, 0.5, 1.5);
     if (!sd) return { skip: true };
     const fuel0 = s.weapon.ammo;
     const hp0 = sd.health;
@@ -248,7 +250,18 @@ async function run() {
     // game runs slower than the clock on the wall.
     const t0 = s.loop.simTime;
     const wall = performance.now();
-    while (s.loop.simTime - t0 < 3 && performance.now() - wall < 60000) {
+    // Held where he was put. He is a live soldier with somewhere better to
+    // be, and a man who walks out of the stream halfway through measures his
+    // own footwork rather than the flamethrower.
+    const stood = { x: sd.x, z: sd.z };
+    // Six seconds rather than three. The stream puts three puffs a frame at
+    // random distances down the cone, so a man standing at nine metres is in
+    // perhaps a third of it, and three seconds of that left him alive at
+    // about half health: close enough to the line that the check passed or
+    // failed on the weather.
+    while (s.loop.simTime - t0 < 6 && performance.now() - wall < 90000) {
+      sd.x = stood.x;
+      sd.z = stood.z;
       s.holdFire(true);
       await new Promise((r) => requestAnimationFrame(r));
     }

@@ -67,6 +67,9 @@ export class Renderer {
     if (loc) gl.uniform3fv(loc, pal);
     this.progWorld.int('uShadow0', 4).int('uShadow1', 5).int('uDebugMode', 0);
     this.debugMode = 0;
+    // The sky pass. Off, every hole in the world is black, which is how the
+    // checks tell a hole from the Spree.
+    this.drawSky = true;
     // Tiles a blast has taken a bite out of. They are drawn a second time,
     // inside out, so that a hole shows the inside of the world rather than
     // the sky. main.js marks them; nothing else here knows about damage.
@@ -624,11 +627,18 @@ export class Renderer {
     }
 
     // Sky last, depth equal to the far plane, so it only fills what is left.
-    gl.depthFunc(gl.LEQUAL);
-    this.progSky.use();
-    gl.bindVertexArray(this.emptyVao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    draws++;
+    // Which is also what makes it worth being able to switch off: with no sky
+    // drawn, whatever is left is the cleared frame, and a hole in the city
+    // reads as black rather than as a nice day. The checks look for holes in
+    // the ground that way, because against a blue sky a hole and the river
+    // are the same handful of blue pixels.
+    if (this.drawSky) {
+      gl.depthFunc(gl.LEQUAL);
+      this.progSky.use();
+      gl.bindVertexArray(this.emptyVao);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      draws++;
+    }
 
     if (this.drawActors) {
       gl.disable(gl.CULL_FACE);

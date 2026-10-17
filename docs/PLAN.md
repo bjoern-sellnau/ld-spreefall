@@ -1258,3 +1258,39 @@ is what prompted the change.
   one. A single ring at a fixed distance answered no about one call in three
   from a square with craters in it, and a Titan you cannot call because of
   where you happen to be standing is a Titan you do not have.
+
+- 2026-10-17: the holes in the ground, and what they were. The city had
+  patches you could see the sky through while standing on ground the
+  collision layer called solid: a long strip across the Tiergarten was the
+  one that gave it away. Three faults, found by switching the sky off and
+  flying over the district looking straight down, because with nothing drawn
+  behind the city a hole is black and the Spree is not.
+
+  The first is the one that made the hole. A vertex is stored as a sixteen
+  bit offset from its tile's origin at a sixty fourth of a metre, which runs
+  out at five hundred and twelve metres, and anything further is clamped. The
+  park came out of the triangulator as a handful of triangles six hundred
+  metres across, the clamp pulled their corners in, and what was left was a
+  gap. Ground polygons are now cut to a fifty metre grid before they are laid
+  down, and road ribbons have their long runs cut the same way. The cut is
+  done with the same arithmetic on both sides of every grid line, so there
+  are no T junctions and no hairline cracks, it nests inside the hundred
+  metre tiles so a piece of ground belongs to the tile it is drawn in, and as
+  a bonus the ground now follows the terrain instead of being a flat sheet
+  laid over a city that is not flat. It costs six per cent more triangles and
+  four per cent more download.
+
+  The second is the mask that decides where the base plane goes. It was built
+  from the source polygons rather than from what was drawn, so a park was
+  marked as covering its own holes, a polygon that failed to triangulate was
+  marked as covering what it never drew, and a building footprint, which is
+  not ground at all, was marked as covering the ground under it. It now
+  rasterises the triangles in the mesh, at three quarters of a metre, and
+  nothing else: what the base plane fills is exactly what the rest of the
+  city did not draw.
+
+  The third is the check that was not there. The city suite now flies over
+  twenty five places in the district with the sky switched off and counts the
+  black pixels looking straight down. The renderer learned one switch for it,
+  which is worth having anyway: with the sky off, every hole in the world
+  shows as a hole.
