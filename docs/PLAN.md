@@ -1212,3 +1212,12 @@ is what prompted the change.
   locking a rocket onto the one thing you could not lock onto. It can now,
   except for yours, because a dart that chases your own Titan across the
   square is not a feature.
+
+- 2026-10-17: Rise of the Machines starts at the hour it actually is. The
+  mode held the light at a quarter past eight in the evening whatever the
+  clock said; it now reads the clock on the wall when the mode is picked,
+  rounded to the step the slider moves in so that the screen and the world
+  cannot disagree about what time it is. Picking the mode again re-reads it,
+  because a tab left open since the morning should still start this
+  afternoon, and moving the slider stops all of that: a time somebody has
+  chosen is a setting rather than a default.

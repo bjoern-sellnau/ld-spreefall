@@ -3031,15 +3031,25 @@ async function main() {
   for (const b of modeButtons) {
     b.addEventListener('click', () => {
       machines.set(b.dataset.mode === 'machines');
+      // Picking the mode puts the clock back on the hour it actually is,
+      // unless the slider has been moved: a tab left open since the morning
+      // should still start the end of the world at this afternoon.
+      machines.syncClock();
+      showModeTime();
       showMode();
     });
   }
   el.modeTime.addEventListener('input', () => {
-    machines.timeOfDay = parseFloat(el.modeTime.value);
+    machines.setTime(parseFloat(el.modeTime.value));
     el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
     if (machines.active) renderer.timeOfDay = machines.timeOfDay;
   });
-  el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
+  /** The slider and its label, from whatever the mode's time is now. */
+  function showModeTime() {
+    el.modeTime.value = String(machines.timeOfDay.toFixed(1));
+    el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
+  }
+  showModeTime();
   showMode();
 
   const diffButtons = [...document.querySelectorAll('.difficulty .diff')];

@@ -239,6 +239,20 @@ async function run() {
     const wasCheated = s.cheats.used;
     const btn = [...document.querySelectorAll('.diff.mode')].find((b) => b.dataset.mode === 'machines');
     if (btn) btn.click();
+    // The clock on the wall, read at the moment the mode was picked.
+    const now = new Date();
+    const wall = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+    const preset = s.machines.timeOfDay;
+    const slider = parseFloat(document.getElementById('modetime').value);
+    // And then moved by hand, which is a choice rather than a default: from
+    // there on it stays where it was put even when the mode is picked again.
+    s.machines.setTime(3.5);
+    if (btn) btn.click();
+    const kept = s.machines.timeOfDay;
+    // And back to the early afternoon for everything after this. The mode
+    // holds the light while it is running, and the rest of the suite takes
+    // its pictures in it: at half past three in the morning they are black.
+    s.machines.setTime(14.2);
     s.soldiers.active.length = 0;
     for (let i = 0; i < 60 * 12; i++) s.machinesTick(1 / 60);
     const standing = s.soldiers.active.filter((x) => x.machine);
@@ -249,10 +263,19 @@ async function run() {
       machines: standing.length,
       health: standing[0] ? standing[0].health : 0,
       timeShown: !document.getElementById('timepick').classList.contains('hidden'),
+      wall: Number(wall.toFixed(2)),
+      preset: Number(preset.toFixed(2)),
+      slider: Number(slider.toFixed(1)),
+      kept: Number(kept.toFixed(2)),
     };
   });
   check('Rise of the Machines is picked on the title screen', mode.on && mode.timeShown,
     'with the time of day to go with it');
+  check('and it starts at the hour it actually is',
+    Math.abs(mode.preset - mode.wall) < 0.12 && Math.abs(mode.slider - mode.preset) < 0.1,
+    `${mode.preset} against a clock reading ${mode.wall}`);
+  check('unless the slider has been moved, which is a choice rather than a default',
+    mode.kept === 3.5, `${mode.kept} held through picking the mode again`);
   check('and it is a mode, not a cheat', !mode.cheated && !mode.wasCheated,
     'the run is not marked');
   check('the sky goes with it', mode.armageddon === 1 && mode.fog > 0.0015,
