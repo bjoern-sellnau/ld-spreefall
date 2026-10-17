@@ -178,6 +178,76 @@ test('a hipped and a gabled roof stay inside their footprint', () => {
   }
 });
 
+test('every roof the data can ask for is built, and at the height it says', () => {
+  const outer = [[0, 0], [24, 0], [24, 14], [0, 14]];
+  // Each of these is a roof:shape that appears on Berlin buildings in
+  // OpenStreetMap. What they have in common is all that can be asserted in
+  // one place: the top of the roof is where the tagging puts it, nothing
+  // hangs outside the footprint, and there is geometry rather than a hole.
+  for (const shape of ['gabled', 'hipped', 'half_hipped', 'pyramidal', 'skillion',
+    'mansard', 'gambrel', 'dome', 'onion', 'cone']) {
+    const mesh = new Mesh();
+    extrudeBuilding(mesh, { outer, holes: [] }, {
+      base: 0, height: 15, roofShape: shape, roofHeight: 5,
+      seed: 1, levels: 4, skirt: 0,
+    });
+    let maxY = -Infinity, minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let i = 0; i < mesh.vertexCount; i++) {
+      maxY = Math.max(maxY, mesh.py[i]);
+      minX = Math.min(minX, mesh.px[i]);
+      maxX = Math.max(maxX, mesh.px[i]);
+      minZ = Math.min(minZ, mesh.pz[i]);
+      maxZ = Math.max(maxZ, mesh.pz[i]);
+    }
+    assert.ok(Math.abs(maxY - 20) < 0.02, `${shape} tops out at 20, got ${maxY}`);
+    assert.ok(minX > -0.05 && maxX < 24.05 && minZ > -0.05 && maxZ < 14.05,
+      `${shape} stays in plan, ${minX}..${maxX} by ${minZ}..${maxZ}`);
+    assert.ok(mesh.triangleCount > 8, `${shape} produced geometry`);
+  }
+});
+
+test('a ridge runs along the building unless the tagging says across it', () => {
+  const outer = [[0, 0], [40, 0], [40, 12], [0, 12]];
+  const ridgeOf = (across) => {
+    const mesh = new Mesh();
+    extrudeBuilding(mesh, { outer, holes: [] }, {
+      base: 0, height: 10, roofShape: 'gabled', roofHeight: 4,
+      roofAcross: across, seed: 1, levels: 3, skirt: 0,
+    });
+    // Every vertex at the very top is on the ridge; which way it runs is
+    // whichever of the two spans is the longer one.
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let i = 0; i < mesh.vertexCount; i++) {
+      if (mesh.py[i] < 13.9) continue;
+      minX = Math.min(minX, mesh.px[i]); maxX = Math.max(maxX, mesh.px[i]);
+      minZ = Math.min(minZ, mesh.pz[i]); maxZ = Math.max(maxZ, mesh.pz[i]);
+    }
+    return { x: maxX - minX, z: maxZ - minZ };
+  };
+  const along = ridgeOf(false);
+  assert.ok(along.x > 30 && along.z < 1, `along the long side, ${along.x} by ${along.z}`);
+  const across = ridgeOf(true);
+  assert.ok(across.z > 8 && across.x < 1, `across it, ${across.x} by ${across.z}`);
+});
+
+test('a single slope falls the way roof:direction points', () => {
+  const outer = [[0, 0], [20, 0], [20, 20], [0, 20]];
+  // Ninety degrees is east, and a roof that faces east is high in the west.
+  const mesh = new Mesh();
+  extrudeBuilding(mesh, { outer, holes: [] }, {
+    base: 0, height: 8, roofShape: 'skillion', roofHeight: 3,
+    roofDir: 90, seed: 1, levels: 2, skirt: 0,
+  });
+  // The walls stop at eight and the slope is the three above them.
+  let westTop = -Infinity, eastTop = -Infinity;
+  for (let i = 0; i < mesh.vertexCount; i++) {
+    if (mesh.px[i] < 0.5) westTop = Math.max(westTop, mesh.py[i]);
+    if (mesh.px[i] > 19.5) eastTop = Math.max(eastTop, mesh.py[i]);
+  }
+  assert.ok(Math.abs(westTop - 11) < 0.02, `high side at 11, got ${westTop}`);
+  assert.ok(Math.abs(eastTop - 8) < 0.02, `low side at 8, got ${eastTop}`);
+});
+
 test('oriented box finds the long axis of a rotated rectangle', () => {
   const a = 0.4;
   const c = Math.cos(a), s = Math.sin(a);

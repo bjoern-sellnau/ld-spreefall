@@ -193,7 +193,10 @@ async function run() {
     }
     for (const spot of spots) {
       const y = s.world.groundHeight(spot.x, spot.z);
-      for (let i = 0; i < 3; i++) s.demolition.blast(spot.x, y + 5, spot.z, 12, 500);
+      // Enough to finish whatever is there rather than enough to dent it:
+      // what is being measured is where the damage lands once the sixteen
+      // slots are full, not how much of a frontage one rocket takes.
+      for (let i = 0; i < 4; i++) s.demolition.blast(spot.x, y + 5, spot.z, 16, 900);
       for (let k = 0; k < 200; k++) s.demolition.update(1 / 60);
     }
     for (let k = 0; k < 60 * 4; k++) s.demolition.update(1 / 60);
@@ -237,10 +240,34 @@ async function run() {
     s.soldiers.enabled = true;
     s.weapon.giveAll();
     const chose = s.weapon.select('flamer');
-    const f = s.camera.forward;
+    // Put back down on the street first. By this point in the suite the
+    // player may be standing on a heap of what used to be a building, and
+    // the stream tests the height of what it lands on: three metres of
+    // rubble between the nozzle and the man is a miss every time.
+    s.teleport(s.player.x, s.player.z);
     // Five metres, which is the range this weapon is for. Nine put him at the
-    // far end of a cone the stream only reaches a third of the time.
-    const sd = s.soldiers.spawnNear(s.player.x + f[0] * 5, s.player.z + f[2] * 5, 0.5, 1.5);
+    // far end of a cone the stream only reaches a third of the time. The
+    // direction is whichever one has nothing in it: by this point in the
+    // suite the streets here are rubble, and a heap between the nozzle and
+    // the man measures the heap.
+    const eye0 = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    let sd = null;
+    for (let i = 0; i < 12 && !sd; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const dx = Math.cos(a), dz = Math.sin(a);
+      if (s.world.raycast(eye0.x, eye0.y, eye0.z, dx, 0, dz, 6.5)) continue;
+      sd = s.soldiers.spawnNear(s.player.x + dx * 5, s.player.z + dz * 5, 0.5, 1.2);
+      if (sd) {
+        // Put exactly five metres away rather than wherever there was room:
+        // the stream throws its puffs at random distances down the cone, so
+        // a man three metres out is in front of most of it and one at nine
+        // is behind it, and both measure where he was standing rather than
+        // what a flamethrower does.
+        sd.x = s.player.x + dx * 5;
+        sd.z = s.player.z + dz * 5;
+        sd.y = s.world.groundHeight(sd.x, sd.z);
+      }
+    }
     if (!sd) return { skip: true };
     // Pointed at him rather than at wherever the last check left the view: a
     // flamethrower is a cone, and three degrees of pitch at five metres is
@@ -257,6 +284,10 @@ async function run() {
     // a stretch of wall clock: the thing being measured is a drain per second
     // of game, and on a machine slow enough for the frame clamp to bite the
     // game runs slower than the clock on the wall.
+    // On his feet before the clock starts: he arrives in a sphere and comes
+    // up out of the street, and a second of that is a second of pouring
+    // flame over the pavement he is still under.
+    while (sd.rise > 0) await new Promise((r) => requestAnimationFrame(r));
     const t0 = s.loop.simTime;
     const wall = performance.now();
     // Held where he was put. He is a live soldier with somewhere better to
@@ -276,11 +307,27 @@ async function run() {
     }
     const seconds = s.loop.simTime - t0;
     s.holdFire(false);
+    // And then let him burn. A man who has had six seconds of a flamethrower
+    // poured over him does not stop being on fire when you let go of the
+    // trigger: the pools he is standing in go on burning, and the claim is
+    // that he goes down, not that he goes down while you are still pouring.
+    const t2 = s.loop.simTime;
+    while (sd.health > 0 && s.loop.simTime - t2 < 8 && performance.now() - wall < 150000) {
+      sd.x = stood.x;
+      sd.z = stood.z;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    const burntFor = +(s.loop.simTime - t0).toFixed(1);
     return {
       chose, seconds: +seconds.toFixed(1),
       fuel0: Math.round(fuel0), fuel: Math.round(s.weapon.ammo),
       perSecond: s.weapons.flamer.stream.fuelPerSecond,
       hp0: Math.round(hp0), hp: Math.round(sd.health), charred: +(sd.charred || 0).toFixed(2),
+      burntFor,
+      scale: +s.state.timeScale.toFixed(2),
+      inMech: !!s.state.inMech,
+      away: +Math.hypot(sd.x - s.player.x, sd.z - s.player.z).toFixed(1),
+      held: s.weapon.id || s.weapon.current,
     };
   });
   const poured = flame.skip ? 0 : flame.fuel0 - flame.fuel;
@@ -291,7 +338,8 @@ async function run() {
       : `${poured} fuel in ${flame.seconds} s, ${Math.round(owed)} owed`);
   check('and what is in the stream burns down',
     !flame.skip && flame.hp <= 0 && flame.charred > 0.9,
-    flame.skip ? '' : `${flame.hp0} health became ${flame.hp}, charred ${flame.charred}`);
+    flame.skip ? '' : `${flame.hp0} health became ${flame.hp} in ${flame.burntFor} s, `
+      + `charred ${flame.charred}, ${flame.away} m away`);
 
   const wall = await page.evaluate(async () => {
     const s = window.spreefall;
@@ -618,7 +666,10 @@ async function run() {
     const wall = s.world.raycast(eye[0], eye[1], eye[2], f[0], f[1], f[2], 220);
     const away = wall ? Math.min(wall.t, 120) : 70;
     const x = s.player.x + f[0] * away, z = s.player.z + f[2] * away;
-    s.demolition.blast(x, s.world.groundHeight(x, z), z, 46, 3400);
+    // A big enough bite that there is something to measure: a frontage with
+    // a mansard on it leaves less sky behind it than a flat one, and forty
+    // odd pixels is not a sample.
+    s.demolition.blast(x, s.world.groundHeight(x, z), z, 62, 4400);
     for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
     s.teleport(x - f[0] * Math.min(26, away * 0.5), z - f[2] * Math.min(26, away * 0.5));
     // Wait for the dust to settle, literally: smoke and sparks are bright and
@@ -909,6 +960,70 @@ async function run() {
   });
   check('and the wheel moves one along, not two',
     wheeled.id === 'leadwall', `the wheel reached the ${wheeled.id}`);
+
+  // Underfoot. Eight metres of walking armour does not step over a man, and
+  // the man is not shot: he is where the foot came down.
+  const trampled = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const m = s.state.inMech;
+    if (!m) return { skip: true };
+    s.soldiers.reset(); s.combat.reset(); s.gibs.clear();
+    const v = s.spawnSoldier(0.4, 0.3);
+    if (!v) return { skip: true, why: 'nobody to stand on' };
+    v.x = m.x + 0.4; v.z = m.z + 0.3; v.y = m.y;
+    const kills = s.combat.kills;
+    for (let i = 0; i < 8 && v.health > 0; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    const out = { down: v.health <= 0, credited: s.combat.kills - kills };
+    // And somebody standing clear is not touched by the same step.
+    const w = s.spawnSoldier(9, 0);
+    if (w) { w.x = m.x + 9; w.z = m.z; w.y = m.y; }
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    out.bystander = w ? w.health > 0 : null;
+    s.soldiers.reset();
+    return out;
+  });
+  check('a mech walking over somebody puts him into the pavement',
+    !trampled.skip && trampled.down && trampled.credited === 1,
+    trampled.skip ? (trampled.why || 'no mech') : `${trampled.credited} kill`);
+  check('and the man standing nine metres off is left alone',
+    !trampled.skip && trampled.bystander === true);
+
+  // The keys a pilot keeps. The view moved off V so that the travel map is
+  // the same key everywhere in the game, and the reflex has to be worth
+  // having in a machine, which means the machine keeps its own speed while
+  // the world slows rather than being slowed with it.
+  const was = await page.evaluate(() => window.spreefall.state.cockpit);
+  await page.keyboard.press('KeyY');
+  const viewKey = await page.evaluate(() => window.spreefall.state.cockpit);
+  check('Y changes the view from inside a mech', viewKey !== was,
+    `${was ? 'cockpit' : 'shoulder'} became ${viewKey ? 'cockpit' : 'shoulder'}`);
+  await page.keyboard.press('KeyY');
+  await page.keyboard.press('KeyV');
+  const travelKey = await page.evaluate(async () => {
+    const s = window.spreefall;
+    await new Promise((r) => requestAnimationFrame(r));
+    const open = !!s.state.targeting
+      || !document.getElementById('nuketarget').classList.contains('hidden');
+    s.closeTargeting(true);
+    await new Promise((r) => requestAnimationFrame(r));
+    return open;
+  });
+  check('and V still opens the travel map in there', travelKey);
+  const banana = await page.evaluate(() => {
+    const s = window.spreefall;
+    const before = s.weapon.id;
+    return { before };
+  });
+  await page.keyboard.press('Digit6');
+  const sixth = await page.evaluate(() => {
+    const s = window.spreefall;
+    return { weapon: s.weapon.id, arm: s.state.inMech ? s.state.inMech.arm : -1 };
+  });
+  check('and the number row cannot reach the pilot\'s own weapons',
+    sixth.weapon === banana.before,
+    `still holding the ${sixth.weapon}`);
 
   // The view out of the canopy. The thing worth measuring is not where the
   // camera is but whether it tells the truth: the guns converge on the point

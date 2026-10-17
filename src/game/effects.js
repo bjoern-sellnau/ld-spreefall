@@ -184,6 +184,63 @@ export class Effects {
   }
 
   /**
+   * Something arriving where there was nothing. A sphere of light stands on
+   * the street for a moment, closes in on itself, and whatever came through
+   * it is standing there when it goes.
+   *
+   * It is built out of the same three pieces as the pulse, because they are
+   * the right three: a core that is almost white, a shell of sparks that
+   * travels inwards rather than out, which is what makes it read as
+   * something arriving rather than something exploding, and arcs crawling up
+   * off the ground around it.
+   *
+   * @param {number} radius how big the sphere is, in metres
+   * @param {number} scale how much of everything, for a machine rather than
+   *   a man
+   */
+  arrival(x, y, z, radius, scale = 1) {
+    this.flash(x, y + radius * 0.5, z, radius * 1.1, 0.72, 0.90, 1.0, 0.20);
+    this.flash(x, y + radius * 0.5, z, radius * 0.45, 1.0, 1.0, 1.0, 0.13);
+    // The shell. Points scattered over a sphere, each of them falling in
+    // towards the middle of it and arriving as it dies.
+    const n = Math.min(120, Math.round((34 + radius * 10) * scale));
+    for (let i = 0; i < n; i++) {
+      const p = this._get();
+      p.alive = true;
+      p.kind = 1;
+      const a = Math.random() * Math.PI * 2;
+      const b = Math.acos(2 * Math.random() - 1);
+      const sx = Math.sin(b) * Math.cos(a), sy = Math.cos(b), sz = Math.sin(b) * Math.sin(a);
+      const life = 0.34 + Math.random() * 0.26;
+      p.ax = x + sx * radius;
+      p.ay = y + radius * 0.55 + sy * radius * 0.8;
+      p.az = z + sz * radius;
+      p.vx = -sx * radius / life;
+      p.vy = -sy * radius * 0.8 / life;
+      p.vz = -sz * radius / life;
+      p.gravity = 0;
+      p.maxLife = life;
+      p.life = life;
+      p.r = 0.52; p.g = 0.84; p.b = 1.0;
+      p.size = 0.18 + Math.random() * 0.26;
+      p.bx = 0; p.by = 0; p.bz = 0;
+    }
+    for (let i = 0; i < Math.round(8 * scale); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = radius * (0.2 + Math.random() * 0.8);
+      this.lance(x + Math.cos(a) * r, y, z + Math.sin(a) * r,
+        x + Math.cos(a) * r * 0.3, y + radius * (0.6 + Math.random()), z + Math.sin(a) * r * 0.3,
+        0.62, 0.88, 1.0);
+    }
+    for (let i = 0; i < Math.round(14 * scale); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = radius * Math.sqrt(Math.random());
+      this.spark(x + Math.cos(a) * r, y + 0.2 + Math.random() * radius,
+        z + Math.sin(a) * r, 0.58, 0.86, 1.0);
+    }
+  }
+
+  /**
    * An electromagnetic pulse going off.
    *
    * Not an explosion, and it should not look like one: no fire, no smoke, no

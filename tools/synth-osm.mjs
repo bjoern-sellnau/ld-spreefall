@@ -471,8 +471,17 @@ function emitBlock(doc, cx, cz, w, d, cosA, sinA, rnd, roadClass) {
   const building = kindRoll < 0.55 ? 'apartments'
     : kindRoll < 0.8 ? 'residential'
     : kindRoll < 0.94 ? 'office' : 'retail';
+  // The spread of roofs over a Berlin block: a lot of flat ones, a lot of
+  // mansards on the Gruenderzeit frontages, gables and hips on the rest, and
+  // the odd single slope or pyramid on a corner. The offline city stands in
+  // for the real extract, so it is worth it carrying the same mix of tags
+  // the real one does rather than two shapes and nothing else.
   const roofRoll = rnd();
-  const roof = roofRoll < 0.5 ? 'flat' : roofRoll < 0.82 ? 'gabled' : 'hipped';
+  const roof = roofRoll < 0.38 ? 'flat'
+    : roofRoll < 0.60 ? 'gabled'
+    : roofRoll < 0.79 ? 'mansard'
+    : roofRoll < 0.92 ? 'hipped'
+    : roofRoll < 0.97 ? 'skillion' : 'pyramidal';
   const tags = {
     building,
     'building:levels': String(levels),
@@ -481,6 +490,12 @@ function emitBlock(doc, cx, cz, w, d, cosA, sinA, rnd, roadClass) {
     'roof:shape': roof,
   };
   if (roof !== 'flat') tags['roof:height'] = (3.5 + rnd() * 3.5).toFixed(1);
+  if (roof === 'gabled' && rnd() < 0.25) tags['roof:orientation'] = 'across';
+  if (roof === 'skillion') tags['roof:direction'] = String(Math.floor(rnd() * 360));
+  const matRoll = rnd();
+  if (matRoll < 0.10) tags['roof:material'] = 'copper';
+  else if (matRoll < 0.32) tags['roof:material'] = 'slate';
+  else if (matRoll < 0.58) tags['roof:material'] = 'roof_tiles';
   if (roadClass === 'primary' || roadClass === 'secondary') tags.shop = 'yes';
   doc.ring(corners, tags);
 }

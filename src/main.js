@@ -394,11 +394,20 @@ async function main() {
     bob: 0,
     inSanctuary: false,
     targeting: false,
+    // Just a Walk: nothing is sent after you. What the cheat menu brings out
+    // by hand is still real, and still fights; it simply does not come back
+    // once it is dead. Remembered between visits, because a mode is a choice
+    // about what you came for rather than a setting.
+    peaceful: (() => {
+      try { return localStorage.getItem('spreefall.walk') === '1'; } catch { return false; }
+    })(),
     blastSlow: 0,
     // Seconds of slow motion left over a kill that emptied the street. Kept
     // apart from blastSlow because they are different switches and either
     // may be on without the other.
     killSlow: 0,
+    // And how long before another one may do it again.
+    killRest: 0,
     mapMode: 'nuke',
     pendingNuke: null,
     travelTo: null,
@@ -755,13 +764,23 @@ async function main() {
   }
 
   /** One kill, however it was made: by a bullet, a blast or a fall. */
+  // How far away a fight is still the fight you are in, for the last kill.
+  // A hundred and fifty metres was the whole street and everything over it:
+  // in a real fight something is always alive somewhere in a circle that
+  // size, so the slow motion never came, which is what was reported. Sixty
+  // five is the piece of city you are actually in.
+  const LAST_KILL_REACH = 65;
+  // And it may not happen again straight away, or clearing a square one body
+  // at a time turns into a stutter.
+  const LAST_KILL_REST = 5;
+
   /**
    * How many of them are still up and anywhere near you. Dying is not up: a
    * soldier on his way down has no health left and is on his own time.
    *
    * @param {number} reach metres, beyond which it is somebody else's fight
    */
-  function hostilesAlive(x, z, reach = 150) {
+  function hostilesAlive(x, z, reach = LAST_KILL_REACH) {
     let n = 0;
     const near = (a) => Math.hypot(a.x - x, a.z - z) <= reach;
     for (const d of drones.active) if (d.health > 0 && near(d)) n++;
@@ -773,6 +792,58 @@ async function main() {
     return n;
   }
 
+  /**
+   * Is a mech's head inside a building rather than beside one? Eight rays at
+   * head height, out as far as the hull is wide and then some. If nearly all
+   * of them are stopped, the machine is standing in the building rather than
+   * against it, and the cockpit view is the inside of a wall, which is black:
+   * that is what the view out of a mech standing in a frontage was. There is
+   * no test for a roof over it because nothing in this city has one the
+   * collision knows about.
+   *
+   * @returns {boolean} true when the shoulder view should take over
+   */
+  function mechEyeBoxedIn(m) {
+    const y = m.y + m.spec.eye;
+    const reach = (m.spec.radius || 2.3) * 2.6;
+    let hits = 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1],
+      [0.707, 0.707], [-0.707, 0.707], [0.707, -0.707], [-0.707, -0.707]]) {
+      if (world.raycast(m.x, y, m.z, dx, 0, dz, reach)) hits++;
+    }
+    return hits >= 7;
+  }
+
+  /**
+   * Anything under the feet of a machine this size. Eight metres of walking
+   * armour does not step over a man: it puts him into the pavement. The foot
+   * is the hull's own radius, and anybody standing well above it, on a heap
+   * or a roof, is not underneath it.
+   *
+   * @param {object} m the mech doing the walking
+   */
+  function trampleUnderfoot(m) {
+    const reach = (m.spec.radius || 2.3) * 1.15;
+    for (const sd of [...soldiers.active]) {
+      if (sd.health <= 0) continue;
+      if (Math.hypot(sd.x - m.x, sd.z - m.z) > reach) continue;
+      if (sd.y > m.y + 2.2) continue;
+      const dir = { x: 0, y: -1, z: 0 };
+      if (soldiers.damage(sd, 9999, dir)) {
+        creditTarget(sd, false, 'soldier');
+        feed('<b>underfoot</b>');
+        // Flat, wide and in the road: what is left of somebody a mech has
+        // walked over is a stain rather than a body.
+        if (cheats.bleeding) {
+          const k = cheats.goreScale;
+          effects.stain(sd.x, world.groundHeight(sd.x, sd.z), sd.z, 1.1 + k * 0.3, 60);
+          effects.blood(sd.x, sd.y + 0.3, sd.z, 0, 0.6, 0, k * 1.2);
+        }
+        audio.treeBurst(Math.hypot(player.x - sd.x, player.z - sd.z) + 30);
+      }
+    }
+  }
+
   function creditTarget(target, core, kind) {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
@@ -781,12 +852,17 @@ async function main() {
     audio.droneDown();
     const name = kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
     feed(`<b>${name} down</b> ${Math.round(dist)} m${core ? ' <i>core</i>' : ''}`);
-    // The last kill, in slow motion. It fires only when this one emptied the
-    // street: a flourish on every kill is not a flourish, it is a stutter,
-    // and the whole point of the switch is the quiet after the last of them
-    // goes down.
-    if (cheats.lastKill && state.mode === 'walk' && hostilesAlive(player.x, player.z) === 0) {
+    // The last kill, in slow motion. It fires on the kill that emptied the
+    // ground around you, and on no other: a flourish on every kill is not a
+    // flourish, it is a stutter, and the whole point of the switch is the
+    // quiet after the last of them goes down. The one you just killed has to
+    // have been near you as well, or a rocket fired across the district
+    // would do it.
+    if (cheats.lastKill && state.mode === 'walk' && state.killRest <= 0
+      && dist <= LAST_KILL_REACH
+      && hostilesAlive(player.x, player.z) === 0) {
       state.killSlow = 2.2;
+      state.killRest = LAST_KILL_REST;
       feed('<i>last kill</i>');
     }
   }
@@ -1660,7 +1736,8 @@ async function main() {
     el.vehicleName.textContent = m.spec.name;
     el.vehicleKeys.textContent =
       'W A S D walks, mouse aims, left mouse fires, right mouse empties the pod, '
-      + '1 to 5 or the wheel changes weapon, Shift dashes, V changes the view';
+      + '1 to 5 or the wheel changes weapon, Shift dashes, Y changes the view, '
+      + 'E is the reflex, V is the travel map';
     camera.yaw = m.torso;
     if (m.spec.arms) {
       buildArmRows();
@@ -1879,7 +1956,26 @@ async function main() {
   function spawnMech(type, away = 14) {
     const spot = mechSpot(away);
     if (!spot) return null;
-    return mechs.spawn(type, spot.x, spot.z, spot.a + Math.PI);
+    const m = mechs.spawn(type, spot.x, spot.z, spot.a + Math.PI);
+    // Eight metres of it does not walk round the corner: it arrives, the
+    // same way the men do, in a sphere the size of the thing inside it.
+    if (m && !m.mine) arriveAt(m.x, m.z, 4.4, 2.4);
+    return m;
+  }
+
+  /**
+   * Something arriving where there was nothing: a sphere of light standing on
+   * the street, a scorch mark under it, and the crack of the air closing.
+   *
+   * @param {number} radius how big the sphere is
+   * @param {number} scale how much of everything, for a machine over a man
+   */
+  function arriveAt(x, z, radius, scale = 1) {
+    const y = world.groundHeight(x, z);
+    effects.arrival(x, y, z, radius, scale);
+    renderer.addScar(x, y, z, radius * 1.1, 0.45);
+    const away = Math.hypot(player.x - x, player.z - z);
+    if (away < 140) audio.emp(away);
   }
 
   /**
@@ -1896,22 +1992,37 @@ async function main() {
     // answered no about one call in three from a cratered square, and a
     // Titan that cannot be called because of where you happen to be standing
     // is a Titan you do not have.
-    for (const scale of [1, 0.7, 1.4, 1.9, 0.5, 2.4]) {
-      for (let i = 0; i < 28; i++) {
-        const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
-        const r = away * scale * (0.9 + Math.random() * 0.2);
-        const x = player.x + Math.cos(a) * r;
-        const z = player.z + Math.sin(a) * r;
-        if (!world.isLoaded(x, z)) continue;
-        let boxed = false;
-        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, 7)) {
-            boxed = true; break;
+    // And the room it asks for is given up a bit at a time. Seven metres
+    // clear on four sides is a comfortable place to put one down; in a
+    // street that has been shelled flat there may be nowhere like that at
+    // all, and a machine that cannot be called because of where you happen
+    // to be standing is a machine you do not have. So the first pass asks
+    // for seven, the next for four and a half, the last for two and a half,
+    // and below that it takes whatever loaded ground it can find.
+    for (const clear of [7, 4.5, 2.5]) {
+      for (const scale of [1, 0.7, 1.4, 1.9, 0.5, 2.4]) {
+        for (let i = 0; i < 28; i++) {
+          const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+          const r = away * scale * (0.9 + Math.random() * 0.2);
+          const x = player.x + Math.cos(a) * r;
+          const z = player.z + Math.sin(a) * r;
+          if (!world.isLoaded(x, z)) continue;
+          let boxed = false;
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, clear)) {
+              boxed = true; break;
+            }
           }
+          if (boxed) continue;
+          return { x, z, a };
         }
-        if (boxed) continue;
-        return { x, z, a };
       }
+    }
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const x = player.x + Math.cos(a) * away;
+      const z = player.z + Math.sin(a) * away;
+      if (world.isLoaded(x, z)) return { x, z, a };
     }
     return null;
   }
@@ -2043,11 +2154,27 @@ async function main() {
   // A skeleton that has stood long enough comes apart where it stands: a
   // handful of bone coloured pieces, a dry clatter, and nothing left.
   soldiers.onCrumble = (s) => {
-    gibs.rubble(s.x, s.y + 0.9, s.z, 0.5, 7, 1.1);
+    // Bones rather than rubble: what is standing there is a skeleton, and it
+    // comes down as one. The dust is the ash going with it.
+    gibs.bones(s.x, s.y + 0.6, s.z, { x: 0, y: 0, z: 0 }, 0.8 * cheats.goreScale);
     effects.dust(s.x, s.y + 0.4, s.z, 1.4);
     audio.treeFall(Math.hypot(player.x - s.x, player.z - s.z) + 60);
     feed('<b>crumbled</b>');
   };
+  // Shot while it was still standing. Harder, louder and thrown the way the
+  // bullet was going, and it counts for nothing: whoever that was has been
+  // dead since the fire went through.
+  soldiers.onShatter = (s, dir) => {
+    gibs.bones(s.x, s.y + 0.9, s.z, dir, 1.4 * cheats.goreScale);
+    effects.dust(s.x, s.y + 0.9, s.z, 1.1);
+    effects.shake = Math.min(1, effects.shake + 0.05);
+    audio.treeFall(Math.hypot(player.x - s.x, player.z - s.z) + 40);
+    feed('<i>bones</i>');
+  };
+  // Terminator: the sphere stands on the street for a moment and he comes up
+  // through it. The second it takes is in the soldier layer, which keeps him
+  // under the pavement, blind and harmless, until he is on his feet.
+  soldiers.onArrive = (s) => arriveAt(s.x, s.z, 1.7, 1);
   soldiers.onSlip = (s) => {
     toast('down he goes');
     feed('<b>slipped</b> on a banana');
@@ -3199,18 +3326,22 @@ async function main() {
   // is the same city after it has gone, and it is picked here rather than in
   // the cheat menu because it is a mode, not a cheat: the score counts.
   const modeButtons = [...document.querySelectorAll('.diff.mode')];
+  const modeNow = () => (state.peaceful ? 'walk' : (machines.active ? 'machines' : 'berlin'));
   const showMode = () => {
-    for (const b of modeButtons) {
-      b.classList.toggle('on', (b.dataset.mode === 'machines') === machines.active);
-    }
-    el.modeNote.textContent = machines.active
+    const now = modeNow();
+    for (const b of modeButtons) b.classList.toggle('on', b.dataset.mode === now);
+    el.modeNote.textContent = now === 'machines'
       ? 'Warheads come down every few seconds, the sky is gone, and what walks the streets is steel with one red eye. G flame, V an EMP to stop them, then anything you like.'
-      : 'A walk through the real city, with the real fight in it.';
-    el.timePick.classList.toggle('hidden', !machines.active);
+      : now === 'walk'
+        ? 'Nothing is hunting you. The whole of Berlin to walk about in, and the cheat menu to bring anything out by hand if you change your mind.'
+        : 'A walk through the real city, with the real fight in it.';
+    el.timePick.classList.toggle('hidden', now !== 'machines');
     applyMachineLook();
   };
   for (const b of modeButtons) {
     b.addEventListener('click', () => {
+      state.peaceful = b.dataset.mode === 'walk';
+      try { localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0'); } catch { /* private mode */ }
       machines.set(b.dataset.mode === 'machines');
       // Picking the mode puts the clock back on the hour it actually is,
       // unless the slider has been moved: a tab left open since the morning
@@ -3363,8 +3494,18 @@ async function main() {
       if (code.startsWith('Digit')) {
         const n = Number(code.slice(5));
         if (n >= 1 && n <= ARMS.length) { mechs.selectArm(state.inMech, n - 1); return; }
+        // A number past the end of the mech's loadout is not the pilot's
+        // rifle. Six used to fall through to what the man inside is carrying
+        // and put a banana on the screen of something eight metres tall.
+        toast(`the mech carries ${ARMS.length}`);
+        return;
       }
-      if (code === 'KeyV') { toggleCockpit(); return; }
+      // And neither is any of the keys that reach over his shoulder.
+      if (code === 'KeyZ' || code === 'KeyB' || code === 'KeyX'
+        || code === 'KeyK' || code === 'KeyQ' || code === 'KeyT') return;
+      // The view used to be on V, which is the travel map everywhere else in
+      // the game, so climbing into a mech took free travel away from you.
+      if (code === 'KeyY') { toggleCockpit(); return; }
       if (code === 'KeyR') {
         const m = state.inMech;
         const arm = mechs.arm(m);
@@ -3478,6 +3619,7 @@ async function main() {
       state.killSlow = Math.max(0, state.killSlow - dt);
       scale = Math.min(scale, 0.25);
     }
+    if (state.killRest > 0) state.killRest = Math.max(0, state.killRest - dt);
     if (state.mode === 'cinema') {
       scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
     }
@@ -3489,6 +3631,16 @@ async function main() {
     state.time += worldDt;
     input.poll();
     updateBedrock();
+
+    // Just a Walk. The budgets are held at nought rather than the layers
+    // switched off, so that anything the cheat menu brings out by hand is a
+    // real enemy with a real fight in it; it simply is not replaced when it
+    // goes down, and nothing is sent after you in the first place.
+    if (state.peaceful) {
+      drones.budget = 0;
+      soldiers.budget = 0;
+      jets.budget = 0;
+    }
 
     if (state.mode === 'intro' || state.mode === 'landing') return;
 
@@ -3535,7 +3687,12 @@ async function main() {
         dash: input.run && !photo.active,
         jump: input.jumpHeld && !photo.active,
       };
-      mechs.update(worldDt, { x: player.x, y: player.y, z: player.z }, controls);
+      // The pilot's clock rather than the world's, the same way your legs
+      // keep most of their speed on foot. A machine slowed by exactly as much
+      // as everything around it is a reflex that does nothing at all, which
+      // is how it felt from the cockpit.
+      mechs.update(selfDt, { x: player.x, y: player.y, z: player.z }, controls);
+      trampleUnderfoot(m);
       // A torso only turns so far up and down, and the view is held to the
       // same limit: looking past where the guns can point would mean a
       // crosshair that no longer says where the shot goes.
@@ -3737,6 +3894,15 @@ async function main() {
       } else if (p.finished) {
         const at = state.travelTo;
         player.teleport(at.x, at.z);
+        // Whatever you were sitting in comes with you. Leaving a mech
+        // standing on the other side of Berlin because you used the map is
+        // not travel, it is losing your mech.
+        if (state.inMech) {
+          const m = state.inMech;
+          m.x = at.x; m.z = at.z;
+          m.y = world.groundHeight(at.x, at.z);
+          m.vx = 0; m.vy = 0; m.vz = 0;
+        }
         state.prev = { x: at.x, y: player.y, z: at.z };
         state.curr = { x: at.x, y: player.y, z: at.z };
         camera.yaw = p.yaw;
@@ -3774,7 +3940,8 @@ async function main() {
       camera.position[2] = p.z;
       camera.yaw = p.yaw;
       camera.pitch = p.pitch;
-    } else if (state.inMech && state.cockpit && state.inMech.spec.cockpit) {
+    } else if (state.inMech && state.cockpit && state.inMech.spec.cockpit
+      && !mechEyeBoxedIn(state.inMech)) {
       // Out of the canopy. The head is a point in the body's own coordinates,
       // so it turns with the torso and rides the hull: the camera is carried
       // by the machine rather than hung in the air near it.
@@ -4200,6 +4367,11 @@ async function main() {
       if (!s) return null;
       const x = player.x + dx, z = player.z + dz;
       s.spawn(x, world.groundHeight(x, z), z, combat.tier);
+      // On his feet at once. This one is the handle the tests put a man
+      // exactly where they need him with; the sphere and the second it takes
+      // to come up through it belong to the ways the game itself sends them.
+      s.rise = 0;
+      s.y = world.groundHeight(x, z);
       soldiers.active.push(s);
       return s;
     },

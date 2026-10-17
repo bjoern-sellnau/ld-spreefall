@@ -412,17 +412,23 @@ async function run() {
   }
 
   // --- the map ------------------------------------------------------------
-  const map = await page.evaluate(() => {
+  const map = await page.evaluate(async () => {
     const s = window.spreefall;
     s.minimap.toggle({ x: s.player.x, z: s.player.z });
-    const near = s.minimap.zoom;
-    s.minimap.zoom = 1; s.minimap.centre = null;
-    return { near, districts: s.world.catalogue.length };
+    // The map opens on so many metres of city rather than on a zoom, and the
+    // zoom that comes to is worked out on the next draw, against the canvas
+    // it has once it is enlarged. So it is measured after it has been drawn,
+    // and measured in metres, which is what the opening is written in.
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    const v = s.minimap._view;
+    const span = v ? Math.round(s.minimap.canvas.width / v.scale) : 0;
+    s.minimap.zoom = 1; s.minimap.openSpan = 0; s.minimap.centre = null;
+    return { span, districts: s.world.catalogue.length };
   });
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(SHOTS, 'district-02-map.png') });
   check('the map opens on the streets around you rather than on all of Berlin',
-    map.near >= 4, `zoom ${map.near}`);
+    map.span > 450 && map.span < 1000, `${map.span} m across the canvas`);
 
   const cityView = await page.evaluate(() => {
     const s = window.spreefall;

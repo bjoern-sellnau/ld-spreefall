@@ -412,18 +412,80 @@ async function run() {
     stains.alpha > 0 && stains.additive > 0,
     `${stains.additive} additive, ${stains.alpha} alpha`);
 
+  // --- what is left of somebody who burned ---------------------------------
+  const bones = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const burnt = (at) => {
+      // Charred and killed by the burn, which is the path the flamethrower
+      // and the ion cannon both end in: no body falls, a skeleton stands.
+      const v = s.spawnSoldier(at, 0);
+      v.charred = 1;
+      s.soldiers.damage(v, 9999, { x: 0, y: 0, z: 0 });
+      v.charred = 1;
+      return v;
+    };
+    s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); s.combat.reset();
+    s.soldiers.enabled = true;
+    const budget = s.soldiers.budget;
+    s.soldiers.budget = 0;
+
+    // One left alone. It stands for a while and then comes apart on its own.
+    const a = burnt(-14);
+    const standing = s.soldiers.isBones(a);
+    let stoodFor = 0;
+    for (let i = 0; i < 60 * 40 && a.alive; i++) {
+      s.soldiers.update(1 / 60, { x: s.player.x, y: s.player.y + 1.7, z: s.player.z, alive: true }, i / 60);
+      stoodFor += 1 / 60;
+    }
+    const crumbled = { gone: !a.alive, after: Math.round(stoodFor), bones: s.gibs.count };
+
+    // One shot where it stands.
+    s.gibs.clear(); s.soldiers.reset(); s.weapon.reset();
+    const b = burnt(-12);
+    const kills = s.combat.kills;
+    const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+    const vx = b.x - ex, vy = b.y + 1.1 - ey, vz = b.z - ez;
+    const l = Math.hypot(vx, vy, vz);
+    s.look(Math.atan2(-vx, -vz) * 180 / Math.PI, Math.asin(vy / l) * 180 / Math.PI);
+    s.camera.update(16 / 9);
+    s.weapon.select('m16'); s.weapon.cooldown = 0; s.weapon.spread = 0;
+    s.shoot();
+    const shot = { gone: !b.alive, bones: s.gibs.count, credited: s.combat.kills - kills };
+
+    s.soldiers.budget = budget;
+    s.soldiers.enabled = false;
+    s.cheats.reset(); s.soldiers.reset(); s.gibs.clear();
+    return { standing, crumbled, shot };
+  });
+  check('somebody burnt to the bone is left standing', bones.standing);
+  check('and comes apart on his own rather than standing there for ever',
+    bones.crumbled.gone && bones.crumbled.bones > 4,
+    `after ${bones.crumbled.after} s, ${bones.crumbled.bones} bones`);
+  check('a shot at one takes it to pieces where it stands',
+    bones.shot.gone && bones.shot.bones > 6,
+    `${bones.shot.bones} bones`);
+  check('and it counts for nothing, because he was already dead',
+    bones.shot.credited === 0, `${bones.shot.credited} kills`);
+
   // --- the last kill -------------------------------------------------------
   // Killed through the weapon rather than by calling damage, because the
   // slow motion hangs off the credit and the credit comes from the shot.
   const lastKill = await page.evaluate(async () => {
     const s = window.spreefall;
-    const kill = async (on, others) => {
+    const kill = async (on, others, far = 0) => {
       s.cheats.reset();
       s.soldiers.reset(); s.drones.reset(); s.combat.reset();
-      s.state.killSlow = 0; s.state.blastSlow = 0;
+      // And the rest the last one put on it, or the cases after the first
+      // are all still inside its cooldown.
+      s.state.killSlow = 0; s.state.blastSlow = 0; s.state.killRest = 0;
       if (on) s.setCheat('lastKill', true);
-      // Company, far enough off to be somebody else and near enough to count.
+      // Company, near enough to count as the fight you are in.
       for (let i = 0; i < others; i++) s.spawnSoldier(-40 - i * 5, 14 + i * 3);
+      // And company that is somebody else's problem, a street and a half
+      // away. This is what used to stop it firing at all: in a live fight
+      // something is always alive somewhere within a hundred and fifty
+      // metres, which is what the old reach was.
+      for (let i = 0; i < far; i++) s.spawnSoldier(-150 - i * 8, 40);
       const v = s.spawnSoldier(-16, 1);
       const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
       const vx = v.x - ex, vy = v.y + 1.1 - ey, vz = v.z - ez;
@@ -440,13 +502,14 @@ async function run() {
       await new Promise((r) => requestAnimationFrame(r));
       const scale = s.state.timeScale;
       s.cheats.reset(); s.soldiers.reset(); s.weapon.reset();
-      s.state.killSlow = 0;
+      s.state.killSlow = 0; s.state.killRest = 0;
       return { dead: !v.alive, slow: Number(slow.toFixed(2)), scale: Number(scale.toFixed(2)) };
     };
     return {
       alone: await kill(true, 0),
       company: await kill(true, 3),
       off: await kill(false, 0),
+      acrossTown: await kill(true, 0, 3),
     };
   });
   check('the last one standing goes down in slow motion',
@@ -458,6 +521,69 @@ async function run() {
   check('nor does the last kill with the switch off',
     lastKill.off.dead && lastKill.off.slow === 0 && lastKill.off.scale === 1,
     `${lastKill.off.slow} s, world at ${lastKill.off.scale}`);
+  check('and three of them a street and a half away do not stop it',
+    lastKill.acrossTown.dead && lastKill.acrossTown.slow > 1
+      && lastKill.acrossTown.scale < 0.4,
+    `${lastKill.acrossTown.slow} s left, world at ${lastKill.acrossTown.scale}`);
+
+  // --- Just a Walk ---------------------------------------------------------
+  // Nothing is sent after you, and what the menu brings out by hand is still
+  // a real enemy: alive, moving, and not replaced when it goes down.
+  const quiet = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset();
+    s.state.peaceful = true;
+    s.soldiers.enabled = true; s.drones.enabled = true; s.jets.enabled = true;
+    // Budgets as a fight would set them. The mode has to take them back.
+    s.soldiers.budget = 8; s.drones.budget = 6; s.jets.budget = 2;
+    const t0 = s.loop.simTime;
+    while (s.loop.simTime - t0 < 12) await new Promise((r) => requestAnimationFrame(r));
+    const sent = s.soldiers.active.length + s.drones.active.length + s.jets.active.length;
+
+    // And by hand.
+    const made = s.spawnWave('drones', 4);
+    const up = s.drones.active.length;
+    const where = s.drones.active.map((d) => `${d.x.toFixed(1)},${d.y.toFixed(1)}`).join('|');
+    const t1 = s.loop.simTime;
+    while (s.loop.simTime - t1 < 3) await new Promise((r) => requestAnimationFrame(r));
+    const moved = s.drones.active.map((d) => `${d.x.toFixed(1)},${d.y.toFixed(1)}`).join('|') !== where;
+    const stillUp = s.drones.active.length;
+
+    s.state.peaceful = false;
+    s.soldiers.enabled = false; s.drones.enabled = false; s.jets.enabled = false;
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset();
+    return { sent, made, up, moved, stillUp };
+  });
+  check('in Just a Walk nothing is sent after you',
+    quiet.sent === 0, `${quiet.sent} arrived in twelve seconds with the budgets full`);
+  check('and what the menu brings out by hand is still real',
+    quiet.made === 4 && quiet.up === 4 && quiet.moved && quiet.stillUp === 4,
+    `${quiet.up} up, ${quiet.moved ? 'flying' : 'frozen'}`);
+
+  // --- how they arrive -----------------------------------------------------
+  const arrival = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.soldiers.reset(); s.effects.clear();
+    s.state.peaceful = false;
+    const made = s.spawnWave('soldiers', 2);
+    const v = s.soldiers.active[0];
+    if (!v) return { skip: true };
+    const ground = s.world.groundHeight(v.x, v.z);
+    const sphere = s.effects.list.filter((p) => p.alive && p.kind === 1).length;
+    const under = Number((ground - v.y).toFixed(2));
+    const t0 = s.loop.simTime;
+    while (s.loop.simTime - t0 < 1.4) await new Promise((r) => requestAnimationFrame(r));
+    const standing = Number(Math.abs(v.y - s.world.groundHeight(v.x, v.z)).toFixed(2));
+    s.soldiers.reset(); s.effects.clear();
+    return { made, sphere, under, standing };
+  });
+  check('they arrive in a sphere of light rather than walking round a corner',
+    !arrival.skip && arrival.made === 2 && arrival.sphere > 30,
+    arrival.skip ? 'nobody arrived' : `${arrival.sphere} points of light`);
+  check('and come up through it onto their feet',
+    !arrival.skip && arrival.under > 0.8 && arrival.standing < 0.2,
+    arrival.skip ? '' : `${arrival.under} m under the street, then ${arrival.standing} m off it`);
 
   // --- more of them, on demand ---------------------------------------------
   const waves = await page.evaluate(() => {

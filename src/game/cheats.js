@@ -98,8 +98,8 @@ export const SETTINGS = [
   },
   {
     id: 'boneTime', label: 'Skeletons collapse after', unit: 's',
-    note: 'a burnt body falls to pieces after this long; nought leaves them standing',
-    min: 0, max: 120, step: 1, def: 0,
+    note: 'a burnt body falls to pieces after this long; nought leaves them standing for good',
+    min: 0, max: 120, step: 1, def: 18,
   },
 ];
 

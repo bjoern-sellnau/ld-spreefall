@@ -54,7 +54,7 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | Touch | drag left to walk, drag right to look |
 | Gamepad | left stick walks, right stick looks, A jumps, L3 runs |
 | P | photo mode: hides the interface, unlocks the clock, saves a PNG |
-| M | enlarge the map |
+| M | enlarge the map, on the streets around you |
 | N | sound on and off |
 | H | help |
 | 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |
@@ -110,6 +110,15 @@ Jumping while it runs spends a slice of it and throws you most of a storey up.
 ground, found by asking the world where a person could actually stand rather
 than by anyone authoring a list of coordinates. Run over one and it is yours;
 it comes back on a timer, so the map is something you learn to move around.
+
+The enlarged map opens on seven hundred metres of city around you rather than
+on all forty six kilometres of it, and at that range it writes the street
+names along the streets, from the `name` on the way in OpenStreetMap. A name
+goes on every two hundred and forty metres of road and only if nothing has
+already been written where it would go, with the main roads offered their
+places first, which is how a paper map does it too. The wheel takes it out to
+the whole city and in to a hundred and forty metres across; the names fade out
+on the way out, at about a metre to the pixel.
 Ammunition fills the weapon in your hands and tops up the rest of the loadout.
 A medical kit puts fifty five back. Then the three that have a clock on them
 and a chip on the interface counting it down:
@@ -234,7 +243,7 @@ visits.
 | Blood | hits spray |
 | Ultra gore | the three above, considerably more of it |
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
-| Slow motion on the last kill | killing the last one standing near you drops the world to a crawl |
+| Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not
@@ -284,12 +293,13 @@ What the five gore switches actually are:
 And the last kill:
 
 - **Slow motion on the last kill** waits until the one you just killed was
-  the last one on his feet within a hundred and fifty metres, and then runs
-  the world at a quarter speed for a little over two seconds. It fires on
+  the last one on his feet within sixty five metres, and then runs the world
+  at a quarter speed for a little over two seconds. It fires on
   that kill and no other, because a flourish on every kill is not a flourish,
-  it is a stutter. Your own machine does not count as company, and neither
-  does a body still falling: a soldier with no health left is on his own time
-  already.
+  it is a stutter, and there is five seconds between them. Your own machine
+  does not count as company, and neither does a body still falling: a soldier
+  with no health left is on his own time already. A fight going on two
+  streets away is somebody else's.
 
 And the warhead:
 
@@ -344,6 +354,24 @@ a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
 vertex shader collapses one set of parts or the other to nothing depending on
 how burnt they are, so a person and a skeleton are the same mesh and the same
 draw call.
+
+## Just a Walk
+
+A third mode on the title screen, next to Berlin and Rise of the Machines.
+Nothing is sent after you: no soldiers, no drones, no jets, no machines, and
+the whole of the city to walk about in. The cheat menu still brings anything
+out by hand, and what it brings out is a real enemy with a real fight in it;
+it simply is not replaced when it goes down. The mode is remembered between
+visits, because it is a choice about what you came for rather than a setting.
+
+## How they arrive
+
+Nobody walks round a corner into this fight. A sphere of light stands on the
+street for a moment, a shell of it falling inwards rather than blowing out,
+with arcs crawling up off the pavement and a scorch mark left under it, and
+the soldier comes up through the street into it. For the second that takes he
+is under the pavement, blind and harmless. A machine arrives the same way, in
+a sphere the size of the thing inside it.
 
 ## Vehicles
 
@@ -645,6 +673,15 @@ build log was read.
 ## What is real and what is generated
 
 This matters, so it is spelled out rather than glossed over.
+
+**The shape of a building is what OpenStreetMap says it is.** Height or
+levels, `building:part` pieces instead of the envelope around them,
+`min_height` for a volume that starts above the street, and the roof: its
+shape (flat, gabled, hipped, pyramidal, skillion, mansard, dome and the
+synonyms for each), its height or its levels, which way its ridge runs, which
+way a single slope falls, and its material and colour snapped to the four
+roof tones the shader carries. A tag nobody has set falls back to what most
+of Berlin has, which is a flat roof with a parapet on it.
 
 **Surveyed, from the map.** Every street centreline and its width and surface,
 every landmark footprint and its height, the course of the Spree and the

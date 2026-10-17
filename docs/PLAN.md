@@ -1458,3 +1458,177 @@ is what prompted the change.
   three ways: alone with the switch on, with three of his friends up, and
   with the switch off, and read both the timer and what the world actually
   did with it.
+
+## 29. A map you can read the streets on
+
+- 2026-10-17: the enlarged map opened on two and a half kilometres of city,
+  which on a canvas eleven hundred pixels wide is a diagram of a district
+  rather than a map of a street. It now opens on seven hundred metres around
+  you. The ceiling on the wheel went with it, and for a reason worth writing
+  down: the zoom is a ratio against the whole city fitted to the canvas, and
+  the city is forty six kilometres across rather than the twelve the old
+  ceiling of fourteen was picked for, so the same number meant a district in
+  one place and a street in another. Both the opening and the ceiling are
+  written in metres across the canvas now, and the zoom is worked out from
+  them against whatever canvas there is.
+
+- 2026-10-17: and that opening is held as a span rather than converted to a
+  zoom at the moment the map is opened, because at that moment the canvas is
+  still its small size: the first run put the map at eighteen times the
+  whole city, which on the enlarged canvas was twelve hundred metres across
+  rather than seven hundred. The span survives until the wheel is touched.
+
+- 2026-10-17: street names. They come off the `name` on each OSM way, one
+  label every two hundred and forty metres along it with the angle of the
+  piece it sits on, written by the builder into the district's own manifest
+  and nowhere else: the district you are standing in is the one whose names
+  you can read, and a city of eighty one districts pays nothing for the
+  eighty it is not in. Mitte has a hundred and seventy three labels over
+  sixty streets and the json grew by about six kilobytes. On the map they are
+  drawn in screen pixels rather than in metres, turned to lie along the road
+  and never upside down, main roads first, and a label is kept only if
+  nothing has been written where it would go. Ten of the hundred and seventy
+  three fit on the opening view, which is the point: a map that writes every
+  name it has is a map with no names on it.
+
+## 30. The city OpenStreetMap says it is
+
+- 2026-10-17: building parts. A building that is more than a box is mapped as
+  an outline plus a set of `building:part` pieces, each with its own height,
+  and the outline is an envelope that is not meant to be drawn once the
+  pieces are there. This drew both, so every tower in the city was the box
+  around it. Now a piece claims its outline, by its middle falling inside it,
+  and the outline is left out of the picture and out of the collision
+  together, so a piece that is missing leaves a gap you can walk into rather
+  than a tower inside a crate.
+
+- 2026-10-17: `min_height` and `building:min_level`, so a volume can start
+  above the street. The skirt that carries a wall below the ground is left
+  off when it does, because a volume that starts ten metres up has no ground
+  to meet and the skirt was a wall hanging in an archway, and the collision
+  for it starts where the volume does, so you can walk under what you can see
+  under.
+
+- 2026-10-17: six more roof shapes: pyramidal and cone, skillion, mansard and
+  gambrel, dome and onion, with half hipped going to the hip and saltbox to
+  the gable. The pyramid and the single slope are cut from the footprint
+  itself, so an L shaped shed keeps its shape; the mansard and the dome are
+  built over the oriented box like the gable and the hip, and a footprint too
+  far from a rectangle still falls back to flat, because a fake mansard on a
+  complicated outline looks worse than no mansard. `roof:orientation` decides
+  whether a ridge runs along the block or across it, which is the difference
+  between a row of houses and one shed, and `roof:direction` says which way a
+  single slope falls.
+
+- 2026-10-17: the height on a building is to the top of its roof, which this
+  had never honoured: the walls went to the full height and the roof sat on
+  top of them, so every pitched building in Berlin was four metres too tall.
+  The roof now comes out of the height, and nothing may be more than two
+  fifths roof, because a `roof:height` taller than the building under it is
+  somebody's typing mistake rather than a spire.
+
+- 2026-10-17: and roofs have colours. Four of them, carried in the two bits
+  above the palette index and chosen in the builder from `roof:material`
+  first and `roof:colour` second: the dark tile most of the city is under,
+  the red tile of the older blocks, grey slate, and copper gone green. Four
+  because four is what you can tell apart from a street. A material that has
+  a surface of its own in the shader, copper or zinc or glass, gets that
+  instead.
+
+- 2026-10-17: the offline city carries the same mix of tags, so the fallback
+  extract exercises the same code the live one does: mansards on a fifth of
+  the blocks, gables, hips, the odd single slope and pyramid, and roof
+  materials on half of them. The whole lot costs eleven thousand triangles
+  across eight districts, one and a half per cent, and two hundred kilobytes
+  of the download budget.
+
+## 31. Standing dead men, a hole in the world, and the cockpit
+
+- 2026-10-17: the last kill never fired. It asked for nobody alive within a
+  hundred and fifty metres, and in a live fight something is always alive
+  somewhere in a circle that size, so the slow motion was a switch that did
+  nothing. Sixty five metres is the piece of city you are actually in; the
+  one you killed has to have been in it too, or a rocket across the district
+  would do it; and there is five seconds between flourishes, because clearing
+  a square one body at a time is a stutter rather than a flourish. The check
+  now kills a man with three of his friends standing a street and a half
+  away, which is the case that was reported.
+
+- 2026-10-17: dead men standing. A soldier burnt to the bone stayed on his
+  feet for the rest of the session, because the timer that takes a skeleton
+  down shipped at nought, which means never. It ships at eighteen seconds
+  now, and nought still means never for anybody who wants a field of them.
+
+- 2026-10-17: and a skeleton is a thing you can shoot. It used to be out of
+  the raycast with the rest of the dying, so bullets went through it: now a
+  standing one is a target, a hit takes it apart into bone rather than flesh,
+  and it credits nobody, because whoever that was died when the fire went
+  through. Bones are their own burst: eleven pieces a point of scale, bigger
+  and lighter than gibs, nothing wet about them.
+
+- 2026-10-17: falling through the floor. Asked for the height of the ground
+  on a tile that is not there, the world answered nought. Nought is sea
+  level, and a district standing forty metres above it is then a forty metre
+  hole with you at the bottom: that is the whole bug. It now answers with the
+  nearest ground there is, searching a ring of tiles outwards, so the city
+  ends in a plateau rather than in a pit. The check puts the neighbours on a
+  forty metre hill, takes the tile in the middle away, and asks again.
+
+- 2026-10-17: a mech walking over somebody puts him into the pavement. The
+  foot is the hull's radius and a bit, anybody standing well above it is on
+  something else, and what is left is a wide flat stain rather than a body.
+
+- 2026-10-17: and the view out of a mech. Eight rays at head height: when
+  nearly all of them are stopped within a few metres the machine is standing
+  inside the building rather than against it, the cockpit would be the inside
+  of a wall, and the shoulder view takes over until it is not. The pull in
+  along the aim line only ever helped when the eye started outside.
+
+- 2026-10-17: three keys. The number row past the end of a mech's loadout
+  used to reach the pilot's own weapons, so six put a banana on the screen of
+  something eight metres tall; now nothing on his back exists while he is in
+  there. The cockpit view moved off V, which is the travel map everywhere
+  else in the game and was unreachable from a cockpit, onto Y. And a mech
+  runs on the pilot's clock rather than the world's, so the reflex is worth
+  having in one: a machine slowed by exactly as much as everything around it
+  is a reflex that does nothing at all.
+
+- 2026-10-17: travelling takes your machine with you. Leaving a Titan on the
+  other side of Berlin because you used the map is not travel.
+
+## 32. Just a Walk, and a sphere of light
+
+- 2026-10-17: a third mode. Nothing is sent after you, and the way it is done
+  is worth writing down: the budgets are held at nought every step rather
+  than the layers being switched off. A layer that is off does not update
+  what is already in it, so anything the cheat menu brought out would freeze
+  where it stood; a budget of nought means nothing new is sent and everything
+  already here is a real enemy with a real fight in it, which is exactly what
+  was asked for. It is remembered between visits.
+
+- 2026-10-17: and nobody walks round a corner any more. A sphere of light
+  stands on the street, a shell of sparks falling inwards rather than blowing
+  outwards, which is the whole difference between something arriving and
+  something exploding, with arcs off the pavement and a scorch mark under it.
+  The soldier comes up through the street over a second: he starts one and
+  nine tenths of a metre under it and is blind and harmless until he is on
+  his feet, which is in the soldier layer rather than in the picture, so it
+  is true for the fight as well as for the eye. The test handle that puts a
+  man exactly where a check needs him skips all of it.
+
+- 2026-10-17: two checks in the machines suite were measuring the city rather
+  than the thing they are named after, and the rebuilt city is what showed it.
+  The flamethrower check stood the player whereever the suite had left him,
+  which by then was a heap of rubble three metres up, and the stream tests the
+  height of what it lands on: it now puts him back down on the street first.
+  The bite check blasted a frontage and counted the pixels of hole: a mansard
+  leaves less sky behind it than a flat roof, so the bite is bigger now.
+
+- 2026-10-17: and a mech you call has somewhere to stand. The spot search
+  asked for seven metres clear on four sides, which in a street that has been
+  shelled flat does not exist, and then answered no: the whole mech half of
+  the suite failed on one call that found nowhere to put one. It now gives up
+  the room a bit at a time, seven metres then four and a half then two and a
+  half, and below that takes whatever loaded ground there is, because a
+  machine standing with its shoulder in a wall is better than a machine you
+  cannot call.
