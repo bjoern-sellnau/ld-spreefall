@@ -2206,7 +2206,11 @@ async function main() {
   let bedrockFor = null;
   function updateBedrock() {
     const entry = world.entryAt(player.x, player.z);
-    const key = entry ? entry.id : null;
+    // The loaded state is part of the key as well as the district: asked
+    // before the bytes arrive, the ground answers nought everywhere, and a
+    // floor worked out from that would stay at nought for a district built
+    // on a hill.
+    const key = entry ? `${entry.id}:${world.loaded(entry.id) ? 'in' : 'out'}` : null;
     if (bedrockFor === key) return;
     bedrockFor = key;
     if (!entry) { renderer.bedrock = null; return; }
@@ -3147,6 +3151,7 @@ async function main() {
       state.mode = 'walk';
       state.walking = true;
     } else {
+      intro.restart();
       state.mode = 'intro';
       state.dronePose = intro.sample(performance.now() / 1000);
     }
@@ -3718,7 +3723,11 @@ async function main() {
     } else if (state.mode === 'title' || state.mode === 'intro'
       || state.mode === 'landing' || state.mode === 'travel'
       || state.mode === 'cinema') {
-      const p = state.dronePose || intro.sample(performance.now() / 1000);
+      // The title screen holds the first frame of the drone arc. It used to
+      // sample the flight instead, which started its clock: read the title
+      // for longer than the flight lasts and pressing play skipped straight
+      // to the pavement.
+      const p = state.dronePose || intro.pose(0);
       camera.position[0] = p.x;
       camera.position[1] = p.y;
       camera.position[2] = p.z;

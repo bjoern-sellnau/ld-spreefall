@@ -16,6 +16,20 @@ function check(name, ok, detail = '') {
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${name}${detail ? `  ${detail}` : ''}`);
 }
 
+/**
+ * Wait for the simulation to run, not for the clock to pass. Under the
+ * software rasteriser a single frame can take longer than a second, and a
+ * check that slept for 1.4 s and then read the screen was reading it before
+ * one fixed step had happened at the new position.
+ */
+async function simulate(page, seconds) {
+  await page.evaluate(() => { window.__simFrom = window.spreefall.state.time; });
+  await page.waitForFunction(
+    (s) => window.spreefall.state.time - window.__simFrom >= s,
+    seconds, { timeout: 120000 },
+  );
+}
+
 async function run() {
   fs.mkdirSync(SHOTS, { recursive: true });
   const preinstalled = '/opt/pw-browsers/chromium';
@@ -50,10 +64,18 @@ async function run() {
   check('pressing play starts the drone intro', mode === 'intro' || mode === 'landing', `mode ${mode}`);
   await page.screenshot({ path: path.join(SHOTS, 'ui-02-intro.png') });
 
-  // Clicking skips the intro and lands the camera.
+  // Clicking skips the intro and lands the camera. How long the landing takes
+  // is not a fixed number of seconds here: the software rasteriser hands back
+  // frames when it is ready, and a heavier first district makes it slower
+  // still. Waiting for the mode rather than for a stopwatch is what stops the
+  // checks below from running against a camera that is still coming down, and
+  // the walk begins by forgetting every landmark, which used to wipe the card
+  // this suite had just gone to fetch.
   await page.mouse.click(640, 400);
-  await page.waitForTimeout(4200);
-  const mode2 = await page.evaluate(() => window.spreefall.state.mode);
+  const mode2 = await page.waitForFunction(
+    () => (window.spreefall.state.mode === 'walk' ? 'walk' : false),
+    null, { timeout: 90000 },
+  ).then(() => 'walk', () => 'still not walking');
   check('clicking lands the camera and starts the walk', mode2 === 'walk', `mode ${mode2}`);
 
   // This suite is about the interface, so the fight is switched off for it.
@@ -71,10 +93,17 @@ async function run() {
   // --- landmark cards ------------------------------------------------------
   await page.evaluate(() => {
     const s = window.spreefall;
+    // The spawn is inside the Gate's own radius, so by now it has already been
+    // found and its card has already come and gone: a card lasts nine seconds
+    // and the intro, the landing and the checks above take longer than that.
+    // Forgetting it is what makes this a check of the card rather than a race
+    // against how long the first district took to arrive.
+    s.landmarks.reset();
+    document.getElementById('cardhost').innerHTML = '';
     const l = s.world.manifest.landmarks.find((x) => x.key === 'brandenburg_gate');
     s.teleport(l.x + 8, l.z + 8);
   });
-  await page.waitForTimeout(1400);
+  await simulate(page, 0.5);
   const cardText = await page.textContent('#cardhost').catch(() => '');
   check('walking up to the Gate slides a card in', /Brandenburg/i.test(cardText || ''), (cardText || '').slice(0, 40));
   await page.screenshot({ path: path.join(SHOTS, 'ui-03-card.png') });

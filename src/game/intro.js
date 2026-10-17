@@ -26,7 +26,20 @@ export class Intro {
   sample(nowSeconds) {
     if (!this.startedAt) this.startedAt = nowSeconds;
     this.t = nowSeconds - this.startedAt;
-    const t = this.t;
+    return this.pose(this.t);
+  }
+
+  /**
+   * Where the drone is t seconds into the flight. Separate from sample
+   * because the title screen wants the first frame of the arc and nothing
+   * else: asking sample for it started the flight's clock, and then a player
+   * who read the title for a quarter of a minute pressed play, the flight
+   * was already past its end, and they were put down on the pavement with no
+   * shot at all. The test suite caught it as an intro that was sometimes
+   * there and sometimes not.
+   * @returns {{x,y,z,yaw,pitch}}
+   */
+  pose(t) {
     // A 70 m radius arc, slowly descending from 130 m to 62 m, swinging round
     // to end up looking west at the Gate.
     const ang = -0.55 + t * 0.045;
@@ -40,6 +53,19 @@ export class Intro {
     const yaw = Math.atan2(-(tx - x), -(tz - z));
     const pitch = Math.atan2(-(y - this.groundY - 18), Math.hypot(tx - x, tz - z));
     return { x, y, z, yaw, pitch };
+  }
+
+  /**
+   * Fly it again from the beginning. The clock starts at the first sample, so
+   * without this a second walk would begin with the flight already over.
+   */
+  restart() {
+    this.t = 0;
+    this.startedAt = 0;
+    this.landStartedAt = 0;
+    this.landT = 0;
+    this.done = false;
+    this.landing = false;
   }
 
   /** Blend from the drone pose to the player pose over 1.7 seconds. */
