@@ -1661,3 +1661,35 @@ is what prompted the change.
   civilian; and the arrival check has to switch the layer on, because the
   second a soldier spends coming up out of the street is counted in the
   soldier update, which is where it belongs.
+
+## 34. Relief, and what a frontage has left
+
+- 2026-10-17: the first of the three graphics steps. A cornice under the eaves
+  on every building over nine metres, and a band over the shop windows where
+  the ground floor is a shop, both built in the builder as geometry. Two quads
+  an edge: the face you see and the underside the sun never reaches, and the
+  second one is the whole point, because what makes a frontage read as relief
+  is the shadow line under a projecting band rather than the band itself.
+  Edges under three and a half metres are skipped, since a Berlin block has a
+  dozen jogs in its outline that nobody can see.
+
+- 2026-10-17: it costs. Mitte went from a hundred and fifty thousand triangles
+  to a hundred and eighty eight, and the download for the eight districts
+  built here from 13.89 MB to 14.47 of the 25 MB budget. It is on in the
+  middle tier only, which is where you walk.
+
+- 2026-10-17: and the cheat menu will tell you what a frontage has left. The
+  damage sits on a grid of cells about one block frontage across, which is the
+  unit that comes down, so the honest answer to "how much more will that wall
+  take" is the cell your shot would land in: seven hundred and twenty for a
+  whole one, in four stages of a hundred and eighty. A ruin says so instead of
+  giving a number.
+
+- 2026-10-17: writing that switch turned up a worse one. The switches were
+  listed in three places, and the last kill was in two of them: in the list
+  the menu is built from and not in the constructor. `set` refuses an id it
+  cannot find a boolean behind, so that row did nothing at all, and the switch
+  only came alive after pressing all off once, which is what reset does. That
+  is very probably the whole of what was reported as the slow motion not
+  working. The constructor now builds every switch out of the one list, and a
+  unit test flips every row in the menu on and off again.

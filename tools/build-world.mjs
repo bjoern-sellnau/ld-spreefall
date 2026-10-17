@@ -687,6 +687,13 @@ function buildDistrict(district) {
       roofHeight: roofH,
       roofAcross,
       roofDir: Number.isFinite(roofDirTag) ? roofDirTag : undefined,
+      // A frontage with a cornice on it, and a band over the windows where
+      // the ground floor is a shop. Whether it is a shop is whatever the
+      // tagging says: a shop tag, a retail building, or anything with a
+      // counter in it.
+      relief: !!tier.relief,
+      shopfront: !!tier.relief && !!(tags.shop || tags.amenity
+        || tags.building === 'retail' || tags.building === 'commercial'),
       wallMat, roofMat: roofMatTag !== undefined ? roofMatTag : MAT.ROOF,
       // The roof carries the same palette entry as the walls in its low bits,
       // which nothing reads, and its tone in the two above, which the roof

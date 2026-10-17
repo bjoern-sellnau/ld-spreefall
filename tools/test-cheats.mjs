@@ -467,6 +467,57 @@ async function run() {
   check('and it counts for nothing, because he was already dead',
     bones.shot.credited === 0, `${bones.shot.credited} kills`);
 
+  // --- what a building has left --------------------------------------------
+  const damage = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.demolition.reset(); s.renderer.clearCollapses();
+    // Find a frontage to look at, and look at it.
+    // Something that is still standing, rather than the first thing the ray
+    // happens to hit: by this point in the suite half the street is a ruin
+    // two metres high, and what a ruin has left is a different question.
+    const eye = s.camera.position;
+    let wall = null;
+    for (let i = 0; i < 48 && !wall; i++) {
+      s.look((i / 48) * 720, i % 2 ? -2 : 2);
+      s.camera.update(16 / 9);
+      const g = s.camera.forward;
+      const hit = s.world.raycast(eye[0], eye[1], eye[2], g[0], g[1], g[2], 200);
+      if (!hit) continue;
+      const hx = eye[0] + g[0] * hit.t, hz = eye[2] + g[2] * hit.t;
+      if (s.world.tallestNear(hx, hz, 10) > 6) wall = hit;
+    }
+    if (!wall) return { skip: true };
+    const d = s.camera.forward;
+    const x = eye[0] + d[0] * wall.t, z = eye[2] + d[2] * wall.t;
+    const before = s.demolition.damageAt(x, z);
+    const off = !document.getElementById('buildinfo').classList.contains('hidden');
+    s.setCheat('showDamage', true);
+    await new Promise((r) => requestAnimationFrame(r));
+    const shown = document.getElementById('buildinfo').textContent;
+    // Put some damage into that cell and ask again.
+    s.demolition.blast(x, s.world.groundHeight(x, z), z, 9, 300);
+    for (let i = 0; i < 60; i++) s.demolition.update(1 / 60);
+    const after = s.demolition.damageAt(x, z);
+    await new Promise((r) => requestAnimationFrame(r));
+    const shownAfter = document.getElementById('buildinfo').textContent;
+    s.setCheat('showDamage', false);
+    await new Promise((r) => requestAnimationFrame(r));
+    const hiddenAgain = document.getElementById('buildinfo').classList.contains('hidden');
+    s.demolition.reset(); s.renderer.clearCollapses();
+    return {
+      off, shown, shownAfter, hiddenAgain,
+      left0: before.left, left1: after.left, whole: before.whole,
+    };
+  });
+  check('the menu can show what a building has left',
+    !damage.skip && damage.off === false && /left of/.test(damage.shown || '')
+      && damage.hiddenAgain,
+    damage.skip ? 'no wall to look at' : (damage.shown || '').slice(0, 60));
+  check('and the number comes down as you take the frontage apart',
+    !damage.skip && damage.left1 < damage.left0 && damage.left0 === damage.whole,
+    damage.skip ? '' : `${damage.left0} of ${damage.whole} became ${damage.left1}`);
+
   // --- the last kill -------------------------------------------------------
   // Killed through the weapon rather than by calling damage, because the
   // slow motion hangs off the credit and the credit comes from the shot.

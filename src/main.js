@@ -58,6 +58,7 @@ const el = {
   weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
   sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
+  buildInfo: $('buildinfo'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
   cheatValues: $('cheatvalues'),
   crossing: $('crossing'), crossName: $('crossname'), crossNote: $('crossnote'),
@@ -794,6 +795,35 @@ async function main() {
     // have left it standing in the road.
     for (const m of mechs.active) if (!m.mine && m.alive && m.health > 0 && near(m)) n++;
     return n;
+  }
+
+  /**
+   * What the frontage you are aiming at has taken, and what it has left. The
+   * damage is kept on a grid of cells about one Berlin block frontage
+   * across, which is the unit that comes down, so what this answers is the
+   * cell your shot would land in rather than some notion of a building.
+   *
+   * Only while the menu asks for it, and only on a wall: the ground and the
+   * sky have nothing to say here.
+   */
+  function showBuildingDamage() {
+    if (!cheats.showDamage || state.mode !== 'walk') {
+      if (!el.buildInfo.classList.contains('hidden')) el.buildInfo.classList.add('hidden');
+      return;
+    }
+    const eye = camera.position;
+    const f = camera.forward;
+    const hit = world.raycast(eye[0], eye[1], eye[2], f[0], f[1], f[2], 220);
+    if (!hit) { el.buildInfo.classList.add('hidden'); return; }
+    const x = eye[0] + f[0] * hit.t;
+    const z = eye[2] + f[2] * hit.t;
+    const d = demolition.damageAt(x, z);
+    const tall = world.tallestNear(x, z, 10);
+    el.buildInfo.classList.remove('hidden');
+    el.buildInfo.innerHTML = tall < 2.5
+      ? `<i>nothing standing here</i>`
+      : `<b>${d.left}</b> left of <b>${d.whole}</b> <i>stage ${d.stage} of ${d.stages}, `
+        + `${Math.round(tall)} m standing, ${Math.round(hit.t)} m away</i>`;
   }
 
   /**
@@ -4237,6 +4267,7 @@ async function main() {
       el.crosshair.style.setProperty('--gap', `${px}px`);
       el.crosshair.classList.toggle('aiming', weapon.aimBlend > 0.6);
       el.crosshair.classList.toggle('holstered', weapon.holstered);
+      showBuildingDamage();
       // Aiming narrows the field of view, which is most of what aiming is.
       camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;
       if (state.inSanctuary !== state.sanctuaryShown) {

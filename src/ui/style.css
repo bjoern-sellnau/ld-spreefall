@@ -418,6 +418,23 @@ html, body {
 #threat span[id] { color: var(--accent); font-weight: 600; }
 #threat .tsep { margin-left: 14px; }
 
+/* What a frontage has left, under the crosshair, when the menu asks for it. */
+#buildinfo {
+  position: absolute;
+  left: 50%; top: calc(50% + 34px);
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  background: rgba(10, 12, 15, 0.62);
+  border: 1px solid var(--edge);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #cfcabf;
+  white-space: nowrap;
+  pointer-events: none;
+}
+#buildinfo b { color: #e2c98d; font-weight: 600; }
+#buildinfo i { color: #8d8a84; font-style: normal; }
+
 #sanctuary {
   position: absolute;
   left: 50%; top: 22%;

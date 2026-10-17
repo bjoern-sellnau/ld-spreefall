@@ -59,6 +59,10 @@ export const TIERS = [
     // it, because this is the Berlin the brief asks for by name.
     name: 'full',
     minArea: 6, simplify: 0, roofs: true, windows: true, landmarks: true,
+    // Relief on the frontages: the cornice under the eaves and the band over
+    // the shop windows. Only here, because it is two quads an edge on every
+    // building and it is only worth that from the pavement.
+    relief: true,
     trees: 1, driveOnly: false, grid: 33, kerbs: true, groundStep: 12.5,
     boxBelow: 0, service: true, surfaceStep: 2.5,
     // Even here the centrelines are simplified. OpenStreetMap puts a node

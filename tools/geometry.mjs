@@ -126,6 +126,17 @@ export function extrudeBuilding(mesh, foot, o) {
     }
   }
 
+  // Relief. A cornice under the eaves on anything tall enough to have one,
+  // and a string course over the shop windows where there are shops. Both
+  // are bands rather than mouldings: two quads an edge buys the shadow line,
+  // and a profile nobody can see from the pavement buys nothing.
+  if (o.relief && o.height > 9) {
+    facadeBand(mesh, rings[0], wallTop - 0.95, 0.5, 0.26, wallMat, seed, hgt);
+  }
+  if (o.shopfront && o.height > 6) {
+    facadeBand(mesh, rings[0], base + 3.9, 0.3, 0.15, wallMat, seed, hgt);
+  }
+
   // The roof. Everything OpenStreetMap writes down about one is honoured
   // here: its shape, which way the ridge runs, which way a single slope
   // falls, and what it is made of. A shape nobody has tagged, or one that
@@ -149,6 +160,49 @@ export function extrudeBuilding(mesh, foot, o) {
   } else {
     flatRoof(mesh, rings, wallTop, roofMat, roofSeed);
     if (o.parapet !== false && o.height > 6) parapet(mesh, rings[0], wallTop, 0.7, wallMat, seed, hgt);
+  }
+}
+
+/**
+ * A band round the outside of a building: the cornice under the eaves, the
+ * string course over the shop windows. Two quads an edge, the face you see
+ * and the underside the sun never reaches, and it is the second one that
+ * does the work: the shadow line under a projecting band is what makes a
+ * frontage read as relief rather than as a photograph of one.
+ *
+ * Edges shorter than minEdge are skipped. A Berlin block has a dozen two
+ * metre jogs in its outline that nobody can see and every one of them would
+ * cost the same as the frontage.
+ *
+ * @param {Array<[number,number]>} ring the footprint, counter clockwise
+ * @param {number} y where the band starts, in world metres
+ * @param {number} height how deep the band is
+ * @param {number} out how far it stands proud of the wall
+ */
+export function facadeBand(mesh, ring, y, height, out, mat, seed, hgt, minEdge = 3.5) {
+  const flags = FACADE_FLAG.NO_WINDOWS;
+  let run = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const len = Math.hypot(dx, dz);
+    if (len < minEdge) { run += len; continue; }
+    const nx = dz / len, nz = -dx / len;
+    const ax = a[0] + nx * out, az = a[1] + nz * out;
+    const bx = b[0] + nx * out, bz = b[1] + nz * out;
+    // The face.
+    const f0 = mesh.vertex(ax, y, az, nx, 0, nz, run, 0, mat, seed, 0, flags, hgt, 255);
+    const f1 = mesh.vertex(bx, y, bz, nx, 0, nz, run + len, 0, mat, seed, 0, flags, hgt, 255);
+    const f2 = mesh.vertex(bx, y + height, bz, nx, 0, nz, run + len, height, mat, seed, 0, flags, hgt, 255);
+    const f3 = mesh.vertex(ax, y + height, az, nx, 0, nz, run, height, mat, seed, 0, flags, hgt, 255);
+    mesh.quad(f3, f2, f1, f0);
+    // And the underside, which is the shadow.
+    const u0 = mesh.vertex(a[0], y, a[1], 0, -1, 0, run, 0, mat, seed, 0, flags, hgt, 120);
+    const u1 = mesh.vertex(b[0], y, b[1], 0, -1, 0, run + len, 0, mat, seed, 0, flags, hgt, 120);
+    const u2 = mesh.vertex(bx, y, bz, 0, -1, 0, run + len, out, mat, seed, 0, flags, hgt, 120);
+    const u3 = mesh.vertex(ax, y, az, 0, -1, 0, run, out, mat, seed, 0, flags, hgt, 120);
+    mesh.quad(u0, u1, u2, u3);
+    run += len;
   }
 }
 

@@ -244,6 +244,7 @@ visits.
 | Ultra gore | the three above, considerably more of it |
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
+| Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not
@@ -685,6 +686,14 @@ build log was read.
 ## What is real and what is generated
 
 This matters, so it is spelled out rather than glossed over.
+
+**Relief on the frontages.** A cornice under the eaves on anything over nine
+metres, and a band over the shop windows where the ground floor is a shop.
+Both are bands rather than mouldings: two quads an edge, the face you see and
+the underside the sun never reaches, and it is the second one that does the
+work, because the shadow line under a projecting band is what makes a frontage
+read as relief. Only in the middle, where you walk: it costs a quarter of the
+triangles of that district and is only worth that from the pavement.
 
 **The shape of a building is what OpenStreetMap says it is.** Height or
 levels, `building:part` pieces instead of the envelope around them,

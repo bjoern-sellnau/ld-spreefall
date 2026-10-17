@@ -14,7 +14,7 @@ const KEY = 'spreefall.cheats';
 
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
-  'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill',
+  'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
   'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore'];
 
 /** The switches, in the order the menu shows them. */
@@ -34,6 +34,7 @@ export const SWITCHES = [
   { id: 'wreckBuildings', label: 'Buildings can be destroyed', note: 'blasts cut frontages back and bring them down; off leaves the city standing', def: true },
   { id: 'wreckGround', label: 'Ground can be cratered', note: 'warheads dig a hole where they land; off keeps the street level', def: true },
   { id: 'lastKill', label: 'Slow motion on the last kill', note: 'killing the last one standing near you drops the world to a crawl for a moment' },
+  { id: 'showDamage', label: 'Show what a building has left', note: 'what the frontage you are aiming at has taken, and how much more it takes to bring it down' },
 ];
 
 export const GORE = [
@@ -114,20 +115,14 @@ export const RIDES = [
 
 export class Cheats {
   constructor() {
-    this.godmode = false;
-    this.infiniteAmmo = false;
-    this.nukeRain = false;
-    this.noDrones = false;
-    this.cinematic = false;
-    this.slowBlast = false;
-    this.mechKillers = false;
-    this.wreckBuildings = true;
-    this.wreckGround = true;
-    this.gib = false;
-    this.ragdoll = false;
-    this.blood = false;
-    this.ultraGore = false;
-    this.maxGore = false;
+    // Every switch, at what it is before anybody touches the menu. Built out
+    // of the list rather than written out one by one, and that is not tidiness:
+    // `set` refuses an id it cannot find a boolean behind, so a switch that
+    // was in the list and not in the constructor could not be turned on at
+    // all. Its row in the menu did nothing, and it only came alive after
+    // pressing all off once, which is what reset does. The last kill spent a
+    // day like that.
+    for (const id of KEYS) this[id] = DEFAULTS[id];
     // The numeric settings, by id, starting at what the game ships with.
     this.values = {};
     for (const s of SETTINGS) this.values[s.id] = s.def;
