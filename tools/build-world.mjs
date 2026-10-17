@@ -151,6 +151,39 @@ const MATERIAL_BY_TAG = {
   plaster: MAT.FACADE, metal: MAT.METAL, wood: MAT.FACADE,
 };
 
+// What a roof is made of, where the tagging says. Anything not in here, and
+// anything untagged, is the tiled roof the city is mostly covered in.
+const ROOF_MATERIAL_BY_TAG = {
+  copper: MAT.COPPER, zinc: MAT.METAL, metal: MAT.METAL, metal_sheet: MAT.METAL,
+  steel: MAT.METAL, aluminium: MAT.METAL, tin: MAT.METAL,
+  glass: MAT.GLASS, concrete: MAT.CONCRETE, gravel: MAT.GRAVEL,
+};
+
+/**
+ * Which of the four roof tones this one is. The shader carries four, because
+ * four is what you can tell apart from a street: the dark tile most of the
+ * city has, the red tile of the older blocks, grey slate, and copper gone
+ * green. The material is believed first and the colour read only if there is
+ * no material, because a colour is somebody's guess at a photograph.
+ *
+ * @returns {number} 0 dark tile, 1 red tile, 2 slate, 3 copper
+ */
+function roofTone(tags) {
+  const mat = (tags['roof:material'] || '').toLowerCase();
+  if (mat === 'copper') return 3;
+  if (mat === 'slate' || mat === 'zinc' || mat === 'metal' || mat === 'eternit'
+    || mat === 'metal_sheet' || mat === 'tin') return 2;
+  if (mat.includes('tile') || mat === 'clay' || mat === 'brick') return 1;
+  const c = parseColour(tags['roof:colour'] || tags['roof:color']);
+  if (!c) return 0;
+  const [r, g, b] = c;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  if (r > 0.3 && r > g * 1.35 && r > b * 1.35) return 1;
+  if (g > 0.26 && g > r * 1.15 && g > b * 1.05) return 3;
+  if (max - min < 0.09 && max > 0.42) return 2;
+  return 0;
+}
+
 function surfaceId(tags) {
   const s = (tags.surface || '').toLowerCase();
   if (s === 'sett' || s === 'cobblestone' || s === 'paving_stones' || s === 'unhewn_cobblestone') return SURFACE.COBBLE;
@@ -276,7 +309,10 @@ function buildDistrict(district) {
     if (!outers.length) continue;
     if (t.building || t['building:part']) {
       for (const o of outers) {
-        buildings.push({ outer: o, holes: inners.filter((h) => ringInside(h, o)), tags: t });
+        buildings.push({
+          outer: o, holes: inners.filter((h) => ringInside(h, o)), tags: t,
+          part: !!t['building:part'] && !t.building,
+        });
       }
     } else if (t.natural === 'water' || t.waterway === 'riverbank') {
       for (const o of outers) waterPolys.push({ ring: o, holes: inners, tags: t });
@@ -293,7 +329,12 @@ function buildDistrict(district) {
     const closed = way.refs.length > 3 && way.refs[0] === way.refs[way.refs.length - 1];
 
     if (t.building || t['building:part']) {
-      if (closed && ring.length >= 4) buildings.push({ outer: ring.slice(0, -1), holes: [], tags: t });
+      if (closed && ring.length >= 4) {
+        buildings.push({
+          outer: ring.slice(0, -1), holes: [], tags: t,
+          part: !!t['building:part'] && !t.building,
+        });
+      }
       continue;
     }
     if (t.historic === 'memorial' && t.memorial === 'stelae_field' && closed) {
@@ -546,6 +587,12 @@ function buildDistrict(district) {
 
   since('rails');
   // --- buildings ----------------------------------------------------------
+  // Simple 3D Buildings: a building that is more than a box is mapped as an
+  // outline plus a set of building:part pieces, each with its own height, and
+  // the outline is a rough envelope that is not meant to be drawn once the
+  // pieces are there. Drawing both is what turned every tower in this city
+  // into the box around it, which is what you were looking at before.
+  const parentsWithParts = markBuildingParts(buildings);
   let buildingCount = 0;
   const landmarkIndex = [];
   const palette = new Palette(BERLIN_PALETTE, { frozen: true });
@@ -556,11 +603,21 @@ function buildDistrict(district) {
     if (area < tier.minArea) continue;
     const [cx, cz] = ringCentroid(ring);
     if (cx < world.minX - 60 || cx > world.maxX + 60 || cz < world.minZ - 60 || cz > world.maxZ + 60) continue;
+    // Its pieces are drawn instead, and they carry their own collision, so
+    // the envelope is left out of both. A piece that is missing leaves a gap
+    // you can walk into, which is rarer and kinder than a tower inside a box.
+    if (b.hasParts) continue;
     const base = yAt(cx, cz);
     const tags = b.tags;
     const height = buildingHeight(tags);
     const levels = buildingLevels(tags, height);
-    const minH = parseLength(tags.min_height);
+    // Where the volume starts, for a piece that hangs over a passage or a
+    // tower that begins at the tenth floor. Metres win over levels, which is
+    // the order the tagging scheme puts them in.
+    const minLevels = parseFloat(tags['building:min_level']);
+    const minMetres = parseLength(tags.min_height);
+    const minH = Number.isFinite(minMetres) ? minMetres
+      : (Number.isFinite(minLevels) && minLevels > 0 ? minLevels * LEVEL_HEIGHT : NaN);
     const seed = hashInt(Math.round(cx * 4), Math.round(cz * 4)) & 255;
 
     const lmKey = tags['spreefall:landmark'];
@@ -586,21 +643,54 @@ function buildDistrict(district) {
     // Out past the inner districts every roof is flat. A pitched roof is four
     // more vertices and a different normal per metre of frontage, and from the
     // next street over it reads as a flat roof anyway.
-    const roofShape = tier.roofs ? (tags['roof:shape'] || 'flat').toLowerCase() : 'flat';
-    const roofHeight = tier.roofs ? parseLength(tags['roof:height']) : 0;
+    const roofShape = tier.roofs
+      ? (tags['roof:shape'] || 'flat').toLowerCase().trim().replace(/[\s-]+/g, '_') : 'flat';
+    // How tall the roof is. Metres if they are given, otherwise the roof
+    // levels, otherwise the four and a half metres a Berlin pitch is. The
+    // height on the building is to the top of the roof, which is why the
+    // walls give this back rather than carrying the roof on top of their
+    // full height, and why nothing is allowed to be more than two fifths
+    // roof: a tagged roof:height taller than the building it is on is a
+    // mistake somebody made, not a spire.
+    const roofLevels = parseFloat(tags['roof:levels']);
+    const roofTagged = tier.roofs ? parseLength(tags['roof:height']) : 0;
+    let roofHeight = Number.isFinite(roofTagged) ? roofTagged
+      : (Number.isFinite(roofLevels) && roofLevels > 0 ? roofLevels * LEVEL_HEIGHT * 0.8
+        : (roofShape === 'flat' ? 0 : 4.5));
+    if (!tier.roofs || roofShape === 'flat') roofHeight = 0;
+    const roofAcross = (tags['roof:orientation'] || '').toLowerCase().trim() === 'across';
+    const roofDirTag = parseFloat(tags['roof:direction']);
+    const roofMatTag = ROOF_MATERIAL_BY_TAG[(tags['roof:material'] || '').toLowerCase()];
+    const from = base + (Number.isFinite(minH) ? minH : 0);
+    const solid = Math.max(2, height - (Number.isFinite(minH) ? minH : 0));
+    const roofH = Math.max(0, Math.min(roofHeight, solid * 0.4));
     extrudeBuilding(mesh, { outer: ring, holes: b.holes }, {
-      base: base + (Number.isFinite(minH) ? minH : 0),
-      height: Math.max(2, height - (Number.isFinite(minH) ? minH : 0)),
+      base: from,
+      height: Math.max(2, solid - roofH),
+      // The skirt is the bit of wall carried below the ground so that a
+      // building on a slope has no gap under it. A volume that starts ten
+      // metres up has no ground to meet, and a skirt there is a wall hanging
+      // in the air under an archway.
+      skirt: Number.isFinite(minH) && minH > 0.5 ? 0 : undefined,
       roofShape,
-      roofHeight: Number.isFinite(roofHeight) ? roofHeight : (roofShape === 'flat' ? 0 : 4.5),
-      wallMat, roofMat: MAT.ROOF,
+      roofHeight: roofH,
+      roofAcross,
+      roofDir: Number.isFinite(roofDirTag) ? roofDirTag : undefined,
+      wallMat, roofMat: roofMatTag !== undefined ? roofMatTag : MAT.ROOF,
+      // The roof carries the same palette entry as the walls in its low bits,
+      // which nothing reads, and its tone in the two above, which the roof
+      // shader does.
+      roofSeed: (packedSeed & 63) | (roofTone(tags) << 6),
       seed: packedSeed,
       levels,
       landmark: false,
       noWindows: wallMat === MAT.CONCRETE || !tier.windows,
     });
-    pushFootprintCollision(collision, ring, base - 1, base + height, SURFACE.STONE);
-    for (const h of b.holes) pushFootprintCollision(collision, h, base - 1, base + height, SURFACE.STONE);
+    // A volume that starts above the street is collided against from where it
+    // starts, so you can walk under the arch you can see under.
+    const collideFrom = Number.isFinite(minH) && minH > 0.5 ? from : base - 1;
+    pushFootprintCollision(collision, ring, collideFrom, base + height, SURFACE.STONE);
+    for (const h of b.holes) pushFootprintCollision(collision, h, collideFrom, base + height, SURFACE.STONE);
     buildingCount++;
   }
 
@@ -1326,6 +1416,53 @@ function bboxOf(ring) {
 function ringInside(inner, outer) {
   const p = inner[0];
   return pointInRing(p[0], p[1], outer);
+}
+
+/**
+ * Works out which outlines have building:part pieces inside them, so the
+ * outline can be left undrawn and the pieces drawn in its place. A piece
+ * belongs to the outline its middle falls in; nested outlines are rare enough
+ * that the first match is the right one.
+ *
+ * @param {Array<{outer:Array,tags:Object,part:boolean}>} list every building
+ *   and piece in the district, in the order they were read
+ * @returns {number} how many outlines were taken over by their pieces
+ */
+function markBuildingParts(list) {
+  const CELL = 120;
+  const grid = new Map();
+  const key = (i, j) => `${i},${j}`;
+  const whole = [];
+  for (const b of list) {
+    if (b.part || b.outer.length < 3) continue;
+    const bb = bboxOf(b.outer);
+    b._bb = bb;
+    whole.push(b);
+    for (let j = Math.floor(bb.minZ / CELL); j <= Math.floor(bb.maxZ / CELL); j++) {
+      for (let i = Math.floor(bb.minX / CELL); i <= Math.floor(bb.maxX / CELL); i++) {
+        const k = key(i, j);
+        let cell = grid.get(k);
+        if (!cell) { cell = []; grid.set(k, cell); }
+        cell.push(b);
+      }
+    }
+  }
+  let taken = 0;
+  for (const p of list) {
+    if (!p.part || p.outer.length < 3) continue;
+    const [px, pz] = ringCentroid(p.outer);
+    const cell = grid.get(key(Math.floor(px / CELL), Math.floor(pz / CELL)));
+    if (!cell) continue;
+    for (const b of cell) {
+      if (b === p) continue;
+      const bb = b._bb;
+      if (px < bb.minX || px > bb.maxX || pz < bb.minZ || pz > bb.maxZ) continue;
+      if (!pointInRing(px, pz, b.outer)) continue;
+      if (!b.hasParts) { b.hasParts = true; taken++; }
+      break;
+    }
+  }
+  return taken;
 }
 
 function pointInRing(x, z, ring) {

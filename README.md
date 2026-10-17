@@ -655,6 +655,15 @@ build log was read.
 
 This matters, so it is spelled out rather than glossed over.
 
+**The shape of a building is what OpenStreetMap says it is.** Height or
+levels, `building:part` pieces instead of the envelope around them,
+`min_height` for a volume that starts above the street, and the roof: its
+shape (flat, gabled, hipped, pyramidal, skillion, mansard, dome and the
+synonyms for each), its height or its levels, which way its ridge runs, which
+way a single slope falls, and its material and colour snapped to the four
+roof tones the shader carries. A tag nobody has set falls back to what most
+of Berlin has, which is a flat roof with a parapet on it.
+
 **Surveyed, from the map.** Every street centreline and its width and surface,
 every landmark footprint and its height, the course of the Spree and the
 Spreekanal, the outlines of the Tiergarten, the Lustgarten, Monbijoupark and the

@@ -1490,3 +1490,54 @@ is what prompted the change.
   nothing has been written where it would go. Ten of the hundred and seventy
   three fit on the opening view, which is the point: a map that writes every
   name it has is a map with no names on it.
+
+## 30. The city OpenStreetMap says it is
+
+- 2026-10-17: building parts. A building that is more than a box is mapped as
+  an outline plus a set of `building:part` pieces, each with its own height,
+  and the outline is an envelope that is not meant to be drawn once the
+  pieces are there. This drew both, so every tower in the city was the box
+  around it. Now a piece claims its outline, by its middle falling inside it,
+  and the outline is left out of the picture and out of the collision
+  together, so a piece that is missing leaves a gap you can walk into rather
+  than a tower inside a crate.
+
+- 2026-10-17: `min_height` and `building:min_level`, so a volume can start
+  above the street. The skirt that carries a wall below the ground is left
+  off when it does, because a volume that starts ten metres up has no ground
+  to meet and the skirt was a wall hanging in an archway, and the collision
+  for it starts where the volume does, so you can walk under what you can see
+  under.
+
+- 2026-10-17: six more roof shapes: pyramidal and cone, skillion, mansard and
+  gambrel, dome and onion, with half hipped going to the hip and saltbox to
+  the gable. The pyramid and the single slope are cut from the footprint
+  itself, so an L shaped shed keeps its shape; the mansard and the dome are
+  built over the oriented box like the gable and the hip, and a footprint too
+  far from a rectangle still falls back to flat, because a fake mansard on a
+  complicated outline looks worse than no mansard. `roof:orientation` decides
+  whether a ridge runs along the block or across it, which is the difference
+  between a row of houses and one shed, and `roof:direction` says which way a
+  single slope falls.
+
+- 2026-10-17: the height on a building is to the top of its roof, which this
+  had never honoured: the walls went to the full height and the roof sat on
+  top of them, so every pitched building in Berlin was four metres too tall.
+  The roof now comes out of the height, and nothing may be more than two
+  fifths roof, because a `roof:height` taller than the building under it is
+  somebody's typing mistake rather than a spire.
+
+- 2026-10-17: and roofs have colours. Four of them, carried in the two bits
+  above the palette index and chosen in the builder from `roof:material`
+  first and `roof:colour` second: the dark tile most of the city is under,
+  the red tile of the older blocks, grey slate, and copper gone green. Four
+  because four is what you can tell apart from a street. A material that has
+  a surface of its own in the shader, copper or zinc or glass, gets that
+  instead.
+
+- 2026-10-17: the offline city carries the same mix of tags, so the fallback
+  extract exercises the same code the live one does: mansards on a fifth of
+  the blocks, gables, hips, the odd single slope and pyramid, and roof
+  materials on half of them. The whole lot costs eleven thousand triangles
+  across eight districts, one and a half per cent, and two hundred kilobytes
+  of the download budget.

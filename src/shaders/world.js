@@ -572,6 +572,16 @@ Surface water() {
   return s;
 }
 
+// The four roof tones, chosen in the builder from roof:material and
+// roof:colour and carried in the two bits above the palette index. Four is
+// what you can tell apart from a street: the dark tile most of this city is
+// under, the red tile of the older blocks, grey slate, and copper gone green.
+const vec3 ROOF_TONE[4] = vec3[4](
+  vec3(0.128, 0.098, 0.092),
+  vec3(0.196, 0.086, 0.060),
+  vec3(0.104, 0.112, 0.118),
+  vec3(0.074, 0.152, 0.126));
+
 Surface roofTiles() {
   Surface s;
   s.metallic = 0.0;
@@ -580,7 +590,7 @@ Surface roofTiles() {
   float rows = fract(p.y);
   float line = smoothstep(0.0, 0.07, rows) * smoothstep(0.0, 0.07, 1.0 - rows);
   float tone = 0.75 + 0.35 * hash12(floor(p));
-  vec3 col = vec3(0.128, 0.098, 0.092) * tone;
+  vec3 col = ROOF_TONE[int((vSeed >> 6u) & 3u)] * tone;
   col = mix(col * 0.6, col, line);
   s.normal = vNormal;
   s.albedo = col;

@@ -126,16 +126,28 @@ export function extrudeBuilding(mesh, foot, o) {
     }
   }
 
+  // The roof. Everything OpenStreetMap writes down about one is honoured
+  // here: its shape, which way the ridge runs, which way a single slope
+  // falls, and what it is made of. A shape nobody has tagged, or one that
+  // cannot be built over this footprint, comes out flat with a parapet,
+  // which is what most of Berlin has anyway.
   const shape = o.roofShape || 'flat';
   const rh = o.roofHeight || 0;
-  if (shape === 'gabled' && rh > 0.2) {
-    gabledRoof(mesh, rings[0], wallTop, rh, roofMat, seed);
-  } else if (shape === 'hipped' && rh > 0.2) {
-    hippedRoof(mesh, rings[0], wallTop, rh, roofMat, seed);
-  } else if (shape === 'dome') {
-    flatRoof(mesh, rings, wallTop, roofMat, seed);
+  const roofSeed = o.roofSeed !== undefined ? (o.roofSeed & 255) : seed;
+  if (rh > 0.2 && (shape === 'gabled' || shape === 'saltbox')) {
+    gabledRoof(mesh, rings[0], wallTop, rh, roofMat, roofSeed, o.roofAcross);
+  } else if (rh > 0.2 && (shape === 'hipped' || shape === 'half_hipped')) {
+    hippedRoof(mesh, rings[0], wallTop, rh, roofMat, roofSeed, o.roofAcross);
+  } else if (rh > 0.2 && (shape === 'pyramidal' || shape === 'cone' || shape === 'tented')) {
+    pyramidRoof(mesh, rings[0], wallTop, rh, roofMat, roofSeed);
+  } else if (rh > 0.2 && (shape === 'skillion' || shape === 'lean_to' || shape === 'mono_pitch')) {
+    skillionRoof(mesh, rings[0], wallTop, rh, roofMat, roofSeed, o.roofDir);
+  } else if (rh > 0.2 && (shape === 'mansard' || shape === 'gambrel')) {
+    mansardRoof(mesh, rings[0], wallTop, rh, roofMat, roofSeed);
+  } else if (rh > 0.2 && (shape === 'dome' || shape === 'onion' || shape === 'round')) {
+    domeRoof(mesh, rings[0], wallTop, rh, roofMat, roofSeed);
   } else {
-    flatRoof(mesh, rings, wallTop, roofMat, seed);
+    flatRoof(mesh, rings, wallTop, roofMat, roofSeed);
     if (o.parapet !== false && o.height > 6) parapet(mesh, rings[0], wallTop, 0.7, wallMat, seed, hgt);
   }
 }
@@ -212,10 +224,13 @@ function rawNormal(a, b, c) {
 // A gabled roof over the footprint oriented bounding box. The ridge runs along
 // the long axis. Footprints that are not close to rectangular fall back to flat,
 // because a fake gable on a complex outline looks worse than no gable.
-function gabledRoof(mesh, ring, y, rh, mat, seed) {
+function gabledRoof(mesh, ring, y, rh, mat, seed, across = false) {
   const b = orientedBox(ring);
   if (ringArea(ring) < b.lu * b.lv * 0.78) { flatRoof(mesh, [ring], y, mat, seed); return; }
-  const long = b.lu >= b.lv;
+  // The ridge runs along the long axis unless the tagging says across it,
+  // which is roof:orientation and the one thing that decides whether a block
+  // reads as a row of houses or as one shed.
+  const long = across ? b.lu < b.lv : b.lu >= b.lv;
   const hu = b.lu / 2, hv = b.lv / 2;
   const P = (u, v, h) => [b.cx + u * b.ux + v * b.vx, y + h, b.cz + u * b.uz + v * b.vz];
   const flags = FACADE_FLAG.ROOF_SLOPE;
@@ -238,12 +253,12 @@ function gabledRoof(mesh, ring, y, rh, mat, seed) {
   }
 }
 
-function hippedRoof(mesh, ring, y, rh, mat, seed) {
+function hippedRoof(mesh, ring, y, rh, mat, seed, across = false) {
   const b = orientedBox(ring);
   if (ringArea(ring) < b.lu * b.lv * 0.78) { flatRoof(mesh, [ring], y, mat, seed); return; }
   const hu = b.lu / 2, hv = b.lv / 2;
   const inset = Math.min(hu, hv) * 0.62;
-  const long = b.lu >= b.lv;
+  const long = across ? b.lu < b.lv : b.lu >= b.lv;
   const P = (u, v, h) => [b.cx + u * b.ux + v * b.vx, y + h, b.cz + u * b.uz + v * b.vz];
   const flags = FACADE_FLAG.ROOF_SLOPE;
   const ref = [b.cx, y - 1, b.cz];
@@ -256,6 +271,144 @@ function hippedRoof(mesh, ring, y, rh, mat, seed) {
   emitFace(mesh, [c2, c3, r0, r1], uvQ, mat, seed, flags, ref);
   emitFace(mesh, [c1, c2, r1], uvT, mat, seed, flags, ref);
   emitFace(mesh, [c3, c0, r0], uvT, mat, seed, flags, ref);
+}
+
+/**
+ * A pyramid over the footprint: one triangle from every edge up to a point
+ * over the middle. Any outline at all can carry one, which is why the tower
+ * tops and the pavilions use it.
+ */
+function pyramidRoof(mesh, ring, y, rh, mat, seed) {
+  const [cx, cz] = ringCentroid(ring);
+  const apex = [cx, y + rh, cz];
+  const ref = [cx, y - 1, cz];
+  const flags = FACADE_FLAG.ROOF_SLOPE;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 0.05) continue;
+    const slope = Math.hypot(len / 2, rh);
+    emitFace(mesh, [[a[0], y, a[1]], [b[0], y, b[1]], apex],
+      [[0, 0], [len, 0], [len / 2, slope]], mat, seed, flags, ref);
+  }
+}
+
+/**
+ * One slope, falling the way roof:direction says it falls. The plane is cut
+ * out of the footprint itself rather than out of its bounding box, so an L
+ * shaped shed keeps its shape, and the triangle of wall left under the high
+ * side is closed off.
+ *
+ * @param {number} dirDeg compass degrees the roof faces, or undefined for
+ *   the way the footprint is shortest, which is how a lean to is usually hung
+ */
+function skillionRoof(mesh, ring, y, rh, mat, seed, dirDeg) {
+  let dx, dz;
+  if (Number.isFinite(dirDeg)) {
+    const r = (dirDeg * Math.PI) / 180;
+    dx = Math.sin(r); dz = -Math.cos(r);
+  } else {
+    const b = orientedBox(ring);
+    // Down the short axis, which is the way water is meant to come off it.
+    if (b.lu >= b.lv) { dx = b.vx; dz = b.vz; } else { dx = b.ux; dz = b.uz; }
+  }
+  let lo = Infinity, hi = -Infinity;
+  for (const p of ring) {
+    const t = p[0] * dx + p[1] * dz;
+    if (t < lo) lo = t;
+    if (t > hi) hi = t;
+  }
+  const span = hi - lo || 1;
+  const hAt = (p) => y + rh * (hi - (p[0] * dx + p[1] * dz)) / span;
+  // The plane tilts by rh over the span, so its normal leans the same way.
+  const g = rh / span;
+  const nl = Math.hypot(g * dx, 1, g * dz) || 1;
+  const nx = (g * dx) / nl, ny = 1 / nl, nz = (g * dz) / nl;
+  const { verts, indices } = triangulate(ring, []);
+  const map = verts.map((p) => mesh.vertex(p[0], hAt(p), p[1], nx, ny, nz,
+    p[0], p[1], mat, seed, 0, FACADE_FLAG.ROOF_SLOPE, 0, 255));
+  for (let i = 0; i < indices.length; i += 3) {
+    mesh.tri(map[indices[i]], map[indices[i + 2]], map[indices[i + 1]]);
+  }
+  // The wall between the top of the building and the sloped plane, so the
+  // high end is not open to the sky.
+  let run = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    const ex = b[0] - a[0], ez = b[1] - a[1];
+    const len = Math.hypot(ex, ez);
+    if (len < 0.05) continue;
+    const ha = hAt(a), hb = hAt(b);
+    if (ha - y < 0.05 && hb - y < 0.05) { run += len; continue; }
+    const enx = ez / len, enz = -ex / len;
+    const v0 = mesh.vertex(a[0], y, a[1], enx, 0, enz, run, 0, mat, seed, 0, FACADE_FLAG.NO_WINDOWS, 0, 255);
+    const v1 = mesh.vertex(b[0], y, b[1], enx, 0, enz, run + len, 0, mat, seed, 0, FACADE_FLAG.NO_WINDOWS, 0, 255);
+    const v2 = mesh.vertex(b[0], hb, b[1], enx, 0, enz, run + len, hb - y, mat, seed, 0, FACADE_FLAG.NO_WINDOWS, 0, 255);
+    const v3 = mesh.vertex(a[0], ha, a[1], enx, 0, enz, run, ha - y, mat, seed, 0, FACADE_FLAG.NO_WINDOWS, 0, 255);
+    mesh.quad(v3, v2, v1, v0);
+    run += len;
+  }
+}
+
+/**
+ * A mansard: steep sides rising to a flat deck, which is the roof on half the
+ * Gruenderzeit blocks in this city and the reason their top floor has dormer
+ * windows. Built over the oriented box, like the gable and the hip, and a
+ * footprint too far from a rectangle falls back to flat.
+ */
+function mansardRoof(mesh, ring, y, rh, mat, seed) {
+  const b = orientedBox(ring);
+  if (ringArea(ring) < b.lu * b.lv * 0.78) { flatRoof(mesh, [ring], y, mat, seed); return; }
+  const hu = b.lu / 2, hv = b.lv / 2;
+  const inset = Math.min(hu, hv) * 0.42;
+  const P = (u, v, h) => [b.cx + u * b.ux + v * b.vx, y + h, b.cz + u * b.uz + v * b.vz];
+  const ref = [b.cx, y - 1, b.cz];
+  const flags = FACADE_FLAG.ROOF_SLOPE;
+  const c = [P(-hu, -hv, 0), P(hu, -hv, 0), P(hu, hv, 0), P(-hu, hv, 0)];
+  const d = [P(-hu + inset, -hv + inset, rh), P(hu - inset, -hv + inset, rh),
+    P(hu - inset, hv - inset, rh), P(-hu + inset, hv - inset, rh)];
+  const slope = Math.hypot(inset, rh);
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const len = Math.hypot(c[j][0] - c[i][0], c[j][2] - c[i][2]);
+    emitFace(mesh, [c[i], c[j], d[j], d[i]],
+      [[0, 0], [len, 0], [len, slope], [0, slope]], mat, seed, flags, ref);
+  }
+  emitFace(mesh, [d[0], d[1], d[2], d[3]],
+    [[0, 0], [b.lu, 0], [b.lu, b.lv], [0, b.lv]], mat, seed, FACADE_FLAG.NO_WINDOWS, ref);
+}
+
+/**
+ * A dome over the footprint's box, in three courses of twelve. Rare enough in
+ * the data to be worth the triangles: the ones that carry this tag are the
+ * cathedral, the synagogue and the Reichstag's neighbours, and a flat lid on
+ * any of them is the one thing everybody notices.
+ */
+function domeRoof(mesh, ring, y, rh, mat, seed) {
+  const b = orientedBox(ring);
+  const ru = b.lu / 2, rv = b.lv / 2;
+  const ref = [b.cx, y - 1, b.cz];
+  const flags = FACADE_FLAG.ROOF_SLOPE;
+  const STACKS = 3, SLICES = 12;
+  const at = (i, k) => {
+    const ang = (i / SLICES) * Math.PI * 2;
+    const lat = (k / STACKS) * (Math.PI / 2);
+    const r = Math.cos(lat);
+    const u = Math.cos(ang) * ru * r, v = Math.sin(ang) * rv * r;
+    return [b.cx + u * b.ux + v * b.vx, y + Math.sin(lat) * rh, b.cz + u * b.uz + v * b.vz];
+  };
+  for (let k = 0; k < STACKS; k++) {
+    for (let i = 0; i < SLICES; i++) {
+      const p0 = at(i, k), p1 = at(i + 1, k), p2 = at(i + 1, k + 1), p3 = at(i, k + 1);
+      const w = Math.hypot(p1[0] - p0[0], p1[2] - p0[2]);
+      const hgt = Math.hypot(p3[0] - p0[0], p3[1] - p0[1], p3[2] - p0[2]);
+      if (k === STACKS - 1) {
+        emitFace(mesh, [p0, p1, p3], [[0, 0], [w, 0], [w / 2, hgt]], mat, seed, flags, ref);
+      } else {
+        emitFace(mesh, [p0, p1, p2, p3], [[0, 0], [w, 0], [w, hgt], [0, hgt]], mat, seed, flags, ref);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
