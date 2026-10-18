@@ -67,6 +67,7 @@ export class Minimap {
     // the first frame after the map is opened and a zoom worked out against
     // that one is wrong by whatever the two sizes differ by.
     this.openSpan = 0;
+    this.across = 0;              // metres across the window, set by draw
     this.centre = null;
     // How many street names the last draw managed to fit on, which is a
     // number the tests read.
@@ -134,6 +135,10 @@ export class Minimap {
       this.zoom = Math.min(this.maxZoom, Math.max(1, (W / this.openSpan) / fit));
     }
     const scale = this.big ? fit * this.zoom : 0.16 * this.dpr;
+    // What the window is actually showing, in metres, taken from the same
+    // scale the drawing uses rather than worked out a second time: the two
+    // disagreed by thirty kilometres when they were computed separately.
+    this.across = W / scale;
     if (this.big && this.centre) this.clampCentre(W, H, scale);
     const originX = this.big ? (this.centre ? this.centre.x : (wm.minX + wm.maxX) / 2) : px;
     const originZ = this.big ? (this.centre ? this.centre.z : (wm.minZ + wm.maxZ) / 2) : pz;
@@ -604,6 +609,12 @@ export class Minimap {
   }
 
   /** Back to the whole city. */
+  /**
+   * How wide the window is, in metres. What a scale bar would say, and the
+   * only number on a map that means anything to somebody standing in it.
+   */
+  spanAcross() { return this.across || 0; }
+
   resetView() {
     this.zoom = 1;
     this.openSpan = 0;

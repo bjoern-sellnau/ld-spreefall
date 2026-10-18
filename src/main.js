@@ -51,6 +51,8 @@ const el = {
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
+  mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
+  mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -3945,6 +3947,7 @@ async function main() {
     if (state.targeting) return;              // the target map has its own
     if (minimap.big) {
       minimap.zoomAt(ev.clientX, ev.clientY, ev.deltaY < 0 ? 1.18 : 1 / 1.18);
+      mapTools();
       ev.preventDefault();
       return;
     }
@@ -3965,7 +3968,46 @@ async function main() {
     ev.preventDefault();
   }, { passive: false });
 
-  el.btnMap.addEventListener('click', () => minimap.toggle({ x: player.x, z: player.z }));
+  // --- the big map's controls ----------------------------------------------
+  // The map you open with M could always be zoomed with the wheel, and that
+  // was all it could do: it opens on a few hundred metres around you, the
+  // whole of Berlin is zoom one, and there was no way back to it short of
+  // twenty eight turns of the wheel. So it has the same three buttons the
+  // targeting map has had since it was built, plus a readout of how far out
+  // you are and how wide the window is in metres.
+  function mapTools() {
+    el.mapTools.classList.toggle('hidden', !minimap.big);
+    if (!minimap.big) return;
+    // A locked pointer belongs to the game, and while it is locked the canvas
+    // takes every click: the buttons were there and could not be pressed.
+    if (!photo.active) input.exitLock();
+    const across = minimap.spanAcross();
+    // How far out, and how wide the window is in metres. The second number is
+    // the one that means anything standing in the city; the first is the one
+    // that tells you the wheel did something.
+    const wide = across >= 2000
+      ? `${(across / 1000).toFixed(1)} km` : `${Math.round(across)} m`;
+    el.mapZoom.textContent = `${minimap.zoom.toFixed(1)}x  ${wide} across`;
+  }
+  function mapZoomStep(factor) {
+    const r = el.minimap.getBoundingClientRect();
+    minimap.zoomAt(r.left + r.width / 2, r.top + r.height / 2, factor);
+    mapTools();
+  }
+  el.btnMap.addEventListener('click', () => {
+    minimap.toggle({ x: player.x, z: player.z });
+    mapTools();
+    if (!minimap.big && !isTouch && !photo.active) input.requestLock();
+  });
+  el.mapIn.addEventListener('click', () => mapZoomStep(1.5));
+  el.mapOut.addEventListener('click', () => mapZoomStep(1 / 1.5));
+  el.mapFit.addEventListener('click', () => { minimap.resetView(); mapTools(); });
+  el.mapHere.addEventListener('click', () => {
+    minimap.centre = { x: player.x, z: player.z };
+    minimap.openSpan = 0;
+    minimap.zoom = Math.max(minimap.zoom, 60);
+    mapTools();
+  });
   el.btnTravel.addEventListener('click', () => openTravel());
   el.btnHelp.addEventListener('click', () => el.help.classList.toggle('hidden'));
   el.helpClose.addEventListener('click', () => el.help.classList.add('hidden'));
@@ -4070,7 +4112,11 @@ async function main() {
     }
     switch (code) {
       case 'KeyP': togglePhoto(); break;
-      case 'KeyM': minimap.toggle({ x: player.x, z: player.z }); break;
+      case 'KeyM':
+        minimap.toggle({ x: player.x, z: player.z });
+        mapTools();
+        if (!minimap.big && !isTouch && !photo.active) input.requestLock();
+        break;
       case 'KeyH': el.help.classList.toggle('hidden'); break;
       case 'KeyN': {
         const on = audio.toggle();
@@ -4829,6 +4875,7 @@ async function main() {
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live,
         vehicles.active.filter((v) => v.alive && !v.occupied && v.health > 0));
+      if (minimap.big) mapTools();
       el.found.textContent = String(landmarks.foundInGoal);
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
       const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];

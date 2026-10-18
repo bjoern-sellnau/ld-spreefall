@@ -2474,3 +2474,37 @@ caps residency at 520.
   curated buildings put the Kronprinzenpalais. A building on the carriageway
   is a separate bug from the bridges and is written down rather than fixed in
   the same breath.
+
+## 56. The map that shows the whole city, and the way back
+
+- 2026-10-18: asked for a mode that shows the whole map, like the one free
+  travel opens, with the wheel to zoom. The wheel has zoomed this map since 12b
+  and the whole of Berlin has always been zoom one. What was missing was any
+  way to get there: the map opens on a few hundred metres around you, which at
+  1.18 a click is twenty eight turns of the wheel from the city.
+
+- 2026-10-18: so the big map has the controls the targeting map has had since
+  it was built, plus two of its own. In and out, **all of it**, which is the
+  whole 45.8 by 37.5 km box, and **me**, which comes back onto the street you
+  are standing in. The readout says how far out you are and how wide the
+  window is: 1.0x and 101.6 km across at full fit, and metres when you are in
+  among the streets.
+
+- 2026-10-18: the window is wider than the city at full fit because the canvas
+  is letterboxed and the fit is the smaller of the two ratios, so the whole
+  box is on the screen in both directions. The number is the window's, not
+  Berlin's, and it says `across` for that reason.
+
+- 2026-10-18: and the thing that made the buttons useless before they were
+  tested: a locked pointer belongs to the game and the canvas takes every
+  click, so the controls were drawn and could not be pressed. Opening the map
+  lets the pointer go, closing it takes it back.
+
+- 2026-10-18: not done, and not for a technical reason. Laying a map service
+  over it to compare was asked for in the same breath, and this project's
+  rules say no runtime dependencies and nothing from a CDN: a tile from
+  anybody's server at play time breaks that. The comparison that is available
+  offline is the one the map already draws, which is our own geometry out of
+  the OSM extract. Most of the grid is empty here because 73 of the 81
+  districts are not built in this checkout and Overpass cannot be reached from
+  this machine, not because the map is wrong.
