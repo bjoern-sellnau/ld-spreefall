@@ -489,6 +489,77 @@ function buildDistrict(district) {
   }
 
   since('parks');
+  // --- where a street crosses water ---------------------------------------
+  // Twelve of them do in Mitte, and until now every one of them was a wall.
+  // The quay wall that stops you walking into the Spree runs along the bank
+  // whether or not there is a street on top of it, so Unter den Linden ended
+  // twenty nine metres short of the Spreekanal and the Museum Island was not
+  // reachable on foot at all.
+  //
+  // Each crossing is worked out here, before the bank is built, so the bank
+  // can leave a gap for it and the roads section can put a deck in the gap.
+  const bridges = [];
+  for (const r of roads) {
+    const cls = r.tags.highway;
+    if (cls === 'steps') continue;
+    const explicit = parseLength(r.tags.width);
+    const width = Number.isFinite(explicit) && explicit > 1 ? explicit : (ROAD_WIDTH[cls] || 6);
+    for (const w of waterPolys) {
+      // Sampled along the line rather than solved: the bank is a polygon with
+      // a hundred points on it and the road has its own bends, and a metre of
+      // step is finer than either.
+      let run = null;
+      let wasDry = false;
+      const line = r.line;
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], b = line[i];
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const steps = Math.max(1, Math.ceil(len));
+        for (let k = 0; k <= steps; k++) {
+          const t = k / steps;
+          const px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t;
+          const wet = pointInRing(px, pz, w.ring);
+          if (wet && !run) { if (wasDry) run = { pts: [[px, pz]], width }; }
+          else if (wet) run.pts.push([px, pz]);
+          else {
+            wasDry = true;
+            if (run) {
+              // It has to be a crossing rather than a road that happens to
+              // run inside the water polygon: dry land on both sides of it,
+              // and short enough to be a bridge. A quay road along the Spree
+              // is wet for two hundred metres, and the first version put a
+              // parapet down the middle of the street it ran into.
+              const span = polylineLength(run.pts);
+              if (span > 4 && span < 70) bridges.push(run);
+              run = null;
+            }
+          }
+        }
+      }
+    }
+  }
+  // A point is on a bridge if it is inside the deck, which is the crossing
+  // widened by the road's own width and a little more for the abutment.
+  const onBridge = (x, z) => {
+    for (const b of bridges) {
+      const reach = b.width * 0.5 + 3.5;
+      for (let i = 1; i < b.pts.length; i++) {
+        const a = b.pts[i - 1], c = b.pts[i];
+        const ex = c[0] - a[0], ez = c[1] - a[1];
+        const l2 = ex * ex + ez * ez || 1;
+        let t = ((x - a[0]) * ex + (z - a[1]) * ez) / l2;
+        t = Math.max(0, Math.min(1, t));
+        const dx = a[0] + ex * t - x, dz = a[1] + ez * t - z;
+        if (dx * dx + dz * dz <= reach * reach) return true;
+      }
+    }
+    return false;
+  };
+  if (bridges.length) {
+    console.log(`bridges: ${bridges.length} crossings, `
+      + `${bridges.map((b) => Math.round(polylineLength(b.pts))).join(' m, ')} m`);
+  }
+
   // --- water --------------------------------------------------------------
   const waterLevel = terrain.waterLevel;
   for (const w of waterPolys) {
@@ -496,10 +567,34 @@ function buildDistrict(district) {
     // The bank: a skirt from the quay edge down to the water, and a wall for
     // collision so the player cannot walk into the Spree.
     const ring = w.ring;
+    // The bank is drawn one ring edge at a time, and those edges are long:
+    // the Spreekanal is eight surveyed points, so one of them can be a
+    // hundred and fifty metres of quay. An edge that passes a bridge is cut
+    // into short pieces first, so that the gap for the bridge is the width of
+    // the bridge rather than the whole edge.
+    const edges = [];
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
       const a = ring[j], b = ring[i];
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (len < 0.05) continue;
+      let near = false;
+      for (let k = 0; k <= 1 && !near; k += 0.02) {
+        if (onBridge(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)) near = true;
+      }
+      const pieces = near ? Math.max(1, Math.ceil(len / 3)) : 1;
+      for (let p = 0; p < pieces; p++) {
+        const t0 = p / pieces, t1 = (p + 1) / pieces;
+        edges.push([
+          [a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0],
+          [a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1],
+        ]);
+      }
+    }
+    for (const [a, b] of edges) {
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < 0.05) continue;
+      // The bank stops at the bridge and starts again on the far side of it.
+      if (onBridge((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)) continue;
       const ya = yAt(a[0], a[1]), yb = yAt(b[0], b[1]);
       const nx = (b[1] - a[1]) / len, nz = -(b[0] - a[0]) / len;
       const v0 = mesh.vertex(a[0], ya + 0.25, a[1], nx, 0.2, nz, 0, 0, MAT.CONCRETE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 200);
@@ -556,6 +651,70 @@ function buildDistrict(district) {
   for (const a of areas) {
     groundPolygon(mesh, a.ring, [], roadMaterial(a.tags), yAt, { lift: 0.05, seed: 3 });
   }
+
+  // --- the decks ------------------------------------------------------------
+  // The roadway itself is already drawn: the ribbon runs across the water at
+  // street level, because that is where the terrain says the ground is. What
+  // was missing is everything that makes it a bridge rather than a stripe of
+  // tarmac floating over a river: an edge beam you can see from the bank, a
+  // parapet you cannot walk off, and the collision to go with it.
+  let decks = 0;
+  for (const b of bridges) {
+    const line = simplify(b.pts, 0.8);
+    if (line.length < 2) continue;
+    // Out onto the bank at both ends, so the deck meets the street rather
+    // than stopping at the water's edge.
+    const ext = line.map((p) => [p[0], p[1]]);
+    const grow = (from, to, by) => {
+      const dx = to[0] - from[0], dz = to[1] - from[1];
+      const l = Math.hypot(dx, dz) || 1;
+      return [to[0] + (dx / l) * by, to[1] + (dz / l) * by];
+    };
+    ext[0] = grow(ext[1], ext[0], 4);
+    ext[ext.length - 1] = grow(ext[ext.length - 2], ext[ext.length - 1], 4);
+    const half = b.width * 0.5;
+    for (const side of [-1, 1]) {
+      const edge = offsetLine(ext, (half + 0.25) * side);
+      for (let i = 1; i < edge.length; i++) {
+        const a = edge[i - 1], c = edge[i];
+        const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+        if (len < 0.1) continue;
+        const nx = (c[1] - a[1]) / len * side, nz = -(c[0] - a[0]) / len * side;
+        const ya = yAt(a[0], a[1]), yc = yAt(c[0], c[1]);
+        // One face from under the deck to the top of the parapet: the beam
+        // and the rail in one strip, which is what you see from the bank.
+        const v0 = mesh.vertex(a[0], ya - 0.95, a[1], nx, 0, nz, 0, 0,
+          MAT.CONCRETE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 110);
+        const v1 = mesh.vertex(c[0], yc - 0.95, c[1], nx, 0, nz, len, 0,
+          MAT.CONCRETE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 110);
+        const v2 = mesh.vertex(c[0], yc + 0.95, c[1], nx, 0, nz, len, 1.9,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        const v3 = mesh.vertex(a[0], ya + 0.95, a[1], nx, 0, nz, 0, 1.9,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        mesh.quad(v3, v2, v1, v0);
+        // And the inside of the parapet, which is what you see from the road.
+        const w0 = mesh.vertex(a[0], ya, a[1], -nx, 0, -nz, 0, 0,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        const w1 = mesh.vertex(c[0], yc, c[1], -nx, 0, -nz, len, 0,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        const w2 = mesh.vertex(c[0], yc + 0.95, c[1], -nx, 0, -nz, len, 0.95,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        const w3 = mesh.vertex(a[0], ya + 0.95, a[1], -nx, 0, -nz, 0, 0.95,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        mesh.quad(w0, w1, w2, w3);
+        collision.push({ x1: a[0], z1: a[1], x2: c[0], z2: c[1],
+          base: Math.min(ya, yc) - 1, top: Math.max(ya, yc) + 0.95, surface: SURFACE.STONE });
+      }
+    }
+    // The soffit: a flat underside so the river does not show daylight
+    // through the roadway when you look along it.
+    const under = [];
+    for (const p of ext) under.push(p);
+    groundPolygon(mesh, ringOf(ext, half + 0.25), [], MAT.CONCRETE,
+      (x, z) => yAt(x, z) - 0.95, { lift: 0, seed: 9 });
+    decks++;
+  }
+  if (decks) console.log(`bridges: ${decks} decks with parapets`);
 
   // --- what stands on the street ------------------------------------------
   // Lamps, parked cars, bins and benches, laid along the kerb of every street
@@ -1601,6 +1760,13 @@ function ringInside(inner, outer) {
  *   One that will not may not claim an outline, or the building disappears.
  * @returns {number} how many outlines were taken over by their pieces
  */
+/** The outline of a ribbon: one side out, the other back. */
+function ringOf(line, half) {
+  const left = offsetLine(line, half);
+  const right = offsetLine(line, -half);
+  return [...left, ...right.reverse()];
+}
+
 export function markBuildingParts(list, buildable = () => true) {
   const CELL = 120;
   const grid = new Map();

@@ -2431,3 +2431,46 @@ caps residency at 520.
   suite, which runs in streets it has already wrecked, the same thing is
   measured on the wall itself: a wall 0.4 m from the burst before, and nothing
   within 1.89 m of it after.
+
+## 55. Bridges, because the river was a wall
+
+- 2026-10-18: asked whether bridges work. They did not, and the way they did
+  not is worse than a missing bridge. The quay wall that stops you walking
+  into the Spree is drawn along the whole bank whether or not there is a
+  street on top of it, so every street that crosses the water ended at the
+  water. Measured on Unter den Linden going east: a ray at knee height is
+  stopped **29 m** short of the Spreekanal, and walking it with the real
+  controller gets you the same 29 m. Twelve surveyed streets cross the Spree
+  or the Spreekanal in Mitte, which is twelve dead ends, and the Museum Island
+  could not be reached on foot at all.
+
+- 2026-10-18: the roadway itself was never the problem. The ribbon already
+  runs across the water at street level, because the terrain says the ground
+  is there. What was missing was the gap in the bank and everything that makes
+  the crossing read as a bridge.
+
+- 2026-10-18: a crossing is now found by walking each road a metre at a time
+  against each water polygon and keeping the wet runs that have dry land on
+  both sides and are under seventy metres long. Without the dry ends a quay
+  road that runs inside the river polygon for two hundred metres counts as a
+  bridge, and the first version put a parapet down the middle of the street it
+  ran into: 19 crossings became 11 once both tests were in.
+
+- 2026-10-18: the bank is cut into three metre pieces where it passes a
+  crossing, and the pieces on the bridge are left out. Dropping whole ring
+  edges instead was the first attempt and it is useless here: the Spreekanal
+  is eight surveyed points, so one edge of its bank is a hundred and fifty
+  metres of quay, and taking one out opens the river for the length of a
+  street. The deck gets an edge beam and a parapet either side, with the
+  collision to match, and a soffit so the river does not show daylight through
+  the roadway.
+
+- 2026-10-18: measured again on the same line. Nothing stops the ray now, and
+  the walk crosses the canal and carries on into the far side. Mitte went from
+  263,268 to 266,046 triangles for the eleven of them.
+
+- 2026-10-18: and a thing found on the way, not fixed here: something 26 m
+  tall stands across Unter den Linden at about x 1270, which is where the
+  curated buildings put the Kronprinzenpalais. A building on the carriageway
+  is a separate bug from the bridges and is written down rather than fixed in
+  the same breath.
