@@ -849,24 +849,85 @@ function buildDistrict(district) {
   for (const r of rails) {
     const elevated = r.tags.bridge === 'yes' || r.tags.railway === 'rail';
     if (elevated) {
-      // The Stadtbahn runs on a brick viaduct 6 m above the street.
+      // The Stadtbahn runs on a brick viaduct 6 m above the street, and a
+      // Berlin viaduct is a row of arches rather than a wall. It was a wall
+      // here: two faces from the pavement to the deck, with collision to
+      // match, which is a 6.6 m barrier across every street the railway
+      // crosses. Friedrichstrasse was stopped dead at it.
+      //
+      // So the face is built bay by bay. A pier takes the full height, the
+      // arch between two piers is open from the pavement to its crown, and
+      // the spandrel above the crown carries on to the deck. The collision is
+      // the same three pieces: pier, nothing, spandrel, which is exactly what
+      // a segment with its own base and top can say.
       const line = r.line;
       const yv = (x, z) => yAt(x, z) + 6.2;
       ribbon(mesh, line, 6.0, MAT.GRAVEL, yv, { lift: 0 });
+      const BAY = 9.0;          // middle to middle of two piers
+      const PIER = 3.0;         // how much of that is pier
+      const SPRING = 3.0;       // where the arch starts to curve
+      const RISE = 1.9;         // and how far it rises to its crown
+      const DECK = 6.6;
+      const brick = (x, y, z, nx, nz, u, v) => mesh.vertex(x, y, z, nx, 0, nz, u, v,
+        MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, v > 5 ? 255 : 190);
       for (const side of [-1, 1]) {
         const off = offsetLine(line, 6.0 * side);
-        for (let i = 1; i < off.length; i++) {
-          const a = off[i - 1], b = off[i];
-          const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-          if (len < 0.1) continue;
-          const nx = (b[1] - a[1]) / len * side, nz = -(b[0] - a[0]) / len * side;
-          const ya = yAt(a[0], a[1]), yb = yAt(b[0], b[1]);
-          const v0 = mesh.vertex(a[0], ya, a[1], nx, 0, nz, 0, 0, MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, 190);
-          const v1 = mesh.vertex(b[0], yb, b[1], nx, 0, nz, len, 0, MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, 190);
-          const v2 = mesh.vertex(b[0], yb + 6.6, b[1], nx, 0, nz, len, 6.6, MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, 255);
-          const v3 = mesh.vertex(a[0], ya + 6.6, a[1], nx, 0, nz, 0, 6.6, MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, 255);
-          mesh.quad(v3, v2, v1, v0);
-          collision.push({ x1: a[0], z1: a[1], x2: b[0], z2: b[1], base: -2, top: 6.6, surface: SURFACE.STONE });
+        const total = polylineLength(off);
+        const bays = Math.max(1, Math.round(total / BAY));
+        const step = total / bays;
+        const at = (d) => pointAt(off, Math.max(0, Math.min(total, d)));
+        for (let i = 0; i < bays; i++) {
+          const d0 = i * step;
+          const marks = [d0, d0 + PIER * 0.5, d0 + step - PIER * 0.5, d0 + step];
+          const pts = marks.map((d) => at(d)).filter(Boolean);
+          if (pts.length < 4) continue;
+          const [p0, p1, p2, p3] = pts;
+          const faceDir = (a, b) => {
+            const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+            return [(b[1] - a[1]) / len * side, -(b[0] - a[0]) / len * side, len];
+          };
+          // The pier, floor to deck.
+          {
+            const [nx, nz, len] = faceDir(p0, p1);
+            const ya = yAt(p0[0], p0[1]), yb = yAt(p1[0], p1[1]);
+            mesh.quad(
+              brick(p0[0], ya + DECK, p0[1], nx, nz, 0, DECK),
+              brick(p1[0], yb + DECK, p1[1], nx, nz, len, DECK),
+              brick(p1[0], yb, p1[1], nx, nz, len, 0),
+              brick(p0[0], ya, p0[1], nx, nz, 0, 0),
+            );
+            collision.push({ x1: p0[0], z1: p0[1], x2: p1[0], z2: p1[1],
+              base: -2, top: DECK, surface: SURFACE.STONE });
+          }
+          // The wall over the arch, drawn in columns from the curve up to the
+          // deck, so that everything above the opening is brick and the
+          // opening itself is the shape of an arch. The first attempt drew a
+          // straight band and hung the curve under it, which from the street
+          // read as a row of teeth.
+          {
+            const steps = 8;
+            for (let k = 0; k < steps; k++) {
+              const t0 = k / steps, t1 = (k + 1) / steps;
+              const arch = (t) => SPRING + RISE * Math.sin(Math.PI * t);
+              const q0 = at(d0 + PIER * 0.5 + (step - PIER) * t0);
+              const q1 = at(d0 + PIER * 0.5 + (step - PIER) * t1);
+              if (!q0 || !q1) continue;
+              const [ax, az, l2] = faceDir(q0, q1);
+              const y0 = yAt(q0[0], q0[1]), y1 = yAt(q1[0], q1[1]);
+              mesh.quad(
+                brick(q0[0], y0 + DECK, q0[1], ax, az, 0, DECK),
+                brick(q1[0], y1 + DECK, q1[1], ax, az, l2, DECK),
+                brick(q1[0], y1 + arch(t1), q1[1], ax, az, l2, arch(t1)),
+                brick(q0[0], y0 + arch(t0), q0[1], ax, az, 0, arch(t0)),
+              );
+            }
+            // One segment for the whole opening, from the springing up. A
+            // round arch is lower at its sides than in the middle and this
+            // takes the lower of the two, which is the safe way round: what
+            // you can walk under you can shoot under.
+            collision.push({ x1: p1[0], z1: p1[1], x2: p2[0], z2: p2[1],
+              base: yAt(p1[0], p1[1]) + SPRING, top: DECK, surface: SURFACE.STONE });
+          }
         }
       }
     } else {
@@ -1151,6 +1212,13 @@ function buildDistrict(district) {
     landmarks: buildLandmarkCards(attractions, landmarkIndex),
     stations: stations.map((s) => ({ name: s.tags.name || '', x: round2(s.p[0]), z: round2(s.p[1]), kind: s.tags.railway })),
     roadLines,
+    // Where the railways run, and which of them are up on a viaduct. A train
+    // needs a line to run along and the game has no other way to know one.
+    railLines: rails.map((r) => ({
+      kind: r.tags.railway,
+      up: r.tags.bridge === 'yes' || r.tags.railway === 'rail',
+      pts: simplify(r.line, 2).flatMap((p) => [round2(p[0]), round2(p[1])]),
+    })).filter((r) => r.pts.length >= 4),
     streets: streetNames,
     cars: carList,
     waterOutlines: waterPolys.map((w) => flatRing(simplify(w.ring, 2.5))),
@@ -1760,6 +1828,23 @@ function ringInside(inner, outer) {
  *   One that will not may not claim an outline, or the building disappears.
  * @returns {number} how many outlines were taken over by their pieces
  */
+/** A point a given distance along a polyline, or null past the end. */
+function pointAt(pts, dist) {
+  let left = dist;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len <= 0) continue;
+    if (left <= len) {
+      const t = left / len;
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    }
+    left -= len;
+  }
+  const last = pts[pts.length - 1];
+  return last ? [last[0], last[1]] : null;
+}
+
 /** The outline of a ribbon: one side out, the other back. */
 function ringOf(line, half) {
   const left = offsetLine(line, half);

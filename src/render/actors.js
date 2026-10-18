@@ -516,6 +516,45 @@ export function buildJeepMesh() {
 }
 
 /**
+ * One S-Bahn carriage, as it runs on the Stadtbahn viaduct over the city.
+ *
+ * Eighteen metres of it, three wide, with the two tone paint Berlin has used
+ * since the twenties: red below the waist, ochre above it. Parts: 27 is the
+ * red, 28 the ochre, 24 the glass, 0 the roof and the gear under the floor.
+ * It is drawn through the vehicle pipeline because a carriage is a box that
+ * moves, which is what that pipeline is for, and three of them in a row are
+ * three instances of one mesh.
+ */
+export function buildTrainMesh() {
+  const m = new MeshBuild();
+  const L = 17.4, W = 2.95;
+  m.box(0, 1.55, 0, W, 1.50, L, 27);                 // the red below the waist
+  m.box(0, 2.72, 0, W, 0.84, L, 28);                 // ochre above it
+  m.box(0, 3.26, 0, W - 0.22, 0.30, L - 0.5, 0);     // roof
+  // The window band, a hand's breadth proud of the side so it reads as glass
+  // rather than as paint.
+  for (const side of [-1, 1]) {
+    m.box(side * (W / 2 + 0.02), 2.72, 0, 0.06, 0.66, L - 1.6, 24);
+  }
+  // The cab ends: a darker face and a windscreen.
+  for (const end of [-1, 1]) {
+    m.box(0, 2.55, end * (L / 2 - 0.08), W - 0.3, 1.0, 0.1, 24);
+    m.box(0, 1.05, end * (L / 2 - 0.05), W - 0.5, 0.5, 0.12, 0);
+  }
+  // Skirt and bogies, so it does not float over the rails.
+  m.box(0, 0.72, 0, W - 0.5, 0.55, L - 1.2, 0);
+  for (const z of [-L / 2 + 2.6, L / 2 - 2.6]) {
+    m.box(0, 0.42, z, W - 0.35, 0.5, 2.9, 2);
+    for (const side of [-1, 1]) {
+      for (const dz of [-0.95, 0.95]) {
+        m.cylinder(side * 0.72, 0.42, z + dz, 0.42, 0.42, side * 0.12, 8, 2, 'y');
+      }
+    }
+  }
+  return m;
+}
+
+/**
  * A tank, seven and a half metres long with the gun over the front. Parts:
  * 0 hull, 2 track steel, 8 the barrel.
  */
@@ -761,6 +800,9 @@ export class Actors {
       tank: this._uploadMesh(buildTankMesh(), MAX_VEHICLES, 2),
       heli: this._uploadMesh(buildHeliMesh(), MAX_VEHICLES, 2),
       jet: this._uploadMesh(buildJetMesh(), MAX_VEHICLES, 2),
+      // Six carriages is two trains on the same stretch of viaduct, which is
+      // more than Berlin manages at rush hour.
+      train: this._uploadMesh(buildTrainMesh(), 6, 2),
     };
     // Every viewmodel is uploaded once. They are a few hundred triangles each,
     // so carrying all six costs less than switching would.
@@ -874,6 +916,9 @@ export class Actors {
       count: build.i.length,
       indexType: use32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT,
       instanceCount: 0,
+      // How many of it the buffer was made for. The vehicles all had the same
+      // ceiling until the carriages turned up with one of their own.
+      maxInstances: instances,
     };
   }
 
@@ -1081,10 +1126,10 @@ export class Actors {
 
   updateVehicles(list) {
     const gl = this.gl;
-    const counts = { jeep: 0, tank: 0, heli: 0, jet: 0 };
+    const counts = { jeep: 0, tank: 0, heli: 0, jet: 0, train: 0 };
     for (const v of list) {
       const mesh = this.vehicles[v.type];
-      if (!v.alive || !mesh || counts[v.type] >= MAX_VEHICLES) continue;
+      if (!v.alive || !mesh || counts[v.type] >= mesh.maxInstances) continue;
       const o = counts[v.type] * 8;
       const d = mesh.instData;
       d[o] = v.x; d[o + 1] = v.y; d[o + 2] = v.z; d[o + 3] = v.yaw;

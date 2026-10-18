@@ -27,6 +27,7 @@ import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
+import { Trains, TRAIN } from './game/trains.js';
 import { bakeCrush } from './game/bake.js';
 import { fineGround, holeInWall } from './game/remesh.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
@@ -218,6 +219,7 @@ async function main() {
   const cheats = new Cheats();
   const gibs = new Gibs(world);
   const cars = new Cars(world);
+  const trains = new Trains(world);
   const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
   // A ruin that has stopped moving is written into the city's own bytes, and
   // the card needs the new ones. Nothing else changes: the same ruin, drawn
@@ -1367,11 +1369,14 @@ async function main() {
   // did to it back. It used to be put back by hand at the two places that
   // waited for a fetch; the streamer fetches without waiting for anything, so
   // the record is restored where the bytes arrive instead.
-  world.onDistrict = (d) => { restoreScars(d.id); cars.add(d); };
+  world.onDistrict = (d) => { restoreScars(d.id); cars.add(d); trains.gather(); };
   world.onDrop = (d) => { cars.drop(d); };
   // Anything already in memory by the time this is wired up, which is the
   // district the game boots into.
   for (const d of world.districts.values()) cars.add(d);
+  trains.gather();
+  // One going over while you are under the arches, heard rather than seen.
+  trains.onPass = (away) => audio.jetPass ? audio.jetPass(away) : null;
 
   // --- the parked cars ------------------------------------------------------
   // A car is four boxes baked into a tile with a collision box beside it, so
@@ -4280,6 +4285,7 @@ async function main() {
       fireWalls.update(worldDt);
       updateBurning(worldDt);
       updateCarBlasts();
+      trains.update(worldDt, player);
       ion.update(worldDt);
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
@@ -4456,6 +4462,7 @@ async function main() {
     fireWalls.update(worldDt);
     updateBurning(worldDt);
     updateCarBlasts();
+    trains.update(worldDt, player);
     ion.update(worldDt);
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
@@ -4767,7 +4774,7 @@ async function main() {
       renderer.actors.updateSparks(effects.list);
       renderer.actors.updatePickups(pickups.live, camera.position);
       renderer.actors.updateGibs(gibs.active);
-      renderer.actors.updateVehicles(vehicles.active);
+      renderer.actors.updateVehicles([...vehicles.active, ...trains.cars]);
       renderer.actors.updateMechs(mechs.active);
       renderer.drawActors = true;
     } else {
@@ -4784,7 +4791,7 @@ async function main() {
       renderer.actors.updateSparks(live ? effects.list : []);
       renderer.actors.updatePickups(live ? pickups.live : [], camera.position);
       renderer.actors.updateGibs(live ? gibs.active : []);
-      renderer.actors.updateVehicles(live ? vehicles.active : []);
+      renderer.actors.updateVehicles(live ? [...vehicles.active, ...trains.cars] : []);
       renderer.actors.updateMechs(live ? mechs.active : []);
       renderer.drawActors = live;
     }
@@ -4929,6 +4936,7 @@ async function main() {
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input, minimap,
     combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs, cars,
+    trains, trainSpec: TRAIN,
     demolition, demoSpec: DEMO, demoBite: bite, demoCrater: craterAt, travelSpec: TRAVEL,
     fires,
     explode(x, y, z, splash, body) { return explode(x, y, z, splash, body || null); },

@@ -102,6 +102,10 @@ export class World {
       landmarks: [],
       stations: [],
       roadLines: [],
+      // The railways, so the game can run a train along one. Only the
+      // elevated ones matter for that: the Stadtbahn is on a viaduct and a
+      // tram is in the street with everything else.
+      railLines: [],
       // Street name labels, from whichever districts are in memory. The
       // district you are standing in is the one whose names you can read.
       streets: [],
@@ -327,7 +331,8 @@ export class World {
   _mergeManifest(district, sign) {
     const m = this.manifest;
     const d = district.manifest;
-    const lists = ['landmarks', 'stations', 'roadLines', 'streets', 'waterOutlines', 'greenOutlines'];
+    const lists = ['landmarks', 'stations', 'roadLines', 'railLines', 'streets',
+      'waterOutlines', 'greenOutlines'];
     if (sign > 0) {
       for (const key of lists) {
         for (const item of (d[key] || [])) {

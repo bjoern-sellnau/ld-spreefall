@@ -1285,6 +1285,76 @@ async function run() {
     opened.skip ? opened.why
       : `${opened.standing} m of it left, wall overhead at ${opened.above} m`);
 
+  // --- the viaduct is a bridge, and there is an S-Bahn on it ---------------
+  // The brick viaduct the Stadtbahn runs on was a 6.6 m wall across every
+  // street the railway crosses: Friedrichstrasse ended at it.
+  const viaduct = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.demolition.reset(); s.renderer.clearCollapses();
+    // Friedrichstrasse runs north to south under the Stadtbahn at about
+    // x 637, z -422. Stand there: the train only runs on a line that is
+    // near you, and by this point in the suite the player could be anywhere.
+    s.teleport(637, -462);
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    const from = { x: 637, z: -462 };
+    const y = s.world.groundHeight(from.x, from.z) + 0.9;
+    const hit = s.world.raycast(from.x, y, from.z, 0, 0, 1, 80);
+    // Eight metres, because the two faces of the viaduct stand six metres
+    // either side of the middle of the railway and nothing at all is on the
+    // line itself.
+    const standing = s.world.tallestNear(637, -422, 8);
+    // And the shot at the height of the deck, which is still brick.
+    const up = s.world.raycast(from.x, s.world.groundHeight(from.x, from.z) + 5.6,
+      from.z, 0, 0, 1, 80);
+    // The train, run up to the crossing. It is put a hundred metres short of
+    // it first rather than waited for: the line is three kilometres long and
+    // a train on it at sixty kilometres an hour is a three minute wait.
+    const lines = s.trains.lines.length;
+    const line = s.trains.lines[0];
+    if (line) {
+      let best = 0, bestD = 1e9, run = 0;
+      for (let i = 1; i < line.pts.length; i++) {
+        const a = line.pts[i - 1], b = line.pts[i];
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        for (let t = 0; t <= 1; t += 0.02) {
+          const d = Math.hypot(a[0] + (b[0] - a[0]) * t - 637,
+            a[1] + (b[1] - a[1]) * t + 422);
+          if (d < bestD) { bestD = d; best = run + len * t; }
+        }
+        run += len;
+      }
+      line.at = Math.max(60, best - 110);
+      line.dir = 1;
+    }
+    let near = 999;
+    for (let i = 0; i < 60 * 20 && near > 20; i++) {
+      s.fixedForTest(1 / 60);
+      for (const c of s.trains.cars) {
+        near = Math.min(near, Math.hypot(c.x - 637, c.z + 422));
+      }
+    }
+    const car = s.trains.cars[0] || null;
+    return {
+      under: hit ? Math.round(hit.t) : null,
+      deckBlocked: up ? Math.round(up.t) : null,
+      standing: Number(standing.toFixed(1)),
+      lines, cars: s.trains.cars.length,
+      near: Math.round(near),
+      carHeight: car ? Number((car.y - s.world.groundHeight(car.x, car.z)).toFixed(1)) : null,
+    };
+  });
+  check('a street runs under the viaduct instead of into it',
+    viaduct.under === null && viaduct.standing > 5,
+    `${viaduct.standing} m of viaduct standing, nothing in the way at head height`);
+  check('and the arch is still brick above the arch',
+    viaduct.deckBlocked !== null, `stopped at ${viaduct.deckBlocked} m at deck height`);
+  check('an S-Bahn runs along the line on top of it',
+    viaduct.lines > 0 && viaduct.cars === 3 && viaduct.near <= 20,
+    `${viaduct.cars} carriages on ${viaduct.lines} line, nearest ${viaduct.near} m from the crossing`);
+  check('and it rides on the viaduct rather than in the street',
+    viaduct.carHeight !== null && viaduct.carHeight > 5 && viaduct.carHeight < 9,
+    `${viaduct.carHeight} m over the ground`);
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

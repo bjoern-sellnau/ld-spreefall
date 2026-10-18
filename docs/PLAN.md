@@ -2508,3 +2508,43 @@ caps residency at 520.
   the OSM extract. Most of the grid is empty here because 73 of the 81
   districts are not built in this checkout and Overpass cannot be reached from
   this machine, not because the map is wrong.
+
+## 57. The viaduct is a bridge, and there is an S-Bahn on it
+
+- 2026-10-18: bridges over streets, not only over water. The Stadtbahn already
+  ran on a brick viaduct 6 m up, and that viaduct was two unbroken faces from
+  the pavement to the deck with collision to match: a 6.6 m wall across every
+  street the railway crosses. Six surveyed streets cross it in Mitte.
+  Measured on Friedrichstrasse: a ray at knee height is stopped **32 m** short
+  of the crossing, by a wall 6.3 m tall.
+
+- 2026-10-18: a Berlin viaduct is a row of arches. It is built bay by bay now:
+  nine metres from pier to pier, three of that pier, and between them an
+  opening that curves from three metres up to a crown at nearly five. The wall
+  above the arch is drawn in columns from the curve to the deck, so everything
+  over the opening is brick and the opening is the shape of an arch; the first
+  attempt drew a straight band with the curve hung under it and from the
+  street that read as a row of teeth. The collision is the same three pieces:
+  pier, nothing, and the wall above the springing, which is exactly what a
+  segment with its own base and top can say.
+
+- 2026-10-18: Friedrichstrasse now runs under it, and a shot at deck height
+  still stops in brick. 263,268 to 278,942 triangles for the arches across
+  Mitte.
+
+- 2026-10-18: and then an S-Bahn on it, because a city with a railway through
+  the middle of it should have something on the railway. Three carriages nose
+  to tail, seventeen metres each, running at sixty kilometres an hour along
+  the line the builder now writes into the manifest, at the height of the
+  deck. Red below the waist and ochre above it, which is the paint Berlin has
+  used since the twenties. It is scenery with a timetable: nothing shoots it
+  and nothing rides it.
+
+- 2026-10-18: drawn through the vehicle pipeline, which already takes a mesh
+  and a list of positions, so a carriage costs an instance rather than a draw
+  call. The one thing that had to change there is that the vehicles all shared
+  one ceiling of eight instances and the carriages wanted their own.
+
+- 2026-10-18: the train runs whether or not you are near it and is only drawn
+  when you are. Stepping it only when it was near froze it the moment it ran
+  out past the edge of that circle, which is to say for good.
