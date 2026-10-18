@@ -695,6 +695,15 @@ work, because the shadow line under a projecting band is what makes a frontage
 read as relief. Only in the middle, where you walk: it costs a quarter of the
 triangles of that district and is only worth that from the pavement.
 
+**Windows everywhere, not only in the middle.** The ring and the outskirts
+used to be blank walls, because the tier they are built at had the window
+shader switched off. It costs nothing: the flag is one bit on the vertex and
+the pattern is a fragment shader reading the building's own storey count, so
+the city is the same 875,427 triangles and the same 15.88 MB either way. What
+had to come first was a fade: the facade is the one pattern in this renderer
+made of hard edges rather than smoothsteps, so once a pixel covers a storey it
+now draws the average of a frontage instead of a pattern nobody can resolve.
+
 **The street you are standing in.** Named under the crosshair, faint while
 you walk and up for four seconds when it changes. Measured to the road
 centreline rather than to a map label, because a label is a point every two

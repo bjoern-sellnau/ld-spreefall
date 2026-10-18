@@ -1938,3 +1938,50 @@ budget: the eight districts built here are 53.3 MB raw, Mitte alone 16.8 MB,
 a ring district 3 to 8 MB. Two or three resident is a few tens of megabytes of
 ArrayBuffer, and the tile manager already evicts GPU tiles by distance and
 caps residency at 520.
+
+## 39. The ring stops looking like boxes
+
+- 2026-10-18: windows outside Mitte. Tier 2 is most of the ring and tier 3 is
+  everything out past it, and both were built with `windows: false`, so every
+  block was a blank wall with a parapet on it. The measurement that decided
+  this: `tier.windows` sets one flag bit on the vertex, and the whole window
+  pattern is a fragment shader that reads the building's own storey count. The
+  eight districts built here come to 875,427 triangles and 15.88 MB gzipped
+  with the windows off, and to 875,427 triangles and 15.88 MB with them on.
+  Not approximately: the same two numbers. Frame time in a ring street came
+  out at 58 ms a frame either way on the software renderer the checks run on.
+  It had been off for years for no better reason than that it sounded
+  expensive.
+
+- 2026-10-18: which only works because the facade now fades. Every other
+  pattern in this shader has been widened to the pixel footprint for years;
+  the facade never was, and it is the one made of hard edged tests rather than
+  smoothsteps, so it is the one that shimmers. Once a pixel covers a storey
+  there is nothing left to draw but the mean, so it draws that instead: the
+  wall, darkened by the share of it that is glass. That is what a mip chain
+  would give, and it is what makes the window shader affordable five
+  kilometres out, where a suburb is now a tone rather than a flicker.
+
+- 2026-10-18: two silhouette ideas were built, measured and thrown away, which
+  is the useful part of this entry.
+
+  Chimney stacks and lift overruns on flat roofs. A stack is one box and
+  twelve triangles, so it reads as the cheapest silhouette there is. On every
+  building over ninety square metres it doubled a whole tier, 72,826
+  triangles to 144,496. Tuned down to the big half of the big buildings it was
+  still a quarter more, and a screenshot from the pavement showed none of it,
+  because from a street you cannot see a roof. A second screenshot from roof
+  height over Mitte showed almost none either, because tier 0 has real pitched
+  roofs and there is hardly a flat one to stand a stack on. Removed.
+
+  A parapet of a different height per building. The quads are emitted either
+  way, so this one really did look free. It is not: thirteen different heights
+  where there had been one cost a quarter of a megabyte across the city,
+  because a column of identical numbers is what a compressor lives on. Half a
+  metre on a twenty metre building is also under what anybody can see from the
+  pavement. Removed, with the reason written where the next person will look.
+
+- 2026-10-18: one reading in the middle of all that came out at 16.13 MB and
+  893,777 triangles and could not be reproduced afterwards from the same
+  sources; the two builds either side of it both give 875,427 and 15.88. It is
+  recorded rather than explained.

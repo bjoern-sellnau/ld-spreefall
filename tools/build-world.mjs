@@ -733,6 +733,7 @@ function buildDistrict(district) {
       && bz >= world.minZ - 60 && bz <= world.maxZ + 60;
   });
   let buildingCount = 0;
+  let blankWalls = 0;
   const landmarkIndex = [];
   const palette = new Palette(BERLIN_PALETTE, { frozen: true });
   for (const b of buildings) {
@@ -803,6 +804,12 @@ function buildDistrict(district) {
     const from = base + (Number.isFinite(minH) ? minH : 0);
     const solid = Math.max(2, height - (Number.isFinite(minH) ? minH : 0));
     const roofH = Math.max(0, Math.min(roofHeight, solid * 0.4));
+    // Whether this one gets the window shader. It is one flag bit and the
+    // pattern itself costs nothing to carry, so the only reason to refuse it
+    // is that the wall is not a frontage: raw concrete has no windows cut
+    // into it wherever it stands.
+    const blank = wallMat === MAT.CONCRETE || !tier.windows;
+    if (blank) blankWalls++;
     extrudeBuilding(mesh, { outer: ring, holes: b.holes }, {
       base: from,
       height: Math.max(2, solid - roofH),
@@ -830,7 +837,7 @@ function buildDistrict(district) {
       seed: packedSeed,
       levels,
       landmark: false,
-      noWindows: wallMat === MAT.CONCRETE || !tier.windows,
+      noWindows: blank,
     });
     // A volume that starts above the street is collided against from where it
     // starts, so you can walk under the arch you can see under.
@@ -933,6 +940,7 @@ function buildDistrict(district) {
   console.log('vertices: ' + Object.entries(spent).filter(([, v]) => v > 0)
     .map(([k, v]) => `${k} ${Math.round(v / 1000)}k`).join(', ')
     + `  (${roadPoints} road points over ${(roadMetres / 1000).toFixed(1)} km)`);
+  console.log(`windows: ${buildingCount - blankWalls} of ${buildingCount} buildings have them`);
   console.log(`geometry: ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${buildingCount} buildings, ${stelae} stelae, ${treeList.length} trees, ${lamps} lamps, ${cars} cars, ${props - lamps - cars} seats and bins, ${(roadMetres / 1000).toFixed(1)} km of road`);
 
   // --- surface map for footsteps -----------------------------------------

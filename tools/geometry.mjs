@@ -159,6 +159,13 @@ export function extrudeBuilding(mesh, foot, o) {
     domeRoof(mesh, rings[0], wallTop, rh, roofMat, roofSeed);
   } else {
     flatRoof(mesh, rings, wallTop, roofMat, roofSeed);
+    // One height for every parapet, which looks like a ruled line along a
+    // street and is kept anyway. Varying it was tried: the quads are emitted
+    // either way, so it reads as free, and it is not. Thirteen different
+    // heights instead of one cost a quarter of a megabyte across the city,
+    // because a column of identical numbers is what the compressor lives on,
+    // and half a metre on a twenty metre building is under what anybody can
+    // see from the pavement.
     if (o.parapet !== false && o.height > 6) parapet(mesh, rings[0], wallTop, 0.7, wallMat, seed, hgt);
   }
 }

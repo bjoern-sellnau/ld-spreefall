@@ -379,6 +379,34 @@ Surface facade(vec3 base, int wallKind) {
   wall *= wg.albedo * (0.88 + 0.12 * wg.ao);
   s.normal = bend(vNormal, wg.slope);
 
+  // How wide and how tall the openings on this building are, as a share of a
+  // bay and of a storey. Worked out here rather than where they are used,
+  // because the fade below needs them too.
+  float wWide = mon ? mix(0.085, 0.130, hash11(seedF * 3.7 + 1.9))
+                    : mix(0.155, 0.245, hash11(seedF * 3.7 + 1.9));
+  float wTall = mon ? mix(0.44, 0.60, hash11(seedF * 5.1 + 2.3))
+                    : mix(0.30, 0.44, hash11(seedF * 5.1 + 2.3));
+
+  // A frontage too far away to resolve a window is drawn as the average of
+  // one instead of as a pattern nobody can see.
+  //
+  // Everything else in this shader has been widened to the pixel footprint
+  // for years; the facade never was, and it is the one pattern made of hard
+  // edges rather than smoothsteps, so it is the one that shimmers. A storey
+  // is about three metres and a bay about three, so once a pixel covers a
+  // storey there is nothing left to draw but the mean: the wall, darkened by
+  // the share of it that is glass. That is what a mip chain would give, and
+  // it is what makes the window shader affordable out past the ring, where a
+  // block is a few pixels tall and used to flicker as you walked.
+  float facadePx = max(fwidth(vUv.x), fwidth(vUv.y));
+  float resolved = 1.0 - smoothstep(floorH * 0.42, floorH * 1.30, facadePx);
+  if (resolved < 0.015) {
+    float glassShare = clamp(2.0 * wWide * wTall * 2.2, 0.0, 0.55);
+    s.albedo = mix(wall, vec3(0.085, 0.100, 0.120), glassShare) * (0.74 + 0.26 * vAo);
+    s.roughness = mix(wallRough, 0.45, glassShare);
+    return s;
+  }
+
   // Plinth.
   if (y < 1.05) {
     s.albedo = mix(wall * 0.58, vec3(0.30, 0.29, 0.275), 0.5) * (0.7 + 0.3 * vAo);
@@ -425,12 +453,9 @@ Surface facade(vec3 base, int wallKind) {
   float rowIndex = floor(upper / floorH);
   float fy = fract(upper / floorH);
 
-  // Openings: about a third of the bay wide and about half the storey tall,
-  // which is roughly the proportion of a Berlin Gruenderzeit window.
-  float wWide = mon ? mix(0.085, 0.130, hash11(seedF * 3.7 + 1.9))
-                    : mix(0.155, 0.245, hash11(seedF * 3.7 + 1.9));
-  float wTall = mon ? mix(0.44, 0.60, hash11(seedF * 5.1 + 2.3))
-                    : mix(0.30, 0.44, hash11(seedF * 5.1 + 2.3));
+  // The openings themselves are about a third of a bay wide and about half a
+  // storey tall, which is roughly the proportion of a Berlin Gruenderzeit
+  // window. Their size was worked out above, where the fade needed it.
   float dx = abs(fx - 0.5);
   float dy = fy - (mon ? 0.22 : 0.30);
   float widthHere = wWide;
