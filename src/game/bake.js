@@ -21,6 +21,7 @@
 // shader drew a moment earlier is a building that jumps as it settles.
 
 import { VERTEX_STRIDE, POS_SCALE, FACADE_FLAG, GROUND_SCALE } from '../shared/constants.js';
+import { tileMesh } from '../engine/world.js';
 
 const COLLAPSE_WAVE = 0.7;
 const CRATER_RIM = 0.18;
@@ -146,12 +147,14 @@ export function bakeCrush(world, x, z, radius, tall = 2.2, squash = 0.42) {
     for (let tx = tx0; tx <= tx1; tx++) {
       const index = tz * world.nx + tx;
       const rec = world.tiles[index];
-      if (!rec || !rec.vCount) continue;
+      if (!rec) continue;
+      const m = tileMesh(rec);
+      if (!m.vCount) continue;
       const [ox, oz] = world.tileOrigin(index);
-      const view = rec.view;
+      const view = m.view;
       let touched = 0;
-      for (let i = 0; i < rec.vCount; i++) {
-        const o = rec.vOff + i * VERTEX_STRIDE;
+      for (let i = 0; i < m.vCount; i++) {
+        const o = m.vOff + i * VERTEX_STRIDE;
         const px = view.getInt16(o, true) / POS_SCALE + ox;
         const pz = view.getInt16(o + 4, true) / POS_SCALE + oz;
         const dx = px - x, dz = pz - z;
@@ -201,12 +204,14 @@ export function bakeSite(world, site) {
     for (let tx = tx0; tx <= tx1; tx++) {
       const index = tz * world.nx + tx;
       const rec = world.tiles[index];
-      if (!rec || !rec.vCount) continue;
+      if (!rec) continue;
+      const m = tileMesh(rec);
+      if (!m.vCount) continue;
       const [ox, oz] = world.tileOrigin(index);
-      const view = rec.view;
+      const view = m.view;
       let touched = 0;
-      for (let i = 0; i < rec.vCount; i++) {
-        const o = rec.vOff + i * VERTEX_STRIDE;
+      for (let i = 0; i < m.vCount; i++) {
+        const o = m.vOff + i * VERTEX_STRIDE;
         p.x = view.getInt16(o, true) / POS_SCALE + ox;
         p.y = view.getInt16(o + 2, true) / POS_SCALE;
         p.z = view.getInt16(o + 4, true) / POS_SCALE + oz;
@@ -234,7 +239,7 @@ export function bakeSite(world, site) {
         moved += touched;
         // The tile's own box has to grow with what moved, or a flattened
         // block is culled away while its rubble is still on screen.
-        rec.min[1] = Math.min(rec.min[1], -site.depth - 2);
+        m.min[1] = Math.min(m.min[1], -site.depth - 2);
       }
     }
   }

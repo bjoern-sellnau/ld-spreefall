@@ -232,19 +232,24 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
     const x = s.player.x - 40, z = s.player.z + 10;
     const y = s.world.groundHeight(x, z);
+    // The sites that take buildings with them. A blast also opens a hole in
+    // the road of its own, and that one is at level one from the moment it
+    // is made: it is a hole, it does not come apart in quarters.
+    const frontage = (v) => !v.craterOnly && Math.hypot(v.x - x, v.z - z) < 20;
     const levels = [];
     for (let i = 0; i < 7; i++) {
       s.demolition.blast(x, y, z, 9, 150);
-      const site = s.demolition.sites.find((v) => Math.hypot(v.x - x, v.z - z) < 20);
+      const site = s.demolition.sites.find(frontage);
       levels.push(site ? site.level : 0);
     }
     s.demolition.reset(); s.renderer.clearCollapses();
-    const one = s.demolition.blast(x, y, z, 9, 150).length;
-    const afterOne = s.demolition.sites.length ? s.demolition.sites[0].level : 0;
+    const one = s.demolition.blast(x, y, z, 9, 150).filter((v) => !v.craterOnly).length;
+    const first = s.demolition.sites.find((v) => !v.craterOnly);
+    const afterOne = first ? first.level : 0;
     s.demolition.reset(); s.renderer.clearCollapses();
     return { levels, one, afterOne, stages: s.demoSpec.stages };
   });
-  check('one rocket does not bring anything down', adds.one === 0 && adds.afterOne === 0);
+  check('one rocket does not bring any building down', adds.one === 0 && adds.afterOne === 0);
   check('and a frontage comes apart a piece at a time rather than at once',
     new Set(adds.levels).size >= 4 && adds.levels[adds.levels.length - 1] === 1
     && adds.levels[1] > 0 && adds.levels[1] < 1,
@@ -436,24 +441,6 @@ async function run() {
   check('rather than leaving you in the air to fall',
     rode.fastest > -4 && rode.onGround,
     `worst fall ${-rode.fastest} m/s, standing at the bottom`);
-
-  // --- small blasts leave the ground alone ---------------------------------
-  const small = await page.evaluate(() => {
-    const s = window.spreefall;
-    s.demolition.reset(); s.renderer.clearCollapses();
-    const x = s.player.x - 30, z = s.player.z - 30;
-    const y = s.world.groundHeight(x, z);
-    for (let i = 0; i < 8; i++) s.demolition.blast(x, y, z, 9, 150);
-    // Read while it is still a site, because a finished one is baked into the
-    // city and the list it was in is empty by then. What the ground did is
-    // read afterwards, and it should have done nothing at all.
-    const site = s.demolition.sites[0];
-    const crater = site ? site.craterRadius : null;
-    for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
-    return { crater, moved: Number((y - s.world.groundHeight(x, z)).toFixed(3)) };
-  });
-  check('a rocket does not crater the street', small.crater === 0 && small.moved === 0,
-    'the ground mesh is a 12.5 m grid, so a small hole would be invisible');
 
   // --- the memorial ---------------------------------------------------------
   const memorial = await page.evaluate(() => {
@@ -1106,6 +1093,69 @@ async function run() {
     !hole.skip && hole.punch > 1 && hole.share > 0.5,
     hole.skip ? hole.why : `${hole.punch} m of hole, ${hole.share}% of the frame through it`);
 
+  // --- a rocket digs a hole, and it is the hole you stand in ---------------
+  // This used to be the other way round: nothing under 55 m of blast dug at
+  // all, because the ground mesh is a 12.5 m grid and a small hole had no
+  // vertices inside it to move. The ground is cut finer where a blast lands
+  // now, so what is tested is that the two agree.
+  const small = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.demolition.reset(); s.renderer.clearCollapses();
+    // An open patch of street that nothing earlier in this suite has already
+    // knocked about: by this point the city round the player is rubble in
+    // places, and a hole measured in a ruin measures the ruin.
+    let x = 0, z = 0, found = false;
+    for (let r = 30; r <= 90 && !found; r += 20) {
+      for (let a = 0; a < 12 && !found; a++) {
+        const px = s.player.x + Math.cos(a / 12 * Math.PI * 2) * r;
+        const pz = s.player.z + Math.sin(a / 12 * Math.PI * 2) * r;
+        const i = s.world.tileIndex(px, pz);
+        if (i < 0 || !s.world.tiles[i] || s.world.tiles[i].mesh) continue;
+        if (s.world.tallestNear(px, pz, 12) > 0.6) continue;
+        const drawn = s.drawnGround(px, pz);
+        if (drawn === null) continue;
+        if (Math.abs(drawn - s.world.groundHeight(px, pz)) > 0.2) continue;
+        x = px; z = pz; found = true;
+      }
+    }
+    if (!found) return { skip: true, why: 'nowhere level left to dig' };
+    const y = s.world.groundHeight(x, z);
+    const index = s.world.tileIndex(x, z);
+    const before = s.world.tiles[index] ? s.world.tiles[index].vCount : 0;
+    s.demolition.blast(x, y, z, 9, 150);
+    const site = s.demolition.sites.find((v) => v.craterRadius > 0) || null;
+    const crater = site ? site.craterRadius : 0;
+    const depth = site ? site.depth : 0;
+    for (let i = 0; i < 240; i++) s.demolition.update(1 / 60);
+    const rec = s.world.tiles[index];
+    // Across the hole: what you walk on against what you can see.
+    let worst = 0;
+    const rows = [];
+    for (let d = 0; d <= crater * 2.2; d += 1.2) {
+      const coll = s.world.groundHeight(x + d, z) - y;
+      const drawn = s.drawnGround(x + d, z);
+      if (drawn === null) continue;
+      rows.push(d);
+      worst = Math.max(worst, Math.abs(coll - (drawn - y)));
+    }
+    return {
+      skip: false,
+      crater: Number(crater.toFixed(1)), depth: Number(depth.toFixed(2)),
+      dug: Number((y - s.world.groundHeight(x, z)).toFixed(2)),
+      before, after: rec && rec.mesh ? rec.mesh.vCount : before,
+      worst: Number(worst.toFixed(2)), points: rows.length,
+    };
+  });
+  check('a rocket digs a hole in the street',
+    small.skip || (small.crater > 3 && small.dug > 0.4),
+    small.skip ? small.why : `${small.crater} m across, ${small.dug} m down`);
+  check('and the ground under it is cut fine enough to show one',
+    small.skip || small.after > small.before * 1.2,
+    small.skip ? small.why : `${small.before} vertices in the tile, ${small.after} after`);
+  check('and the hole you can see is the hole you stand in',
+    small.skip || (small.points > 4 && small.worst < 0.4),
+    small.skip ? small.why : `worst ${small.worst} m apart over ${small.points} points`);
+
   // --- the parked cars ------------------------------------------------------
   const car = await page.evaluate(async () => {
     const s = window.spreefall;
@@ -1117,7 +1167,9 @@ async function run() {
       if (Math.hypot(c.x, c.z) > 1200) continue;
       car = c; break;
     }
-    const tallBefore = s.world.tallestNear(car.x, car.z, 2);
+    // Measured inside the car's own footprint: it is 1.78 by 4.3, so a metre
+    // and a bit finds its own sides and not the bin on the pavement.
+    const tallBefore = s.world.tallestNear(car.x, car.z, 1.2);
     // Two rifle magazines into it, one round at a time, the way a player
     // would: the hit goes in through the same path a bullet takes.
     let shots = 0;
@@ -1126,7 +1178,7 @@ async function run() {
     return {
       skip: false, shots, dead: car.dead, before: alive, after: s.cars.alive,
       tallBefore: Math.round(tallBefore * 100) / 100,
-      tallAfter: Math.round(s.world.tallestNear(car.x, car.z, 2) * 100) / 100,
+      tallAfter: Math.round(s.world.tallestNear(car.x, car.z, 1.2) * 100) / 100,
     };
   });
   check('a parked car takes a magazine and then goes up',
@@ -1135,6 +1187,103 @@ async function run() {
   check('and what is left of it is a knee high wreck rather than a car',
     car.skip || (car.tallBefore > 1.2 && car.tallAfter > 0.2 && car.tallAfter < 1.0),
     car.skip ? car.why : `${car.tallBefore} m before, ${car.tallAfter} m after`);
+
+  // --- and the hole is a hole rather than a picture of one -----------------
+  // The shader's punch is one of sixteen marks and goes when the ring comes
+  // round again. This is the other half: the hole is cut out of the buffers
+  // and out of the collision, so what you can see through you can shoot
+  // through, and the wall above it is still a wall.
+  const opened = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setCheat('wreckBuildings', true);
+    s.demolition.reset(); s.renderer.clearCollapses();
+    s.teleport(700, -55);
+    for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+    let best = null;
+    for (let yaw = 0; yaw < 360; yaw += 4) {
+      s.look(yaw, 0); s.camera.update(16 / 9);
+      const e = s.camera.position, f = s.camera.forward;
+      const hit = s.world.raycast(e[0], e[1], e[2], f[0], f[1], f[2], 40);
+      if (!hit || hit.kind !== 'wall' || hit.t < 6) continue;
+      // On the wall itself rather than beside it: by this point in the suite
+      // there is rubble in these streets, and a metre of heap in front of a
+      // building passes a test that asks what is standing within four metres.
+      if (s.world.tallestNear(hit.x, hit.z, 1.5) < 8) continue;
+      if (!best || hit.t < best.t) best = { yaw, t: hit.t };
+    }
+    if (!best) return { skip: true, why: 'no frontage within forty metres' };
+    s.look(best.yaw, 0); s.camera.update(16 / 9);
+    const e = s.camera.position.slice(), f = s.camera.forward.slice();
+    const solid = s.world.raycast(e[0], e[1], e[2], f[0], f[1], f[2], 80);
+    const at = { x: e[0] + f[0] * (solid.t - 0.4), y: e[1] + f[1] * (solid.t - 0.4),
+      z: e[2] + f[2] * (solid.t - 0.4) };
+    const index = s.world.tileIndex(at.x, at.z);
+    const before = s.world.tiles[index] ? s.world.tiles[index].vCount : 0;
+    // How many walls stand across the shot at the height it goes in at, and
+    // how near the nearest of them is.
+    const crossing = (px, py, pz) => {
+      let n = 0, near = 99;
+      s.world.forEachSegmentTile(px - 5, pz - 5, px + 5, pz + 5, (sg, count) => {
+        for (let i = 0; i < count; i++) {
+          const o = i * 6;
+          if (sg[o + 4] > py || sg[o + 5] < py) continue;
+          const ex = sg[o + 2] - sg[o], ez = sg[o + 3] - sg[o + 1];
+          const len2 = ex * ex + ez * ez || 1;
+          let t = ((px - sg[o]) * ex + (pz - sg[o + 1]) * ez) / len2;
+          t = Math.max(0, Math.min(1, t));
+          const d = Math.hypot(sg[o] + ex * t - px, sg[o + 1] + ez * t - pz);
+          if (d < 3) { n++; near = Math.min(near, d); }
+        }
+      });
+      return { n, near: Number(near.toFixed(2)) };
+    };
+    const was = crossing(at.x, at.y, at.z);
+    // Hard enough to open a hole, not hard enough to bring the frontage down:
+    // a stage costs 180 and a punch needs 90.
+    s.explode(at.x, at.y, at.z, { radius: 9, damage: 120 }, { weapon: 'rpg' });
+    for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+    const through = s.world.raycast(e[0], e[1], e[2], f[0], f[1], f[2], 80);
+    // The same line, tilted up over the top of the hole.
+    const ux = f[0], uy = 0.55, uz = f[2];
+    const ul = Math.hypot(ux, uy, uz);
+    const above = s.world.raycast(e[0], e[1], e[2], ux / ul, uy / ul, uz / ul, 80);
+    const rec = s.world.tiles[index];
+    let segs = 0;
+    s.world.forEachSegmentTile(at.x - 4, at.z - 4, at.x + 4, at.z + 4, (sg, count) => {
+      for (let i = 0; i < count; i++) {
+        const o = i * 6;
+        const mx = (sg[o] + sg[o + 2]) * 0.5, mz = (sg[o + 1] + sg[o + 3]) * 0.5;
+        if (Math.hypot(mx - at.x, mz - at.z) < 4 && sg[o + 5] - sg[o + 4] > 3) segs++;
+      }
+    });
+    return {
+      skip: false,
+      wrecking: s.demolition.buildings,
+      segs, was, now: crossing(at.x, at.y, at.z),
+      kind: through ? through.kind : 'none',
+      wallAt: Number(solid.t.toFixed(1)),
+      openFor: through ? Number(through.t.toFixed(1)) : null,
+      above: above ? Number(above.t.toFixed(1)) : null,
+      standing: Number(s.world.tallestNear(at.x, at.z, 3).toFixed(1)),
+      before, after: rec && rec.mesh ? rec.mesh.vCount : before,
+    };
+  });
+  // Measured on the wall rather than down the line: a street of terraces has
+  // another frontage a metre or two behind the one you hit, and whether the
+  // shot carries on into the next room is not what this is about. What it is
+  // about is that where the shell went in there is no longer a wall.
+  check('a shell opens the wall in the collision, not only in the picture',
+    opened.skip || (opened.was.near < 1 && opened.now.near > 1.4),
+    opened.skip ? opened.why
+      : `a wall ${opened.was.near} m from the burst before, `
+        + `nothing within ${opened.now.near} m of it after`);
+  check('and the hole is cut out of the tile rather than painted on it',
+    opened.skip || opened.after > opened.before * 1.2,
+    opened.skip ? opened.why : `${opened.before} vertices, ${opened.after} after`);
+  check('and the building above the hole is still standing',
+    opened.skip || (opened.above !== null && opened.standing > 8),
+    opened.skip ? opened.why
+      : `${opened.standing} m of it left, wall overhead at ${opened.above} m`);
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

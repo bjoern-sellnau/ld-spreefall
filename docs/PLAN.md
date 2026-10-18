@@ -2337,3 +2337,97 @@ caps residency at 520.
   spawned raised the tier, gave the jets a budget of two, and a flight took
   off before the next step could put the budget back. The tier now holds every
   budget at nought in Just a Walk rather than setting them.
+
+## 52. Tiles the game can re-mesh
+
+- 2026-10-18: section 44 ended by naming the piece that had to be built: a
+  tile's vertices are a packed slice of the district's bytes and the tile
+  manager uploads them as they come, so nothing could give a tile a mesh that
+  was not the one in the file. `src/engine/world.js` now has `tileMesh(rec)`,
+  which hands back either the file's slice or the tile's own buffer, and the
+  uploader, the baker and the crusher all go through it. The collision and the
+  trees stay where they were: they are read by their own offsets into the
+  district's bytes and nothing about re-meshing touches them.
+
+- 2026-10-18: `src/game/remesh.js` is the cutter. The triangles a blast
+  reaches are split at their longest edge until that edge is short enough,
+  each new vertex interpolated from the two it sits between so the material,
+  the surface, the texture coordinates and the normal all carry over exactly,
+  and the midpoint of an edge is shared between the two triangles that own it
+  or the halves pull apart and leave a crack. Nothing here moves a vertex:
+  displacing them is still the baker's job and the shader's, out of the same
+  crater shape they always used.
+
+- 2026-10-18: the first version tested the triangle's corners against the
+  hole and missed the case that matters most, which is one long thin triangle
+  lying right across the street with both its ends a hundred metres away. It
+  tests boxes now, and prunes: a child that has fallen outside the worked
+  area is kept whole, so a 100 m sliver is cut only where the hole is.
+
+## 53. Craters small enough to be craters
+
+- 2026-10-18: the floor was 55 m of blast, and the reason was never the look
+  of it: the ground is a 12.5 m grid, a hole eight metres across had no
+  vertices inside it, and the picture would have stayed flat while the
+  collision dipped. With the ground cut finer where a blast lands, the floor
+  is what the collision field can follow instead.
+
+- 2026-10-18: measured, drawing the ground out of the tile buffers and
+  comparing it with the height field you stand on, worst case across the hole:
+
+  | blast | crater | depth | re-meshed | as it was |
+  | --- | --- | --- | --- | --- |
+  | 8 m | 4.5 m | 0.62 m | 0.15 m | 0.33 m |
+  | 20 m | 4.5 m | 0.62 m | 0.15 m | 0.34 m |
+  | 60 m | 12.6 m | 4.79 m | 0.37 m | 3.75 m |
+  | 120 m | 25.2 m | 9.58 m | 0.19 m | 4.75 m |
+
+  A warhead used to draw a hole four and three quarter metres away from the
+  one you could walk into. The tile it lands in goes from 342 vertices to
+  3469, which is 60 kB and about six thousand triangles against the city's
+  850,000.
+
+- 2026-10-18: so a rocket digs now, and the numbers that decide how deep are
+  stated rather than guessed. A crater narrower than two ground samples is a
+  dimple nothing can stand in, so there is a floor of 4.5 m on the radius. A
+  bowl sampled every `step` metres is out by about `depth * (step / radius)`
+  squared at its worst, so the depth is capped at `0.30 * (radius / step)`
+  squared: 0.62 m for a rocket, and no cap at all by the time a warhead is
+  digging twenty five metres across.
+
+- 2026-10-18: 0.55 was the first value, which gave a rocket 1.14 m. It reads
+  well and a fighter cannot take off over it, which the suite said before I
+  did. Half a metre of dish nine metres across is a shell hole you can drive
+  through, which is the one that stays.
+
+- 2026-10-18: a hole in the road is its own site now, with `walls: false`, and
+  it is kept apart from the sites that bring frontages down. The first version
+  let the two merge, and since a crater site is at level one from the moment
+  it opens, a frontage that merged with one went from standing to a heap in a
+  single step. A car going up does not dig at all: it is a tank of petrol, and
+  a shell hole under its own wreck left the burnt out shell standing in the
+  air over one.
+
+## 54. A hole in a wall you can shoot through
+
+- 2026-10-18: the shader has punched a hole in a facade since 38.3, out of the
+  ring of sixteen most recent blast marks. Nothing else knew about it. You
+  could put a rocket through a shopfront, see the inside of the building
+  through the hole, and still not be able to shoot or walk through what was
+  visibly no longer there, and the mark went when the ring came round again.
+
+- 2026-10-18: the hole is now cut out of the tile and out of the collision.
+  The wall is subdivided to a quarter of the hole's radius and every piece
+  whose middle is inside it is dropped, which is why the edge is ragged rather
+  than a circle. A collision segment runs between two points and stands
+  between a base and a top, which is exactly enough to say wall, then nothing,
+  then wall again above it: the piece across the hole becomes a sill under it
+  and a lintel over it, and the pieces either side are left whole.
+
+- 2026-10-18: measured on a frontage on Unter den Linden. A wall 17.1 m away,
+  one rocket, and the same line then reaches past eighty metres with nothing
+  in it; a line out of the same eye angled up over the hole still stops at
+  17.1 m; and `tallestNear` says 27.1 m of building is still standing. In the
+  suite, which runs in streets it has already wrecked, the same thing is
+  measured on the wall itself: a wall 0.4 m from the burst before, and nothing
+  within 1.89 m of it after.

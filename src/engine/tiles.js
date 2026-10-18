@@ -2,6 +2,7 @@
 // and hands the renderer a frustum culled list every frame.
 
 import { VERTEX_STRIDE } from '../shared/constants.js';
+import { tileMesh } from './world.js';
 
 export const ATTRIB = {
   POSITION: 0,
@@ -94,27 +95,29 @@ export class TileManager {
     const rec = world.tiles[index];
     if (!rec) { this.absent.add(index); return null; }
     const [ox, oz] = world.tileOrigin(index);
+    // Its own buffer if the game has re-meshed it, the file's bytes if not.
+    const m = tileMesh(rec);
     const tile = {
       index, ox, oz,
-      minX: ox + rec.min[0], minY: rec.min[1], minZ: oz + rec.min[2],
-      maxX: ox + rec.max[0], maxY: rec.max[1], maxZ: oz + rec.max[2],
-      count: rec.iCount,
-      indexType: rec.i32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT,
-      tris: rec.tris,
+      minX: ox + m.min[0], minY: m.min[1], minZ: oz + m.min[2],
+      maxX: ox + m.max[0], maxY: m.max[1], maxZ: oz + m.max[2],
+      count: m.iCount,
+      indexType: m.i32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT,
+      tris: m.tris,
       vao: null, vbo: null, ibo: null,
       treeVao: null, treeVbo: null, treeCount: 0,
       bytes: 0,
       lastUsed: 0,
     };
 
-    if (rec.iCount > 0) {
+    if (m.iCount > 0) {
       const vao = gl.createVertexArray();
       gl.bindVertexArray(vao);
 
       const vbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
       gl.bufferData(gl.ARRAY_BUFFER,
-        new Uint8Array(rec.d.buffer, rec.vOff, rec.vCount * VERTEX_STRIDE), gl.STATIC_DRAW);
+        new Uint8Array(m.buffer, m.vOff, m.vCount * VERTEX_STRIDE), gl.STATIC_DRAW);
 
       gl.enableVertexAttribArray(ATTRIB.POSITION);
       gl.vertexAttribIPointer(ATTRIB.POSITION, 3, gl.SHORT, VERTEX_STRIDE, 0);
@@ -129,16 +132,16 @@ export class TileManager {
 
       const ibo = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-      const ibytes = rec.iCount * (rec.i32 ? 4 : 2);
+      const ibytes = m.iCount * (m.i32 ? 4 : 2);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
-        new Uint8Array(rec.d.buffer, rec.iOff, ibytes), gl.STATIC_DRAW);
+        new Uint8Array(m.buffer, m.iOff, ibytes), gl.STATIC_DRAW);
 
       gl.bindVertexArray(null);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
       tile.vao = vao; tile.vbo = vbo; tile.ibo = ibo;
-      tile.bytes = rec.vCount * VERTEX_STRIDE + ibytes;
+      tile.bytes = m.vCount * VERTEX_STRIDE + ibytes;
     }
 
     const trees = world.trees(index);

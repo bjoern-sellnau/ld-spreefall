@@ -55,16 +55,28 @@ export const DEMO = {
   rubble: 0.11,
   maxRubble: 4.5,
 
-  // Craters. Only a big blast digs one at all: the ground mesh is a 12.5 m
-  // grid, so a hole eight metres across has no vertices inside it to move and
-  // would be an invisible trap in the collision. The radius is a fraction of
-  // the blast, which is the whole correction here, and the depth is a
-  // fraction of that again.
-  craterFrom: 55,
+  // Craters.
+  //
+  // This used to start at 55 m of blast, because the ground mesh is a 12.5 m
+  // grid and a hole eight metres across had no vertices inside it to move:
+  // the picture stayed flat while the collision dipped, which is an invisible
+  // trap. The ground is now cut finer where a blast lands, so the floor is
+  // what the collision field can actually follow rather than what the mesh
+  // can draw, and a rocket digs a hole.
+  //
+  // The radius is a fraction of the blast with a floor under it, because a
+  // crater narrower than two ground samples is a dimple nothing can stand in.
+  // The depth is a fraction of the radius, capped by what the collision can
+  // follow: a bowl sampled every `step` metres is out by about
+  // depth * (step / radius) squared at its worst, and a quarter of a metre is
+  // under the height of a kerb.
+  craterFrom: 7,
   craterOfBlast: 0.21,
+  minCraterRadius: 4.5,
   maxCraterRadius: 38,
   craterDepth: 0.38,
   maxCraterDepth: 11,
+  craterSlack: 0.30,
   // The ring of thrown up ground around the lip, matching the shader.
   rim: 0.18,
   rimOut: 1.75,
@@ -148,6 +160,9 @@ export class Demolition {
     // edit, and it has to survive the tile being cut into pieces too.
     this.original = new Map();
     this.onStage = null;         // fn(site, level, previousLevel)
+    // fn(site) the first time a site gains a crater, so the ground under it
+    // can be cut finer before anything is displaced.
+    this.onCrater = null;
     // fn(tileIndices) when a ruin has been written into the tile buffers and
     // the card needs the new bytes.
     this.onBaked = null;
@@ -184,7 +199,7 @@ export class Demolition {
    *
    * @returns {Array} the sites that moved because of this one
    */
-  blast(x, y, z, radius, damage) {
+  blast(x, y, z, radius, damage, crater = true) {
     if (!this.enabled) return [];
     // With both switches off the blast is still a blast, with the fire and
     // the noise and the dead; it simply leaves the city as it found it.
@@ -193,9 +208,21 @@ export class Demolition {
     if (radius >= DEMO.bigBlast) {
       // A warhead takes the whole circle at once, and digs a hole a fraction
       // of it across in the middle.
-      const site = this._open(x, z, radius * 0.86, 1, radius);
+      const site = this._open(x, z, radius * 0.86, 1, crater ? radius : 0);
       if (site) made.push(site);
       return made;
+    }
+    // A hole in the road where it landed, whatever it did to the buildings.
+    // This is a site of its own rather than a property of a collapse, because
+    // a rocket into an empty street damages no frontage and so opened no site
+    // at all, and the street is exactly where you want the hole. It carries
+    // the crater and nothing else: every wall around it is left standing.
+    if (crater && this.ground && radius >= DEMO.craterFrom) {
+      const dig = Math.min(DEMO.maxCraterRadius,
+        Math.max(DEMO.minCraterRadius, radius * DEMO.craterOfBlast));
+      const dug = this._open(x, z, Math.max(radius * 0.86, dig * 2.6), 1, radius,
+        { walls: false, quiet: true, craterOnly: true });
+      if (dug) made.push(dug);
     }
     // Everything smaller than a warhead only ever cuts walls, so with the
     // buildings switch off there is nothing left for it to do.
@@ -247,13 +274,19 @@ export class Demolition {
    *   for anything too small to dig one
    * @returns {object|null} the site, or null if nothing changed
    */
-  _open(x, z, radius, level, blastRadius) {
+  _open(x, z, radius, level, blastRadius, opts = {}) {
     if (this.isSanctuary(x, 0, z)) return null;
     const y = this.world.groundHeight(x, z);
     const crater = this.ground && blastRadius >= DEMO.craterFrom
-      ? Math.min(DEMO.maxCraterRadius, blastRadius * DEMO.craterOfBlast) : 0;
+      ? Math.min(DEMO.maxCraterRadius,
+        Math.max(DEMO.minCraterRadius, blastRadius * DEMO.craterOfBlast)) : 0;
 
     for (const site of this.sites) {
+      // A hole in the road and a frontage coming down are not the same event
+      // and must not merge into each other. The crater site carries level one
+      // from the moment it opens, so a collapse that merged with it jumped
+      // straight to a flattened block instead of going in quarters.
+      if (!site.craterOnly !== !opts.craterOnly) continue;
       const d = Math.hypot(site.x - x, site.z - z);
       if (d > Math.max(site.radius, radius) * 0.8) continue;
       const grown = Math.max(site.radius, d + radius);
@@ -262,7 +295,7 @@ export class Demolition {
         return null;
       }
       site.radius = grown;
-      return this._raise(site, raised, crater);
+      return this._raise(site, raised, crater, opts);
     }
 
     const site = {
@@ -270,7 +303,10 @@ export class Demolition {
       // Whether this one takes the walls with it. Read by the shader, by the
       // collision and by the baker, so all three agree about a site opened
       // while the buildings switch was off.
-      walls: this.buildings,
+      walls: opts.walls === false ? false : this.buildings,
+      // A site that is only a hole in the ground, kept apart from the ones
+      // that take buildings with them.
+      craterOnly: !!opts.craterOnly,
       level: 0,
       shown: 0,
       from: 0,
@@ -287,7 +323,7 @@ export class Demolition {
 
     if (this.sites.length < DEMO.maxSites) {
       this.sites.push(site);
-      return this._raise(site, level, crater);
+      return this._raise(site, level, crater, opts);
     }
 
     // All the slots are taken. The furthest finished site is written into the
@@ -318,11 +354,11 @@ export class Demolition {
       if (d < nearD) { nearD = d; near = s; }
     }
     near.radius = Math.max(near.radius, nearD + radius);
-    return this._raise(near, Math.max(near.level, level), crater);
+    return this._raise(near, Math.max(near.level, level), crater, opts);
   }
 
   /** Puts a site up to a new level and starts that stage playing. */
-  _raise(site, level, crater) {
+  _raise(site, level, crater, opts = {}) {
     const was = site.level;
     site.from = site.shown;
     site.level = level;
@@ -330,11 +366,21 @@ export class Demolition {
     site.opened = false;
     if (crater > site.craterRadius) {
       site.craterRadius = crater;
-      site.depth = Math.min(DEMO.maxCraterDepth, crater * DEMO.craterDepth);
+      // As deep as the shape says, or as deep as the ground underneath can be
+      // made to agree with, whichever is less.
+      const step = this.world.groundStep(site.x, site.z);
+      const follows = DEMO.craterSlack * (crater / step) * (crater / step);
+      site.depth = Math.min(DEMO.maxCraterDepth, crater * DEMO.craterDepth, follows);
+      // The ground here is a quad grid, and a hole wants vertices inside it.
+      // The layer above cuts the ground finer before anything is moved, which
+      // is what lets a crater be smaller than one of those quads.
+      if (this.onCrater) this.onCrater(site);
     }
     site.fall = DEMO.fallTime + site.radius * DEMO.fallPerMetre;
     site.t = 0;
-    if (this.onStage) this.onStage(site, level, was);
+    // A hole in the road has no storey coming away and no dust at roof
+    // height, so it does not announce itself as a collapse.
+    if (this.onStage && !opts.quiet) this.onStage(site, level, was);
     return site;
   }
 
@@ -409,6 +455,11 @@ export class Demolition {
     };
     this.lowerWalls(site);
     this.sinkCrater(site);
+    // A hole replayed into a district that has just been fetched goes into
+    // fresh bytes from the file, so the ground under it has to be cut finer
+    // again before it is dug. Without this a crater you came back to was the
+    // old coarse dish, and the picture and the collision parted company.
+    if (site.craterRadius > 0 && this.onCrater) this.onCrater(site);
     const { tiles } = bakeSite(this.world, site);
     this.baked++;
     return tiles;
@@ -464,6 +515,91 @@ export class Demolition {
       }
     }
     return touched;
+  }
+
+  /**
+   * Opens a hole in whatever walls are at a point, in the collision.
+   *
+   * The picture already has one: the fragment shader cuts a hole out of the
+   * facade where a shell went in. Until now nothing else knew about it, so
+   * the wall you could see through was a wall you could not shoot through or
+   * walk through. A segment runs between two points and stands between a base
+   * and a top, which is exactly enough to say "wall, then nothing, then wall
+   * again above it": the piece across the hole becomes a sill under it and a
+   * lintel over it, and the piece either side of the hole is left whole.
+   *
+   * @param {number} x @param {number} y @param {number} z the middle of it
+   * @param {number} radius metres
+   * @returns {number} how many segments were cut
+   */
+  punch(x, y, z, radius) {
+    if (!this.enabled || !this.buildings) return 0;
+    const w = this.world;
+    const tiles = new Set();
+    w.forEachSegmentTile(x - radius, z - radius, x + radius, z + radius,
+      (segs, count, index) => { tiles.add(index); });
+    let cut = 0;
+    for (const index of tiles) {
+      const segs = this.splitTile(index);
+      const tops = this.original.get(index);
+      const count = segs.length / 6;
+      const out = [];
+      const newTops = [];
+      let here = 0;
+      for (let i = 0; i < count; i++) {
+        const o = i * 6;
+        const x1 = segs[o], z1 = segs[o + 1], x2 = segs[o + 2], z2 = segs[o + 3];
+        const base = segs[o + 4], top = segs[o + 5];
+        const keep = () => {
+          out.push(x1, z1, x2, z2, base, top);
+          newTops.push(tops[i]);
+        };
+        if (top <= base || y + radius <= base || y - radius >= top) { keep(); continue; }
+        const ex = x2 - x1, ez = z2 - z1;
+        const len = Math.hypot(ex, ez);
+        if (len < 0.01) { keep(); continue; }
+        // Where the hole sits along the wall, and how far it reaches.
+        let t = ((x - x1) * ex + (z - z1) * ez) / (len * len);
+        t = Math.max(0, Math.min(1, t));
+        const px = x1 + ex * t, pz = z1 + ez * t;
+        const d = Math.hypot(px - x, pz - z);
+        if (d >= radius) { keep(); continue; }
+        // A sphere cut through a flat wall is a circle: this is its radius.
+        const half = Math.sqrt(radius * radius - d * d);
+        const a0 = Math.max(0, (t * len - half) / len);
+        const a1 = Math.min(1, (t * len + half) / len);
+        if (a1 - a0 <= 0.001) { keep(); continue; }
+        const at = (k) => [x1 + ex * k, z1 + ez * k];
+        if (a0 > 0.001) {
+          const [bx, bz] = at(a0);
+          out.push(x1, z1, bx, bz, base, top);
+          newTops.push(tops[i]);
+        }
+        const [hx0, hz0] = at(a0);
+        const [hx1, hz1] = at(a1);
+        const sill = Math.max(base, y - half);
+        const lintel = Math.min(top, y + half);
+        if (sill > base + 0.05) {
+          out.push(hx0, hz0, hx1, hz1, base, sill);
+          newTops.push(Math.min(tops[i], sill));
+        }
+        if (lintel < top - 0.05) {
+          out.push(hx0, hz0, hx1, hz1, lintel, top);
+          newTops.push(tops[i]);
+        }
+        if (a1 < 0.999) {
+          const [cx2, cz2] = at(a1);
+          out.push(cx2, cz2, x2, z2, base, top);
+          newTops.push(tops[i]);
+        }
+        here++;
+      }
+      cut += here;
+      if (!here) continue;
+      w.collisionCache.set(index, new Float32Array(out));
+      this.original.set(index, new Float32Array(newTops));
+    }
+    return cut;
   }
 
   /**

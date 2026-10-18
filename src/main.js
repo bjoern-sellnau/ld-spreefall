@@ -1,7 +1,7 @@
 // SPREE|FALL. Entry point: load the world, build the renderer, run the loop.
 
 import { createContext } from './engine/gl.js';
-import { World } from './engine/world.js';
+import { World, tileMesh } from './engine/world.js';
 import { TileManager } from './engine/tiles.js';
 import { Camera } from './engine/camera.js';
 import { Input } from './engine/input.js';
@@ -28,6 +28,7 @@ import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { bakeCrush } from './game/bake.js';
+import { fineGround, holeInWall } from './game/remesh.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
@@ -38,7 +39,7 @@ import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
-import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
+import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -229,6 +230,18 @@ async function main() {
   // away when the district is unloaded, so the record goes to the world,
   // which puts it back the next time the district is loaded.
   demolition.onScar = (scar) => world.recordScar(scar);
+
+  // A crater needs vertices inside it to move, and the ground is a quad grid
+  // at 12.5 m in the middle of town. Before anything is displaced the ground
+  // around the hole is cut down to three metres an edge, which is finer than
+  // the collision field it has to agree with, and the tiles that changed go
+  // back to the card. The worked area is wider than the crater's own reach so
+  // that the join between cut and uncut ground sits where nothing moves.
+  demolition.onCrater = (site) => {
+    const reach = site.craterRadius * DEMO.rimOut + 6;
+    const changed = fineGround(world, site.x, site.z, reach);
+    if (changed.length) tiles.refresh(changed);
+  };
 
   /**
    * Puts the ruins back in a district that has just been loaded.
@@ -595,7 +608,12 @@ async function main() {
       // A fraction of the blast, the way a crater is. The first pass had it at
       // 0.38 of the radius, which took most of a storey out of a frontage for
       // one rocket: dramatic, and wrong by about double.
-      const punch = splash.damage >= 90 ? Math.min(3.0, splash.radius * 0.21) : 0;
+      // Not everything that goes off cuts a hole through masonry. A car going
+      // up is a tank of petrol: it burns, it throws its own panels about, and
+      // it leaves a wreck. Giving it a punch took the wreck away again, and
+      // the lamp post beside it with it.
+      const punch = splash.punch === false ? 0
+        : (splash.damage >= 90 ? Math.min(3.0, splash.radius * 0.21) : 0);
       renderer.addScar(x, y, z, splash.radius * 1.5,
         Math.min(1, splash.damage / 180), punch);
       // A hole has to have something behind it. The tiles round a blast are
@@ -603,6 +621,21 @@ async function main() {
       // inside of the building instead of with the sky, and until now only a
       // collapse asked for that.
       if (punch > 0) scarTiles(x, z, splash.radius);
+      // And the hole is cut into the wall rather than only drawn over it. The
+      // shader's version is one of sixteen marks and goes when the ring comes
+      // round again; this one is in the buffers and in the collision, so what
+      // you can see through you can also shoot and walk through, and it is
+      // still there an hour later.
+      // With the buildings switch off the city stays standing, and that
+      // includes not having holes cut in it.
+      if (punch > 0 && demolition.buildings) {
+        const opened = holeInWall(world, x, y, z, punch);
+        if (opened.length) {
+          tiles.refresh(opened);
+          for (const i of opened) renderer.scarredTiles.add(i);
+        }
+        demolition.punch(x, y, z, punch);
+      }
       debris(x, y, z, splash.radius);
     }
     effects.shake = Math.min(splash.nuke ? 2.6 : 1.4, effects.shake
@@ -701,7 +734,10 @@ async function main() {
     // And what it did to the city itself. Small blasts add up on a grid and
     // bring a frontage down when they have done enough; a warhead takes its
     // whole radius at once.
-    demolition.blast(x, y, z, splash.radius, splash.damage);
+    // Some blasts do not dig: a car going up is a tank of petrol and a lot of
+    // noise, and it should not leave a shell hole under its own wreck, which
+    // is what left the burnt out shell standing in the air over one.
+    demolition.blast(x, y, z, splash.radius, splash.damage, splash.crater !== false);
     // Anything that leaves a mark sets light to the trees in it. The radius
     // is wider than the blast, because fire spreads and a blast does not.
     fires.ignite(x, y, z, splash.radius * (splash.nuke ? 1.15 : 1.9),
@@ -1403,7 +1439,7 @@ async function main() {
    * than a grenade, and it reaches far enough to take the next car along with
    * it, which is the whole pleasure of a row of them.
    */
-  const CAR_BLAST = { radius: 11, damage: 120 };
+  const CAR_BLAST = { radius: 11, damage: 120, crater: false, punch: false };
 
   /**
    * A round or a blast landing on a parked car.
@@ -4936,6 +4972,54 @@ async function main() {
     // layer sets the same flag when a mouse button is down.
     holdFire(on) { input.fire = !!on; },
     fireWalls,
+    /**
+     * The height of the ground as it is actually drawn at a point: the tile's
+     * own triangles, the ones on the card, rather than the collision field.
+     *
+     * The two are meant to agree, and the whole reason a crater had to be
+     * 55 m across was that at 12.5 m of ground quad they could not. This is
+     * what lets a test say so in metres instead of by eye.
+     *
+     * @returns {number|null} metres, or null where nothing is drawn
+     */
+    drawnGround(x, z) {
+      const index = world.tileIndex(x, z);
+      if (index < 0) return null;
+      const rec = world.tiles[index];
+      if (!rec) return null;
+      const m = tileMesh(rec);
+      if (!m.vCount || !m.iCount) return null;
+      const [ox, oz] = world.tileOrigin(index);
+      const idx = m.i32
+        ? new Uint32Array(m.buffer, m.iOff, m.iCount)
+        : new Uint16Array(m.buffer, m.iOff, m.iCount);
+      const at = (i) => {
+        const o = m.vOff + i * VERTEX_STRIDE;
+        return [
+          m.view.getInt16(o, true) / POS_SCALE + ox,
+          m.view.getInt16(o + 2, true) / POS_SCALE,
+          m.view.getInt16(o + 4, true) / POS_SCALE + oz,
+          m.view.getUint8(o + 17),
+        ];
+      };
+      let best = null;
+      for (let i = 0; i < idx.length; i += 3) {
+        const a = at(idx[i]), b = at(idx[i + 1]), c = at(idx[i + 2]);
+        if (!(a[3] & FACADE_FLAG.GROUND)) continue;
+        // Barycentric, in the ground plane.
+        const d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
+        if (Math.abs(d) < 1e-6) continue;
+        const u = ((b[2] - c[2]) * (x - c[0]) + (c[0] - b[0]) * (z - c[2])) / d;
+        const v = ((c[2] - a[2]) * (x - c[0]) + (a[0] - c[0]) * (z - c[2])) / d;
+        const w = 1 - u - v;
+        if (u < -0.001 || v < -0.001 || w < -0.001) continue;
+        const y = u * a[1] + v * b[1] + w * c[1];
+        // The topmost ground under the point: a street drawn over a pavement
+        // drawn over the base grid is three triangles deep in places.
+        if (best === null || y > best) best = y;
+      }
+      return best;
+    },
     /** A round into a parked car, for the tests. */
     hitCarForTest(x, z, damage) {
       return hitCar(x, world.groundHeight(x, z) + 0.9, z, damage);

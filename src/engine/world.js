@@ -489,6 +489,18 @@ export class World {
     return hf ? hf.n : COLLISION_GRID;
   }
 
+  /**
+   * How far apart the ground samples are at a point, in metres: 3.125 in the
+   * middle of town and coarser outside it. Anything digging a hole has to
+   * know, because a hole narrower than this cannot be in the collision at all
+   * and so has no business being in the picture either.
+   */
+  groundStep(x, z) {
+    const index = this.tileIndex(x, z);
+    if (index < 0) return this.tileSize / (COLLISION_GRID - 1);
+    return this.tileSize / Math.max(1, this.gridOf(index) - 1);
+  }
+
   /** Bilinear ground height. Outside the box it clamps to the edge tile. */
   groundHeight(x, z) {
     const cx = Math.min(this.maxX - 0.001, Math.max(this.minX, x));
@@ -877,4 +889,33 @@ export class World {
     for (const set of this.deadTrees.values()) n += set.size;
     return n;
   }
+}
+
+/**
+ * The vertices and indices a tile draws from.
+ *
+ * Normally that is a slice of the district's own bytes, exactly as the file
+ * laid it out. A tile the game has re-meshed carries its own buffer instead:
+ * a crater needs vertices inside it to move, and a 12.5 m ground quad has
+ * none. Everything that reads or writes a tile's geometry goes through here,
+ * so that the uploader, the baker and the re-mesher cannot disagree about
+ * which buffer is the real one.
+ *
+ * The collision and the trees are not in here. They stay in the district's
+ * bytes, which is where `rec.cOff` and `rec.trOff` point, and nothing about
+ * re-meshing touches them.
+ *
+ * @param {object} rec a tile record
+ * @returns {{buffer: ArrayBuffer, view: DataView, vOff: number, vCount: number,
+ *   iOff: number, iCount: number, i32: boolean, tris: number,
+ *   min: number[], max: number[]}}
+ */
+export function tileMesh(rec) {
+  return rec.mesh || {
+    buffer: rec.d.buffer, view: rec.view,
+    vOff: rec.vOff, vCount: rec.vCount,
+    iOff: rec.iOff, iCount: rec.iCount,
+    i32: !!rec.i32, tris: rec.tris,
+    min: rec.min, max: rec.max,
+  };
 }
