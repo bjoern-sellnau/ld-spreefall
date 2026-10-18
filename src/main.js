@@ -432,6 +432,10 @@ async function main() {
     // tells you the thing you are sitting in has just fired.
     mechFlash: 0,
     unbuiltSaid: null,
+    // Which district you are standing in, so that walking into another one is
+    // something the game notices. It used to be noticed by the loading card,
+    // which is no longer in the way.
+    districtIn: null,
   };
 
   function resize() {
@@ -1156,6 +1160,12 @@ async function main() {
     }
     effects.shake = Math.min(1.6, effects.shake + 0.8);
   };
+
+  // Every district that lands, however it was asked for, gets the damage you
+  // did to it back. It used to be put back by hand at the two places that
+  // waited for a fetch; the streamer fetches without waiting for anything, so
+  // the record is restored where the bytes arrive instead.
+  world.onDistrict = (d) => { restoreScars(d.id); };
 
   mechs.onEject = () => { if (state.inMech) leaveMech(false); };
 
@@ -2904,14 +2914,12 @@ async function main() {
       // before you leave it behind.
       demolition.bakeAll();
       world.loadDistrict(far.id).then(() => {
-        restoreScars(far.id);
         tiles.uploadsPerFrame = 10000;
         tiles.updateResidency(tx, tz, loop.frame);
         tiles.uploadsPerFrame = 8;
-        // One district at a time: whatever we took off from goes now.
-        for (const id of world.loadedIds) {
-          if (id !== far.id) world.unloadDistrict(id);
-        }
+        // What you took off from is let go by the streamer on the far side,
+        // because by then it is a long way behind you. It used to be dropped
+        // here by hand, on the rule that one district was all there was.
       }).catch(() => toast(`${far.name} could not be loaded`));
     }
     tiles.updateResidency(tx, tz, loop.frame);
@@ -2964,10 +2972,13 @@ async function main() {
     // building that got away.
     demolition.bakeAll();
     try {
-      await world.enterOnly(x, z, (p) => {
+      // Loaded rather than entered: `enterOnly` drops every other district,
+      // which is what the card used to be for. The streamer decides what is
+      // let go now, by distance and by a memory ceiling, so walking back the
+      // way you came finds the district you left still there.
+      await world.loadDistrict(entry.id, (p) => {
         el.crossFill.style.width = `${Math.round(p * 100)}%`;
       });
-      restoreScars(entry.id);
     } catch (err) {
       el.crossHint.textContent = 'that district could not be loaded';
       await new Promise((r) => setTimeout(r, 1200));
@@ -3012,21 +3023,54 @@ async function main() {
     return parts.join(', ');
   }
 
+  // How much city is held at once, and how far out it is fetched from.
+  //
+  // One district at a time was the old answer and it is what made crossing a
+  // boundary a card and a wait. The world layer could always hold several,
+  // and the only thing missing was anybody asking it to.
+  //
+  // The reach is measured to a district's box, so a neighbour starts coming
+  // down while you are still nine hundred metres inside your own, which is a
+  // couple of minutes of walking at this speed and far longer than the fetch.
+  // The drop distance is much larger than the reach so that walking back and
+  // forth over a boundary cannot thrash. The ceiling is on bytes rather than
+  // on a count, because a district is anything from three to seventeen
+  // megabytes.
+  const STREAM = { reach: 900, drop: 2600, most: 6, bytes: 128e6, every: 0.5 };
+  let streamDue = 0;
+
   /**
-   * The district streamer. One district is in memory, and the next one is a
-   * loading screen away: the whole of Berlin is eighty one districts and more
-   * than two hundred megabytes, and what a player holds is the one they are
-   * standing in.
+   * The district streamer. Keeps the one you are in, the ones you are near,
+   * and nothing past the drop distance, inside a memory ceiling.
    */
-  function streamCity(x, z) {
+  function streamCity(x, z, dt = 0) {
     const here = world.idAt(x, z);
     el.district.textContent = world.nameAt(x, z) || 'Berlin';
     el.district.classList.toggle('loading', !!state.crossing);
     if (!here || state.crossing) return;
-    // Walking at a boundary: when the ground ahead belongs to another
-    // district, that is where you are going, and the screen says so. The
-    // controller holds you at the edge until the bytes are in.
-    if (!world.loaded(here)) crossInto(x, z);
+    // Fetching is throttled: it walks the whole catalogue of eighty one
+    // districts, and nothing it decides can change inside half a second of
+    // walking.
+    streamDue -= dt;
+    if (streamDue <= 0) {
+      streamDue = STREAM.every;
+      world.keepAround(x, z, STREAM.reach, STREAM.drop, STREAM.most, STREAM.bytes);
+    }
+    // And if you are somehow standing on ground that is not in yet, which is
+    // a fast travel or a deep link rather than a walk, the card is still
+    // there to wait behind.
+    if (!world.loaded(here)) { crossInto(x, z); return; }
+    // Arriving somewhere new. This used to happen inside the card, which was
+    // also the only place that knew you had changed district; now that you
+    // can walk across without one, the arrival is noticed here instead.
+    if (state.districtIn !== here) {
+      const first = state.districtIn === null;
+      state.districtIn = here;
+      // A district with no jeep in it is a district you have to walk out of.
+      // The ones you left behind are two kilometres away and are let go with
+      // the pool; this parks a set around wherever you came out.
+      if (!first && state.mode === 'walk') parkVehicles({ x, z });
+    }
   }
 
   /**
@@ -4281,7 +4325,7 @@ async function main() {
     // Keep the city around whoever is being followed: the district they are
     // in, the ones within reach, and nothing beyond the drop distance. This
     // starts fetches and returns at once; tiles appear as the bytes land.
-    streamCity(camera.position[0], camera.position[2]);
+    streamCity(camera.position[0], camera.position[2], loop.stats.intervalMs / 1000);
     checkBoundary();
     tiles.updateResidency(camera.position[0], camera.position[2], loop.frame);
     // Dynamic resolution, fed the real cost of the last frame. When it decides

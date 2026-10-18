@@ -382,7 +382,7 @@ export class World {
     return e ? e.id : null;
   }
 
-  keepAround(x, z, reach = 900, drop = 2600, max = 9) {
+  keepAround(x, z, reach = 900, drop = 2600, max = 9, maxBytes = Infinity) {
     const want = new Set();
     const here = this.entryAt(x, z);
     if (here) want.add(here.id);
@@ -402,6 +402,25 @@ export class World {
       const entry = this.entryFor(id);
       if (!entry) continue;
       if (boxDistance(x, z, entry.bounds) > drop) this.unloadDistrict(id);
+    }
+    // And a ceiling on what is held, because the drop distance alone does not
+    // give one: a district is between three and seventeen megabytes, and the
+    // cells out past the ring are four and eight kilometres across, so
+    // whether half a dozen of them fit in memory depends on which half dozen.
+    // The furthest goes first, and whatever you are standing in never does.
+    if (Number.isFinite(maxBytes)) {
+      const mine = here ? here.id : null;
+      while (this.residentBytes > maxBytes) {
+        let worst = null, worstAway = -1;
+        for (const id of this.districts.keys()) {
+          if (id === mine) continue;
+          const entry = this.entryFor(id);
+          const away = entry ? boxDistance(x, z, entry.bounds) : Infinity;
+          if (away > worstAway) { worstAway = away; worst = id; }
+        }
+        if (!worst) break;
+        this.unloadDistrict(worst);
+      }
     }
     return [...this.pending.keys()];
   }

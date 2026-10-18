@@ -700,6 +700,13 @@ work, because the shadow line under a projecting band is what makes a frontage
 read as relief. Only in the middle, where you walk: it costs a quarter of the
 triangles of that district and is only worth that from the pavement.
 
+**The city streams.** Walking into another district used to be a card and a
+wait. The neighbour now comes down while you are still nine hundred metres
+inside your own, and crossing is a step: three districts and 26 MB held
+walking east out of Mitte, with the one behind you still there when you turn
+round. The card is still there for arriving somewhere that is not in memory,
+which is a fast travel or a link rather than a walk.
+
 **Roofs everywhere, and they were cheaper than flat ones.** The ring and the
 outskirts had flat roofs because the tier table said a pitched roof costs four
 more vertices per metre of frontage. Measured, it is the reverse: a flat roof

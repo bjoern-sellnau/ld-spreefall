@@ -2035,3 +2035,46 @@ caps residency at 520.
   and roofs, were off on an assumption about cost that nobody had measured,
   and neither of them costs anything. The comment that had it backwards is
   replaced with the figures.
+
+## 42. The city streams, and the card is only for arriving
+
+- 2026-10-18: crossing a district boundary was a modal card and a wait, and
+  the reason was in one line of `main.js`: it called `world.enterOnly`, which
+  loads the district you are entering and drops every other one. The world
+  layer has had `keepAround` since the districts were written, which holds the
+  one you are in, the ones within reach and nothing past a drop distance. The
+  only caller in the tree was the districts test. The streaming was written
+  and switched off.
+
+- 2026-10-18: so it is switched on. A neighbour starts coming down when you
+  are within nine hundred metres of its box, which at walking speed is a
+  couple of minutes and far longer than the fetch; the drop distance is 2.6 km
+  so that walking back and forth across a boundary cannot thrash; and what is
+  held has a ceiling of 128 MB and six districts, because distance alone does
+  not give one when a district is anything from three to seventeen megabytes.
+  Measured walking east out of Mitte: the neighbour was in before the edge,
+  no card, three districts and 26 MB held.
+
+- 2026-10-18: the card is still there, and still needed. It is for arriving
+  somewhere that is not in memory, which is now a fast travel or a link
+  rather than a walk. What it no longer does is drop the rest of the city, so
+  walking back the way you came finds the district you left still standing.
+
+- 2026-10-18: two things the card had quietly owned had to move out of it.
+  The damage you did to a district is restored where the bytes land, on
+  `world.onDistrict`, rather than at the two places that used to wait for a
+  fetch. And arriving in a new district is noticed by the streamer, which is
+  what parks a set of vehicles around you: before this, walking into a
+  district with the card gone left it with no jeep in it, and the districts
+  suite caught it.
+
+- 2026-10-18: three checks in that suite asserted the old behaviour and had to
+  be rewritten rather than loosened, which is worth naming because two of them
+  were measuring the wrong thing afterwards. "Only ever one district is in
+  memory" is now "the district you are walking towards comes down before you
+  reach it", with no card, and the one behind you is still there. The check
+  that a flattened district is still flat when you come back to it was passing
+  on the numbers and failing on its premise: it crossed to a neighbour and
+  expected the bytes to be thrown away, and now they are not. It goes to the
+  far side of the city and stands there, because loading a district is not
+  leaving the one you are in.

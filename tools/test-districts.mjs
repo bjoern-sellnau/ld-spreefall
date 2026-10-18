@@ -116,42 +116,53 @@ async function run() {
       && index.districts.filter((d) => !d.built).every((d) => d.mb === 0),
     `${built.length} built of ${index.districts.length}`);
 
-  // --- one district at a time ---------------------------------------------
+  // --- the city streams rather than waiting ---------------------------------
+  // It used to hold exactly one district and put a card up at every boundary.
+  // The neighbour now comes down while you are still walking towards it, and
+  // crossing is a step rather than a wait.
   const only = await page.evaluate(async () => {
     const s = window.spreefall;
     const home = s.world.entryFor(s.world.home);
-    // Walk at the nearest boundary until the screen comes up, the way a
-    // player gets there.
-    s.teleport(home.bounds.minX + 25, (home.bounds.minZ + home.bounds.maxZ) / 2);
+    const mid = (home.bounds.minZ + home.bounds.maxZ) / 2;
+    // Start in the middle, where the far edge is further off than the reach.
+    s.teleport((home.bounds.minX + home.bounds.maxX) / 2, mid);
+    for (let i = 0; i < 60; i++) await new Promise((r) => requestAnimationFrame(r));
+    const west = s.world.idAt(home.bounds.minX - 40, mid);
+    const fromMiddle = s.world.loadedIds.slice();
+    // Then walk at the western boundary, the way a player gets there.
+    s.teleport(home.bounds.minX + 240, mid);
     s.look(90, -2);
-    const held = [];
-    for (let i = 0; i < 240; i++) {
+    let card = false;
+    for (let i = 0; i < 300; i++) {
       s.player.step(1 / 60, -5.2, 0, false);
       await new Promise((r) => requestAnimationFrame(r));
-      held.push(s.world.loadedIds.length);
-      if (s.crossingShown()) break;
+      if (s.crossingShown()) card = true;
     }
-    const showing = s.crossingShown();
-    const name = document.getElementById('crossname').textContent;
-    const note = document.getElementById('crossnote').textContent;
-    for (let i = 0; i < 400 && s.crossingShown(); i++) {
-      await new Promise((r) => requestAnimationFrame(r));
-    }
+    const atEdge = s.world.loadedIds.slice();
+    // And over it, which is where the card used to be.
+    s.teleport(home.bounds.minX - 60, mid);
+    for (let i = 0; i < 40; i++) await new Promise((r) => requestAnimationFrame(r));
     return {
-      showing, name, note,
-      most: Math.max(...held, s.world.loadedIds.length),
-      loaded: s.world.loadedIds,
+      west, fromMiddle, atEdge, card,
+      cardOver: s.crossingShown(),
+      inAfter: s.world.isLoaded(s.player.x, s.player.z),
+      back: s.world.loaded(home.id),
+      held: s.world.loadedIds.length,
       here: s.world.nameAt(s.player.x, s.player.z),
       onGround: Math.abs(s.player.y - s.world.groundHeight(s.player.x, s.player.z)) < 1,
       mb: Math.round(s.world.residentBytes / 1e5) / 10,
     };
   });
-  check('walking at a boundary brings up the district you are entering',
-    only.showing && !!only.name, `${only.name}: ${only.note}`);
-  check('and only ever one district is in memory', only.most <= 1 && only.loaded.length === 1,
-    `${only.most} at most, ${only.mb} MB held`);
-  check('and you come out on the other side, on the ground',
-    only.loaded.length === 1 && only.onGround, `standing in ${only.here}`);
+  check('the district you are walking towards comes down before you reach it',
+    !!only.west && only.atEdge.includes(only.west) && !only.card,
+    `${only.west} in at the edge, ${only.card ? 'behind a card' : 'with no card'}`);
+  check('and crossing the boundary is a step rather than a wait',
+    !only.cardOver && only.inAfter && only.onGround,
+    `${only.here}${only.cardOver ? ', card up' : ', no card'}`);
+  check('and the one you came from is still there behind you',
+    only.back, `${only.held} districts held, ${only.mb} MB`);
+  check('and what is held stays inside the ceiling',
+    only.held <= 6 && only.mb <= 128, `${only.held} districts, ${only.mb} MB`);
 
   // --- the loading screen names a place in the district --------------------
   // Held open by a slow line rather than by a hook: the screen is only up
@@ -166,6 +177,11 @@ async function run() {
     const home = s.world.entryFor(s.world.home);
     const cx = (home.bounds.minX + home.bounds.maxX) / 2;
     const cz = (home.bounds.minZ + home.bounds.maxZ) / 2;
+    // The card is for arriving somewhere that is not in memory, which since
+    // the city started streaming means a fast travel or a link rather than a
+    // walk. So the district is let go first: crossing into one you are
+    // already holding is a step, and there would be nothing to photograph.
+    s.world.unloadDistrict(home.id);
     const back = s.crossInto(cx, cz);
     // Read the screen while it is still up, then let the load finish.
     await new Promise((r) => requestAnimationFrame(r));
@@ -493,12 +509,28 @@ async function run() {
     for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
     const dug = s.world.groundHeight(x, z);
     const tallAfter = s.world.tallestNear(x, z, 60);
-    // Out to a neighbour, which throws this district's bytes away, and back.
-    const next = s.world.catalogue.find((d) => d.built !== false && d.id !== home);
-    await s.crossInto((next.bounds.minX + next.bounds.maxX) / 2,
-      (next.bounds.minZ + next.bounds.maxZ) / 2);
+    // Out to the far side of the city and back, which is far enough for the
+    // streamer to let go of this district: a neighbour no longer counts,
+    // because the one you came from stays in memory behind you now.
+    const here = s.world.entryFor(home);
+    const next = s.world.catalogue
+      .filter((d) => d.built !== false && d.id !== home)
+      .sort((a, b) => Math.hypot(b.bounds.minX - here.bounds.minX, b.bounds.minZ - here.bounds.minZ)
+        - Math.hypot(a.bounds.minX - here.bounds.minX, a.bounds.minZ - here.bounds.minZ))[0];
+    const fx = (next.bounds.minX + next.bounds.maxX) / 2;
+    const fz = (next.bounds.minZ + next.bounds.maxZ) / 2;
+    await s.crossInto(fx, fz);
+    // And stand there. Loading a district is not leaving the one you are in:
+    // the streamer holds on to whatever is under your feet, which is the
+    // point of it, so this has to actually go.
+    s.teleport(fx, fz);
+    // It is let go on the streamer's next pass rather than the instant you
+    // arrive, so give it a few.
+    for (let i = 0; i < 120; i++) await new Promise((r) => requestAnimationFrame(r));
     const gone = !s.world.loaded(home);
     await s.crossInto(x, z);
+    s.teleport(x, z);
+    for (let i = 0; i < 30; i++) await new Promise((r) => requestAnimationFrame(r));
     return {
       scars: s.world.scarCount,
       gone,
