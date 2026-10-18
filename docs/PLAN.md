@@ -1835,3 +1835,106 @@ is what prompted the change.
   bundle: a point on a centreline is named by that street, a point forty
   metres off it is not, and a build whose centrelines carry no names at all
   fails rather than quietly showing nothing.
+
+## 38. Where this goes next (planned, not built)
+
+Written down before any of it is built, because the last plan that lived only
+in a conversation was lost. Five asks, in the order they were made, with what
+each one costs measured off the tree as it stands today.
+
+### 38.1 The city outside Mitte reads as generic
+
+What makes it generic is the tier table, not the data. Tier 2, which is most
+of the ring, is built with `roofs: false` and `windows: false`, so every block
+is a flat topped box with a flat colour on it. Tier 3 is the same with a
+bigger `minArea`.
+
+The important measurement: **windows cost nothing**. `tier.windows` sets one
+flag bit on the vertex, `FACADE_FLAG.NO_WINDOWS`, and the whole window pattern
+is a fragment shader that reads the building's own storey count. Turning them
+on in tier 2 and 3 adds zero bytes to the download and zero triangles, and
+costs only fragment work on buildings that are mostly far away and small on
+the screen. That is the cheapest single change available anywhere in this
+project.
+
+Roofs are not free: `tier.roofs` builds real pitched geometry. Turning them on
+across the ring would be measured before it was kept.
+
+Beyond that, what makes a block read as Berlin rather than as a box is
+silhouette variety that costs nothing per building: parapets, a chimney or two
+off the same hash that places the street furniture, and a wider spread in the
+palette. All of it is builder work on geometry that is already being emitted.
+
+### 38.2 The Brandenburg Gate is not recognisable
+
+It is twelve Doric columns, four cross walls, an entablature, an attic and a
+quadriga of five blocks, all in one flat `MAT.SANDSTONE`. Three things are
+missing, and none of them is expensive:
+
+- The columns have no flutes. A flute is a shader pattern on a cylinder, not
+  geometry.
+- The attic is one plain box. The real one is a cornice, a set back block and
+  a relief frieze: three boxes and a band instead of one box.
+- The quadriga is four rectangles. Legs, necks and heads are a dozen more
+  boxes on a model that is drawn once in the whole city.
+
+The flanking pavilions, Haus Liebermann and Haus Sommer, are not there at all,
+and they are what makes the square read as the square.
+
+### 38.3 Craters you can shoot
+
+Today only a blast of radius 55 m or more digs one, and the reason is in
+`DEMO.craterFrom`: the ground base is a 12.5 m quad grid in Mitte and coarser
+outside, so a six metre hole has no vertices inside it to move. It would be an
+invisible trap rather than a crater.
+
+Two ways out.
+
+The cheap one is a **crater patch**: emit a bowl as its own little mesh and
+draw it over the ground. It does not work on its own, because the flat base
+grid is still there and pokes through.
+
+The one that fits what this engine already does is to **re-mesh the ground of
+a touched tile at fine resolution**. There is precedent: the memorial floor is
+already built at 2.5 m inside the 12.5 m base, because its whole point is that
+the ground rolls. And the machinery to replace vertices in a tile and
+re-upload it is `src/game/bake.js`, which already does exactly that for a
+collapse. A crater of ten metres at 1.5 m resolution is about 140 quads. The
+cost is bounded by a cap on how many tiles may be re-meshed.
+
+Seeing through is already handled and would stay handled: damaged tiles are
+drawn a second time inside out, and there is a bedrock plane under everything.
+
+### 38.4 Holes shot in a building, and a collapse when too much is gone
+
+Damage already accumulates on a grid, `DEMO.cell` of 22 m, in four stages of
+180, and a finished cell comes down. What the shader does with it is cut the
+building back from the top. So a building loses its top quarter; it never
+loses the middle of a wall.
+
+A real hole is cheaper than it sounds, because the mechanism is already there.
+`uScars` is a ring of sixteen blast marks, each a centre, a radius and a
+severity, and the fragment shader already draws a ragged soot edge round each
+one with noise. A hole is the same loop with a `discard` inside the ragged
+edge. What you then see through it is the inside of the building, which the
+inside out pass already draws.
+
+So the work is: a hit list that outlives the sixteen scars, a smaller damage
+cell so a frontage breaks in pieces rather than in one slab, the collision
+segments opened where the hole is, which `DEMO.splitAt` already does for a
+collapse, and the existing per cell accumulation to bring the whole thing down
+when enough of it is gone.
+
+### 38.5 Crossing a district is abrupt
+
+`World.keepAround` already exists: it loads every built district within reach,
+drops the ones past a distance, and caps how many are resident. **Nothing in
+the game calls it.** The only caller in the tree is the districts test. The
+game calls `enterOnly`, which deliberately unloads everything else and holds
+you at a modal card while the bytes arrive.
+
+So the streaming is written and switched off. What has to be decided is the
+budget: the eight districts built here are 53.3 MB raw, Mitte alone 16.8 MB,
+a ring district 3 to 8 MB. Two or three resident is a few tens of megabytes of
+ArrayBuffer, and the tile manager already evicts GPU tiles by distance and
+caps residency at 520.
