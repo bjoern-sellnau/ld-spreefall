@@ -700,6 +700,14 @@ work, because the shadow line under a projecting band is what makes a frontage
 read as relief. Only in the middle, where you walk: it costs a quarter of the
 triangles of that district and is only worth that from the pavement.
 
+**Roofs everywhere, and they were cheaper than flat ones.** The ring and the
+outskirts had flat roofs because the tier table said a pitched roof costs four
+more vertices per metre of frontage. Measured, it is the reverse: a flat roof
+here is a cap plus a parapet, and a parapet is two triangles for every edge of
+a footprint. Turning the roofs on took the city from 875,427 triangles to
+869,559 and from 15.88 MB to 15.85, and gave the ring a skyline of red tile,
+slate and copper.
+
 **Windows everywhere, not only in the middle.** The ring and the outskirts
 used to be blank walls, because the tier they are built at had the window
 shader switched off. It costs nothing: the flag is one bit on the vertex and

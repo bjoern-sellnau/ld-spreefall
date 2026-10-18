@@ -2014,3 +2014,24 @@ caps residency at 520.
   tile, two shadow cascades, and a quality tier chosen from the measured
   median frame time over the first three seconds. That is the budget that was
   ever doing the work.
+
+## 41. Roofs across the ring, and what the measurement said
+
+- 2026-10-18: with the ceiling gone the obvious thing to spend on was roofs
+  outside Mitte, which had been flat since the tiers were written. The tier
+  table said why: a pitched roof is four more vertices per metre of frontage
+  than a flat one.
+
+- 2026-10-18: it is the other way round. A flat roof here is a cap plus a
+  parapet, and a parapet is two triangles for every edge of the footprint,
+  which on a Berlin block with a dozen jogs in its outline is a great many.
+  Switching the roofs on across the ring and the outskirts took one district
+  from 72,826 triangles to 66,958, and the whole city from 875,427 to 869,559
+  and from 15.88 MB to 15.85. It gave the ring a skyline of red tile, slate
+  and copper, and it made the city smaller doing it.
+
+- 2026-10-18: so the thing that was being saved for by keeping the detail off
+  was never being saved. Both of the switches turned on in this pass, windows
+  and roofs, were off on an assumption about cost that nobody had measured,
+  and neither of them costs anything. The comment that had it backwards is
+  replaced with the figures.

@@ -84,9 +84,12 @@ export const TIERS = [
     boxBelow: 0, service: true, surfaceStep: 5.0, roadSimplify: 1.5,
   },
   {
-    // The rest of the ring. Blocks: every building still solid and still
-    // climbable, but roofs flattened, small ones become the box that fits
-    // them, a third of the trees, and only the roads you can drive on.
+    // The rest of the ring. Still solid and still climbable, small ones
+    // become the box that fits them, a third of the trees, and only the
+    // roads you can drive on. Roofs and windows are on, and both were off
+    // here for years on the assumption that they were expensive. The windows
+    // cost nothing at all, and the roofs came out cheaper than the flat ones
+    // they replaced: see the note on `roofs` in tools/build-world.mjs.
     //
     // The windows stay on, and they are the reason this tier stopped reading
     // as a warehouse estate. They are not geometry: `windows` sets one flag
@@ -95,7 +98,7 @@ export const TIERS = [
     // and nothing in triangles. It was off here for a long time for no better
     // reason than that it sounded expensive.
     name: 'block',
-    minArea: 120, simplify: 2.5, roofs: false, windows: true, landmarks: true,
+    minArea: 120, simplify: 2.5, roofs: true, windows: true, landmarks: true,
     trees: 0.3, driveOnly: true, grid: 9, kerbs: false, groundStep: 50,
     boxBelow: 700, service: false, surfaceStep: 10.0, roadSimplify: 5.0,
   },
@@ -109,7 +112,7 @@ export const TIERS = [
     // once a storey goes under a pixel, so a suburb five kilometres off is a
     // tone rather than a flicker.
     name: 'outline',
-    minArea: 250, simplify: 4.0, roofs: false, windows: true, landmarks: true,
+    minArea: 250, simplify: 4.0, roofs: true, windows: true, landmarks: true,
     trees: 0, driveOnly: true, grid: 5, kerbs: false, groundStep: 100,
     boxBelow: 2000, service: false, surfaceStep: 20.0, roadSimplify: 10.0,
   },
