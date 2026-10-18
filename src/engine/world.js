@@ -576,6 +576,51 @@ export class World {
   }
 
   /**
+   * The name of the street you are standing in, or null out in the open.
+   *
+   * Measured to the centreline rather than to a map label: a label is a point
+   * every two hundred and forty metres and the nearest one can easily be on
+   * the next street over. This walks the named centrelines in memory and
+   * takes the nearest one whose carriageway you are actually on, with a
+   * couple of metres of pavement either side so that standing on the kerb
+   * still counts.
+   *
+   * Ties go to the wider road, because a junction is where two names meet and
+   * the one people use is the bigger of them.
+   *
+   * @param {number} slack how far outside the carriageway still counts
+   * @returns {{name: string, away: number, cls: string}|null}
+   */
+  streetAt(x, z, slack = 3.5) {
+    const lines = this.manifest.roadLines;
+    if (!lines || !lines.length) return null;
+    let best = null;
+    for (const r of lines) {
+      if (!r.n) continue;
+      const pts = r.pts;
+      // How far outside this particular road still counts as being in it.
+      const reach = r.w * 0.5 + slack;
+      let near = Infinity;
+      for (let i = 2; i < pts.length; i += 2) {
+        const ax = pts[i - 2], az = pts[i - 1], bx = pts[i], bz = pts[i + 1];
+        // A box test first: most ways in memory are nowhere near you, and
+        // this is the whole of the cost on every one of them.
+        if (Math.min(ax, bx) - reach > x || Math.max(ax, bx) + reach < x) continue;
+        if (Math.min(az, bz) - reach > z || Math.max(az, bz) + reach < z) continue;
+        const d = segmentDistance(x, z, ax, az, bx, bz);
+        if (d < near) near = d;
+      }
+      if (near > reach) continue;
+      if (!best || near < best.away - 0.5
+        || (Math.abs(near - best.away) <= 0.5 && r.w > best.w)) {
+        best = { name: r.n, away: near, cls: r.cls, w: r.w };
+      }
+    }
+    if (!best) return null;
+    return { name: best.name, away: Math.round(best.away * 10) / 10, cls: best.cls };
+  }
+
+  /**
    * The tallest thing standing in a circle, in metres above the ground there.
    * Used to decide where a collapse breaks, which wants an answer in one pass
    * over the segments rather than a raycast.

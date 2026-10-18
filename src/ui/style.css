@@ -162,6 +162,31 @@ html, body {
 #crosshair.aiming i { opacity: 0; }
 #crosshair.holstered i, #crosshair.holstered::after { opacity: 0.18; }
 
+/* The name of the street you are standing in, under the crosshair.
+   Faint while you walk, so it is never in the way of a shot, and brought up
+   for a few seconds whenever it changes, which is the moment you want to
+   read it. Small caps and wide letters because it is a street sign. */
+#streetname {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, 0);
+  margin-top: 34px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.7);
+  opacity: 0.30;
+  transition: opacity 0.7s ease;
+}
+#streetname.fresh {
+  opacity: 0.95;
+  color: var(--accent);
+  transition: opacity 0.18s ease;
+}
+
 /* The X that confirms a shot connected. */
 #hitmarker {
   position: absolute;

@@ -307,6 +307,49 @@ async function run() {
     await page.evaluate(() => window.spreefall.state.holstered) === true);
   await page.keyboard.press('KeyG');
 
+  // --- the street you are standing in --------------------------------------
+  // Named on the screen, under the crosshair. The name is measured to the
+  // centreline rather than to a map label, because a label is a point every
+  // two hundred and forty metres and the nearest one is routinely on the next
+  // street over.
+  const street = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const el = document.getElementById('streetname');
+    const settle = async () => {
+      for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+      await new Promise((r) => requestAnimationFrame(r));
+    };
+    // Unter den Linden, which this city has by name whether it was built from
+    // the live map or from the fallback.
+    s.teleport(319, -22);
+    await settle();
+    const linden = { text: el.textContent, up: !el.classList.contains('hidden'),
+      fresh: el.classList.contains('fresh') };
+    // Somewhere else with a different name, found by asking rather than by
+    // guessing at a coordinate.
+    const other = s.world.manifest.roadLines
+      .find((r) => r.n && r.n !== linden.text && r.pts.length >= 4);
+    if (!other) return { skip: true, why: 'only one named street in memory' };
+    s.teleport((other.pts[0] + other.pts[2]) / 2, (other.pts[1] + other.pts[3]) / 2);
+    await settle();
+    const moved = { text: el.textContent, fresh: el.classList.contains('fresh') };
+    // And the bright version goes out again, leaving the faint one up.
+    for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(r));
+    const settled = { text: el.textContent, up: !el.classList.contains('hidden'),
+      fresh: el.classList.contains('fresh') };
+    return { skip: false, linden, other: other.n, moved, settled };
+  });
+  check('the street you are standing in is named in the middle of the screen',
+    !street.skip && street.linden.up && street.linden.text === 'Unter den Linden',
+    street.skip ? street.why : `"${street.linden.text}"`);
+  check('and crossing into another one changes it, and brings it up',
+    !street.skip && street.moved.text === street.other && street.moved.fresh,
+    street.skip ? '' : `became "${street.moved.text}"${street.moved.fresh ? ', up' : ', not up'}`);
+  check('and it settles back to the faint version rather than staying bright',
+    !street.skip && street.settled.up && !street.settled.fresh,
+    street.skip ? '' : `${street.settled.up ? 'still up' : 'gone'}, ${street.settled.fresh ? 'bright' : 'faint'}`);
+
   await browser.close();
 
   const failed = checks.filter((c) => !c.ok);

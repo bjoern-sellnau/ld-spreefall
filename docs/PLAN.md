@@ -1810,3 +1810,28 @@ is what prompted the change.
   render on a frontage at seven cells across three metres, which is half metre
   blobs, and a Berlin block came out looking like it had damp rather than
   render on it. It is eighteen cells now.
+
+## 37. The street you are standing in
+
+- 2026-10-18: the name on the screen, under the crosshair. Faint while you
+  walk, so it is never in the way of a shot, and up in the accent colour for
+  four seconds whenever it changes, which is the moment anybody wants to read
+  it. In a mech or a vehicle it reads off the machine rather than off you: the
+  street under a Titan is the street it is standing in.
+
+- 2026-10-18: the names already existed, and were useless for this. A map
+  label is a point every two hundred and forty metres along a way, placed to
+  be written across a map, so the nearest label to where you are standing is
+  routinely on the next street over. The name now rides on the centreline as
+  well, which costs 1.4 kB of manifest in Mitte, and the answer is measured to
+  the centreline with half a carriageway and three and a half metres of
+  pavement of slack, so standing on the kerb still counts and standing in the
+  middle of a block counts as nowhere. A junction is a tie, and a tie goes to
+  the wider road, because that is the name people use.
+
+- 2026-10-18: looked up four times a second rather than every frame. It walks
+  every named centreline in memory, and the answer cannot change between two
+  frames of walking. `tools/test/street.test.mjs` holds the lookup to the real
+  bundle: a point on a centreline is named by that street, a point forty
+  metres off it is not, and a build whose centrelines carry no names at all
+  fails rather than quietly showing nothing.

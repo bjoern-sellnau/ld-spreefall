@@ -50,6 +50,7 @@ const el = {
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
+  streetName: $('streetname'),
   combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
   ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
   shieldbar: $('shieldbar'), shieldnum: $('shieldnum'), shieldflash: $('shieldflash'),
@@ -2425,6 +2426,39 @@ async function main() {
    * worked out once per district and costs two triangles a frame.
    */
   let bedrockFor = null;
+  // The street you are standing in. Looked up four times a second rather than
+  // every frame: it walks every named centreline in memory, and the answer
+  // cannot change between two frames of walking anyway.
+  let streetWas = null;
+  let streetDue = 0;
+  let streetFresh = 0;
+
+  function updateStreetName(dt) {
+    streetDue -= dt;
+    if (streetFresh > 0) {
+      streetFresh = Math.max(0, streetFresh - dt);
+      if (streetFresh === 0) el.streetName.classList.remove('fresh');
+    }
+    if (streetDue > 0) return;
+    streetDue = 0.25;
+    // Wherever you are looking out of, which is a mech or a vehicle when you
+    // are in one: the street under a Titan is the street it is standing in.
+    const ride = state.inMech || state.inVehicle;
+    const at = ride ? ride : player;
+    const found = world.streetAt(at.x, at.z);
+    const name = found ? found.name : null;
+    if (name === streetWas) return;
+    streetWas = name;
+    el.streetName.classList.toggle('hidden', !name);
+    if (!name) { el.streetName.classList.remove('fresh'); return; }
+    el.streetName.textContent = name;
+    // Up for a few seconds whenever it changes, which is the moment anybody
+    // wants to read it, then back to the faint version that stays out of the
+    // way of a shot.
+    el.streetName.classList.add('fresh');
+    streetFresh = 4.0;
+  }
+
   function updateBedrock() {
     const entry = world.entryAt(player.x, player.z);
     // The loaded state is part of the key as well as the district: asked
@@ -3690,6 +3724,7 @@ async function main() {
     state.time += worldDt;
     input.poll();
     updateBedrock();
+    updateStreetName(dt);
 
     // A pilot whose machine is no longer there is put back on their feet.
     // Everything that takes a mech away in the ordinary course of things

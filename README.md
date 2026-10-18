@@ -695,6 +695,12 @@ work, because the shadow line under a projecting band is what makes a frontage
 read as relief. Only in the middle, where you walk: it costs a quarter of the
 triangles of that district and is only worth that from the pavement.
 
+**The street you are standing in.** Named under the crosshair, faint while
+you walk and up for four seconds when it changes. Measured to the road
+centreline rather than to a map label, because a label is a point every two
+hundred and forty metres and the nearest one is routinely on the next street
+over; a junction is a tie and the tie goes to the wider road.
+
 **Surfaces with real maps.** Ten tiling maps built when the page loads, out
 of the same noise the shader used to run per pixel, handed to the card as one
 array texture with a mip chain and anisotropy on it. They are not albedos: the

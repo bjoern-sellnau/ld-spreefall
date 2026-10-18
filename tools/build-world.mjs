@@ -538,11 +538,18 @@ function buildDistrict(district) {
     roadMetres += polylineLength(r.line);
     roadPoints += r.line.length;
     if (!isFoot) {
-      roadLines.push({
+      // The name rides along with the centreline, not only with the labels
+      // the map draws. A label is a point every two hundred and forty metres,
+      // which is fine for writing a name across a map and useless for
+      // answering what street you are standing in: the nearest one can be a
+      // hundred metres away on the next street over.
+      const line = {
         cls,
         w: width,
         pts: simplify(r.line, 1.5).flatMap((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]),
-      });
+      };
+      if (r.tags.name) line.n = r.tags.name;
+      roadLines.push(line);
       if (r.tags.name) streetNames.push(...streetLabels(r.tags.name, r.line, cls));
     }
   }
