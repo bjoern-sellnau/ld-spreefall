@@ -2078,3 +2078,14 @@ caps residency at 520.
   expected the bytes to be thrown away, and now they are not. It goes to the
   far side of the city and stands there, because loading a district is not
   leaving the one you are in.
+
+- 2026-10-18: one check went red on the run after this and it was not the
+  streaming. "A shot sends everybody within earshot running" reported nought
+  of nought: a gunshot scares everybody inside seventy metres, and the check
+  took whoever happened to be inside that at the moment it fired. Civilians
+  spawn in a ring thirty to a hundred and twenty metres out and then walk an
+  errand, so the chance that none of six is inside seventy is about one in
+  eight. It had been a coin toss since it was written and it finally came up
+  tails. Three of them are now stood in the open at known distances before
+  the shot, which measures the thing the check is named after instead of the
+  dice.

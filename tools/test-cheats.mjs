@@ -636,7 +636,31 @@ async function run() {
     out.moved = who.filter((v, i) => `${v.x.toFixed(1)},${v.z.toFixed(1)}` !== before[i]).length;
 
     // And a shot sends them running away from it rather than towards it.
-    const near = who.filter((v) => Math.hypot(v.x - s.player.x, v.z - s.player.z) < 70);
+    //
+    // Three of them are stood where a shot will be heard first, which is not
+    // cheating: a gunshot scares everybody inside seventy metres, and this
+    // measures that rather than where six people happened to wander. They
+    // spawn in a ring thirty to a hundred and twenty metres out and then walk
+    // an errand, so on about one run in eight nobody was inside the seventy
+    // at the moment of the shot and the check failed on the dice, reporting
+    // nought of nought. It did exactly that once.
+    const near = who.slice(0, 3);
+    near.forEach((v, i) => {
+      const want = 22 + i * 14;
+      // Somewhere in the open at that distance, so that running away from the
+      // shot is something they can actually do.
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * Math.PI * 2 + i * 0.7;
+        const x = s.player.x + Math.cos(a) * want;
+        const z = s.player.z + Math.sin(a) * want;
+        if (!s.world.isLoaded(x, z)) continue;
+        const g = s.world.groundHeight(x, z);
+        if (s.world.raycast(x, g + 1.2, z, Math.cos(a), 0, Math.sin(a), 14)) continue;
+        v.x = x; v.z = z; v.y = g;
+        break;
+      }
+      v.panicLeft = 0;
+    });
     const away0 = near.map((v) => Math.hypot(v.x - s.player.x, v.z - s.player.z));
     s.weapon.select('m16'); s.weapon.cooldown = 0; s.weapon.spread = 0;
     s.shoot();
