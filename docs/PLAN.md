@@ -2139,3 +2139,35 @@ caps residency at 520.
   marks. It is the damage you have just done rather than a record. What is
   permanent is still the collapse: enough damage in a cell and the frontage
   comes down for good.
+
+## 44. What a small crater would cost, measured before building it
+
+- 2026-10-18: before writing any of 38.3, the two numbers that decide it.
+
+  The collision height field is 33 samples across a 100 m tile, so **3.125 m**.
+  The visible ground is a quad grid at **12.5 m** in Mitte and coarser
+  outside. The collision is already four times finer than the picture. That
+  is the whole of why `DEMO.craterFrom` refuses to dig anything under 55 m:
+  a small crater would be a dip you can walk into and cannot see, which is
+  the one class of bug this project refuses outright.
+
+- 2026-10-18: so the fix is on the picture, not on the collision. The obvious
+  version, build the ground finer everywhere, is out. Mitte's ground is
+  already 210,000 vertices of the district's 600,000, a third of it, because
+  ground quads do not share vertices. At 4 m it would be about two million.
+  Not a budget question, a frame rate one.
+
+- 2026-10-18: what is affordable is re-meshing the tiles a blast touches, and
+  only those. One 100 m tile at 3.125 m is 1,024 quads against 64 today, so
+  about two thousand triangles a tile; twenty damaged tiles is forty
+  thousand, against the city's 870,000. The precedent is already in the
+  builder, where the memorial floor is laid at 2.5 m inside the 12.5 m base
+  because its whole point is that the ground rolls.
+
+- 2026-10-18: the work that is left is not the arithmetic, it is the plumbing.
+  A tile's vertices are a packed slice of the district's bytes and the tile
+  manager uploads them as they come; replacing a tile's ground with sixteen
+  times as many vertices means the manager has to accept a mesh that is not
+  the one in the file. `src/game/bake.js` can rewrite vertices in place but
+  cannot add any. That is the piece to build, and it is the same piece a
+  hole in a wall needs before the collision can agree with it.
