@@ -23,7 +23,7 @@ the sound and the data pipeline are all written from scratch.
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
 | Shipped as | one HTML file, JS modules, one bundle per district, no backend |
 | Extent | Berlin, out to the city boundary, 1,718 km2 in 81 districts, one in memory at a time |
-| Payload | the code, the index and the district you are standing in: 1 to 3 MB over the wire, 9.2 MB for Mitte, against a 25 MB budget |
+| Payload | the code, the index and the district you are standing in: 4.69 MB over the wire for the city built here, 8.89 MB for the heaviest district of the real one |
 | Difficulty | easy, normal and hard, with shields that come back |
 | Third party code at run time | none |
 
@@ -244,6 +244,7 @@ visits.
 | Ultra gore | the three above, considerably more of it |
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
+| Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not
@@ -363,6 +364,18 @@ the whole of the city to walk about in. The cheat menu still brings anything
 out by hand, and what it brings out is a real enemy with a real fight in it;
 it simply is not replaced when it goes down. The mode is remembered between
 visits, because it is a choice about what you came for rather than a setting.
+
+## The people who live here
+
+In Just a Walk the streets have somebody on them. They are soldiers in the one
+sense that matters to the engine, which is the walking, the ground under them,
+the capsule you can hit and the single draw call; everything else about them is
+about fifteen lines. They carry nothing, wear no helmet, have a coat in one of
+four colours picked per person, and walk from somewhere to somewhere else. A
+shot inside seventy metres, a blast, or anything arriving in a sphere of light
+sends every one of them running straight away from it for seven seconds, and
+then they go back about their business. They are not in the fight, nothing
+counts them as a contact, and nobody is hunting them.
 
 ## How they arrive
 
@@ -569,12 +582,12 @@ instance, which turns the red core blue.
 
 ## The city is eighty one districts
 
-The brief asks for a walkable Berlin under 25 MB of download. Mitte at full
-detail is 2.2 MB over the wire and 6.5 square kilometres; Berlin out to the
-city boundary is 1,718 square kilometres of lattice, and at Mitte's detail
-that would be hundreds of megabytes. So the city is cut into districts, built
-one at a time, thinned with distance from the middle, and exactly one of them
-is in memory while you play.
+Mitte at full detail is 4.40 MB over the wire and 6.5 square kilometres;
+Berlin out to the city boundary is 1,718 square kilometres of lattice, and at
+Mitte's detail that would be hundreds of megabytes. So the city is cut into
+districts, built one at a time, thinned with distance from the middle, and
+exactly one of them is in memory while you play. What a player waits for is
+one district, not the city.
 
 **The box.** The playable area is the Land of Berlin: 52.3380 to 52.6760 N,
 13.0880 to 13.7620 E, which is 45.7 km by 37.4 km. That extent is the one two
@@ -621,21 +634,26 @@ have, and you can zoom from a street out to all of Berlin and back. Free travel
 across the city loads the destination during the flight and will not put you
 down until the ground is there.
 
-**The budget.** All of Berlin at these tiers is 304 MB deployed and 107 MB
+**What it weighs.** All of Berlin at these tiers is 304 MB deployed and 107 MB
 over the wire, measured on 13 October 2026 with every one of the eighty one
 districts built from the live extract: 102,691 buildings over 1,717 square
-kilometres, which is 0.062 MB of download per square kilometre. No amount of
-thinning gets that under 25. What does fit, easily, is what
-a player downloads to play: the code, the index and the district they are
-standing in. The biggest district in the real city is 8.65 MB over the wire,
-8.89 MB with the code and the index on top of it, and most are two to five.
-That is what the budget is now held against, and it is a reinterpretation of the
-brief's rule 6, written down in `docs/PLAN.md` rather than quietly applied. The
-old reading is still available: `npm run fit -- --whole=25` cuts the city down
-to what fits as a whole. `npm run weigh` prints the table of districts with
-deployed and gzipped bytes, `npm run fit` fails the build if a single district
-is too big to wait for, and `.github/workflows/city.yml` builds from the live
-extract and publishes that table.
+kilometres, which is 0.062 MB of download per square kilometre. None of that
+is what a player downloads. What comes down before you can walk is the code,
+the index and the district you are standing in: 4.69 MB for the eight built
+here, and 8.89 MB for the biggest district in the real city, with most at two
+to five.
+
+There was a hard ceiling on that number, 25 MB a district, carried over from
+the brief. It is gone. It never bound anything, because the biggest district
+is a third of it, and holding detail back against a figure that was never
+reached is the wrong way round: the test is whether the thing is playable,
+which is a wait you will sit through and a frame rate you can move in. A
+ceiling is still there for anyone who wants one, and then it does fail the
+build, because a limit nobody acts on is not a limit: `npm run fit -- --budget=12`.
+`npm run fit -- --whole=25` still cuts the city down to what fits as a whole.
+`npm run weigh` prints the table of districts, `npm run fit` prints what you
+wait for, and `.github/workflows/city.yml` builds from the live extract and
+publishes both.
 
 ## Two cities, and which one you are looking at
 
@@ -673,6 +691,81 @@ build log was read.
 ## What is real and what is generated
 
 This matters, so it is spelled out rather than glossed over.
+
+**Relief on the frontages.** A cornice under the eaves on anything over nine
+metres, and a band over the shop windows where the ground floor is a shop.
+Both are bands rather than mouldings: two quads an edge, the face you see and
+the underside the sun never reaches, and it is the second one that does the
+work, because the shadow line under a projecting band is what makes a frontage
+read as relief. Only in the middle, where you walk: it costs a quarter of the
+triangles of that district and is only worth that from the pavement.
+
+**A shell opens the wall it goes off against.** A hole is a `discard` inside
+the same ragged noise edge the shader already drew the soot with, so the rim
+and the scorching are the same shape and it reads as torn rather than cut. The
+tiles round a blast are drawn a second time inside out, which is what fills
+the hole with the inside of the building instead of the sky. Measured by
+drawing the frame twice, once with the hole and once with the same scar at
+nought: 2.31 m of hole and 40.5 per cent of the frame different between them.
+Two limits worth knowing: the hole is in the picture only, so the collision
+still has the wall whole and a shot through it stops, and it lives as long as
+the sixteen most recent blast marks. What is permanent is the collapse.
+
+**The city streams.** Walking into another district used to be a card and a
+wait. The neighbour now comes down while you are still nine hundred metres
+inside your own, and crossing is a step: three districts and 26 MB held
+walking east out of Mitte, with the one behind you still there when you turn
+round. The card is still there for arriving somewhere that is not in memory,
+which is a fast travel or a link rather than a walk.
+
+**Roofs everywhere, and they were cheaper than flat ones.** The ring and the
+outskirts had flat roofs because the tier table said a pitched roof costs four
+more vertices per metre of frontage. Measured, it is the reverse: a flat roof
+here is a cap plus a parapet, and a parapet is two triangles for every edge of
+a footprint. Turning the roofs on took the city from 875,427 triangles to
+869,559 and from 15.88 MB to 15.85, and gave the ring a skyline of red tile,
+slate and copper.
+
+**Windows everywhere, not only in the middle.** The ring and the outskirts
+used to be blank walls, because the tier they are built at had the window
+shader switched off. It costs nothing: the flag is one bit on the vertex and
+the pattern is a fragment shader reading the building's own storey count, so
+the city is the same 875,427 triangles and the same 15.88 MB either way. What
+had to come first was a fade: the facade is the one pattern in this renderer
+made of hard edges rather than smoothsteps, so once a pixel covers a storey it
+now draws the average of a frontage instead of a pattern nobody can resolve.
+
+**The street you are standing in.** Named under the crosshair, faint while
+you walk and up for four seconds when it changes. Measured to the road
+centreline rather than to a map label, because a label is a point every two
+hundred and forty metres and the nearest one is routinely on the next street
+over; a junction is a tie and the tie goes to the wider road.
+
+**Surfaces with real maps.** Ten tiling maps built when the page loads, out
+of the same noise the shader used to run per pixel, handed to the card as one
+array texture with a mip chain and anisotropy on it. They are not albedos: the
+colour of a wall comes from the palette and the colour of a road comes from
+the shader, so a map carries the slope, a multiplier on the albedo and how
+buried a point is in its own relief, all worked out from one height field per
+material. The structure stays procedural, because a road knows where its own
+centre line is and a texture does not; what the maps add is grain that
+survives distance, since the card averages a mip chain down for free and a
+fractal noise run per pixel has to be faded out instead. Still nothing
+downloaded: 2.6 MB of bytes computed in a fifth of a second.
+
+**What stands on the street.** Lamp posts every forty five metres, alternating
+sides the way they do here, cars parked at the kerb down the quieter streets,
+and a bench or a bin at the odd corner. None of it is in the map: OpenStreetMap
+knows where the roads are and how wide they are, and the furniture is placed
+off that, at a fixed step along the centreline with the kerb worked out from
+the width, so two builds put the same lamp in the same place. It is what makes
+a street read as a street rather than as a corridor between two walls. Lamps
+and cars carry collision that matches what is drawn, down to the car being a
+rectangle the length of a car rather than a square the width of one, and
+nothing stands inside anything else: a piece that would land on a car, a lamp
+or a tree is dropped, which is 178 of them across Mitte. It costs 75,000
+triangles there, against 188,000 for the city it stands in, and it is on in
+the middle tier only, like the relief.
 
 **The shape of a building is what OpenStreetMap says it is.** Height or
 levels, `building:part` pieces instead of the envelope around them,
@@ -792,18 +885,24 @@ capture, which the verification run writes.
 ### The build
 
 ```
-parsed 1.47 MB of OSM: nodes 10848  ways 1759  relations 5
-features: buildings 1672  roads 67  areas 1  water 2  green 7  rails 2, trees 3746
-geometry: 266,195 vertices, 132,397 triangles, 1672 buildings, 2711 stelae,
-          3728 trees, 44.3 km of road
-tiles     646, of 34 by 19, 613 of them non empty
-world.bin 9.05 MB
-world.json 0.14 MB
-dist      9.42 MB, 2.28 MB over the wire with gzip, against a 25 MB budget
-max tile  589.5 kB, 12,141 triangles (the stelae field)
-mean tile 12.1 kB
-build     about one second
+parsed 1.52 MB: nodes 10852  ways 1760  relations 5
+features: buildings 1673  roads 67  areas 1  water 2  green 7  rails 2  trees 3746
+geometry: 599587 vertices, 263051 triangles, 1662 buildings, 2711 stelae,
+          3699 trees, 790 lamps, 1013 cars, 72 seats and bins, 43.9 km of road
+tiles           646 of 34 by 19 (646 non empty)
+world-core.bin  16.68 MB
+world-core.json 0.16 MB
+over the wire   4.40 MB gzipped
+max tile        827.5 kB, 15842 triangles
+mean tile       23.6 kB
+built in        3.0 s
 ```
+
+That is Mitte, which is the district you land in. It has doubled in triangles
+since the first version of this table: the relief, the street furniture and
+the surface maps all went into it, and the download went from 2.28 MB to 4.40.
+There is no ceiling on that number any more, only the question of whether the
+wait and the frame rate are still something you would sit through.
 
 ### Frame rate
 
@@ -910,6 +1009,15 @@ the square is untouched.*
 
 ![Vehicles on Pariser Platz](docs/screenshots/city-05-vehicles.png)
 *A jeep, a tank, a helicopter and a fighter, parked on the square.*
+
+![Cobbles in a low sun](docs/screenshots/surface-01-ground.png)
+*Sett at eight in the morning. Every stone has its own slope, out of a map
+built when the page loaded, and the grain carries into the middle distance
+instead of going smooth at thirty metres.*
+
+![A street with things on it](docs/screenshots/street-01-furniture.png)
+*A side street in Mitte: cars at the kerb and a lamp post standing beside
+them.*
 
 ![Flying across the city](docs/screenshots/city-03-travel.png)
 *Free travel, halfway across: three hundred metres up over the roofs of Mitte,

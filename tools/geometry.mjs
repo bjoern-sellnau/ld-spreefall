@@ -126,6 +126,17 @@ export function extrudeBuilding(mesh, foot, o) {
     }
   }
 
+  // Relief. A cornice under the eaves on anything tall enough to have one,
+  // and a string course over the shop windows where there are shops. Both
+  // are bands rather than mouldings: two quads an edge buys the shadow line,
+  // and a profile nobody can see from the pavement buys nothing.
+  if (o.relief && o.height > 9) {
+    facadeBand(mesh, rings[0], wallTop - 0.95, 0.5, 0.26, wallMat, seed, hgt);
+  }
+  if (o.shopfront && o.height > 6) {
+    facadeBand(mesh, rings[0], base + 3.9, 0.3, 0.15, wallMat, seed, hgt);
+  }
+
   // The roof. Everything OpenStreetMap writes down about one is honoured
   // here: its shape, which way the ridge runs, which way a single slope
   // falls, and what it is made of. A shape nobody has tagged, or one that
@@ -148,7 +159,57 @@ export function extrudeBuilding(mesh, foot, o) {
     domeRoof(mesh, rings[0], wallTop, rh, roofMat, roofSeed);
   } else {
     flatRoof(mesh, rings, wallTop, roofMat, roofSeed);
+    // One height for every parapet, which looks like a ruled line along a
+    // street and is kept anyway. Varying it was tried: the quads are emitted
+    // either way, so it reads as free, and it is not. Thirteen different
+    // heights instead of one cost a quarter of a megabyte across the city,
+    // because a column of identical numbers is what the compressor lives on,
+    // and half a metre on a twenty metre building is under what anybody can
+    // see from the pavement.
     if (o.parapet !== false && o.height > 6) parapet(mesh, rings[0], wallTop, 0.7, wallMat, seed, hgt);
+  }
+}
+
+/**
+ * A band round the outside of a building: the cornice under the eaves, the
+ * string course over the shop windows. Two quads an edge, the face you see
+ * and the underside the sun never reaches, and it is the second one that
+ * does the work: the shadow line under a projecting band is what makes a
+ * frontage read as relief rather than as a photograph of one.
+ *
+ * Edges shorter than minEdge are skipped. A Berlin block has a dozen two
+ * metre jogs in its outline that nobody can see and every one of them would
+ * cost the same as the frontage.
+ *
+ * @param {Array<[number,number]>} ring the footprint, counter clockwise
+ * @param {number} y where the band starts, in world metres
+ * @param {number} height how deep the band is
+ * @param {number} out how far it stands proud of the wall
+ */
+export function facadeBand(mesh, ring, y, height, out, mat, seed, hgt, minEdge = 3.5) {
+  const flags = FACADE_FLAG.NO_WINDOWS;
+  let run = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const len = Math.hypot(dx, dz);
+    if (len < minEdge) { run += len; continue; }
+    const nx = dz / len, nz = -dx / len;
+    const ax = a[0] + nx * out, az = a[1] + nz * out;
+    const bx = b[0] + nx * out, bz = b[1] + nz * out;
+    // The face.
+    const f0 = mesh.vertex(ax, y, az, nx, 0, nz, run, 0, mat, seed, 0, flags, hgt, 255);
+    const f1 = mesh.vertex(bx, y, bz, nx, 0, nz, run + len, 0, mat, seed, 0, flags, hgt, 255);
+    const f2 = mesh.vertex(bx, y + height, bz, nx, 0, nz, run + len, height, mat, seed, 0, flags, hgt, 255);
+    const f3 = mesh.vertex(ax, y + height, az, nx, 0, nz, run, height, mat, seed, 0, flags, hgt, 255);
+    mesh.quad(f3, f2, f1, f0);
+    // And the underside, which is the shadow.
+    const u0 = mesh.vertex(a[0], y, a[1], 0, -1, 0, run, 0, mat, seed, 0, flags, hgt, 120);
+    const u1 = mesh.vertex(b[0], y, b[1], 0, -1, 0, run + len, 0, mat, seed, 0, flags, hgt, 120);
+    const u2 = mesh.vertex(bx, y, bz, 0, -1, 0, run + len, out, mat, seed, 0, flags, hgt, 120);
+    const u3 = mesh.vertex(ax, y, az, 0, -1, 0, run, out, mat, seed, 0, flags, hgt, 120);
+    mesh.quad(u0, u1, u2, u3);
+    run += len;
   }
 }
 
@@ -408,6 +469,78 @@ function domeRoof(mesh, ring, y, rh, mat, seed) {
         emitFace(mesh, [p0, p1, p2, p3], [[0, 0], [w, 0], [w, hgt], [0, hgt]], mat, seed, flags, ref);
       }
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// What stands on the street
+
+/**
+ * A Berlin street lamp: a cast post with a slight taper, an arm over the
+ * carriageway and a lantern on the end of it. A few dozen triangles, which
+ * at one every forty five metres is what a street costs to look lived in.
+ *
+ * @param {number} yaw which way the arm reaches, radians
+ */
+export function lampPost(mesh, x, y, z, yaw, opts = {}) {
+  const h = opts.height || 6.2;
+  const reach = opts.reach || 1.1;
+  const flags = FACADE_FLAG.NO_WINDOWS;
+  const o = { flags, seed: opts.seed || 0 };
+  cylinder(mesh, x, y, z, 0.17, 0.10, h, 7, MAT.METAL, o);
+  // The arm, a flattened box leaning out over the road.
+  const ax = x + Math.sin(yaw) * reach * 0.5;
+  const az = z + Math.cos(yaw) * reach * 0.5;
+  box(mesh, ax, y + h - 0.12, az, reach, 0.14, 0.16, MAT.METAL, { ...o, rot: -yaw });
+  // The lantern. Glass, so it catches the sun and reads at dusk.
+  const lx = x + Math.sin(yaw) * reach;
+  const lz = z + Math.cos(yaw) * reach;
+  box(mesh, lx, y + h - 0.34, lz, 0.52, 0.22, 0.34, MAT.GLASS, { ...o, rot: -yaw });
+}
+
+/**
+ * A car at the kerb. Four boxes and a windscreen: a body, a cabin, and the
+ * dark band of glass that makes it read as a car rather than as a crate.
+ * Deliberately low on triangles, because a street has a lot of them.
+ */
+export function parkedCar(mesh, x, y, z, yaw, opts = {}) {
+  const len = opts.length || 4.3;
+  const wide = opts.width || 1.78;
+  const flags = FACADE_FLAG.NO_WINDOWS;
+  const o = { flags, seed: opts.seed || 0, rot: -yaw };
+  // What it is made of stands in for what colour it is, because a car has no
+  // palette of its own in this renderer: dark road grey, concrete grey or
+  // steel, picked off the seed. A street of bright metal boxes reads as a
+  // row of fridges.
+  const shell = [MAT.ASPHALT, MAT.CONCRETE, MAT.ASPHALT, MAT.METAL][(opts.seed || 0) & 3];
+  // The body sits on its wheels rather than on the road.
+  box(mesh, x, y + 0.26, z, wide, 0.62, len, shell, o);
+  // The cabin, shorter and set back.
+  const bx = x - Math.sin(yaw) * 0.15, bz = z - Math.cos(yaw) * 0.15;
+  box(mesh, bx, y + 0.88, bz, wide * 0.92, 0.52, len * 0.52, shell, o);
+  // Glass all the way round the cabin, a hand's breadth proud of it.
+  box(mesh, bx, y + 0.96, bz, wide * 0.95, 0.34, len * 0.54, MAT.GLASS, o);
+  // Wheels, as two dark bars. Four cylinders would be forty triangles for
+  // something nobody looks at.
+  box(mesh, x, y + 0.02, z, wide * 1.02, 0.26, len * 0.78, MAT.ASPHALT, o);
+}
+
+/** A bin: a dark drum on the pavement. */
+export function streetBin(mesh, x, y, z, opts = {}) {
+  cylinder(mesh, x, y, z, 0.26, 0.30, 0.95, 8, MAT.METAL,
+    { flags: FACADE_FLAG.NO_WINDOWS, seed: opts.seed || 0 });
+}
+
+/** A bench: a slab on two legs, facing the way it is turned. */
+export function bench(mesh, x, y, z, yaw, opts = {}) {
+  const flags = FACADE_FLAG.NO_WINDOWS;
+  const o = { flags, seed: opts.seed || 0, rot: -yaw };
+  box(mesh, x, y + 0.42, z, 1.72, 0.09, 0.52, MAT.FACADE, o);
+  box(mesh, x - Math.sin(yaw) * 0.24, y + 0.52, z - Math.cos(yaw) * 0.24,
+    1.72, 0.42, 0.08, MAT.FACADE, o);
+  for (const side of [-0.72, 0.72]) {
+    box(mesh, x + Math.cos(yaw) * side, y, z - Math.sin(yaw) * side,
+      0.1, 0.42, 0.46, MAT.METAL, o);
   }
 }
 

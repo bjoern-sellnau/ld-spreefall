@@ -49,6 +49,86 @@ async function run() {
     s.cheats.reset();
     s.teleport(81, 0); s.look(90, -3); s.setTime(14.2);
     s.setQuality('low');
+
+    // Everybody else off the street, for the two checks that measure one gun
+    // against one target. A shot from a mech goes to the nearest thing on
+    // the line, and Rise of the Machines keeps a dozen of them walking at
+    // you: with any of those in the way the number that comes out is about
+    // what it hit rather than about the gun.
+    window.clearTheStreet = (keep) => {
+      let gone = 0;
+      for (let i = s.mechs.active.length - 1; i >= 0; i--) {
+        const m = s.mechs.active[i];
+        if (keep.includes(m)) continue;
+        m.alive = false;
+        m.occupied = false;
+        s.mechs.active.splice(i, 1);
+        gone++;
+      }
+      gone += s.soldiers.active.length + s.drones.active.length + s.jets.active.length;
+      s.soldiers.reset();
+      s.drones.reset();
+      s.jets.reset();
+      s.soldiers.budget = 0;
+      s.drones.budget = 0;
+      s.jets.budget = 0;
+      return gone;
+    };
+
+    // Somewhere to stand a target that the mech can actually shoot at, used
+    // by both of the checks that measure one of its guns.
+    //
+    // Two earlier versions of this got it wrong in instructive ways. The
+    // first swept a level ray and then refused any ground more than three
+    // metres off the mech's own level, which by the end of the suite is most
+    // of the district: eleven of its twenty four candidates were blocked and
+    // the other thirteen were over a hole. A shot down into a crater is a
+    // perfectly good shot, and every check here takes its aim off the
+    // target's real height anyway. The second swept muzzle to chest, found a
+    // line, and watched the gun put forty eight rounds out of forty eight
+    // into the city: a mech's guns do not point at what you are looking at,
+    // they converge on the point where the torso's own ray runs out, and
+    // from a muzzle two metres off the centre line that is a different line.
+    // So this turns the torso onto each candidate and asks the mech itself
+    // where the shot would go.
+    window.firingSpot = (mine, near = 24) => {
+      const was = { torso: mine.torso, pitch: mine.pitch };
+      const bearing = mine.torso;
+      let tried = 0, walls = 0, holes = 0;
+      const look = (px, py, pz) => {
+        // Point the torso where the pilot will be pointing it. Everything
+        // about the shot hangs off this: the muzzle swings round with the
+        // torso, and the guns converge on wherever the torso's own ray
+        // runs out rather than on the target.
+        const flat = Math.hypot(px - mine.x, pz - mine.z) || 1;
+        mine.torso = Math.atan2(-(px - mine.x), -(pz - mine.z));
+        mine.pitch = Math.atan2((py + 5.2) - (mine.y + mine.spec.eye), flat);
+      };
+      for (let ring = 0; ring < 5; ring++) {
+        const d = near + ring * 7;
+        for (let step = 0; step < 17; step++) {
+          const a = bearing + (step % 2 ? 1 : -1) * Math.floor((step + 1) / 2) * 0.19;
+          const px = mine.x - Math.sin(a) * d;
+          const pz = mine.z - Math.cos(a) * d;
+          const py = s.world.groundHeight(px, pz);
+          tried++;
+          // Deep enough to be a quarry rather than a street: what is being
+          // measured is the gun, not a forty metre drop.
+          if (Math.abs(py - mine.y) > 9) { holes++; continue; }
+          look(px, py, pz);
+          const muzzle = s.mechs.muzzle(mine, s.mechSpec.titan.chaingun.muzzle);
+          const dir = s.mechs.aimFrom(muzzle, s.mechs.aimPoint(mine, 280));
+          const reach = Math.hypot(px - muzzle.x, (py + 5.2) - muzzle.y, pz - muzzle.z);
+          if (s.world.raycast(muzzle.x, muzzle.y, muzzle.z,
+            dir.x, dir.y, dir.z, reach - 1.5)) { walls++; continue; }
+          return { x: px, z: pz };
+        }
+      }
+      mine.torso = was.torso;
+      mine.pitch = was.pitch;
+      return { why: `nowhere to stand a target: ${walls} of ${tried} blocked, `
+        + `${holes} over a hole` };
+    };
   });
   await page.waitForTimeout(4000);
 
@@ -776,7 +856,14 @@ async function run() {
     const s = window.spreefall;
     const mine = s.mechs.active.find((m) => m.mine);
     const theirs = s.mechs.active.find((m) => !m.mine);
-    if (!mine || !theirs) return { skip: true };
+    // A skip that says which of the two is missing, and what else is on the
+    // street. The first version of this said nothing at all, and a run where
+    // the Titan had quietly died read exactly like a run where there had
+    // been no room to put one.
+    if (!mine || !theirs) {
+      return { skip: true, why: `mine ${!!mine}, theirs ${!!theirs}, `
+        + `${s.mechs.active.length} of 8 up, piloted ${!!s.state.inMech}` };
+    }
     s.teleport(mine.x + 3, mine.z);
     s.toggleVehicle();
     const inIt = s.state.inMech === mine;
@@ -794,24 +881,9 @@ async function run() {
     // Somewhere the mech can actually see: a spot behind a frontage is a
     // test of the wall, not of the gun. Candidates are tried in a fan round
     // the torso until the line from the muzzle is clear.
-    const muzzle = s.mechs.muzzle(mine, s.mechSpec.titan.chaingun.muzzle);
-    let spot = null;
-    for (let step = 0; step < 24 && !spot; step++) {
-      const a = mine.torso + (step % 2 ? 1 : -1) * Math.floor(step / 2) * 0.26;
-      const d = 30 + (step % 3) * 6;
-      const px = mine.x - Math.sin(a) * d;
-      const pz = mine.z - Math.cos(a) * d;
-      const dx = px - muzzle.x, dz = pz - muzzle.z;
-      const len = Math.hypot(dx, dz) || 1;
-      const blocked = s.world.raycast(muzzle.x, muzzle.y, muzzle.z,
-        dx / len, 0, dz / len, len);
-      // And on ground near its own level: by this point in the suite the city
-      // is full of craters, and a target standing eight metres down is a test
-      // of how far a level shot carries over a hole.
-      const drop = Math.abs(s.world.groundHeight(px, pz) - mine.y);
-      if (!blocked && drop < 3) spot = { x: px, z: pz };
-    }
-    if (!spot) return { skip: true };
+    const alone = window.clearTheStreet([mine, theirs]);
+    const spot = window.firingSpot(mine, 30);
+    if (spot.why) return { skip: true, why: spot.why };
     theirs.x = spot.x;
     theirs.z = spot.z;
     theirs.y = s.world.groundHeight(spot.x, spot.z);
@@ -824,6 +896,24 @@ async function run() {
     const rise = (theirs.y + 5.2) - (mine.y + s.mechSpec.titan.eye);
     s.look(yaw * 180 / Math.PI, Math.atan2(rise, flat) * 180 / Math.PI);
     const hp0 = theirs.health;
+    // Every round the gun lets go, and where it went: the one time this
+    // check failed with a clear line and a target the gun's own ray could
+    // find, the answer was in which of these three counts went up.
+    const tally = { fired: 0, onIt: 0, onSteel: 0, onCity: 0, miss: 0 };
+    const realGun = s.mechs.onArmFire;
+    s.mechs.onArmFire = (mm, from, dir, arm, extra) => {
+      if (mm === mine) {
+        tally.fired++;
+        const far = arm.range || 280;
+        const steel = s.mechs.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, far);
+        const city = s.world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, far);
+        if (steel && (!city || steel.t <= city.t)) {
+          if (steel.mech === theirs) tally.onIt++; else tally.onSteel++;
+        } else if (city) tally.onCity++;
+        else tally.miss++;
+      }
+      realGun(mm, from, dir, arm, extra);
+    };
     s.input.fire = true;
     for (let i = 0; i < 60 * 4; i++) {
       // Nailed to the spot, so this measures the gun rather than whether the
@@ -833,6 +923,7 @@ async function run() {
       s.fixedForTest(1 / 60);
     }
     s.input.fire = false;
+    s.mechs.onArmFire = realGun;
     const hp1 = theirs.health;
     // If nothing landed, say why: where the target was, whether the gun's own
     // ray finds it, and what the world puts in the way.
@@ -845,7 +936,7 @@ async function run() {
       z: theirs.z - mine.z,
     };
     const tl = Math.hypot(toward.x, toward.z) || 1;
-    const why = {
+    const shot = {
       away: Math.round(tl),
       wall: wall ? Math.round(wall.t) : null,
       mech: onTarget ? Math.round(onTarget.t) : null,
@@ -862,6 +953,12 @@ async function run() {
       })(),
       mineY: Number(mine.y.toFixed(1)),
       theirsY: Number(theirs.y.toFixed(1)),
+      // Whether the gun's own ray finds the target rather than something
+      // else, and how many other machines were stood down first.
+      onIt: onTarget ? onTarget.mech === theirs : null,
+      alone,
+      left: s.mechs.active.length,
+      tally,
     };
     // And a salvo of rockets out of the pod. Counted as they leave rather
     // than by looking at what is still in the air: at two hundred and thirty
@@ -876,7 +973,7 @@ async function run() {
     for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
     s.input.secondary = false;
     s.mechs.onRockets = realRockets;
-    const out = { inIt, walked: Math.round(walked), hp0, hp1, rockets, torso: 0, why };
+    const out = { inIt, walked: Math.round(walked), hp0, hp1, rockets, torso: 0, shot };
     // The torso goes where you look and the legs follow it rather than leading.
     s.look((yaw + 1.2) * 180 / Math.PI, 0);
     const legsWere = mine.yaw;
@@ -889,15 +986,15 @@ async function run() {
   });
   check('and you can climb into one of your own',
     !piloted.skip && piloted.inIt && piloted.walked > 10,
-    piloted.skip ? '' : `${piloted.walked} m of walking`);
+    piloted.skip ? piloted.why : `${piloted.walked} m of walking`);
   // The detail carries the whole geometry when this fails, because the one
   // time it did, the answer was not the gun at all: the target was standing
   // in a crater thirteen metres down and the shot went over its head.
   const gunOk = !piloted.skip && piloted.hp1 < piloted.hp0 - 300;
   check('its chaingun takes a mech apart', gunOk,
-    piloted.skip ? ''
-      : `${piloted.hp0} to ${piloted.hp1} at ${piloted.why.away} m`
-        + (gunOk ? '' : ` ${JSON.stringify(piloted.why)}`));
+    piloted.skip ? piloted.why
+      : `${piloted.hp0} to ${piloted.hp1} at ${piloted.shot.away} m`
+        + (gunOk ? '' : ` ${JSON.stringify(piloted.shot)}`));
   check('and the pod throws a salvo rather than one rocket',
     !piloted.skip && piloted.rockets >= 3, `${piloted.rockets} in the air`);
   check('the torso goes where you look and the legs follow',
@@ -910,10 +1007,13 @@ async function run() {
     const s = window.spreefall;
     s.mechs.reset();
     const mine = s.spawnMech('titan', 12);
-    if (!mine) return { skip: true };
+    if (!mine) return { skip: true, why: 'no room for one' };
     s.teleport(mine.x + 3, mine.z);
     s.toggleVehicle();
-    if (s.state.inMech !== mine) return { skip: true };
+    if (s.state.inMech !== mine) {
+      return { skip: true, why: `could not get in: ${s.mechs.nearest(s.player.x, s.player.z, 8) ? 'one within reach' : 'none within reach'}, `
+        + `piloted ${!!s.state.inMech}, ${Math.round(Math.hypot(mine.x - s.player.x, mine.z - s.player.z))} m off` };
+    }
     s.look(mine.torso * 180 / Math.PI, 0);
     for (let i = 0; i < 4; i++) s.fixedForTest(1 / 60);
     await new Promise((r) => requestAnimationFrame(r));
@@ -929,7 +1029,7 @@ async function run() {
   });
   check('a mech of your own carries a loadout rather than one gun',
     !got.skip && got.arms === 5 && got.rows === 5 && got.hud,
-    got.skip ? 'no room for one' : `${got.arms} weapons, holding the ${got.named}`);
+    got.skip ? got.why : `${got.arms} weapons, holding the ${got.named}`);
 
   // The number row and the wheel, through the real keyboard and the real
   // wheel rather than by calling the function underneath them.
@@ -1099,23 +1199,10 @@ async function run() {
     if (!mine) return { skip: true };
     const theirs = s.spawnMech('reaper', 60);
     if (!theirs) return { skip: true };
-    // Somewhere the mech can see, on ground near its own level, the same way
-    // the chaingun check picks its spot.
-    const muzzle = s.mechs.muzzle(mine, s.mechSpec.titan.chaingun.muzzle);
-    let spot = null;
-    for (let step = 0; step < 24 && !spot; step++) {
-      const a = mine.torso + (step % 2 ? 1 : -1) * Math.floor(step / 2) * 0.26;
-      const d = 34 + (step % 3) * 6;
-      const px = mine.x - Math.sin(a) * d;
-      const pz = mine.z - Math.cos(a) * d;
-      const dx = px - muzzle.x, dz = pz - muzzle.z;
-      const len = Math.hypot(dx, dz) || 1;
-      const blocked = s.world.raycast(muzzle.x, muzzle.y, muzzle.z, dx / len, 0, dz / len, len);
-      if (!blocked && Math.abs(s.world.groundHeight(px, pz) - mine.y) < 3) {
-        spot = { x: px, z: pz };
-      }
-    }
-    if (!spot) return { skip: true };
+    // Somewhere the mech can see, the same way the chaingun check picks it.
+    window.clearTheStreet([mine, theirs]);
+    const spot = window.firingSpot(mine, 34);
+    if (spot.why) return { skip: true, why: spot.why };
     const park = () => {
       theirs.x = spot.x; theirs.z = spot.z;
       theirs.y = s.world.groundHeight(spot.x, spot.z);
@@ -1161,7 +1248,7 @@ async function run() {
   });
   check('the railgun charges while you hold it and goes off when you let go',
     !rail.skip && rail.whileHeld < 50 && rail.charge > 1.1 && rail.full > 1000,
-    rail.skip ? 'no clear line'
+    rail.skip ? (rail.why || 'no clear line')
       : `${rail.whileHeld} while held, ${rail.full} on release`);
   check('and a tap is worth a fraction of a full charge',
     !rail.skip && rail.tap > 0 && rail.tap < rail.full * 0.6,

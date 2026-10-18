@@ -12,6 +12,7 @@ import { TREE_VS, TREE_FS, TREE_SHADOW_VS, TREE_SHADOW_FS, MAX_FIRES } from '../
 import { FULLSCREEN_VS, BRIGHT_FS, BLUR_FS, COMPOSITE_FS } from '../shaders/post.js';
 import { sunDirection, sunColour, berlinDate } from './sun.js';
 import { Actors } from './actors.js';
+import { buildSurfaceMaps } from '../engine/surfaces.js';
 
 // std140 layout, see src/shaders/common.js
 const CAM_FLOATS = 112;
@@ -72,6 +73,12 @@ export class Renderer {
     if (loc) gl.uniform3fv(loc, pal);
     this.progWorld.int('uShadow0', 4).int('uShadow1', 5).int('uDebugMode', 0);
     this.debugMode = 0;
+    // The surface maps, built here rather than downloaded. One array texture
+    // with a mip chain, which is what lets a road keep its grain at a hundred
+    // metres instead of going smooth: the card averages the chippings down
+    // for us, and a fractal noise evaluated per pixel cannot.
+    this.surfaces = this._buildSurfaces();
+    this.progWorld.int('uSurf', 6);
     // The sky pass. Off, every hole in the world is black, which is how the
     // checks tell a hole from the Spree.
     this.drawSky = true;
@@ -215,7 +222,15 @@ export class Renderer {
    * @param {number} radius how far the soot reaches, usually the blast radius
    * @param {number} severity 0 to 1, how black it goes
    */
-  addScar(x, y, z, radius, severity = 1) {
+  /**
+   * A mark on whatever is still standing, and the hole in it.
+   *
+   * `punch` is the radius of the hole, in metres, and nought for a mark that
+   * only sooted the wall. What punches is a shell or a rocket; a rifle round
+   * scorches and no more, which is the difference between a fight in a street
+   * and a building coming apart.
+   */
+  addScar(x, y, z, radius, severity = 1, punch = 0) {
     const i = this._scarNext;
     this.scars[i * 4] = x;
     this.scars[i * 4 + 1] = y;
@@ -223,6 +238,7 @@ export class Renderer {
     this.scars[i * 4 + 3] = radius;
     this.scarInfo[i * 4] = Math.max(0, Math.min(1, severity));
     this.scarInfo[i * 4 + 1] = 0;
+    this.scarInfo[i * 4 + 2] = Math.max(0, punch);
     this._scarNext = (i + 1) % this.MAX_SCARS;
     this.scarCount = Math.min(this.MAX_SCARS, this.scarCount + 1);
   }
@@ -533,6 +549,38 @@ export class Renderer {
     c[OFF.shadowSplit + 3] = 1 / this.q.shadow1;
   }
 
+  /**
+   * Builds the surface maps and hands them to the card as one array texture.
+   *
+   * Trilinear with a full mip chain, and anisotropic where the card offers
+   * it, because every one of these is seen at a grazing angle for most of the
+   * time it is on the screen: a road under your feet runs away to the horizon
+   * and without anisotropy the far half of it is a smear.
+   *
+   * @returns {{texture: WebGLTexture, millis: number, bytes: number}}
+   */
+  _buildSurfaces() {
+    const gl = this.gl;
+    const built = buildSurfaceMaps();
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
+    gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, built.size, built.size,
+      built.layers, 0, gl.RGBA, gl.UNSIGNED_BYTE, built.data);
+    gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+    if (aniso) {
+      const most = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+      gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT,
+        Math.min(8, most));
+    }
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
+    return { texture: tex, millis: built.millis, bytes: built.data.length, aniso: !!aniso };
+  }
+
   renderScene(camera, visible) {
     const gl = this.gl;
     this.sceneFbo.bind();
@@ -549,6 +597,8 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.shadowFbo[0].depth);
     gl.activeTexture(gl.TEXTURE5);
     gl.bindTexture(gl.TEXTURE_2D, this.shadowFbo[1].depth);
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.surfaces.texture);
     gl.activeTexture(gl.TEXTURE0);
 
     let draws = 0, tris = 0;

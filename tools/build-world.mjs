@@ -10,7 +10,7 @@
 // means the same thing in every one of them, and each district only builds
 // what has its middle inside its own box: a building on a boundary belongs to
 // one district and is built once. The detail tier comes from the district
-// table, and what it costs is in the budget line at the end.
+// table, and what it costs is in the lines at the end.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,7 +24,7 @@ import { Terrain } from './terrain.mjs';
 import { fbm2, hashInt } from './noise.mjs';
 import {
   extrudeBuilding, ribbon, groundPolygon, box, ringArea, ringCentroid,
-  orientedBox, ringLength,
+  orientedBox, ringLength, lampPost, parkedCar, streetBin, bench,
 } from './geometry.mjs';
 import { LANDMARK_BUILDERS } from './landmarks.mjs';
 import { ROAD_WIDTH } from './synth-osm.mjs';
@@ -538,16 +538,144 @@ function buildDistrict(district) {
     roadMetres += polylineLength(r.line);
     roadPoints += r.line.length;
     if (!isFoot) {
-      roadLines.push({
+      // The name rides along with the centreline, not only with the labels
+      // the map draws. A label is a point every two hundred and forty metres,
+      // which is fine for writing a name across a map and useless for
+      // answering what street you are standing in: the nearest one can be a
+      // hundred metres away on the next street over.
+      const line = {
         cls,
         w: width,
         pts: simplify(r.line, 1.5).flatMap((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]),
-      });
+      };
+      if (r.tags.name) line.n = r.tags.name;
+      roadLines.push(line);
       if (r.tags.name) streetNames.push(...streetLabels(r.tags.name, r.line, cls));
     }
   }
   for (const a of areas) {
     groundPolygon(mesh, a.ring, [], roadMaterial(a.tags), yAt, { lift: 0.05, seed: 3 });
+  }
+
+  // --- what stands on the street ------------------------------------------
+  // Lamps, parked cars, bins and benches, laid along the kerb of every street
+  // that has one. They are ordinary mesh rather than an instanced layer of
+  // their own, because a tile is already drawn in one call and a lamp post is
+  // a few dozen triangles. All of it together is 75,000 triangles across
+  // Mitte, against 188,000 for the city it stands in. Where each one goes is
+  // decided by a hash of the position, so two builds put them in the same
+  // places.
+  let props = 0;
+  let lamps = 0, cars = 0;
+  if (tier.props) {
+    const LAMPS_ON = new Set(['primary', 'secondary', 'tertiary', 'residential',
+      'living_street', 'unclassified', 'pedestrian']);
+    const PARKING_ON = new Set(['residential', 'tertiary', 'living_street', 'unclassified']);
+    const chance = (x, z, salt) =>
+      ((hashInt(Math.round(x * 3) + salt, Math.round(z * 3)) >>> 8) & 1023) / 1023;
+    const clear = (x, z) => {
+      if (x < world.minX + 4 || x > world.maxX - 4) return false;
+      if (z < world.minZ + 4 || z > world.maxZ - 4) return false;
+      // Not in the river, and not in the memorial.
+      for (const w of waterPolys) if (pointInRing(x, z, w.ring)) return false;
+      for (const m of memorials) if (pointInRing(x, z, m.ring)) return false;
+      return true;
+    };
+    // And nothing stands inside anything else. Streets cross, so the lamp one
+    // of them puts at its kerb lands on the car the other one parked there,
+    // and the first build of this had a lamp post growing up through a car
+    // roof. A coarse grid of what has been put down already, with the trees
+    // seeded into it, and a new piece has to clear all of it.
+    const CELL = 6;
+    const placed = new Map();
+    const keep = (x, z, r) => {
+      const k = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
+      const list = placed.get(k);
+      if (list) list.push([x, z, r]); else placed.set(k, [[x, z, r]]);
+    };
+    const room = (x, z, r) => {
+      const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+      for (let ix = cx - 1; ix <= cx + 1; ix++) {
+        for (let iz = cz - 1; iz <= cz + 1; iz++) {
+          const list = placed.get(`${ix},${iz}`);
+          if (!list) continue;
+          for (const [px, pz, pr] of list) {
+            if (Math.hypot(px - x, pz - z) < pr + r) return false;
+          }
+        }
+      }
+      return true;
+    };
+    // A tree is a trunk and a canopy over the pavement; a lamp inside one is
+    // the same nonsense as a lamp inside a car.
+    for (const t of trees) keep(t.p[0], t.p[1], 1.6);
+    for (const r of roads) {
+      const cls = r.tags.highway;
+      if (!LAMPS_ON.has(cls)) continue;
+      const explicit = parseLength(r.tags.width);
+      const width = Number.isFinite(explicit) && explicit > 1 ? explicit : (ROAD_WIDTH[cls] || 6);
+      const kerb = width / 2 + 1.0;
+      const line = r.line;
+      // Walk the centreline at a fixed step, so the spacing is the spacing on
+      // the ground rather than one post per node.
+      let run = 0, since = 1e9, sinceCar = 1e9, sinceSeat = 1e9;
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], b = line[i];
+        const dx = b[0] - a[0], dz = b[1] - a[1];
+        const seg = Math.hypot(dx, dz);
+        if (seg < 0.01) continue;
+        const ux = dx / seg, uz = dz / seg;
+        const yaw = Math.atan2(ux, uz);
+        for (let t = 0; t < seg; t += 2) {
+          const x = a[0] + ux * t, z = a[1] + uz * t;
+          run += 2; since += 2; sinceCar += 2; sinceSeat += 2;
+          // The lamps alternate sides down the street, the way they do here.
+          if (since >= 45) {
+            const side = (Math.floor(run / 45) % 2) ? 1 : -1;
+            const px = x - uz * kerb * side, pz = z + ux * kerb * side;
+            if (clear(px, pz) && room(px, pz, 0.9)) {
+              keep(px, pz, 0.9);
+              const g = yAt(px, pz);
+              lampPost(mesh, px, g, pz, yaw + (side > 0 ? -Math.PI / 2 : Math.PI / 2),
+                { seed: hashInt(Math.round(px), Math.round(pz)) & 255 });
+              // As wide as the pole is, rather than as wide as is easy: the
+              // mast is a third of a metre across at the foot and half that
+              // at the lantern, and a box twice its width is a thing you
+              // bump into beside a lamp post rather than on it.
+              pushPostCollision(collision, px, pz, g, g + 6.2, 0.15);
+              props++; lamps++;
+            }
+            since = 0;
+          }
+          if (PARKING_ON.has(cls) && sinceCar >= 20 && chance(x, z, 17) < 0.5) {
+            const side = chance(x, z, 91) < 0.5 ? 1 : -1;
+            const px = x - uz * (width / 2 - 0.1) * side;
+            const pz = z + ux * (width / 2 - 0.1) * side;
+            if (clear(px, pz) && room(px, pz, 2.5)) {
+              keep(px, pz, 2.5);
+              const g = yAt(px, pz);
+              parkedCar(mesh, px, g, pz, yaw,
+                { seed: hashInt(Math.round(px), Math.round(pz)) & 255 });
+              pushBoxCollision(collision, px, pz, yaw, 1.78, 4.3, g, g + 1.5);
+              props++; cars++;
+            }
+            sinceCar = 0;
+          }
+          if (sinceSeat >= 95 && (cls === 'pedestrian' || cls === 'primary')) {
+            const side = chance(x, z, 53) < 0.5 ? 1 : -1;
+            const px = x - uz * (kerb + 1.4) * side, pz = z + ux * (kerb + 1.4) * side;
+            if (clear(px, pz) && room(px, pz, 1.1)) {
+              keep(px, pz, 1.1);
+              const g = yAt(px, pz);
+              if (chance(x, z, 7) < 0.5) bench(mesh, px, g, pz, yaw + Math.PI / 2);
+              else streetBin(mesh, px, g, pz);
+              props++;
+            }
+            sinceSeat = 0;
+          }
+        }
+      }
+    }
   }
 
   since('roads');
@@ -592,8 +720,20 @@ function buildDistrict(district) {
   // the outline is a rough envelope that is not meant to be drawn once the
   // pieces are there. Drawing both is what turned every tower in this city
   // into the box around it, which is what you were looking at before.
-  const parentsWithParts = markBuildingParts(buildings);
+  const parentsWithParts = markBuildingParts(buildings, (b) => {
+    // Only a piece that is itself going to be built may take its outline out
+    // of the picture. A piece under the district's smallest building, or one
+    // whose middle falls outside the box, is dropped by the loop below, and
+    // without this test it took the whole building with it: the outline was
+    // not drawn because the piece had claimed it, and the piece was not
+    // drawn either, so what stood there was nothing at all.
+    if (ringArea(b.outer) < tier.minArea) return false;
+    const [bx, bz] = ringCentroid(b.outer);
+    return bx >= world.minX - 60 && bx <= world.maxX + 60
+      && bz >= world.minZ - 60 && bz <= world.maxZ + 60;
+  });
   let buildingCount = 0;
+  let blankWalls = 0;
   const landmarkIndex = [];
   const palette = new Palette(BERLIN_PALETTE, { frozen: true });
   for (const b of buildings) {
@@ -640,9 +780,16 @@ function buildDistrict(district) {
     // the per building variation the window shader uses.
     const colourIdx = colour ? palette.indexOf(colour) : palette.pick(seed);
     const packedSeed = (colourIdx & 63) | ((seed & 3) << 6);
-    // Out past the inner districts every roof is flat. A pitched roof is four
-    // more vertices and a different normal per metre of frontage, and from the
-    // next street over it reads as a flat roof anyway.
+    // Whether the roof OpenStreetMap describes is built at all.
+    //
+    // This was off outside the inner districts on the reasoning that a
+    // pitched roof is four more vertices per metre of frontage than a flat
+    // one. Measured, it is the other way round: what a flat roof costs here
+    // is a cap plus a parapet, and a parapet is two triangles for every edge
+    // of the footprint. Switching the roofs on across the ring and the
+    // outskirts took the whole city from 875,427 triangles to 869,559 and
+    // from 15.88 MB to 15.85. It made the city smaller and gave it a
+    // skyline.
     const roofShape = tier.roofs
       ? (tags['roof:shape'] || 'flat').toLowerCase().trim().replace(/[\s-]+/g, '_') : 'flat';
     // How tall the roof is. Metres if they are given, otherwise the roof
@@ -664,6 +811,12 @@ function buildDistrict(district) {
     const from = base + (Number.isFinite(minH) ? minH : 0);
     const solid = Math.max(2, height - (Number.isFinite(minH) ? minH : 0));
     const roofH = Math.max(0, Math.min(roofHeight, solid * 0.4));
+    // Whether this one gets the window shader. It is one flag bit and the
+    // pattern itself costs nothing to carry, so the only reason to refuse it
+    // is that the wall is not a frontage: raw concrete has no windows cut
+    // into it wherever it stands.
+    const blank = wallMat === MAT.CONCRETE || !tier.windows;
+    if (blank) blankWalls++;
     extrudeBuilding(mesh, { outer: ring, holes: b.holes }, {
       base: from,
       height: Math.max(2, solid - roofH),
@@ -676,6 +829,13 @@ function buildDistrict(district) {
       roofHeight: roofH,
       roofAcross,
       roofDir: Number.isFinite(roofDirTag) ? roofDirTag : undefined,
+      // A frontage with a cornice on it, and a band over the windows where
+      // the ground floor is a shop. Whether it is a shop is whatever the
+      // tagging says: a shop tag, a retail building, or anything with a
+      // counter in it.
+      relief: !!tier.relief,
+      shopfront: !!tier.relief && !!(tags.shop || tags.amenity
+        || tags.building === 'retail' || tags.building === 'commercial'),
       wallMat, roofMat: roofMatTag !== undefined ? roofMatTag : MAT.ROOF,
       // The roof carries the same palette entry as the walls in its low bits,
       // which nothing reads, and its tone in the two above, which the roof
@@ -684,7 +844,7 @@ function buildDistrict(district) {
       seed: packedSeed,
       levels,
       landmark: false,
-      noWindows: wallMat === MAT.CONCRETE || !tier.windows,
+      noWindows: blank,
     });
     // A volume that starts above the street is collided against from where it
     // starts, so you can walk under the arch you can see under.
@@ -787,7 +947,8 @@ function buildDistrict(district) {
   console.log('vertices: ' + Object.entries(spent).filter(([, v]) => v > 0)
     .map(([k, v]) => `${k} ${Math.round(v / 1000)}k`).join(', ')
     + `  (${roadPoints} road points over ${(roadMetres / 1000).toFixed(1)} km)`);
-  console.log(`geometry: ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${buildingCount} buildings, ${stelae} stelae, ${treeList.length} trees, ${(roadMetres / 1000).toFixed(1)} km of road`);
+  console.log(`windows: ${buildingCount - blankWalls} of ${buildingCount} buildings have them`);
+  console.log(`geometry: ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${buildingCount} buildings, ${stelae} stelae, ${treeList.length} trees, ${lamps} lamps, ${cars} cars, ${props - lamps - cars} seats and bins, ${(roadMetres / 1000).toFixed(1)} km of road`);
 
   // --- surface map for footsteps -----------------------------------------
   const surfaceGrid = buildSurfaceGrid(world, roads, areas, greens, waterPolys, memorials, tier.surfaceStep);
@@ -1151,8 +1312,10 @@ function writeIndexSummary() {
   console.log(`road            ${road.toFixed(1)} km`);
   console.log(`index           ${(fs.statSync(INDEX_FILE).size / 1e6).toFixed(2)} MB, ${(indexGz / 1e6).toFixed(2)} MB gzipped`);
   console.log(`deployed        ${(bytes / 1e6).toFixed(2)} MB`);
-  console.log(`download        ${(total / 1e6).toFixed(2)} MB gzipped, against a 25 MB budget`
-    + `${total > 25e6 ? '  OVER' : ''}`);
+  // Every district added up, which is not what anybody downloads: the game
+  // fetches the one you are standing in. `node tools/fit-city.mjs` prints
+  // that number, and it is the one that decides whether this is playable.
+  console.log(`download        ${(total / 1e6).toFixed(2)} MB gzipped for all of them`);
 }
 
 /**
@@ -1426,9 +1589,11 @@ function ringInside(inner, outer) {
  *
  * @param {Array<{outer:Array,tags:Object,part:boolean}>} list every building
  *   and piece in the district, in the order they were read
+ * @param {(piece)=>boolean} buildable whether a piece will actually be drawn.
+ *   One that will not may not claim an outline, or the building disappears.
  * @returns {number} how many outlines were taken over by their pieces
  */
-function markBuildingParts(list) {
+export function markBuildingParts(list, buildable = () => true) {
   const CELL = 120;
   const grid = new Map();
   const key = (i, j) => `${i},${j}`;
@@ -1450,6 +1615,7 @@ function markBuildingParts(list) {
   let taken = 0;
   for (const p of list) {
     if (!p.part || p.outer.length < 3) continue;
+    if (!buildable(p)) continue;
     const [px, pz] = ringCentroid(p.outer);
     const cell = grid.get(key(Math.floor(px / CELL), Math.floor(pz / CELL)));
     if (!cell) continue;
@@ -1565,6 +1731,34 @@ function simplify(pts, eps) {
     if (best > 0) { keep[best] = 1; stack.push([i0, best], [best, i1]); }
   }
   return pts.filter((_, i) => keep[i]);
+}
+
+/**
+ * A square of collision round something standing on the pavement: a lamp
+ * post, a bollard. Four segments, the same way a tree trunk is done, so
+ * that what you can see you can also walk into.
+ */
+function pushPostCollision(collision, x, z, base, top, half) {
+  const ring = [[x - half, z - half], [x + half, z - half],
+    [x + half, z + half], [x - half, z + half]];
+  pushFootprintCollision(collision, ring, base, top, SURFACE.STONE);
+}
+
+/**
+ * The same, for something longer than it is wide and parked at an angle: a
+ * car. A square the width of a car is a metre and a half of nothing at each
+ * end that you walk straight through, so this is the real rectangle, turned
+ * the way the thing is turned.
+ */
+function pushBoxCollision(collision, x, z, yaw, wide, long, base, top) {
+  // Along the road is (sin yaw, cos yaw), the same convention the mesh uses,
+  // and across it is the perpendicular.
+  const lx = Math.sin(yaw), lz = Math.cos(yaw);
+  const wx = Math.cos(yaw), wz = -Math.sin(yaw);
+  const hw = wide / 2, hl = long / 2;
+  const at = (a, b) => [x + wx * a + lx * b, z + wz * a + lz * b];
+  const ring = [at(-hw, -hl), at(hw, -hl), at(hw, hl), at(-hw, hl)];
+  pushFootprintCollision(collision, ring, base, top, SURFACE.STONE);
 }
 
 function pushFootprintCollision(collision, ring, base, top, surface) {

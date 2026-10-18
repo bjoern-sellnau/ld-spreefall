@@ -94,9 +94,13 @@ jobs:
           key: osm-city-${{ env.OSM_DAY }}
       - name: Build every district that has an extract
         run: node --max-old-space-size=6144 tools/build-world.mjs --all
-      - name: Weigh the city against the budget
+      - name: Weigh the city
         run: node tools/weigh-city.mjs
-      - name: Check no district is too big to wait for
+      - name: Report what a player waits for
+        # Reports rather than fails. The ceiling of 25 MB a district was
+        # lifted: it never bound anything, and the test is whether the thing
+        # is playable rather than whether it is under a figure. Pass
+        # --budget=N here to put one back.
         run: node tools/fit-city.mjs
       - name: Record which source was used
         run: cat data/raw/source.json

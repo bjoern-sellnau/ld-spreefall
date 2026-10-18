@@ -576,6 +576,30 @@ export class Demolition {
     return moved;
   }
 
+  /**
+   * What a frontage has taken and what it has left, at a point on the map.
+   * The damage is kept on a grid of cells about one Berlin block frontage
+   * across, which is the unit that comes down, so this is the honest answer
+   * to "how much more will that wall take": the cell the point is in.
+   *
+   * @returns {{taken:number,each:number,whole:number,stage:number,stages:number,left:number}}
+   */
+  damageAt(x, z) {
+    const c = DEMO.cell;
+    const key = this._key(Math.floor(x / c), Math.floor(z / c));
+    const taken = this.damage.get(key) || 0;
+    const whole = DEMO.stageDamage * DEMO.stages;
+    const stage = Math.min(DEMO.stages, Math.floor(taken / DEMO.stageDamage));
+    return {
+      taken: Math.round(taken),
+      each: DEMO.stageDamage,
+      whole,
+      stage,
+      stages: DEMO.stages,
+      left: Math.max(0, Math.round(whole - taken)),
+    };
+  }
+
   /** What the renderer needs: the live sites, newest last. */
   get count() { return this.sites.length; }
 }

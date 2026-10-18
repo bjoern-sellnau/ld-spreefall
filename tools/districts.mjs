@@ -59,6 +59,13 @@ export const TIERS = [
     // it, because this is the Berlin the brief asks for by name.
     name: 'full',
     minArea: 6, simplify: 0, roofs: true, windows: true, landmarks: true,
+    // Relief on the frontages: the cornice under the eaves and the band over
+    // the shop windows. Only here, because it is two quads an edge on every
+    // building and it is only worth that from the pavement.
+    relief: true,
+    // And what stands on it: lamps, parked cars, bins and benches. Same
+    // reasoning as the relief, and the same tier.
+    props: true,
     trees: 1, driveOnly: false, grid: 33, kerbs: true, groundStep: 12.5,
     boxBelow: 0, service: true, surfaceStep: 2.5,
     // Even here the centrelines are simplified. OpenStreetMap puts a node
@@ -77,12 +84,21 @@ export const TIERS = [
     boxBelow: 0, service: true, surfaceStep: 5.0, roadSimplify: 1.5,
   },
   {
-    // The rest of the ring. Blocks: every building still solid and still
-    // climbable, but roofs flattened, no window detail, small ones become the
-    // box that fits them, a third of the trees, and only the roads you can
-    // drive on.
+    // The rest of the ring. Still solid and still climbable, small ones
+    // become the box that fits them, a third of the trees, and only the
+    // roads you can drive on. Roofs and windows are on, and both were off
+    // here for years on the assumption that they were expensive. The windows
+    // cost nothing at all, and the roofs came out cheaper than the flat ones
+    // they replaced: see the note on `roofs` in tools/build-world.mjs.
+    //
+    // The windows stay on, and they are the reason this tier stopped reading
+    // as a warehouse estate. They are not geometry: `windows` sets one flag
+    // bit on the vertex and the whole pattern is a fragment shader that reads
+    // the building's own storey count, so this costs nothing in the download
+    // and nothing in triangles. It was off here for a long time for no better
+    // reason than that it sounded expensive.
     name: 'block',
-    minArea: 120, simplify: 2.5, roofs: false, windows: false, landmarks: true,
+    minArea: 120, simplify: 2.5, roofs: true, windows: true, landmarks: true,
     trees: 0.3, driveOnly: true, grid: 9, kerbs: false, groundStep: 50,
     boxBelow: 700, service: false, surfaceStep: 10.0, roadSimplify: 5.0,
   },
@@ -90,9 +106,13 @@ export const TIERS = [
     // Out past the ring: Steglitz, Lichterfelde, Treptow and the rest. An
     // outline of a city rather than a city. Everything is solid, everything
     // can be walked on and driven through, and nothing has any detail it does
-    // not need to be those two things.
+    // not need to be those two things. The windows are the exception, for the
+    // same reason as the tier above: they are a flag bit, not geometry, and
+    // the shader now draws the average of a frontage rather than a pattern
+    // once a storey goes under a pixel, so a suburb five kilometres off is a
+    // tone rather than a flicker.
     name: 'outline',
-    minArea: 250, simplify: 4.0, roofs: false, windows: false, landmarks: true,
+    minArea: 250, simplify: 4.0, roofs: true, windows: true, landmarks: true,
     trees: 0, driveOnly: true, grid: 5, kerbs: false, groundStep: 100,
     boxBelow: 2000, service: false, surfaceStep: 20.0, roadSimplify: 10.0,
   },

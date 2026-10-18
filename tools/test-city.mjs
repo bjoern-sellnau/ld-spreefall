@@ -1037,6 +1037,75 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
   });
 
+  // --- a hole shot in a frontage ------------------------------------------
+  // A shell opens the wall it goes off against. The honest way to measure a
+  // thing the fragment shader does is to draw the frame twice, once with the
+  // hole and once with the same scar at nought, and count what moved: if the
+  // discard never fires the two frames are the same buffer.
+  const hole = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const grab = () => {
+      const gl = s.renderer.gl;
+      const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+      const buf = new Uint8Array(w * h * 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      return { buf, w, h };
+    };
+    const frame = () => new Promise((r) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => r(grab())));
+    });
+    s.demolition.reset();
+    s.renderer.clearCollapses();
+    s.renderer.scarredTiles.clear();
+    s.setCheat('godmode', true);
+    s.setTime(11);
+    s.teleport(81, 0);
+    s.state.holstered = true;
+    // A frontage the camera is pointing at, found by asking rather than by
+    // guessing a bearing.
+    let best = null;
+    for (let i = 0; i < 180; i++) {
+      const a = (i / 180) * Math.PI * 2;
+      const d = { x: -Math.sin(a), z: -Math.cos(a) };
+      const hit = s.world.raycast(s.player.x, s.player.y + 1.6, s.player.z, d.x, 0, d.z, 90);
+      if (!hit || hit.t < 14) continue;
+      if (s.world.tallestNear(s.player.x + d.x * hit.t, s.player.z + d.z * hit.t, 4) < 14) continue;
+      if (!best || hit.t < best.t) best = { t: hit.t, a, d };
+    }
+    if (!best) return { skip: true, why: 'no frontage to shoot at' };
+    s.teleport(s.player.x + best.d.x * (best.t - 13), s.player.z + best.d.z * (best.t - 13));
+    s.look(best.a * 180 / Math.PI, 0);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    await frame();
+    const eye = s.camera.position.slice();
+    const f = s.camera.forward.slice();
+    const ahead = s.world.raycast(eye[0], eye[1], eye[2], f[0], f[1], f[2], 120);
+    if (!ahead) return { skip: true, why: 'nothing in front of the camera' };
+    s.explode(eye[0] + f[0] * (ahead.t - 0.6), eye[1] + f[1] * (ahead.t - 0.6),
+      eye[2] + f[2] * (ahead.t - 0.6), { radius: 11, damage: 240 }, { weapon: 'rpg' });
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    const punched = await frame();
+    // The same frame with the hole closed and nothing else changed.
+    const was = s.renderer.scarInfo[2];
+    s.renderer.scarInfo[2] = 0;
+    const solid = await frame();
+    s.renderer.scarInfo[2] = was;
+    let moved = 0;
+    for (let i = 0; i < punched.buf.length; i += 4) {
+      if (Math.abs(punched.buf[i] - solid.buf[i])
+        + Math.abs(punched.buf[i + 1] - solid.buf[i + 1])
+        + Math.abs(punched.buf[i + 2] - solid.buf[i + 2]) > 24) moved++;
+    }
+    s.demolition.reset();
+    s.renderer.clearCollapses();
+    return { skip: false, punch: Math.round(was * 100) / 100, moved,
+      share: Math.round(moved / (punched.w * punched.h) * 1000) / 10 };
+  });
+  check('a shell opens the wall it goes off against',
+    !hole.skip && hole.punch > 1 && hole.share > 0.5,
+    hole.skip ? hole.why : `${hole.punch} m of hole, ${hole.share}% of the frame through it`);
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

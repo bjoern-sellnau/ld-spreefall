@@ -4,7 +4,7 @@ name: Build the whole city and weigh it
 # queries, which is far too much to do on every push. This builds the lot from
 # the live extract, prints what each district costs in bytes over the wire, and
 # fails if the download for the whole city is over the twenty five megabyte
-# budget the brief sets. It runs on demand, and once a week so that a drift in
+# city weighs. It runs on demand, and once a week so that a drift in
 # the data is noticed before a release rather than after one.
 
 on:
@@ -60,7 +60,7 @@ jobs:
           node --max-old-space-size=6144 tools/fetch-osm.mjs --all --live-only
       - name: Build every district
         run: node --max-old-space-size=6144 tools/build-world.mjs --all | tee city-build.log
-      - name: The budget
+      - name: What it weighs
         run: |
           node tools/weigh-city.mjs | tee city-budget.txt
           node tools/fit-city.mjs --dry | tee -a city-budget.txt

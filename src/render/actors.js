@@ -945,7 +945,9 @@ export class Actors {
       data[o + 8] = s.charred || 0;
       data[o + 9] = s.machine ? 1 : 0;
       data[o + 10] = s.machine && s.stunLeft > 0 ? Math.min(1, s.stunLeft / 2) : 0;
-      data[o + 11] = 0;
+      // Nought for a soldier; for somebody who lives here, one plus which
+      // coat he has on, which the shader reads out of the fraction.
+      data[o + 11] = s.civilian ? 1 + Math.min(0.99, s.who || 0) : 0;
       n++;
     }
     this.soldier.instanceCount = n;

@@ -1632,3 +1632,542 @@ is what prompted the change.
   half, and below that takes whatever loaded ground there is, because a
   machine standing with its shoulder in a wall is better than a machine you
   cannot call.
+
+## 33. The people who live here
+
+- 2026-10-17: passers by, in Just a Walk. They go in the soldier layer with a
+  flag of their own rather than in a layer of their own, and that is the whole
+  design decision: the walking, the wall sliding, the ground under them, the
+  capsule you can hit, the dying, the ragdoll and the one instanced draw call
+  are all there already and all of them are the same for a man on his way to
+  work. What is his own comes to fifteen lines: somewhere to be, somewhere
+  else to be when he gets there, and running away from a noise.
+
+- 2026-10-17: a shot inside seventy metres, a blast heard three times its own
+  radius, or anything arriving in a sphere of light sends them off for seven
+  and a half seconds, straight away from where it came from, picked fresh each
+  step so that turning a corner does not send them back into it. Measured:
+  three of three within earshot bolted and all three were further away two
+  seconds later.
+
+- 2026-10-17: in the picture they are the same figure with the helmet and the
+  rifle collapsed into it, the way the cloth collapses on a man who burns, and
+  the cloth and boots recoloured out of a fraction carried in the one instance
+  slot that was still spare. Four coats, picked per person, because a pavement
+  of them in one colour is a squad.
+
+- 2026-10-17: two checks elsewhere had to learn about them. Just a Walk counts
+  what was sent after you, which is now everybody in the layer who is not a
+  civilian; and the arrival check has to switch the layer on, because the
+  second a soldier spends coming up out of the street is counted in the
+  soldier update, which is where it belongs.
+
+## 34. Relief, and what a frontage has left
+
+- 2026-10-17: the first of the three graphics steps. A cornice under the eaves
+  on every building over nine metres, and a band over the shop windows where
+  the ground floor is a shop, both built in the builder as geometry. Two quads
+  an edge: the face you see and the underside the sun never reaches, and the
+  second one is the whole point, because what makes a frontage read as relief
+  is the shadow line under a projecting band rather than the band itself.
+  Edges under three and a half metres are skipped, since a Berlin block has a
+  dozen jogs in its outline that nobody can see.
+
+- 2026-10-17: it costs. Mitte went from a hundred and fifty thousand triangles
+  to a hundred and eighty eight, and the download for the eight districts
+  built here from 13.89 MB to 14.47 of the 25 MB budget. It is on in the
+  middle tier only, which is where you walk.
+
+- 2026-10-17: and the cheat menu will tell you what a frontage has left. The
+  damage sits on a grid of cells about one block frontage across, which is the
+  unit that comes down, so the honest answer to "how much more will that wall
+  take" is the cell your shot would land in: seven hundred and twenty for a
+  whole one, in four stages of a hundred and eighty. A ruin says so instead of
+  giving a number.
+
+- 2026-10-17: writing that switch turned up a worse one. The switches were
+  listed in three places, and the last kill was in two of them: in the list
+  the menu is built from and not in the constructor. `set` refuses an id it
+  cannot find a boolean behind, so that row did nothing at all, and the switch
+  only came alive after pressing all off once, which is what reset does. That
+  is very probably the whole of what was reported as the slow motion not
+  working. The constructor now builds every switch out of the one list, and a
+  unit test flips every row in the menu on and off again.
+
+## 35. What stands on the street
+
+- 2026-10-18: the second of the three graphics steps, and the one that changes
+  the middle distance most. Lamp posts every forty five metres down anything
+  from a residential street upwards, alternating sides; cars at the kerb every
+  twenty metres on the quieter classes, half the time; a bench or a bin every
+  ninety five metres on the pedestrian and primary streets. All placed off the
+  road centreline at a fixed step, with the kerb worked out from the width the
+  map gives, and all keyed off the same integer hash as everything else, so two
+  builds put the same lamp in the same place.
+
+- 2026-10-18: Mitte went from 187,869 triangles to 263,051: 790 lamps, 1013
+  cars and 72 seats and bins. The eight districts built here come to 15.88 MB
+  gzipped of the 25 MB budget, and Mitte itself, which is what you download to
+  play, is 4.40 MB.
+
+- 2026-10-18: and nothing stands inside anything else. Streets cross, so the
+  lamp one of them puts at its kerb lands on the car the other one parked
+  there, and the first build had exactly that: a lamp post up through a car
+  roof, found by looking at a screenshot of it. What goes down is now kept in
+  a coarse grid with the trees seeded into it, and a piece that overlaps
+  anything already there is dropped. That is 178 of them across Mitte: 92
+  lamps, 78 cars and 8 seats.
+
+- 2026-10-18: collision that matches what is drawn. A lamp is a square 0.30 m
+  across, which is the mast; the first pass used 0.44, and a post twice the
+  width of the thing you can see is something you bump into beside a lamp post
+  rather than on it. A car is the real rectangle, 1.78 by 4.3, turned the way
+  the car is turned: a square the width of a car leaves a metre and a half at
+  each end that you walk straight through.
+
+- 2026-10-18: the machines suite went to 36 of 54 on the back of this, and
+  every one of the eighteen was downstream of two faults that the furniture
+  only brought to the surface.
+
+  The first was in the suite. The check that measures the chaingun stands a
+  target somewhere the mech can see it, and it looked for that spot by sweeping
+  a level ray and then refusing any ground more than three metres off the
+  mech's own level. By the time that check runs the district has been shelled
+  for ten minutes: eleven of its twenty four candidates were blocked and the
+  other thirteen were over a hole, so it gave up, and it gave up silently,
+  behind a skip that said nothing at all. It now sweeps five rings and
+  seventeen bearings, and a shot down into a crater counts as a shot as long
+  as the line is clear.
+
+  Which took two goes to get right, and the second one is the interesting
+  one. Sweeping muzzle to chest found a line and the gun still put forty eight
+  rounds out of forty eight into the city: the guns do not point at the
+  target, they converge on wherever the torso's own ray runs out, which in
+  that street was a hundred and eighty metres past it, and from a muzzle two
+  metres off the centre line that is a different line entirely. The search now
+  turns the torso onto each candidate and asks the mech itself where the shot
+  would go, through the same `muzzle`, `aimPoint` and `aimFrom` the gun uses.
+  The same search is shared with the railgun check instead of being written
+  twice.
+
+  And the street is cleared first. A mech's round goes to the nearest thing on
+  the line, and Rise of the Machines keeps a dozen walking at you: ten of them
+  were standing between the gun and the target, so what the check measured was
+  how long they lasted.
+
+  The second was real. That skip left the player sitting in a mech, and the
+  next check reset the mech layer under them: `state.inMech` went on pointing
+  at a machine that was no longer in the world, so the key that gets you in
+  got you out instead and every mech check after it failed. The layer now says
+  so when it takes a mech out from under its pilot, and the frame loop puts a
+  stranded pilot back on their feet in any case. `tools/test/mechs.test.mjs`
+  holds the layer to it without a browser.
+
+- 2026-10-18: and every skip in the mech half of the suite now says why. Three
+  of them read `no room for one` whatever had actually happened, which is how a
+  reset layer and a blocked firing line both came to look like a street with
+  nowhere to park.
+
+## 36. Surfaces with real maps
+
+- 2026-10-18: the third graphics step, and the one that changes what the city
+  is made of rather than what shape it is. Everything here has always been
+  shaded procedurally, which gets the structure right: a road knows where its
+  own centre line is, a pavement knows where its joints are, and both stay
+  sharp at any angle because the pattern is widened to the pixel footprint
+  rather than faded out by eye. What it cannot get is grain. A fractal noise
+  run per pixel has no mip chain, so it has to be faded away as its features
+  go sub pixel, and that is why the middle distance of this city went to flat
+  colour at about thirty metres.
+
+- 2026-10-18: so the grain is baked instead. `src/engine/surfaces.js` builds
+  ten tiling maps when the page loads, out of the same kind of noise the
+  shader used to run, and hands them to the card as one array texture with a
+  mip chain and eight times anisotropy on it. The card then does the
+  averaging, which is what a mip chain is for, and a road keeps its chippings
+  out to the horizon. Nothing is downloaded: it is 2.6 MB of bytes computed in
+  216 ms, which is a fifth of a second of the loading screen.
+
+- 2026-10-18: what is in a layer is deliberately not an albedo. The colour of
+  a wall comes from the palette and the colour of a road comes from the
+  shader, so a map carries what the surface does to the light instead: the
+  slope in two channels, a multiplier on the albedo in the third, and how
+  buried the point is in its own relief in the fourth. Every one of them is
+  worked out from a single height field per material, so a material is
+  described once rather than three times over.
+
+- 2026-10-18: the tiling is the whole trick, and it is the one thing that is
+  easy to get silently wrong. The lattice coordinates wrap before they are
+  hashed rather than after, so the cell at the right hand edge is the cell at
+  the left hand one. `tools/test/surfaces.test.mjs` holds it to that by
+  comparing the step across the join with the step anywhere else rather than
+  by looking at the edge values, which is the test that fails loudly when the
+  wrap goes.
+
+- 2026-10-18: measured. No change in frame time on the software renderer the
+  checks run on, 74 ms a frame against 73, which is within the noise; what it
+  buys is not speed but the grain surviving distance. The first pass had the
+  render on a frontage at seven cells across three metres, which is half metre
+  blobs, and a Berlin block came out looking like it had damp rather than
+  render on it. It is eighteen cells now.
+
+## 37. The street you are standing in
+
+- 2026-10-18: the name on the screen, under the crosshair. Faint while you
+  walk, so it is never in the way of a shot, and up in the accent colour for
+  four seconds whenever it changes, which is the moment anybody wants to read
+  it. In a mech or a vehicle it reads off the machine rather than off you: the
+  street under a Titan is the street it is standing in.
+
+- 2026-10-18: the names already existed, and were useless for this. A map
+  label is a point every two hundred and forty metres along a way, placed to
+  be written across a map, so the nearest label to where you are standing is
+  routinely on the next street over. The name now rides on the centreline as
+  well, which costs 1.4 kB of manifest in Mitte, and the answer is measured to
+  the centreline with half a carriageway and three and a half metres of
+  pavement of slack, so standing on the kerb still counts and standing in the
+  middle of a block counts as nowhere. A junction is a tie, and a tie goes to
+  the wider road, because that is the name people use.
+
+- 2026-10-18: looked up four times a second rather than every frame. It walks
+  every named centreline in memory, and the answer cannot change between two
+  frames of walking. `tools/test/street.test.mjs` holds the lookup to the real
+  bundle: a point on a centreline is named by that street, a point forty
+  metres off it is not, and a build whose centrelines carry no names at all
+  fails rather than quietly showing nothing.
+
+## 38. Where this goes next (planned, not built)
+
+Written down before any of it is built, because the last plan that lived only
+in a conversation was lost. Five asks, in the order they were made, with what
+each one costs measured off the tree as it stands today.
+
+### 38.1 The city outside Mitte reads as generic
+
+What makes it generic is the tier table, not the data. Tier 2, which is most
+of the ring, is built with `roofs: false` and `windows: false`, so every block
+is a flat topped box with a flat colour on it. Tier 3 is the same with a
+bigger `minArea`.
+
+The important measurement: **windows cost nothing**. `tier.windows` sets one
+flag bit on the vertex, `FACADE_FLAG.NO_WINDOWS`, and the whole window pattern
+is a fragment shader that reads the building's own storey count. Turning them
+on in tier 2 and 3 adds zero bytes to the download and zero triangles, and
+costs only fragment work on buildings that are mostly far away and small on
+the screen. That is the cheapest single change available anywhere in this
+project.
+
+Roofs are not free: `tier.roofs` builds real pitched geometry. Turning them on
+across the ring would be measured before it was kept.
+
+Beyond that, what makes a block read as Berlin rather than as a box is
+silhouette variety that costs nothing per building: parapets, a chimney or two
+off the same hash that places the street furniture, and a wider spread in the
+palette. All of it is builder work on geometry that is already being emitted.
+
+### 38.2 The Brandenburg Gate is not recognisable
+
+It is twelve Doric columns, four cross walls, an entablature, an attic and a
+quadriga of five blocks, all in one flat `MAT.SANDSTONE`. Three things are
+missing, and none of them is expensive:
+
+- The columns have no flutes. A flute is a shader pattern on a cylinder, not
+  geometry.
+- The attic is one plain box. The real one is a cornice, a set back block and
+  a relief frieze: three boxes and a band instead of one box.
+- The quadriga is four rectangles. Legs, necks and heads are a dozen more
+  boxes on a model that is drawn once in the whole city.
+
+The flanking pavilions, Haus Liebermann and Haus Sommer, are not there at all,
+and they are what makes the square read as the square.
+
+### 38.3 Craters you can shoot
+
+Today only a blast of radius 55 m or more digs one, and the reason is in
+`DEMO.craterFrom`: the ground base is a 12.5 m quad grid in Mitte and coarser
+outside, so a six metre hole has no vertices inside it to move. It would be an
+invisible trap rather than a crater.
+
+Two ways out.
+
+The cheap one is a **crater patch**: emit a bowl as its own little mesh and
+draw it over the ground. It does not work on its own, because the flat base
+grid is still there and pokes through.
+
+The one that fits what this engine already does is to **re-mesh the ground of
+a touched tile at fine resolution**. There is precedent: the memorial floor is
+already built at 2.5 m inside the 12.5 m base, because its whole point is that
+the ground rolls. And the machinery to replace vertices in a tile and
+re-upload it is `src/game/bake.js`, which already does exactly that for a
+collapse. A crater of ten metres at 1.5 m resolution is about 140 quads. The
+cost is bounded by a cap on how many tiles may be re-meshed.
+
+Seeing through is already handled and would stay handled: damaged tiles are
+drawn a second time inside out, and there is a bedrock plane under everything.
+
+### 38.4 Holes shot in a building, and a collapse when too much is gone
+
+Damage already accumulates on a grid, `DEMO.cell` of 22 m, in four stages of
+180, and a finished cell comes down. What the shader does with it is cut the
+building back from the top. So a building loses its top quarter; it never
+loses the middle of a wall.
+
+A real hole is cheaper than it sounds, because the mechanism is already there.
+`uScars` is a ring of sixteen blast marks, each a centre, a radius and a
+severity, and the fragment shader already draws a ragged soot edge round each
+one with noise. A hole is the same loop with a `discard` inside the ragged
+edge. What you then see through it is the inside of the building, which the
+inside out pass already draws.
+
+So the work is: a hit list that outlives the sixteen scars, a smaller damage
+cell so a frontage breaks in pieces rather than in one slab, the collision
+segments opened where the hole is, which `DEMO.splitAt` already does for a
+collapse, and the existing per cell accumulation to bring the whole thing down
+when enough of it is gone.
+
+### 38.5 Crossing a district is abrupt
+
+`World.keepAround` already exists: it loads every built district within reach,
+drops the ones past a distance, and caps how many are resident. **Nothing in
+the game calls it.** The only caller in the tree is the districts test. The
+game calls `enterOnly`, which deliberately unloads everything else and holds
+you at a modal card while the bytes arrive.
+
+So the streaming is written and switched off. What has to be decided is the
+budget: the eight districts built here are 53.3 MB raw, Mitte alone 16.8 MB,
+a ring district 3 to 8 MB. Two or three resident is a few tens of megabytes of
+ArrayBuffer, and the tile manager already evicts GPU tiles by distance and
+caps residency at 520.
+
+## 39. The ring stops looking like boxes
+
+- 2026-10-18: windows outside Mitte. Tier 2 is most of the ring and tier 3 is
+  everything out past it, and both were built with `windows: false`, so every
+  block was a blank wall with a parapet on it. The measurement that decided
+  this: `tier.windows` sets one flag bit on the vertex, and the whole window
+  pattern is a fragment shader that reads the building's own storey count. The
+  eight districts built here come to 875,427 triangles and 15.88 MB gzipped
+  with the windows off, and to 875,427 triangles and 15.88 MB with them on.
+  Not approximately: the same two numbers. Frame time in a ring street came
+  out at 58 ms a frame either way on the software renderer the checks run on.
+  It had been off for years for no better reason than that it sounded
+  expensive.
+
+- 2026-10-18: which only works because the facade now fades. Every other
+  pattern in this shader has been widened to the pixel footprint for years;
+  the facade never was, and it is the one made of hard edged tests rather than
+  smoothsteps, so it is the one that shimmers. Once a pixel covers a storey
+  there is nothing left to draw but the mean, so it draws that instead: the
+  wall, darkened by the share of it that is glass. That is what a mip chain
+  would give, and it is what makes the window shader affordable five
+  kilometres out, where a suburb is now a tone rather than a flicker.
+
+- 2026-10-18: two silhouette ideas were built, measured and thrown away, which
+  is the useful part of this entry.
+
+  Chimney stacks and lift overruns on flat roofs. A stack is one box and
+  twelve triangles, so it reads as the cheapest silhouette there is. On every
+  building over ninety square metres it doubled a whole tier, 72,826
+  triangles to 144,496. Tuned down to the big half of the big buildings it was
+  still a quarter more, and a screenshot from the pavement showed none of it,
+  because from a street you cannot see a roof. A second screenshot from roof
+  height over Mitte showed almost none either, because tier 0 has real pitched
+  roofs and there is hardly a flat one to stand a stack on. Removed.
+
+  A parapet of a different height per building. The quads are emitted either
+  way, so this one really did look free. It is not: thirteen different heights
+  where there had been one cost a quarter of a megabyte across the city,
+  because a column of identical numbers is what a compressor lives on. Half a
+  metre on a twenty metre building is also under what anybody can see from the
+  pavement. Removed, with the reason written where the next person will look.
+
+- 2026-10-18: one reading in the middle of all that came out at 16.13 MB and
+  893,777 triangles and could not be reproduced afterwards from the same
+  sources; the two builds either side of it both give 875,427 and 15.88. It is
+  recorded rather than explained.
+
+## 40. The ceiling on a district comes off
+
+- 2026-10-18: the brief's rule 6 asked for the download to stay under twenty
+  five megabytes, and `tools/fit-city.mjs` enforced it per district: the code,
+  the index and any one district had to come to less than that, or the deploy
+  failed. It is lifted, at the author's word, on the grounds that what matters
+  is whether the thing is playable rather than whether it is under a figure.
+
+- 2026-10-18: worth writing down plainly, because it changes less than it
+  sounds. The rule never bound anything. The heaviest district in the real
+  city is 8.89 MB with the code beside it, a third of the ceiling, and the
+  eight built here come to 4.69 MB to play. Nothing was ever held back by the
+  number; what holds detail back is the triangle count and the wait, and both
+  of those are still measured on every build.
+
+- 2026-10-18: so the tools report instead of refusing. `fit-city` prints what
+  a player waits for and takes `--budget=N` for anyone who wants a ceiling
+  back, and then it does fail, because a limit nobody acts on is not a limit.
+  `weigh-city` prints the table with no figure to compare against. The build's
+  last line says what every district adds up to and points at `fit-city` for
+  the number that decides playability. The deploy workflow reports rather than
+  gates.
+
+- 2026-10-18: what is still enforced, and should be: the performance budget.
+  Under 65,000 triangles and under 170 draw calls in view, one draw call a
+  tile, two shadow cascades, and a quality tier chosen from the measured
+  median frame time over the first three seconds. That is the budget that was
+  ever doing the work.
+
+## 41. Roofs across the ring, and what the measurement said
+
+- 2026-10-18: with the ceiling gone the obvious thing to spend on was roofs
+  outside Mitte, which had been flat since the tiers were written. The tier
+  table said why: a pitched roof is four more vertices per metre of frontage
+  than a flat one.
+
+- 2026-10-18: it is the other way round. A flat roof here is a cap plus a
+  parapet, and a parapet is two triangles for every edge of the footprint,
+  which on a Berlin block with a dozen jogs in its outline is a great many.
+  Switching the roofs on across the ring and the outskirts took one district
+  from 72,826 triangles to 66,958, and the whole city from 875,427 to 869,559
+  and from 15.88 MB to 15.85. It gave the ring a skyline of red tile, slate
+  and copper, and it made the city smaller doing it.
+
+- 2026-10-18: so the thing that was being saved for by keeping the detail off
+  was never being saved. Both of the switches turned on in this pass, windows
+  and roofs, were off on an assumption about cost that nobody had measured,
+  and neither of them costs anything. The comment that had it backwards is
+  replaced with the figures.
+
+## 42. The city streams, and the card is only for arriving
+
+- 2026-10-18: crossing a district boundary was a modal card and a wait, and
+  the reason was in one line of `main.js`: it called `world.enterOnly`, which
+  loads the district you are entering and drops every other one. The world
+  layer has had `keepAround` since the districts were written, which holds the
+  one you are in, the ones within reach and nothing past a drop distance. The
+  only caller in the tree was the districts test. The streaming was written
+  and switched off.
+
+- 2026-10-18: so it is switched on. A neighbour starts coming down when you
+  are within nine hundred metres of its box, which at walking speed is a
+  couple of minutes and far longer than the fetch; the drop distance is 2.6 km
+  so that walking back and forth across a boundary cannot thrash; and what is
+  held has a ceiling of 128 MB and six districts, because distance alone does
+  not give one when a district is anything from three to seventeen megabytes.
+  Measured walking east out of Mitte: the neighbour was in before the edge,
+  no card, three districts and 26 MB held.
+
+- 2026-10-18: the card is still there, and still needed. It is for arriving
+  somewhere that is not in memory, which is now a fast travel or a link
+  rather than a walk. What it no longer does is drop the rest of the city, so
+  walking back the way you came finds the district you left still standing.
+
+- 2026-10-18: two things the card had quietly owned had to move out of it.
+  The damage you did to a district is restored where the bytes land, on
+  `world.onDistrict`, rather than at the two places that used to wait for a
+  fetch. And arriving in a new district is noticed by the streamer, which is
+  what parks a set of vehicles around you: before this, walking into a
+  district with the card gone left it with no jeep in it, and the districts
+  suite caught it.
+
+- 2026-10-18: three checks in that suite asserted the old behaviour and had to
+  be rewritten rather than loosened, which is worth naming because two of them
+  were measuring the wrong thing afterwards. "Only ever one district is in
+  memory" is now "the district you are walking towards comes down before you
+  reach it", with no card, and the one behind you is still there. The check
+  that a flattened district is still flat when you come back to it was passing
+  on the numbers and failing on its premise: it crossed to a neighbour and
+  expected the bytes to be thrown away, and now they are not. It goes to the
+  far side of the city and stands there, because loading a district is not
+  leaving the one you are in.
+
+- 2026-10-18: one check went red on the run after this and it was not the
+  streaming. "A shot sends everybody within earshot running" reported nought
+  of nought: a gunshot scares everybody inside seventy metres, and the check
+  took whoever happened to be inside that at the moment it fired. Civilians
+  spawn in a ring thirty to a hundred and twenty metres out and then walk an
+  errand, so the chance that none of six is inside seventy is about one in
+  eight. It had been a coin toss since it was written and it finally came up
+  tails. Three of them are now stood in the open at known distances before
+  the shot, which measures the thing the check is named after instead of the
+  dice.
+
+## 43. A hole shot in a frontage
+
+- 2026-10-18: a shell that goes off against a wall now opens it. The whole of
+  it is four lines in a loop the fragment shader was already running: `uScars`
+  is a ring of sixteen blast marks, each a centre, a radius and a severity,
+  and the shader already drew a ragged soot edge round every one of them with
+  noise. A hole is a `discard` inside that same ragged edge, so the rim of the
+  hole and the soot around it are the same shape, which is what makes it read
+  as torn rather than as cut with a compass.
+
+- 2026-10-18: two things had to be true for it to show at all, and both took a
+  wrong attempt first.
+
+  The inside out pass has to punch as well. It draws the tiles round a blast a
+  second time with the faces reversed, so that a hole shows the inside of a
+  building rather than the sky. Left out of the hole test, it draws the back
+  of the very wall you just opened, across the hole, and the picture is of
+  nothing having happened. That was the first screenshot.
+
+  And the tiles have to be marked as scarred for that pass to run on them at
+  all, which until now only a collapse asked for. Without it a hole is a hole
+  onto black.
+
+- 2026-10-18: the second attempt failed on a name. The fragment shader had a
+  constant `FLAG_GROUND = 1u`, and bit 1 is the shop window storey at the
+  bottom of a building; the street you walk on is bit 16. So "not the ground"
+  read as "not the ground floor", and the test shot, which went into a
+  shopfront, was the one thing excluded. The vertex shader carries a comment
+  about exactly this trap at the collapse, written by whoever hit it last
+  time. The constant is `FLAG_GROUND_FLOOR` now and the real one is beside it.
+
+- 2026-10-18: measured rather than admired. The city suite draws the frame
+  twice, once with the hole and once with the same scar set to nought and
+  nothing else changed, and counts what moved: 2.31 m of hole, 40.5 per cent
+  of the frame different between the two. If the discard never fired the two
+  buffers would be identical.
+
+- 2026-10-18: what this does not do, said plainly. The hole is in the picture
+  only. The collision still has the wall whole, so you can see an enemy
+  through a hole and your shot will stop in it, and you cannot climb through.
+  The collision model is a segment with a base and a top, which can express a
+  wall cut down and cannot express a wall with a hole in the middle of it and
+  masonry above. Making the two agree needs the wall subdivided, which is the
+  same piece of work small craters need in the ground, and it is the next one.
+
+- 2026-10-18: and the hole lives as long as the sixteen most recent blast
+  marks. It is the damage you have just done rather than a record. What is
+  permanent is still the collapse: enough damage in a cell and the frontage
+  comes down for good.
+
+## 44. What a small crater would cost, measured before building it
+
+- 2026-10-18: before writing any of 38.3, the two numbers that decide it.
+
+  The collision height field is 33 samples across a 100 m tile, so **3.125 m**.
+  The visible ground is a quad grid at **12.5 m** in Mitte and coarser
+  outside. The collision is already four times finer than the picture. That
+  is the whole of why `DEMO.craterFrom` refuses to dig anything under 55 m:
+  a small crater would be a dip you can walk into and cannot see, which is
+  the one class of bug this project refuses outright.
+
+- 2026-10-18: so the fix is on the picture, not on the collision. The obvious
+  version, build the ground finer everywhere, is out. Mitte's ground is
+  already 210,000 vertices of the district's 600,000, a third of it, because
+  ground quads do not share vertices. At 4 m it would be about two million.
+  Not a budget question, a frame rate one.
+
+- 2026-10-18: what is affordable is re-meshing the tiles a blast touches, and
+  only those. One 100 m tile at 3.125 m is 1,024 quads against 64 today, so
+  about two thousand triangles a tile; twenty damaged tiles is forty
+  thousand, against the city's 870,000. The precedent is already in the
+  builder, where the memorial floor is laid at 2.5 m inside the 12.5 m base
+  because its whole point is that the ground rolls.
+
+- 2026-10-18: the work that is left is not the arithmetic, it is the plumbing.
+  A tile's vertices are a packed slice of the district's bytes and the tile
+  manager uploads them as they come; replacing a tile's ground with sixteen
+  times as many vertices means the manager has to accept a mesh that is not
+  the one in the file. `src/game/bake.js` can rewrite vertices in place but
+  cannot add any. That is the piece to build, and it is the same piece a
+  hole in a wall needs before the collision can agree with it.

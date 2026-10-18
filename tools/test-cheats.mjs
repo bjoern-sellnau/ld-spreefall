@@ -467,6 +467,57 @@ async function run() {
   check('and it counts for nothing, because he was already dead',
     bones.shot.credited === 0, `${bones.shot.credited} kills`);
 
+  // --- what a building has left --------------------------------------------
+  const damage = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.demolition.reset(); s.renderer.clearCollapses();
+    // Find a frontage to look at, and look at it.
+    // Something that is still standing, rather than the first thing the ray
+    // happens to hit: by this point in the suite half the street is a ruin
+    // two metres high, and what a ruin has left is a different question.
+    const eye = s.camera.position;
+    let wall = null;
+    for (let i = 0; i < 48 && !wall; i++) {
+      s.look((i / 48) * 720, i % 2 ? -2 : 2);
+      s.camera.update(16 / 9);
+      const g = s.camera.forward;
+      const hit = s.world.raycast(eye[0], eye[1], eye[2], g[0], g[1], g[2], 200);
+      if (!hit) continue;
+      const hx = eye[0] + g[0] * hit.t, hz = eye[2] + g[2] * hit.t;
+      if (s.world.tallestNear(hx, hz, 10) > 6) wall = hit;
+    }
+    if (!wall) return { skip: true };
+    const d = s.camera.forward;
+    const x = eye[0] + d[0] * wall.t, z = eye[2] + d[2] * wall.t;
+    const before = s.demolition.damageAt(x, z);
+    const off = !document.getElementById('buildinfo').classList.contains('hidden');
+    s.setCheat('showDamage', true);
+    await new Promise((r) => requestAnimationFrame(r));
+    const shown = document.getElementById('buildinfo').textContent;
+    // Put some damage into that cell and ask again.
+    s.demolition.blast(x, s.world.groundHeight(x, z), z, 9, 300);
+    for (let i = 0; i < 60; i++) s.demolition.update(1 / 60);
+    const after = s.demolition.damageAt(x, z);
+    await new Promise((r) => requestAnimationFrame(r));
+    const shownAfter = document.getElementById('buildinfo').textContent;
+    s.setCheat('showDamage', false);
+    await new Promise((r) => requestAnimationFrame(r));
+    const hiddenAgain = document.getElementById('buildinfo').classList.contains('hidden');
+    s.demolition.reset(); s.renderer.clearCollapses();
+    return {
+      off, shown, shownAfter, hiddenAgain,
+      left0: before.left, left1: after.left, whole: before.whole,
+    };
+  });
+  check('the menu can show what a building has left',
+    !damage.skip && damage.off === false && /left of/.test(damage.shown || '')
+      && damage.hiddenAgain,
+    damage.skip ? 'no wall to look at' : (damage.shown || '').slice(0, 60));
+  check('and the number comes down as you take the frontage apart',
+    !damage.skip && damage.left1 < damage.left0 && damage.left0 === damage.whole,
+    damage.skip ? '' : `${damage.left0} of ${damage.whole} became ${damage.left1}`);
+
   // --- the last kill -------------------------------------------------------
   // Killed through the weapon rather than by calling damage, because the
   // slow motion hangs off the credit and the credit comes from the shot.
@@ -539,7 +590,10 @@ async function run() {
     s.soldiers.budget = 8; s.drones.budget = 6; s.jets.budget = 2;
     const t0 = s.loop.simTime;
     while (s.loop.simTime - t0 < 12) await new Promise((r) => requestAnimationFrame(r));
-    const sent = s.soldiers.active.length + s.drones.active.length + s.jets.active.length;
+    // The people who live here do not count: they are not sent after you,
+    // they were here first.
+    const sent = s.soldiers.active.filter((v) => !v.civilian).length
+      + s.drones.active.length + s.jets.active.length;
 
     // And by hand.
     const made = s.spawnWave('drones', 4);
@@ -561,11 +615,88 @@ async function run() {
     quiet.made === 4 && quiet.up === 4 && quiet.moved && quiet.stillUp === 4,
     `${quiet.up} up, ${quiet.moved ? 'flying' : 'frozen'}`);
 
+  // --- the people who live here --------------------------------------------
+  const folk = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset();
+    s.state.peaceful = true;
+    s.soldiers.enabled = true;
+    const t0 = s.loop.simTime;
+    while (s.loop.simTime - t0 < 14 && s.soldiers.civilianCount < 6) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    const out = { count: s.soldiers.civilianCount };
+    const who = s.soldiers.active.filter((v) => v.civilian);
+    out.armed = who.filter((v) => v.state === 1 || v.state === 2).length;
+    // They walk: a stretch of simulation moves them about the place.
+    const before = who.map((v) => `${v.x.toFixed(1)},${v.z.toFixed(1)}`);
+    const t1 = s.loop.simTime;
+    while (s.loop.simTime - t1 < 2) await new Promise((r) => requestAnimationFrame(r));
+    out.moved = who.filter((v, i) => `${v.x.toFixed(1)},${v.z.toFixed(1)}` !== before[i]).length;
+
+    // And a shot sends them running away from it rather than towards it.
+    //
+    // Three of them are stood where a shot will be heard first, which is not
+    // cheating: a gunshot scares everybody inside seventy metres, and this
+    // measures that rather than where six people happened to wander. They
+    // spawn in a ring thirty to a hundred and twenty metres out and then walk
+    // an errand, so on about one run in eight nobody was inside the seventy
+    // at the moment of the shot and the check failed on the dice, reporting
+    // nought of nought. It did exactly that once.
+    const near = who.slice(0, 3);
+    near.forEach((v, i) => {
+      const want = 22 + i * 14;
+      // Somewhere in the open at that distance, so that running away from the
+      // shot is something they can actually do.
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * Math.PI * 2 + i * 0.7;
+        const x = s.player.x + Math.cos(a) * want;
+        const z = s.player.z + Math.sin(a) * want;
+        if (!s.world.isLoaded(x, z)) continue;
+        const g = s.world.groundHeight(x, z);
+        if (s.world.raycast(x, g + 1.2, z, Math.cos(a), 0, Math.sin(a), 14)) continue;
+        v.x = x; v.z = z; v.y = g;
+        break;
+      }
+      v.panicLeft = 0;
+    });
+    const away0 = near.map((v) => Math.hypot(v.x - s.player.x, v.z - s.player.z));
+    s.weapon.select('m16'); s.weapon.cooldown = 0; s.weapon.spread = 0;
+    s.shoot();
+    out.scared = near.filter((v) => v.panicLeft > 0).length;
+    out.heard = near.length;
+    const t2 = s.loop.simTime;
+    while (s.loop.simTime - t2 < 2.5) await new Promise((r) => requestAnimationFrame(r));
+    out.further = near.filter((v, i) =>
+      Math.hypot(v.x - s.player.x, v.z - s.player.z) > away0[i] + 1.5).length;
+
+    s.state.peaceful = false;
+    s.soldiers.civilianBudget = 0;
+    s.soldiers.enabled = false;
+    s.soldiers.reset(); s.weapon.reset();
+    return out;
+  });
+  check('people are about the place in Just a Walk',
+    folk.count >= 6 && folk.armed === 0, `${folk.count} of them, none in the fight`);
+  check('and they are going somewhere', folk.moved > 0, `${folk.moved} on the move`);
+  check('a shot sends everybody within earshot running',
+    folk.heard > 0 && folk.scared === folk.heard,
+    `${folk.scared} of ${folk.heard} bolted`);
+  check('and they run away from it rather than past it',
+    folk.further >= Math.ceil(folk.heard * 0.6),
+    `${folk.further} of ${folk.heard} further off two seconds later`);
+
   // --- how they arrive -----------------------------------------------------
   const arrival = await page.evaluate(async () => {
     const s = window.spreefall;
     s.soldiers.reset(); s.effects.clear();
     s.state.peaceful = false;
+    // The layer has to be running, or nobody comes up out of anything: the
+    // rise is in the soldier update, which is where it belongs.
+    const was = s.soldiers.enabled;
+    s.soldiers.enabled = true;
+    s.soldiers.budget = 0;
     const made = s.spawnWave('soldiers', 2);
     const v = s.soldiers.active[0];
     if (!v) return { skip: true };
@@ -575,6 +706,7 @@ async function run() {
     const t0 = s.loop.simTime;
     while (s.loop.simTime - t0 < 1.4) await new Promise((r) => requestAnimationFrame(r));
     const standing = Number(Math.abs(v.y - s.world.groundHeight(v.x, v.z)).toFixed(2));
+    s.soldiers.enabled = was;
     s.soldiers.reset(); s.effects.clear();
     return { made, sphere, under, standing };
   });

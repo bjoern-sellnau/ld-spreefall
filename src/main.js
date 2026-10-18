@@ -50,6 +50,7 @@ const el = {
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
+  streetName: $('streetname'),
   combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
   ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
   shieldbar: $('shieldbar'), shieldnum: $('shieldnum'), shieldflash: $('shieldflash'),
@@ -58,6 +59,7 @@ const el = {
   weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
   sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
+  buildInfo: $('buildinfo'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
   cheatValues: $('cheatvalues'),
   crossing: $('crossing'), crossName: $('crossname'), crossNote: $('crossnote'),
@@ -430,6 +432,10 @@ async function main() {
     // tells you the thing you are sitting in has just fired.
     mechFlash: 0,
     unbuiltSaid: null,
+    // Which district you are standing in, so that walking into another one is
+    // something the game notices. It used to be noticed by the loading card,
+    // which is no longer in the way.
+    districtIn: null,
   };
 
   function resize() {
@@ -502,6 +508,8 @@ async function main() {
       audio.gunshot(spec.sound);
       effects.shake = Math.min(1, effects.shake + (spec.kind === 'hitscan' ? 0.07 : 0.16));
       state.muzzle = 1;
+      // Everybody within earshot who is not in this fight gets out of it.
+      soldiers.scare(player.x, player.z, 70);
     }
     const m = muzzlePoint(shot.from);
     if (shot.end) {
@@ -539,6 +547,8 @@ async function main() {
    */
   function explode(x, y, z, splash, body) {
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
+    // Heard a great deal further than a rifle, and run from accordingly.
+    soldiers.scare(x, z, Math.max(90, splash.radius * 3));
     if (splash.nuke) {
       // A warhead is the same code path as a grenade with different numbers,
       // which is the point of having the numbers in one place. What it gets of
@@ -558,22 +568,33 @@ async function main() {
       state.flash = Math.min(1.1, 0.18 + 1.25 * Math.exp(-dist / 300));
       // Four marks across the blast rather than one, because a single scar
       // that wide reads as a circle painted on the ground.
-      renderer.addScar(x, y, z, splash.radius * 1.1, 1);
+      renderer.addScar(x, y, z, splash.radius * 1.1, 1, 0);
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2 + Math.random();
         const r = splash.radius * 0.55;
         renderer.addScar(x + Math.cos(a) * r, y, z + Math.sin(a) * r,
-          splash.radius * 0.8, 0.9);
+          splash.radius * 0.8, 0.9, 0);
       }
       debris(x, y, z, splash.radius * 0.35);
     } else {
       audio.explosion();
       effects.explode(x, y, z);
       effects.blast(x, y, z, splash.radius);
-      // Mark whatever it went off against. The soot reaches further than the
-      // damage does, which is how a blast looks on a wall.
+      // Mark whatever it went off against, and open it. The soot reaches
+      // further than the damage does, which is how a blast looks on a wall;
+      // the hole is a fraction of the blast, the same way a crater is, and
+      // only a charge with real weight behind it makes one at all.
+      // A fraction of the blast, the way a crater is. The first pass had it at
+      // 0.38 of the radius, which took most of a storey out of a frontage for
+      // one rocket: dramatic, and wrong by about double.
+      const punch = splash.damage >= 90 ? Math.min(3.0, splash.radius * 0.21) : 0;
       renderer.addScar(x, y, z, splash.radius * 1.5,
-        Math.min(1, splash.damage / 180));
+        Math.min(1, splash.damage / 180), punch);
+      // A hole has to have something behind it. The tiles round a blast are
+      // drawn a second time inside out, which is what fills a hole with the
+      // inside of the building instead of with the sky, and until now only a
+      // collapse asked for that.
+      if (punch > 0) scarTiles(x, z, splash.radius);
       debris(x, y, z, splash.radius);
     }
     effects.shake = Math.min(splash.nuke ? 2.6 : 1.4, effects.shake
@@ -790,6 +811,35 @@ async function main() {
     // have left it standing in the road.
     for (const m of mechs.active) if (!m.mine && m.alive && m.health > 0 && near(m)) n++;
     return n;
+  }
+
+  /**
+   * What the frontage you are aiming at has taken, and what it has left. The
+   * damage is kept on a grid of cells about one Berlin block frontage
+   * across, which is the unit that comes down, so what this answers is the
+   * cell your shot would land in rather than some notion of a building.
+   *
+   * Only while the menu asks for it, and only on a wall: the ground and the
+   * sky have nothing to say here.
+   */
+  function showBuildingDamage() {
+    if (!cheats.showDamage || state.mode !== 'walk') {
+      if (!el.buildInfo.classList.contains('hidden')) el.buildInfo.classList.add('hidden');
+      return;
+    }
+    const eye = camera.position;
+    const f = camera.forward;
+    const hit = world.raycast(eye[0], eye[1], eye[2], f[0], f[1], f[2], 220);
+    if (!hit) { el.buildInfo.classList.add('hidden'); return; }
+    const x = eye[0] + f[0] * hit.t;
+    const z = eye[2] + f[2] * hit.t;
+    const d = demolition.damageAt(x, z);
+    const tall = world.tallestNear(x, z, 10);
+    el.buildInfo.classList.remove('hidden');
+    el.buildInfo.innerHTML = tall < 2.5
+      ? `<i>nothing standing here</i>`
+      : `<b>${d.left}</b> left of <b>${d.whole}</b> <i>stage ${d.stage} of ${d.stages}, `
+        + `${Math.round(tall)} m standing, ${Math.round(hit.t)} m away</i>`;
   }
 
   /**
@@ -1121,6 +1171,14 @@ async function main() {
     }
     effects.shake = Math.min(1.6, effects.shake + 0.8);
   };
+
+  // Every district that lands, however it was asked for, gets the damage you
+  // did to it back. It used to be put back by hand at the two places that
+  // waited for a fetch; the streamer fetches without waiting for anything, so
+  // the record is restored where the bytes arrive instead.
+  world.onDistrict = (d) => { restoreScars(d.id); };
+
+  mechs.onEject = () => { if (state.inMech) leaveMech(false); };
 
   mechs.onDestroyed = (m) => {
     explode(m.x, m.y + 3.0, m.z, { radius: 26, damage: 420 }, { weapon: 'mech' });
@@ -1972,6 +2030,9 @@ async function main() {
    */
   function arriveAt(x, z, radius, scale = 1) {
     const y = world.groundHeight(x, z);
+    // Whatever just appeared on the street, the people on it do not wait to
+    // find out what it is.
+    soldiers.scare(x, z, 20 + radius * 9);
     effects.arrival(x, y, z, radius, scale);
     renderer.addScar(x, y, z, radius * 1.1, 0.45);
     const away = Math.hypot(player.x - x, player.z - z);
@@ -2006,7 +2067,7 @@ async function main() {
           const r = away * scale * (0.9 + Math.random() * 0.2);
           const x = player.x + Math.cos(a) * r;
           const z = player.z + Math.sin(a) * r;
-          if (!world.isLoaded(x, z)) continue;
+          if (!placeable(x, z)) continue;
           let boxed = false;
           for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, clear)) {
@@ -2018,13 +2079,28 @@ async function main() {
         }
       }
     }
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      const x = player.x + Math.cos(a) * away;
-      const z = player.z + Math.sin(a) * away;
-      if (world.isLoaded(x, z)) return { x, z, a };
+    // Nothing anywhere near that has room. Take whatever ground will have
+    // one, working outwards: a machine standing against a lamp post is a
+    // machine, and no machine at all is a button that does nothing.
+    for (let r = away; r <= away * 12; r *= 1.6) {
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2 + r;
+        const x = player.x + Math.cos(a) * r;
+        const z = player.z + Math.sin(a) * r;
+        if (placeable(x, z)) return { x, z, a };
+      }
     }
     return null;
+  }
+
+  /**
+   * Is this somewhere a machine may be put down at all? Loaded ground, and
+   * not the memorial: the layer refuses one there anyway, and a spot the
+   * spawner is happy with that the layer then throws away is the same as no
+   * spot, with the difference that nobody can see why.
+   */
+  function placeable(x, z) {
+    return world.isLoaded(x, z) && !combat.isSanctuary(x, 0, z);
   }
 
   /**
@@ -2213,6 +2289,11 @@ async function main() {
   // The menu is built from the tables in cheats.js rather than written out in
   // the HTML, so adding a switch is adding a row there and nothing else.
 
+  // How many people are about the place in Just a Walk. Enough that a street
+  // has somebody on it and a square has a few, and few enough that the pool
+  // the soldiers come out of is not full of them when you call a squad in.
+  const CIVILIANS = 10;
+
   const NUKE = {
     // The numbers a warhead is made of. The radius is the one that matters:
     // everything else here is set so that it reads at that size.
@@ -2366,6 +2447,39 @@ async function main() {
    * worked out once per district and costs two triangles a frame.
    */
   let bedrockFor = null;
+  // The street you are standing in. Looked up four times a second rather than
+  // every frame: it walks every named centreline in memory, and the answer
+  // cannot change between two frames of walking anyway.
+  let streetWas = null;
+  let streetDue = 0;
+  let streetFresh = 0;
+
+  function updateStreetName(dt) {
+    streetDue -= dt;
+    if (streetFresh > 0) {
+      streetFresh = Math.max(0, streetFresh - dt);
+      if (streetFresh === 0) el.streetName.classList.remove('fresh');
+    }
+    if (streetDue > 0) return;
+    streetDue = 0.25;
+    // Wherever you are looking out of, which is a mech or a vehicle when you
+    // are in one: the street under a Titan is the street it is standing in.
+    const ride = state.inMech || state.inVehicle;
+    const at = ride ? ride : player;
+    const found = world.streetAt(at.x, at.z);
+    const name = found ? found.name : null;
+    if (name === streetWas) return;
+    streetWas = name;
+    el.streetName.classList.toggle('hidden', !name);
+    if (!name) { el.streetName.classList.remove('fresh'); return; }
+    el.streetName.textContent = name;
+    // Up for a few seconds whenever it changes, which is the moment anybody
+    // wants to read it, then back to the faint version that stays out of the
+    // way of a shot.
+    el.streetName.classList.add('fresh');
+    streetFresh = 4.0;
+  }
+
   function updateBedrock() {
     const entry = world.entryAt(player.x, player.z);
     // The loaded state is part of the key as well as the district: asked
@@ -2811,14 +2925,12 @@ async function main() {
       // before you leave it behind.
       demolition.bakeAll();
       world.loadDistrict(far.id).then(() => {
-        restoreScars(far.id);
         tiles.uploadsPerFrame = 10000;
         tiles.updateResidency(tx, tz, loop.frame);
         tiles.uploadsPerFrame = 8;
-        // One district at a time: whatever we took off from goes now.
-        for (const id of world.loadedIds) {
-          if (id !== far.id) world.unloadDistrict(id);
-        }
+        // What you took off from is let go by the streamer on the far side,
+        // because by then it is a long way behind you. It used to be dropped
+        // here by hand, on the rule that one district was all there was.
       }).catch(() => toast(`${far.name} could not be loaded`));
     }
     tiles.updateResidency(tx, tz, loop.frame);
@@ -2871,10 +2983,13 @@ async function main() {
     // building that got away.
     demolition.bakeAll();
     try {
-      await world.enterOnly(x, z, (p) => {
+      // Loaded rather than entered: `enterOnly` drops every other district,
+      // which is what the card used to be for. The streamer decides what is
+      // let go now, by distance and by a memory ceiling, so walking back the
+      // way you came finds the district you left still there.
+      await world.loadDistrict(entry.id, (p) => {
         el.crossFill.style.width = `${Math.round(p * 100)}%`;
       });
-      restoreScars(entry.id);
     } catch (err) {
       el.crossHint.textContent = 'that district could not be loaded';
       await new Promise((r) => setTimeout(r, 1200));
@@ -2919,21 +3034,54 @@ async function main() {
     return parts.join(', ');
   }
 
+  // How much city is held at once, and how far out it is fetched from.
+  //
+  // One district at a time was the old answer and it is what made crossing a
+  // boundary a card and a wait. The world layer could always hold several,
+  // and the only thing missing was anybody asking it to.
+  //
+  // The reach is measured to a district's box, so a neighbour starts coming
+  // down while you are still nine hundred metres inside your own, which is a
+  // couple of minutes of walking at this speed and far longer than the fetch.
+  // The drop distance is much larger than the reach so that walking back and
+  // forth over a boundary cannot thrash. The ceiling is on bytes rather than
+  // on a count, because a district is anything from three to seventeen
+  // megabytes.
+  const STREAM = { reach: 900, drop: 2600, most: 6, bytes: 128e6, every: 0.5 };
+  let streamDue = 0;
+
   /**
-   * The district streamer. One district is in memory, and the next one is a
-   * loading screen away: the whole of Berlin is eighty one districts and more
-   * than two hundred megabytes, and what a player holds is the one they are
-   * standing in.
+   * The district streamer. Keeps the one you are in, the ones you are near,
+   * and nothing past the drop distance, inside a memory ceiling.
    */
-  function streamCity(x, z) {
+  function streamCity(x, z, dt = 0) {
     const here = world.idAt(x, z);
     el.district.textContent = world.nameAt(x, z) || 'Berlin';
     el.district.classList.toggle('loading', !!state.crossing);
     if (!here || state.crossing) return;
-    // Walking at a boundary: when the ground ahead belongs to another
-    // district, that is where you are going, and the screen says so. The
-    // controller holds you at the edge until the bytes are in.
-    if (!world.loaded(here)) crossInto(x, z);
+    // Fetching is throttled: it walks the whole catalogue of eighty one
+    // districts, and nothing it decides can change inside half a second of
+    // walking.
+    streamDue -= dt;
+    if (streamDue <= 0) {
+      streamDue = STREAM.every;
+      world.keepAround(x, z, STREAM.reach, STREAM.drop, STREAM.most, STREAM.bytes);
+    }
+    // And if you are somehow standing on ground that is not in yet, which is
+    // a fast travel or a deep link rather than a walk, the card is still
+    // there to wait behind.
+    if (!world.loaded(here)) { crossInto(x, z); return; }
+    // Arriving somewhere new. This used to happen inside the card, which was
+    // also the only place that knew you had changed district; now that you
+    // can walk across without one, the arrival is noticed here instead.
+    if (state.districtIn !== here) {
+      const first = state.districtIn === null;
+      state.districtIn = here;
+      // A district with no jeep in it is a district you have to walk out of.
+      // The ones you left behind are two kilometres away and are let go with
+      // the pool; this parks a set around wherever you came out.
+      if (!first && state.mode === 'walk') parkVehicles({ x, z });
+    }
   }
 
   /**
@@ -3631,6 +3779,17 @@ async function main() {
     state.time += worldDt;
     input.poll();
     updateBedrock();
+    updateStreetName(dt);
+
+    // A pilot whose machine is no longer there is put back on their feet.
+    // Everything that takes a mech away in the ordinary course of things
+    // tells the game first, so this never fires in a normal run; what it
+    // catches is the machine going out from under you some other way, and
+    // the alternative is piloting a mech that is not in the world any more,
+    // which locks you out of your own weapons and the key to get out again.
+    if (state.inMech && (!state.inMech.alive || !state.inMech.occupied)) {
+      leaveMech(false);
+    }
 
     // Just a Walk. The budgets are held at nought rather than the layers
     // switched off, so that anything the cheat menu brings out by hand is a
@@ -3641,6 +3800,10 @@ async function main() {
       soldiers.budget = 0;
       jets.budget = 0;
     }
+    // And who is about. A city with nobody hunting you is still a city with
+    // people in it; one that is being shelled is not, and the ones who were
+    // there have already gone.
+    soldiers.civilianBudget = state.peaceful ? CIVILIANS : 0;
 
     if (state.mode === 'intro' || state.mode === 'landing') return;
 
@@ -4173,7 +4336,7 @@ async function main() {
     // Keep the city around whoever is being followed: the district they are
     // in, the ones within reach, and nothing beyond the drop distance. This
     // starts fetches and returns at once; tiles appear as the bytes land.
-    streamCity(camera.position[0], camera.position[2]);
+    streamCity(camera.position[0], camera.position[2], loop.stats.intervalMs / 1000);
     checkBoundary();
     tiles.updateResidency(camera.position[0], camera.position[2], loop.frame);
     // Dynamic resolution, fed the real cost of the last frame. When it decides
@@ -4221,6 +4384,7 @@ async function main() {
       el.crosshair.style.setProperty('--gap', `${px}px`);
       el.crosshair.classList.toggle('aiming', weapon.aimBlend > 0.6);
       el.crosshair.classList.toggle('holstered', weapon.holstered);
+      showBuildingDamage();
       // Aiming narrows the field of view, which is most of what aiming is.
       camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;
       if (state.inSanctuary !== state.sanctuaryShown) {
