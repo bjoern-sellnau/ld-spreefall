@@ -1985,3 +1985,32 @@ caps residency at 520.
   893,777 triangles and could not be reproduced afterwards from the same
   sources; the two builds either side of it both give 875,427 and 15.88. It is
   recorded rather than explained.
+
+## 40. The ceiling on a district comes off
+
+- 2026-10-18: the brief's rule 6 asked for the download to stay under twenty
+  five megabytes, and `tools/fit-city.mjs` enforced it per district: the code,
+  the index and any one district had to come to less than that, or the deploy
+  failed. It is lifted, at the author's word, on the grounds that what matters
+  is whether the thing is playable rather than whether it is under a figure.
+
+- 2026-10-18: worth writing down plainly, because it changes less than it
+  sounds. The rule never bound anything. The heaviest district in the real
+  city is 8.89 MB with the code beside it, a third of the ceiling, and the
+  eight built here come to 4.69 MB to play. Nothing was ever held back by the
+  number; what holds detail back is the triangle count and the wait, and both
+  of those are still measured on every build.
+
+- 2026-10-18: so the tools report instead of refusing. `fit-city` prints what
+  a player waits for and takes `--budget=N` for anyone who wants a ceiling
+  back, and then it does fail, because a limit nobody acts on is not a limit.
+  `weigh-city` prints the table with no figure to compare against. The build's
+  last line says what every district adds up to and points at `fit-city` for
+  the number that decides playability. The deploy workflow reports rather than
+  gates.
+
+- 2026-10-18: what is still enforced, and should be: the performance budget.
+  Under 65,000 triangles and under 170 draw calls in view, one draw call a
+  tile, two shadow cascades, and a quality tier chosen from the measured
+  median frame time over the first three seconds. That is the budget that was
+  ever doing the work.

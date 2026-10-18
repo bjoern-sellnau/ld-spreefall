@@ -1,4 +1,4 @@
-// What the city weighs, district by district, against the brief's budget.
+// What the city weighs, district by district.
 //
 // The brief asks for the whole playable area to be under twenty five
 // megabytes of download. Download is what is measured here, so everything is
@@ -18,7 +18,6 @@ import { DISTRICTS } from './districts.mjs';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PUB = path.join(ROOT, 'public');
 const INDEX = path.join(PUB, 'world.json');
-const BUDGET = 25e6;
 
 function gz(file) {
   return zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
@@ -77,16 +76,10 @@ function main() {
   console.log(`districts       ${(raw / 1e6).toFixed(2)} MB deployed, ${(download / 1e6).toFixed(2)} MB gzipped`);
   console.log(`per km2         ${(download / Math.max(1, area) / 1e6).toFixed(3)} MB of download`);
   console.log('');
-  console.log(`download        ${(total / 1e6).toFixed(2)} MB of the 25.00 MB budget`
-    + `${total > BUDGET ? '  OVER' : `, ${((BUDGET - total) / 1e6).toFixed(2)} MB to spare`}`);
-  // This only reports. What actually ships is decided by tools/fit-city.mjs,
-  // which takes districts outward from the middle until the budget is spent,
-  // so a build that comes in over budget is a smaller city rather than a
-  // failed deploy.
-  if (total > BUDGET) {
-    console.log(`                ${((total - BUDGET) / 1e6).toFixed(2)} MB more than the budget, `
-      + 'so fit-city will ship fewer districts');
-  }
+  // No ceiling to compare it against any more. The whole city deployed is a
+  // number worth watching, but it is not what anybody downloads: the game
+  // fetches the district you are in. `tools/fit-city.mjs` prints that one.
+  console.log(`download        ${(total / 1e6).toFixed(2)} MB for every district built`);
 }
 
 main();

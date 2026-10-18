@@ -10,7 +10,7 @@
 // means the same thing in every one of them, and each district only builds
 // what has its middle inside its own box: a building on a boundary belongs to
 // one district and is built once. The detail tier comes from the district
-// table, and what it costs is in the budget line at the end.
+// table, and what it costs is in the lines at the end.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -1305,8 +1305,10 @@ function writeIndexSummary() {
   console.log(`road            ${road.toFixed(1)} km`);
   console.log(`index           ${(fs.statSync(INDEX_FILE).size / 1e6).toFixed(2)} MB, ${(indexGz / 1e6).toFixed(2)} MB gzipped`);
   console.log(`deployed        ${(bytes / 1e6).toFixed(2)} MB`);
-  console.log(`download        ${(total / 1e6).toFixed(2)} MB gzipped, against a 25 MB budget`
-    + `${total > 25e6 ? '  OVER' : ''}`);
+  // Every district added up, which is not what anybody downloads: the game
+  // fetches the one you are standing in. `node tools/fit-city.mjs` prints
+  // that number, and it is the one that decides whether this is playable.
+  console.log(`download        ${(total / 1e6).toFixed(2)} MB gzipped for all of them`);
 }
 
 /**

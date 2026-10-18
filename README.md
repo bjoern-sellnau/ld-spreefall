@@ -23,7 +23,7 @@ the sound and the data pipeline are all written from scratch.
 | Map data | OpenStreetMap, parsed and triangulated by our own code |
 | Shipped as | one HTML file, JS modules, one bundle per district, no backend |
 | Extent | Berlin, out to the city boundary, 1,718 km2 in 81 districts, one in memory at a time |
-| Payload | the code, the index and the district you are standing in: 1 to 3 MB over the wire, 9.2 MB for Mitte, against a 25 MB budget |
+| Payload | the code, the index and the district you are standing in: 4.69 MB over the wire for the city built here, 8.89 MB for the heaviest district of the real one |
 | Difficulty | easy, normal and hard, with shields that come back |
 | Third party code at run time | none |
 
@@ -582,12 +582,12 @@ instance, which turns the red core blue.
 
 ## The city is eighty one districts
 
-The brief asks for a walkable Berlin under 25 MB of download. Mitte at full
-detail is 2.2 MB over the wire and 6.5 square kilometres; Berlin out to the
-city boundary is 1,718 square kilometres of lattice, and at Mitte's detail
-that would be hundreds of megabytes. So the city is cut into districts, built
-one at a time, thinned with distance from the middle, and exactly one of them
-is in memory while you play.
+Mitte at full detail is 4.40 MB over the wire and 6.5 square kilometres;
+Berlin out to the city boundary is 1,718 square kilometres of lattice, and at
+Mitte's detail that would be hundreds of megabytes. So the city is cut into
+districts, built one at a time, thinned with distance from the middle, and
+exactly one of them is in memory while you play. What a player waits for is
+one district, not the city.
 
 **The box.** The playable area is the Land of Berlin: 52.3380 to 52.6760 N,
 13.0880 to 13.7620 E, which is 45.7 km by 37.4 km. That extent is the one two
@@ -634,21 +634,26 @@ have, and you can zoom from a street out to all of Berlin and back. Free travel
 across the city loads the destination during the flight and will not put you
 down until the ground is there.
 
-**The budget.** All of Berlin at these tiers is 304 MB deployed and 107 MB
+**What it weighs.** All of Berlin at these tiers is 304 MB deployed and 107 MB
 over the wire, measured on 13 October 2026 with every one of the eighty one
 districts built from the live extract: 102,691 buildings over 1,717 square
-kilometres, which is 0.062 MB of download per square kilometre. No amount of
-thinning gets that under 25. What does fit, easily, is what
-a player downloads to play: the code, the index and the district they are
-standing in. The biggest district in the real city is 8.65 MB over the wire,
-8.89 MB with the code and the index on top of it, and most are two to five.
-That is what the budget is now held against, and it is a reinterpretation of the
-brief's rule 6, written down in `docs/PLAN.md` rather than quietly applied. The
-old reading is still available: `npm run fit -- --whole=25` cuts the city down
-to what fits as a whole. `npm run weigh` prints the table of districts with
-deployed and gzipped bytes, `npm run fit` fails the build if a single district
-is too big to wait for, and `.github/workflows/city.yml` builds from the live
-extract and publishes that table.
+kilometres, which is 0.062 MB of download per square kilometre. None of that
+is what a player downloads. What comes down before you can walk is the code,
+the index and the district you are standing in: 4.69 MB for the eight built
+here, and 8.89 MB for the biggest district in the real city, with most at two
+to five.
+
+There was a hard ceiling on that number, 25 MB a district, carried over from
+the brief. It is gone. It never bound anything, because the biggest district
+is a third of it, and holding detail back against a figure that was never
+reached is the wrong way round: the test is whether the thing is playable,
+which is a wait you will sit through and a frame rate you can move in. A
+ceiling is still there for anyone who wants one, and then it does fail the
+build, because a limit nobody acts on is not a limit: `npm run fit -- --budget=12`.
+`npm run fit -- --whole=25` still cuts the city down to what fits as a whole.
+`npm run weigh` prints the table of districts, `npm run fit` prints what you
+wait for, and `.github/workflows/city.yml` builds from the live extract and
+publishes both.
 
 ## Two cities, and which one you are looking at
 
@@ -854,18 +859,24 @@ capture, which the verification run writes.
 ### The build
 
 ```
-parsed 1.47 MB of OSM: nodes 10848  ways 1759  relations 5
-features: buildings 1672  roads 67  areas 1  water 2  green 7  rails 2, trees 3746
-geometry: 266,195 vertices, 132,397 triangles, 1672 buildings, 2711 stelae,
-          3728 trees, 44.3 km of road
-tiles     646, of 34 by 19, 613 of them non empty
-world.bin 9.05 MB
-world.json 0.14 MB
-dist      9.42 MB, 2.28 MB over the wire with gzip, against a 25 MB budget
-max tile  589.5 kB, 12,141 triangles (the stelae field)
-mean tile 12.1 kB
-build     about one second
+parsed 1.52 MB: nodes 10852  ways 1760  relations 5
+features: buildings 1673  roads 67  areas 1  water 2  green 7  rails 2  trees 3746
+geometry: 599587 vertices, 263051 triangles, 1662 buildings, 2711 stelae,
+          3699 trees, 790 lamps, 1013 cars, 72 seats and bins, 43.9 km of road
+tiles           646 of 34 by 19 (646 non empty)
+world-core.bin  16.68 MB
+world-core.json 0.16 MB
+over the wire   4.40 MB gzipped
+max tile        827.5 kB, 15842 triangles
+mean tile       23.6 kB
+built in        3.0 s
 ```
+
+That is Mitte, which is the district you land in. It has doubled in triangles
+since the first version of this table: the relief, the street furniture and
+the surface maps all went into it, and the download went from 2.28 MB to 4.40.
+There is no ceiling on that number any more, only the question of whether the
+wait and the frame rate are still something you would sit through.
 
 ### Frame rate
 
