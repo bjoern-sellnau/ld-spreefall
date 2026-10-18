@@ -130,6 +130,19 @@ export const TIERS = [
 /** The id of the district that holds the original box. */
 export const CORE_ID = 'core';
 
+/**
+ * The tier a district is built at a second time, for the fast travel flight.
+ *
+ * A flight crosses the city at four hundred metres a second, which gives a
+ * district under six seconds between coming into reach and going past. Its
+ * own bundle is between three and forty megabytes and does not arrive in
+ * that; the sketch tier is a twentieth of it and does. Measured on i24:
+ * 47.33 MB at tier 0, 8.06 at tier 3, 2.28 here.
+ *
+ * A district already at this tier or coarser has nothing to build twice.
+ */
+export const OVERFLIGHT_TIER = 4;
+
 /** Degrees of margin a fetch takes around a district, for walls on the cut. */
 export const FETCH_MARGIN = 0.0025;   // about 170 m north to south
 

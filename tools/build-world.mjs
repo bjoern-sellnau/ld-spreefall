@@ -18,7 +18,7 @@ import zlib from 'node:zlib';
 import { parseOsmXml, counts } from './osm-xml.mjs';
 import { annotate } from './annotate.mjs';
 import { project, BBOX, CITY, worldBounds, cityGrid, ORIGIN } from './geo.mjs';
-import { DISTRICTS, TIERS, CORE_ID, districtById } from './districts.mjs';
+import { DISTRICTS, TIERS, CORE_ID, OVERFLIGHT_TIER, districtById } from './districts.mjs';
 import { Mesh } from './mesh.mjs';
 import { Terrain } from './terrain.mjs';
 import { fbm2, hashInt } from './noise.mjs';
@@ -221,20 +221,33 @@ function main() {
   } else {
     wanted = [districtById(CORE_ID)];
   }
-  for (const district of wanted) buildDistrict(district);
+  // Every district is built twice: once at its own tier, and once at the
+  // sketch tier for the fast travel flight to pass over. A district that is
+  // already that coarse is its own overflight bundle and is not built again.
+  const fineOnly = process.argv.includes('--fine-only');
+  for (const district of wanted) {
+    buildDistrict(district);
+    if (!fineOnly && district.tier < OVERFLIGHT_TIER) buildDistrict(district, true);
+  }
   writeIndexSummary();
 }
 
-function buildDistrict(district) {
+/**
+ * @param {object} district one row of the district table
+ * @param {boolean} overflight build the sketch tier bundle rather than its own
+ */
+function buildDistrict(district, overflight = false) {
   const t0 = Date.now();
-  const tier = TIERS[district.tier];
+  const tierIndex = overflight ? OVERFLIGHT_TIER : district.tier;
+  const tier = TIERS[tierIndex];
+  const suffix = overflight ? '.lo' : '';
   const RAW_FILE = rawFile(district.id);
   if (!fs.existsSync(RAW_FILE)) {
     console.error(`missing ${RAW_FILE}, run: node tools/fetch-osm.mjs --district=${district.id}`);
     process.exit(1);
   }
   console.log('');
-  console.log(`=== ${district.id}  tier ${district.tier} (${tier.name})  ${district.nx} by ${district.nz} tiles ===`);
+  console.log(`=== ${district.id}${suffix}  tier ${tierIndex} (${tier.name})  ${district.nx} by ${district.nz} tiles ===`);
   const src = fs.readFileSync(RAW_FILE, 'utf8');
   const osm = parseOsmXml(src);
   const c = counts(osm);
@@ -1197,7 +1210,7 @@ function buildDistrict(district) {
     generator: 'spreefall build-world',
     district: district.id,
     name,
-    tier: district.tier,
+    tier: tierIndex,
     tx: district.tx,
     tz: district.tz,
     nx: district.nx,
@@ -1239,16 +1252,70 @@ function buildDistrict(district) {
     tiles: bundle.tiles,
   };
 
+  // The overflight manifest carries only what the streamer and the renderer
+  // read. Street names, parked cars, railway lines, landmark cards and the
+  // outlines the map draws are the same place at either tier, they are
+  // already in the fine manifest, and nobody reads them from four hundred
+  // metres up at four hundred metres a second. Leaving them in made the
+  // overflight manifest 0.32 MB against the fine one's 0.33.
+  if (overflight) {
+    manifest.landmarks = [];
+    manifest.stations = [];
+    manifest.roadLines = [];
+    manifest.railLines = [];
+    manifest.streets = [];
+    manifest.cars = [];
+    manifest.waterOutlines = [];
+    manifest.greenOutlines = [];
+    manifest.overflight = true;
+  }
+
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const binName = `world-${district.id}.bin`;
-  const jsonName = `world-${district.id}.json`;
+  const binName = `world-${district.id}${suffix}.bin`;
+  const jsonName = `world-${district.id}${suffix}.json`;
   fs.writeFileSync(path.join(OUT_DIR, binName), bundle.buffer);
   fs.writeFileSync(path.join(OUT_DIR, jsonName), JSON.stringify(manifest));
 
   const binBytes = bundle.buffer.length;
   const jsonBytes = fs.statSync(path.join(OUT_DIR, jsonName)).size;
-  const sketch = citySketch(roadLines, manifest.waterOutlines, manifest.greenOutlines);
   const gz = gzipSize(path.join(OUT_DIR, binName)) + gzipSize(path.join(OUT_DIR, jsonName));
+
+  const reportBuild = () => {
+    const binMB = binBytes / 1e6;
+    const jsonMB = jsonBytes / 1e6;
+    console.log('');
+    console.log(`name            ${name}`);
+    console.log(`tiles           ${bundle.tiles.length} of ${bundle.tileCountX} by ${bundle.tileCountZ} (${bundle.nonEmpty} non empty)`);
+    console.log(`triangles       ${mesh.triangleCount}`);
+    console.log(`vertices        ${mesh.vertexCount}`);
+    console.log(`collision segs  ${collision.length}`);
+    console.log(`${binName.padEnd(18)}${binMB.toFixed(2)} MB`);
+    console.log(`${jsonName.padEnd(18)}${jsonMB.toFixed(2)} MB`);
+    console.log(`over the wire   ${(gz / 1e6).toFixed(2)} MB gzipped`);
+    const sp = bundle.spend;
+    const kb = (v) => `${(v / 1024).toFixed(0)} kB`;
+    console.log(`bytes           vertices ${kb(sp.vertices)}, indices ${kb(sp.indices)}, `
+      + `height fields ${kb(sp.grids)}, walls ${kb(sp.segments)}, trees ${kb(sp.trees)}, `
+      + `footsteps ${kb(sp.surface)}`);
+    console.log(`max tile        ${bundle.maxTileKB.toFixed(1)} kB, ${bundle.maxTileTris} triangles`);
+    console.log(`mean tile       ${bundle.meanTileKB.toFixed(1)} kB`);
+    console.log(`built in        ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  };
+
+  if (overflight) {
+    // The overflight bundle is a second pair of files against the entry the
+    // fine build already wrote, not an entry of its own. Everything else
+    // about the district, its name, its sketch and what can be seen from it,
+    // is the same place and is not worked out twice.
+    updateVariant(district, {
+      bin: binName, json: jsonName,
+      bytes: binBytes + jsonBytes, gzip: gz,
+      tier: tierIndex, triangles: mesh.triangleCount,
+    });
+    reportBuild();
+    return;
+  }
+  const sketch = citySketch(roadLines, manifest.waterOutlines, manifest.greenOutlines);
   updateIndex(district, {
     name, tier: district.tier,
     bin: binName, json: jsonName,
@@ -1266,25 +1333,7 @@ function buildDistrict(district) {
     builtAt: new Date().toISOString(),
   });
 
-  const binMB = binBytes / 1e6;
-  const jsonMB = jsonBytes / 1e6;
-  console.log('');
-  console.log(`name            ${name}`);
-  console.log(`tiles           ${bundle.tiles.length} of ${bundle.tileCountX} by ${bundle.tileCountZ} (${bundle.nonEmpty} non empty)`);
-  console.log(`triangles       ${mesh.triangleCount}`);
-  console.log(`vertices        ${mesh.vertexCount}`);
-  console.log(`collision segs  ${collision.length}`);
-  console.log(`${binName.padEnd(16)}${binMB.toFixed(2)} MB`);
-  console.log(`${jsonName.padEnd(16)}${jsonMB.toFixed(2)} MB`);
-  console.log(`over the wire   ${(gz / 1e6).toFixed(2)} MB gzipped`);
-  const sp = bundle.spend;
-  const kb = (v) => `${(v / 1024).toFixed(0)} kB`;
-  console.log(`bytes           vertices ${kb(sp.vertices)}, indices ${kb(sp.indices)}, `
-    + `height fields ${kb(sp.grids)}, walls ${kb(sp.segments)}, trees ${kb(sp.trees)}, `
-    + `footsteps ${kb(sp.surface)}`);
-  console.log(`max tile        ${bundle.maxTileKB.toFixed(1)} kB, ${bundle.maxTileTris} triangles`);
-  console.log(`mean tile       ${bundle.meanTileKB.toFixed(1)} kB`);
-  console.log(`built in        ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  reportBuild();
 }
 
 // ---------------------------------------------------------------------------
@@ -1370,6 +1419,27 @@ function readIndex() {
  * The index is written after every district, so a build that is interrupted
  * leaves behind a city of the districts that finished rather than nothing.
  */
+/**
+ * Record a district's overflight bundle against the entry it already has.
+ *
+ * The fine build runs first and writes the entry; this adds the second pair
+ * of files to it. Nothing else about the district is touched, because the
+ * overflight bundle is the same place at a coarser tier and not a place of
+ * its own.
+ *
+ * @param {object} district one row of the district table
+ * @param {object} lo bin, json, bytes, gzip, tier and triangles
+ */
+function updateVariant(district, lo) {
+  const index = readIndex();
+  if (!index) return;
+  const entry = index.districts.find((d) => d.id === district.id);
+  if (!entry) return;
+  entry.lo = lo;
+  index.builtAt = new Date().toISOString();
+  fs.writeFileSync(INDEX_FILE, JSON.stringify(index));
+}
+
 function updateIndex(district, entry) {
   const previous = readIndex();
   // The header is written fresh every time and the district list is carried
