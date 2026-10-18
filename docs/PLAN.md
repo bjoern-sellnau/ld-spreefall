@@ -2283,3 +2283,57 @@ caps residency at 520.
   would run through a park, the river or a landmark's clearance. Ring 3-2
   carries 9 surveyed streets, 1 named building and 1 green, and its invented
   blocks dropped from 2194 to 1234 because the Tiergarten is in the way now.
+
+## 49. Cars you can shoot, and what a mech does to a row of limes
+
+- 2026-10-18: a parked car was four boxes baked into a tile with a collision
+  box beside it and nothing anywhere that said car. The builder now writes
+  down where it put each one, three numbers each, 1017 of them in Mitte and
+  about ten kilobytes of manifest, and the game keeps the list. A round or a
+  blast looks up the list rather than the geometry.
+
+- 2026-10-18: what is left of one is written back into the same bytes. The
+  geometry is crushed to 42 per cent of its height and marked as rubble, which
+  is dark and matt, and the collision box is cut to 72 cm: a burnt out shell
+  you still walk round, not a mark on the tarmac. Measured, a car goes from
+  **1.51 m standing to 0.72 m**. It is remembered per district, so a street
+  you burnt is still burnt when you come back to it from the far side of
+  Berlin.
+
+- 2026-10-18: the blast is the ordinary one, 11 m and 120, so it hurts what is
+  beside it, cuts the frontage behind it and reaches the next car along. The
+  chain is queued rather than recursive: a row of cars going up one after the
+  other was otherwise a thousand deep stack of explosions inside each other.
+
+- 2026-10-18: the view out of a mech was reported as still blocked. It was not
+  a building. The pilot's eye is at 6.3 m, and on Unter den Linden that is the
+  middle of the crown of every lime in the row: the whole screen was leaves.
+  A crown now opens up when the eye is inside it, which is a test on the
+  height difference and the distance across the ground rather than on distance
+  alone, so a man walking under the same tree still has a tree over him. And a
+  machine that walks through a row of trees leaves no row of trees.
+
+## 50. Five more arms for the Titan
+
+- 2026-10-18: an 88 mm flak gun whose shell bursts beside what is in the air
+  rather than on it, a power laser that goes through three bodies and sets
+  what it cuts alight, a car bomb that turns the nearest parked car into the
+  charge, a Stinger that locks an aircraft up and slows the world to a third
+  while the missile runs it down, and an EMP bomb that stops everything with a
+  motor in it for seven seconds inside 48 m. Ten arms now, so the number row
+  runs 1 to 9 and nought.
+
+- 2026-10-18: measured, every arm fires and takes a round out of its own
+  magazine, the flak and the Stinger both bring a jet down from 200 m, the car
+  bomb destroys the car it was aimed at from 29 m, and the Stinger's lock puts
+  2.4 s of slow motion on the clock.
+
+## 51. Jets in Just a Walk
+
+- 2026-10-18: reported as spawning a section of soldiers in Just a Walk and
+  then jets arriving. The budgets are held at nought at the top of the fixed
+  step, but the threat level is raised from inside `combat.update`, which runs
+  after it, and the jets' own update runs after that again. Killing what you
+  spawned raised the tier, gave the jets a budget of two, and a flight took
+  off before the next step could put the budget back. The tier now holds every
+  budget at nought in Just a Walk rather than setting them.

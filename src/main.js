@@ -26,6 +26,8 @@ import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
 import { Gibs } from './game/gibs.js';
+import { Cars } from './game/cars.js';
+import { bakeCrush } from './game/bake.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
@@ -212,6 +214,7 @@ async function main() {
   const pickups = new Pickups(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const cheats = new Cheats();
   const gibs = new Gibs(world);
+  const cars = new Cars(world);
   const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
   // A ruin that has stopped moving is written into the city's own bytes, and
   // the card needs the new ones. Nothing else changes: the same ruin, drawn
@@ -404,6 +407,8 @@ async function main() {
       try { return localStorage.getItem('spreefall.walk') === '1'; } catch { return false; }
     })(),
     blastSlow: 0,
+    // While a Stinger is running down what it locked onto.
+    airSlow: 0,
     // Seconds of slow motion left over a kill that emptied the street. Kept
     // apart from blastSlow because they are different switches and either
     // may be on without the other.
@@ -531,6 +536,9 @@ async function main() {
       } else {
         effects.impact(shot.end.x, shot.end.y, shot.end.z,
           shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
+        // And if what it went into was a parked car, the car has an opinion
+        // about it. Two magazines or one rocket and it goes up.
+        hitCar(shot.end.x, shot.end.y, shot.end.z, spec.damage || 12);
       }
     }
     if (shot.target) {
@@ -755,6 +763,23 @@ async function main() {
       if (r > splash.radius) continue;
       if (!reach(v.x, v.y + 1.0, v.z)) continue;
       vehicles.damage(v, splash.damage * (1 - r / splash.radius));
+    }
+    // A charge that landed looking for a car. It takes the nearest one within
+    // reach and that car is the bomb: the shaped charge is small, what goes
+    // off is a tank of petrol with a street around it.
+    if (body && body.carbomb) {
+      const car = cars.at(x, z, body.carbomb);
+      if (car) {
+        cars.destroy(car);
+        feed('<b>car bomb</b> armed');
+      }
+    }
+    // Every parked car in it. A blast beside one sets it off, which sets off
+    // the one parked in front of it, which is a street you can take apart one
+    // bonnet at a time.
+    for (const car of cars.near(x, z, splash.radius * 0.9)) {
+      const r = Math.hypot(car.x - x, car.z - z);
+      cars.hurt(car, splash.damage * (1 - r / (splash.radius * 0.9)));
     }
     // And you, unless you are inside something, in which case the thing you
     // are inside has already taken it above and taking it twice would mean a
@@ -1120,7 +1145,115 @@ async function main() {
       }
       return;
     }
+
+    // --- the heavy arms ---------------------------------------------------
+
+    if (arm.kind === 'laser') {
+      // A beam rather than a round: no spread, no travel, and it does not
+      // stop at the first thing it burns through. What it lands on catches.
+      const hit = world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, arm.range);
+      const reach = hit ? hit.t : arm.range;
+      const end = {
+        x: from.x + dir.x * reach, y: from.y + dir.y * reach, z: from.z + dir.z * reach,
+      };
+      effects.lance(from.x, from.y, from.z, end.x, end.y, end.z, 1.0, 0.42, 0.18);
+      effects.flash(from.x, from.y, from.z, 2.4, 1.0, 0.5, 0.2, 0.06);
+      const through = new Set();
+      for (let i = 0; i < arm.pierce; i++) {
+        if (!mechHit(from, dir, reach, arm.damage, through)) break;
+      }
+      if (hit) {
+        effects.flash(end.x, end.y, end.z, 2.0, 1.0, 0.55, 0.2, 0.07);
+        effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+        demolition.blast(end.x, end.y, end.z, 3.0, arm.damage);
+        scarTiles(end.x, end.z, 4);
+        hitCar(end.x, end.y, end.z, arm.damage);
+        // It cuts, and what it cuts smoulders. Not every shot, or a held
+        // trigger would set a street alight in a second and a half.
+        if (Math.random() < 0.08) fires.ignite(end.x, world.groundHeight(end.x, end.z), end.z, 5, 0.6);
+      }
+      return;
+    }
+
+    if (arm.kind === 'flak') {
+      // Lead it onto whatever is in the air in front of you, and let the
+      // shell burst beside it. With nothing up there it is a heavy shell on
+      // a long fuse, which is a different and perfectly good thing to have.
+      const target = airLock(from, dir, arm.lockRange, arm.lockCone);
+      const d = spread(arm.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
+        splash: arm.splash, weapon: 'mech',
+        fuse: arm.fuse,
+        target, proximity: target ? arm.proximity : 0,
+      });
+      if (m === state.inMech && target) toast('flak, on it');
+      return;
+    }
+
+    if (arm.kind === 'stinger') {
+      const target = airLock(from, dir, arm.lockRange, arm.lockCone);
+      if (!target) {
+        if (m === state.inMech) toast('nothing in the air');
+        return;
+      }
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: dir.x * arm.speed, vy: dir.y * arm.speed, vz: dir.z * arm.speed,
+        splash: arm.splash, weapon: 'mech',
+        homing: { turn: 5.5, reach: arm.lockRange }, target,
+      });
+      // And the world slows while it runs it down, which is the whole point
+      // of locking something up rather than leading it.
+      if (m === state.inMech) {
+        state.airSlow = arm.slow;
+        feed('<b>stinger</b> locked');
+      }
+      return;
+    }
+
+    if (arm.kind === 'carbomb') {
+      const d = spread(arm.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
+        splash: arm.splash, weapon: 'mech', carbomb: arm.reach,
+      });
+      return;
+    }
+
+    if (arm.kind === 'empbomb') {
+      const d = spread(arm.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
+        splash: arm.splash, weapon: 'mech', emp: arm.emp,
+      });
+      return;
+    }
   };
+
+  /**
+   * What is in the air in front of the barrel: the nearest jet or drone
+   * inside a narrow cone. Flak leads it, the Stinger chases it.
+   *
+   * @returns {object|null} the body, which is what a homing shot steers at
+   */
+  function airLock(from, dir, range, cone) {
+    let best = null, bestT = Infinity;
+    const look = (body, y) => {
+      const vx = body.x - from.x, vy = y - from.y, vz = body.z - from.z;
+      const t = vx * dir.x + vy * dir.y + vz * dir.z;
+      if (t <= 6 || t > range) return;
+      const off = Math.hypot(vx - dir.x * t, vy - dir.y * t, vz - dir.z * t);
+      if (off > cone * t) return;
+      if (t < bestT) { bestT = t; best = body; }
+    };
+    for (const j of jets.active) if (j.health > 0) look(j, j.y);
+    for (const d of drones.active) if (d.health > 0) look(d, d.y);
+    return best;
+  }
 
   mechs.onArmChange = (m, arm) => {
     if (m !== state.inMech) return;
@@ -1196,16 +1329,175 @@ async function main() {
   // did to it back. It used to be put back by hand at the two places that
   // waited for a fetch; the streamer fetches without waiting for anything, so
   // the record is restored where the bytes arrive instead.
-  world.onDistrict = (d) => { restoreScars(d.id); };
+  world.onDistrict = (d) => { restoreScars(d.id); cars.add(d); };
+  world.onDrop = (d) => { cars.drop(d); };
+  // Anything already in memory by the time this is wired up, which is the
+  // district the game boots into.
+  for (const d of world.districts.values()) cars.add(d);
+
+  // --- the parked cars ------------------------------------------------------
+  // A car is four boxes baked into a tile with a collision box beside it, so
+  // what is left of one that has gone up has to be written back into the same
+  // bytes: the geometry onto the road and the collision box down with it.
+  cars.onFlatten = (car) => {
+    const { tiles: changed } = bakeCrush(world, car.x, car.z, 3.1, 2.2);
+    if (changed.length) {
+      tiles.refresh(changed);
+      for (const i of changed) renderer.scarredTiles.add(i);
+    }
+    // And nothing to walk into any more. The segments inside the footprint
+    // are cut to the road, which is what the collapse of a frontage does to
+    // its walls, through the same per tile split so the whole street does not
+    // come down with the car.
+    const base = world.groundHeight(car.x, car.z);
+    const seen = new Set();
+    world.forEachSegmentTile(car.x - 3, car.z - 3, car.x + 3, car.z + 3,
+      (segs, count, index) => { seen.add(index); });
+    for (const index of seen) {
+      const segs = demolition.splitTile(index);
+      const count = segs.length / 6;
+      for (let i = 0; i < count; i++) {
+        const o = i * 6;
+        const mx = (segs[o] + segs[o + 2]) * 0.5;
+        const mz = (segs[o + 1] + segs[o + 3]) * 0.5;
+        if (Math.hypot(mx - car.x, mz - car.z) > 2.9) continue;
+        // Only what is car sized. A frontage that happens to run past the
+        // kerb is metres tall and is left exactly where it is.
+        if (segs[o + 5] - segs[o + 4] > 2.4) continue;
+        // Still something to bump into: a burnt out shell is knee high and
+        // solid, not a mark on the road.
+        if (segs[o + 5] > base + 0.72) { segs[o + 5] = base + 0.72; }
+      }
+    }
+    world.heightCache.clear();
+  };
+
+  // What setting one off looks like. The blast itself goes through the same
+  // explode() everything else uses, so it hurts what is standing next to it,
+  // cuts the frontage behind it and leaves a mark on the road; a petrol fire
+  // on top of that, because a car that goes up goes on burning.
+  const carBlasts = [];
+  cars.onDestroyed = (car) => {
+    // Not at once, and not all at the same moment: a row of cars going up one
+    // after the other is a chain, and a chain that fires inside its own blast
+    // is a thousand deep stack of them.
+    carBlasts.push({ x: car.x, z: car.z, at: state.time + 0.08 + Math.random() * 0.3 });
+  };
+
+  function updateCarBlasts() {
+    for (let i = carBlasts.length - 1; i >= 0; i--) {
+      if (carBlasts[i].at > state.time) continue;
+      const b = carBlasts.splice(i, 1)[0];
+      const y = world.groundHeight(b.x, b.z);
+      explode(b.x, y + 0.8, b.z, CAR_BLAST, { weapon: 'car' });
+      gibs.rubble(b.x, y + 1.1, b.z, 4.5, 12, 1.6);
+      fires.ignite(b.x, y, b.z, 7, 1);
+      effects.flame(b.x, y + 0.7, b.z, 4.4, 1);
+      burning.push({ x: b.x, y, z: b.z, radius: 6.0, left: 16, damagePerSecond: 26 });
+      feed('<i>car</i> burning');
+    }
+  }
+
+  /**
+   * What goes into the street when a car does. Less than a rocket and more
+   * than a grenade, and it reaches far enough to take the next car along with
+   * it, which is the whole pleasure of a row of them.
+   */
+  const CAR_BLAST = { radius: 11, damage: 120 };
+
+  /**
+   * A round or a blast landing on a parked car.
+   *
+   * @returns {boolean} whether that was the one that set it off
+   */
+  function hitCar(x, y, z, damage) {
+    const car = cars.at(x, z, 2.4);
+    if (!car) return false;
+    if (y > world.groundHeight(x, z) + 2.2) return false;
+    return cars.hurt(car, damage);
+  }
 
   mechs.onEject = () => { if (state.inMech) leaveMech(false); };
 
   mechs.onDestroyed = (m) => {
     explode(m.x, m.y + 3.0, m.z, { radius: 26, damage: 420 }, { weapon: 'mech' });
     gibs.rubble(m.x, m.y + 2.0, m.z, 9, 16, 2.4);
+    // Eight metres of reactor and ammunition going up at once. The blast is
+    // what it does to the street; this is what it looks like, and it is the
+    // one thing on fire in this city that is worth standing back from. A
+    // column up the height of the machine, three secondary bursts out of the
+    // wreck, and ground that goes on burning long enough to be a problem for
+    // whoever walks in after it.
+    const g = world.groundHeight(m.x, m.z);
+    effects.flame(m.x, m.y + 2.0, m.z, 11.0, 1);
+    for (let i = 0; i < 3; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 2 + Math.random() * 5;
+      const fx = m.x + Math.cos(a) * r, fz = m.z + Math.sin(a) * r;
+      effects.flame(fx, world.groundHeight(fx, fz) + 0.6, fz, 5.5, 0.9);
+      fires.ignite(fx, world.groundHeight(fx, fz), fz, 9, 1);
+    }
+    fires.ignite(m.x, g, m.z, 12, 1);
+    burning.push({ x: m.x, y: g, z: m.z, radius: 9.5, left: 26, damagePerSecond: 34 });
+    renderer.addScar(m.x, g, m.z, 14, 1, 0);
+    audio.flameWall();
     feed(`<b>${m.spec.name.toLowerCase()} down</b>`);
     if (state.inMech === m) leaveMech(true);
   };
+
+  /**
+   * Every machine on its feet, against the trees it is standing in. Checked a
+   * few times a second rather than every step: a Titan walks at eleven metres
+   * a second and a tree is four metres across, so nothing is walked past
+   * between one check and the next.
+   */
+  let treeSweep = 0;
+  function walkOverTrees() {
+    treeSweep++;
+    if (treeSweep % 8) return;
+    for (const m of mechs.active) {
+      if (!m.alive) continue;
+      flattenTrees(m.x, m.z, (m.spec.radius || 2.3) + 1.2);
+    }
+  }
+
+  /**
+   * Eight metres of machine walking into a lime.
+   *
+   * The view out of a Titan is at six metres, which on Unter den Linden is
+   * the middle of the canopy, and the whole screen was leaves. The crowns
+   * nearest the camera thin out so you can see past them at all, and this is
+   * the other half of it: a machine that walks through a row of trees leaves
+   * no row of trees. Trunks go out of the instance buffer and out of the
+   * collision, which is the same thing a fire does to them.
+   *
+   * @returns {number} how many went down
+   */
+  function flattenTrees(x, z, radius) {
+    const w = world;
+    let n = 0;
+    const tx0 = Math.max(0, Math.floor((x - radius - w.minX) / w.tileSize));
+    const tx1 = Math.min(w.nx - 1, Math.floor((x + radius - w.minX) / w.tileSize));
+    const tz0 = Math.max(0, Math.floor((z - radius - w.minZ) / w.tileSize));
+    const tz1 = Math.min(w.nz - 1, Math.floor((z + radius - w.minZ) / w.tileSize));
+    for (let tz = tz0; tz <= tz1; tz++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const data = w.trees(tz * w.nx + tx);
+        if (!data) continue;
+        for (let i = 0; i < data.length; i += 5) {
+          const px = data[i], py = data[i + 1], pz = data[i + 2];
+          if (Math.hypot(px - x, pz - z) > radius) continue;
+          if (!w.killTree(px, pz)) continue;
+          const h = data[i + 3];
+          effects.dust(px, py + h * 0.5, pz, h * 0.35);
+          gibs.rubble(px, py + h * 0.4, pz, 2.4, 5, h * 0.3);
+          n++;
+        }
+      }
+    }
+    if (n) audio.treeFall(Math.hypot(player.x - x, player.z - z));
+    return n;
+  }
 
   /**
    * How near a point is to a ray, for working out whether a shot that was not
@@ -1757,7 +2049,7 @@ async function main() {
       const row = document.createElement('div');
       row.className = 'marm';
       const key = document.createElement('u');
-      key.textContent = String(i + 1);
+      key.textContent = String((i + 1) % 10);
       const name = document.createElement('span');
       name.textContent = ARMS[i].name;
       const ammo = document.createElement('b');
@@ -3525,6 +3817,7 @@ async function main() {
     gibs.clear();
     demolition.reset();
     fires.reset();
+    cars.reset();
     renderer.clearCollapses();
     renderer.clearFires();
     effects.clear();
@@ -3713,7 +4006,9 @@ async function main() {
     // man sitting inside eight metres of armour.
     if (state.inMech && state.inMech.spec.arms && !photo.active) {
       if (code.startsWith('Digit')) {
-        const n = Number(code.slice(5));
+        // Nought is the tenth, the way a number row runs out.
+        const raw = Number(code.slice(5));
+        const n = raw === 0 ? 10 : raw;
         if (n >= 1 && n <= ARMS.length) { mechs.selectArm(state.inMech, n - 1); return; }
         // A number past the end of the mech's loadout is not the pilot's
         // rifle. Six used to fall through to what the man inside is carrying
@@ -3840,6 +4135,12 @@ async function main() {
       state.killSlow = Math.max(0, state.killSlow - dt);
       scale = Math.min(scale, 0.25);
     }
+    // A Stinger in the air. Shallower than a blast, because you are still
+    // flying the machine while you watch it.
+    if (state.airSlow > 0) {
+      state.airSlow = Math.max(0, state.airSlow - dt);
+      scale = Math.min(scale, 0.34);
+    }
     if (state.killRest > 0) state.killRest = Math.max(0, state.killRest - dt);
     if (state.mode === 'cinema') {
       scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
@@ -3896,6 +4197,7 @@ async function main() {
       fires.update(worldDt, player);
       fireWalls.update(worldDt);
       updateBurning(worldDt);
+      updateCarBlasts();
       ion.update(worldDt);
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
@@ -3928,6 +4230,7 @@ async function main() {
       // as everything around it is a reflex that does nothing at all, which
       // is how it felt from the cockpit.
       mechs.update(selfDt, { x: player.x, y: player.y, z: player.z }, controls);
+      walkOverTrees();
       trampleUnderfoot(m);
       // A torso only turns so far up and down, and the view is held to the
       // same limit: looking past where the guns can point would mean a
@@ -4070,12 +4373,14 @@ async function main() {
     fires.update(worldDt, player);
     fireWalls.update(worldDt);
     updateBurning(worldDt);
+    updateCarBlasts();
     ion.update(worldDt);
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     // And the ones hunting you keep walking whether or not you are in one.
     if (!state.inMech) {
       mechs.update(worldDt, { x: player.x, y: player.y, z: player.z }, null);
+      walkOverTrees();
     }
     rainTick(worldDt);
     titanTick(worldDt);
@@ -4540,7 +4845,7 @@ async function main() {
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input, minimap,
-    combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs,
+    combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs, cars,
     demolition, demoSpec: DEMO, demoBite: bite, demoCrater: craterAt, travelSpec: TRAVEL,
     fires,
     explode(x, y, z, splash, body) { return explode(x, y, z, splash, body || null); },
@@ -4631,6 +4936,10 @@ async function main() {
     // layer sets the same flag when a mouse button is down.
     holdFire(on) { input.fire = !!on; },
     fireWalls,
+    /** A round into a parked car, for the tests. */
+    hitCarForTest(x, z, damage) {
+      return hitCar(x, world.groundHeight(x, z) + 0.9, z, damage);
+    },
     burningGround: burning,
     machines, machineSpec: MACHINES,
     // The same way one arrives in the mode: with the warhead rolled for it,

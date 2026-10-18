@@ -112,8 +112,12 @@ export function settle(p, isGround, height, site) {
 const clampI16 = (v) => (v < -32768 ? -32768 : v > 32767 ? 32767 : v);
 
 /**
- * Flattens whatever small thing stands at a point onto the road: a parked car
- * that has gone up, and the bench beside it if it was close enough.
+ * Crushes whatever small thing stands at a point: a parked car that has gone
+ * up, and the bench beside it if it was close enough.
+ *
+ * It is not flattened away to nothing. A car that has burnt out is still a
+ * car shaped thing in the road, half the height it was and black, and that
+ * reads from the far end of the street where a mark on the tarmac does not.
  *
  * Nothing in a vertex says car, so what this can go on is height and
  * position. Ground is left alone, so the road itself stays where it is, and
@@ -126,9 +130,10 @@ const clampI16 = (v) => (v < -32768 ? -32768 : v > 32767 ? 32767 : v);
  * @param {number} x @param {number} z the middle of it
  * @param {number} radius metres
  * @param {number} tall metres above the ground, the tallest thing it takes
+ * @param {number} squash what is left of its height, as a fraction
  * @returns {{tiles:number[], moved:number}} tiles to push to the card again
  */
-export function bakeAway(world, x, z, radius, tall = 2.2) {
+export function bakeCrush(world, x, z, radius, tall = 2.2, squash = 0.42) {
   const tiles = [];
   let moved = 0;
   const base = world.groundHeight(x, z);
@@ -155,12 +160,16 @@ export function bakeAway(world, x, z, radius, tall = 2.2) {
         if ((flags & FACADE_FLAG.GROUND) !== 0) continue;
         const py = view.getInt16(o + 2, true) / POS_SCALE;
         if (py > base + tall || py < base - 1.0) continue;
-        // Onto the road, a few centimetres clear of it so the two surfaces do
-        // not fight over which one is in front.
-        view.setInt16(o + 2, clampI16(Math.round((base + 0.06) * POS_SCALE)), true);
+        // Down onto its wheels and then some, keeping a few centimetres of
+        // clearance so the shell and the road do not fight over which one is
+        // in front.
+        const was = Math.max(0, py - base);
+        const now = base + 0.05 + was * squash;
+        if (Math.abs(now - py) < 0.02) continue;
+        view.setInt16(o + 2, clampI16(Math.round(now * POS_SCALE)), true);
+        // The fragment shader reads this and treats it as rubble: burnt, dark
+        // and matt, which is what is left of a car that has gone up.
         view.setUint8(o + 17, flags | FACADE_FLAG.RUBBLE);
-        // Lying down, so it does not light like the side of a car any more.
-        view.setInt8(o + 7, 110);
         touched++;
       }
       if (touched) { tiles.push(index); moved += touched; }

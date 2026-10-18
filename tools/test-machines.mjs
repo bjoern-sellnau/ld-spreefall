@@ -1027,8 +1027,10 @@ async function run() {
       named: document.querySelector('#mecharms .marm.on span').textContent,
     };
   });
+  // Ten of them now, and the readout has a row for each: five it started
+  // with, plus the flak, the laser, the car bomb, the stinger and the EMP.
   check('a mech of your own carries a loadout rather than one gun',
-    !got.skip && got.arms === 5 && got.rows === 5 && got.hud,
+    !got.skip && got.arms === 10 && got.rows === got.arms && got.hud,
     got.skip ? got.why : `${got.arms} weapons, holding the ${got.named}`);
 
   // The number row and the wheel, through the real keyboard and the real
@@ -1771,6 +1773,59 @@ async function run() {
     !stomp.skip && stomp.jumped > 2 && stomp.sites > 0,
     stomp.skip ? '' : `${stomp.jumped} m up, ${stomp.sites} places came apart underneath`);
   check('and the pilot inside the armour is fine', !stomp.skip && !stomp.pilotHurt);
+
+  // --- the whole loadout ----------------------------------------------------
+  // Every arm fires, takes a round out of its own magazine and leaves nothing
+  // on the console. The two anti aircraft arms get something to shoot at.
+  const loadout = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.mechs.reset(); s.projectiles.clear(); s.jets.reset();
+    s.teleport(700, -55);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const m = s.spawnMech('titan', 12);
+    if (!m) return { skip: true, why: 'no room for one' };
+    s.teleport(m.x + 3, m.z);
+    s.toggleVehicle();
+    if (s.state.inMech !== m) return { skip: true, why: 'could not get in' };
+    const rows = [];
+    let slow = 0;
+    for (let i = 0; i < s.mechArms.length; i++) {
+      const arm = s.mechArms[i];
+      s.mechs.selectArm(m, i);
+      const air = arm.id === 'stinger' || arm.id === 'flak';
+      if (air) {
+        const j = s.spawnJet(0, 200, 80);
+        j.x = m.x; j.z = m.z - 200; j.y = m.y + 80;
+        s.look(0, 21);
+      } else {
+        s.look(0, 2);
+      }
+      s.camera.update(16 / 9);
+      // The guns point where the torso points, not where the camera does, so
+      // it is given time to come round before the trigger goes down.
+      for (let k = 0; k < 90; k++) s.fixedForTest(1 / 60);
+      for (let k = 0; k < 60; k++) {
+        s.holdFire(true);
+        s.fixedForTest(1 / 60);
+        slow = Math.max(slow, arm.id === 'stinger' ? s.state.airSlow : 0);
+      }
+      s.holdFire(false);
+      for (let k = 0; k < 120; k++) s.fixedForTest(1 / 60);
+      rows.push({ id: arm.id, fired: m.mags[i] < arm.magazine });
+      s.projectiles.clear(); s.jets.reset();
+    }
+    s.toggleVehicle();
+    s.mechs.reset();
+    return { skip: false, rows, slow: Math.round(slow * 100) / 100 };
+  });
+  check('every arm in the loadout fires',
+    loadout.skip || loadout.rows.every((r) => r.fired),
+    loadout.skip ? loadout.why
+      : `${loadout.rows.filter((r) => r.fired).length} of ${loadout.rows.length}: `
+        + loadout.rows.filter((r) => !r.fired).map((r) => r.id).join(', ') || 'all of them');
+  check('and a stinger on a lock slows the world down while it runs it down',
+    loadout.skip || loadout.slow > 0,
+    loadout.skip ? loadout.why : `${loadout.slow} s of it`);
 
   await page.evaluate(async () => {
     const s = window.spreefall;

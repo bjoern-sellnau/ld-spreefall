@@ -1106,6 +1106,36 @@ async function run() {
     !hole.skip && hole.punch > 1 && hole.share > 0.5,
     hole.skip ? hole.why : `${hole.punch} m of hole, ${hole.share}% of the frame through it`);
 
+  // --- the parked cars ------------------------------------------------------
+  const car = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cars.reset();
+    const alive = s.cars.alive;
+    if (!alive) return { skip: true, why: 'no cars in this district' };
+    let car = null;
+    for (const c of s.cars.list) {
+      if (Math.hypot(c.x, c.z) > 1200) continue;
+      car = c; break;
+    }
+    const tallBefore = s.world.tallestNear(car.x, car.z, 2);
+    // Two rifle magazines into it, one round at a time, the way a player
+    // would: the hit goes in through the same path a bullet takes.
+    let shots = 0;
+    while (!car.dead && shots < 40) { s.hitCarForTest(car.x, car.z, 12); shots++; }
+    for (let i = 0; i < 60 * 2; i++) s.fixedForTest(1 / 60);
+    return {
+      skip: false, shots, dead: car.dead, before: alive, after: s.cars.alive,
+      tallBefore: Math.round(tallBefore * 100) / 100,
+      tallAfter: Math.round(s.world.tallestNear(car.x, car.z, 2) * 100) / 100,
+    };
+  });
+  check('a parked car takes a magazine and then goes up',
+    car.skip || (car.dead && car.after < car.before),
+    car.skip ? car.why : `${car.shots} rounds, ${car.before} to ${car.after} standing`);
+  check('and what is left of it is a knee high wreck rather than a car',
+    car.skip || (car.tallBefore > 1.2 && car.tallAfter > 0.2 && car.tallAfter < 1.0),
+    car.skip ? car.why : `${car.tallBefore} m before, ${car.tallAfter} m after`);
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {
