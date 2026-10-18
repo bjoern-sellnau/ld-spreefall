@@ -1767,3 +1767,46 @@ is what prompted the change.
   of them read `no room for one` whatever had actually happened, which is how a
   reset layer and a blocked firing line both came to look like a street with
   nowhere to park.
+
+## 36. Surfaces with real maps
+
+- 2026-10-18: the third graphics step, and the one that changes what the city
+  is made of rather than what shape it is. Everything here has always been
+  shaded procedurally, which gets the structure right: a road knows where its
+  own centre line is, a pavement knows where its joints are, and both stay
+  sharp at any angle because the pattern is widened to the pixel footprint
+  rather than faded out by eye. What it cannot get is grain. A fractal noise
+  run per pixel has no mip chain, so it has to be faded away as its features
+  go sub pixel, and that is why the middle distance of this city went to flat
+  colour at about thirty metres.
+
+- 2026-10-18: so the grain is baked instead. `src/engine/surfaces.js` builds
+  ten tiling maps when the page loads, out of the same kind of noise the
+  shader used to run, and hands them to the card as one array texture with a
+  mip chain and eight times anisotropy on it. The card then does the
+  averaging, which is what a mip chain is for, and a road keeps its chippings
+  out to the horizon. Nothing is downloaded: it is 2.6 MB of bytes computed in
+  216 ms, which is a fifth of a second of the loading screen.
+
+- 2026-10-18: what is in a layer is deliberately not an albedo. The colour of
+  a wall comes from the palette and the colour of a road comes from the
+  shader, so a map carries what the surface does to the light instead: the
+  slope in two channels, a multiplier on the albedo in the third, and how
+  buried the point is in its own relief in the fourth. Every one of them is
+  worked out from a single height field per material, so a material is
+  described once rather than three times over.
+
+- 2026-10-18: the tiling is the whole trick, and it is the one thing that is
+  easy to get silently wrong. The lattice coordinates wrap before they are
+  hashed rather than after, so the cell at the right hand edge is the cell at
+  the left hand one. `tools/test/surfaces.test.mjs` holds it to that by
+  comparing the step across the join with the step anywhere else rather than
+  by looking at the edge values, which is the test that fails loudly when the
+  wrap goes.
+
+- 2026-10-18: measured. No change in frame time on the software renderer the
+  checks run on, 74 ms a frame against 73, which is within the noise; what it
+  buys is not speed but the grain surviving distance. The first pass had the
+  render on a frontage at seven cells across three metres, which is half metre
+  blobs, and a Berlin block came out looking like it had damp rather than
+  render on it. It is eighteen cells now.

@@ -1,5 +1,6 @@
 import { VERSION, CAMERA_BLOCK, NOISE, FOG, SHADOW } from './common.js';
 import { MAT, POS_SCALE, UV_SCALE, HEIGHT_SCALE, FACADE_FLAG } from '../shared/constants.js';
+import { SURFACE_LAYER as SL, SURFACE_SCALE as SS } from '../engine/surfaces.js';
 
 // What a blast does to the shape of the city, shared by the colour pass and
 // the shadow pass so a flattened building does not go on casting a standing
@@ -228,6 +229,10 @@ uniform int uDebugMode;   // 0 off, 1 material, 2 normals, 3 uv, 4 world positio
 // 1 while the damaged tiles are drawn inside out, to fill the holes a blast
 // leaves in one sided geometry. See Renderer.renderScene.
 uniform float uInside;
+// The surface maps, built when the page loaded: one layer a material, with a
+// slope in the first two channels, a multiplier on the albedo in the third
+// and how buried the point is in its own relief in the fourth.
+uniform mediump sampler2DArray uSurf;
 
 layout(location = 0) out vec4 fragColour;
 
@@ -267,6 +272,43 @@ struct Surface {
   vec3 normal;
 };
 
+// What a surface does to the light where you are standing on it. The grain
+// used to be a fractal noise run per pixel, which has no mip chain, so it had
+// to be faded out by hand as its features went sub pixel and the middle
+// distance of this city went to flat colour at about thirty metres. Now it is
+// read out of a map, and the card averages it down for free: a road keeps its
+// chippings all the way to the horizon, and it costs one tap instead of a
+// dozen rounds of value noise.
+struct Grain {
+  vec2 slope;    // how the surface leans, in tangent space
+  float albedo;  // a multiplier, around one
+  float ao;      // how buried this point is in its own relief
+};
+
+Grain grainAt(int layer, vec2 uv, float scale, float depth) {
+  vec4 t = texture(uSurf, vec3(uv / scale, float(layer)));
+  Grain g;
+  g.slope = (t.xy - 0.5) * 2.0 * depth;
+  g.albedo = 1.0 + (t.z - 0.5) * 2.0;
+  g.ao = t.w;
+  return g;
+}
+
+/**
+ * Leans a normal by the slope out of a map.
+ *
+ * The frame is taken off the face itself: on the ground it is simply east and
+ * north, and on a wall it is across the face and up it, so that a frontage, a
+ * gable and a pavement all lean the same way rather than each in some
+ * direction of its own.
+ */
+vec3 bend(vec3 n, vec2 slope) {
+  if (abs(n.y) > 0.80) return normalize(n + vec3(slope.x, 0.0, slope.y));
+  vec3 t = normalize(cross(vec3(0.0, 1.0, 0.0), n));
+  vec3 b = cross(n, t);
+  return normalize(n + t * slope.x + b * slope.y);
+}
+
 // ---------------------------------------------------------------------------
 // Facades. The window grid is derived from the level count so a five storey
 // block gets five rows of windows, and every building has its own rhythm.
@@ -292,7 +334,15 @@ Surface facade(vec3 base, int wallKind) {
   float y = vUv.y;
   float x = vUv.x;
 
-  // The wall itself, before any openings are cut into it.
+  // The wall itself, before any openings are cut into it. Whatever it is
+  // made of, it has a surface: render, brick, stone or shuttered concrete,
+  // each with its own map, and the normal leans with it. It is the one thing
+  // you are looking at for most of this game, so it is worth the tap.
+  int wallLayer = wallKind == 1 ? ${SL.stone}
+                : wallKind == 2 ? ${SL.brick} : ${SL.plaster};
+  float wallMap = wallKind == 1 ? ${SS.stone.toFixed(2)}
+                : wallKind == 2 ? ${SS.brick.toFixed(2)} : ${SS.plaster.toFixed(2)};
+  Grain wg = grainAt(wallLayer, vUv, wallMap, wallKind == 2 ? 0.8 : 0.6);
   vec3 wall = base;
   float wallRough = 0.86;
   if (wallKind == 1) {
@@ -316,16 +366,18 @@ Surface facade(vec3 base, int wallKind) {
     wall = mix(base * 0.55 + vec3(0.06), wall, line);
     wallRough = 0.92;
   } else if (wallKind == 3) {
-    float n = fbm(vUv * 2.2) * 0.10 + fbm(vUv * 9.0) * 0.05;
-    wall = base * (0.92 + n);
     float board = smoothstep(0.0, 0.035, abs(fract(vUv.y / 1.2) - 0.5) * 1.2);
-    wall *= mix(0.9, 1.0, board);
+    wall = base * mix(0.9, 1.0, board);
     wallRough = 0.9;
   } else {
-    // Plaster, with mottling and a little grime running down from the sills.
+    // Render, with a little grime running down from the sills. The grime is
+    // still noise and not a map: it is metres long, and a map that size would
+    // repeat down a frontage where anybody could see it.
     float grime = fbm(vec2(x * 0.5, y * 0.5) + seedF * 3.0) * 0.14;
     wall = base * (1.0 - grime);
   }
+  wall *= wg.albedo * (0.88 + 0.12 * wg.ao);
+  s.normal = bend(vNormal, wg.slope);
 
   // Plinth.
   if (y < 1.05) {
@@ -434,11 +486,11 @@ Surface facade(vec3 base, int wallKind) {
 
 Surface asphalt() {
   Surface s;
-  s.normal = vNormal;
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
-  float grain = fbm(vWorld.xz * 3.1) * 0.10 + fbm(vWorld.xz * 21.0) * 0.05 * detailFade(0.050);
-  vec3 col = vec3(0.088, 0.090, 0.096) + grain * 0.5;
+  Grain g = grainAt(${SL.asphalt}, vWorld.xz, ${SS.asphalt.toFixed(2)}, 1.0);
+  s.normal = bend(vNormal, g.slope);
+  vec3 col = vec3(0.088, 0.090, 0.096) * g.albedo * (0.80 + 0.20 * g.ao);
   float across = vUv.x;
   float along = vUv.y;
   float halfW = max(vHeight * 0.5, 2.0);
@@ -464,8 +516,12 @@ Surface asphalt() {
   float paint = clamp(max(centre * dash, max(edge, lanes)), 0.0, 1.0);
   // Once the marking itself is thinner than a pixel there is nothing to draw.
   paint *= 1.0 - smoothstep(0.16, 0.55, wAcross);
-  float wear = 0.55 + 0.45 * fbm(vWorld.xz * 6.0);
+  // Paint wears where the wheels run, and the wear is the same grain the
+  // road itself has: the bitumen shows through where the chippings stand up.
+  float wear = 0.62 + 0.52 * (g.albedo - 1.0 + 0.5);
   col = mix(col, vec3(0.74, 0.72, 0.66) * wear, paint * 0.9);
+  // And a painted line is smooth, so it stops leaning with the road under it.
+  s.normal = normalize(mix(s.normal, vNormal, paint * 0.8));
   s.albedo = col;
   s.roughness = mix(0.72, 0.5, paint);
   return s;
@@ -482,11 +538,14 @@ Surface cobble() {
   float joint = smoothstep(0.0, max(0.16, fp * 1.3), c.y);
   float toneFade = 1.0 - smoothstep(0.5, 1.7, fp);
   float tone = mix(1.0, 0.56 + 0.42 * c.z, toneFade);
-  vec3 col = vec3(0.215, 0.210, 0.203) * tone;
+  Grain gr = grainAt(${SL.cobble}, vWorld.xz, ${SS.cobble.toFixed(2)}, 0.7);
+  vec3 col = vec3(0.215, 0.210, 0.203) * tone * gr.albedo;
   col = mix(vec3(0.062, 0.062, 0.058), col, joint);
+  // Two things lean a sett: the curve of the stone, which the shader knows
+  // because it laid them out, and the pitting on its face, which it does not.
   vec2 g = vec2(dFdx(c.x), dFdy(c.x)) * 3.0 * toneFade;
-  s.normal = normalize(vNormal + vec3(g.x, 0.0, g.y) * joint);
-  s.albedo = col;
+  s.normal = bend(normalize(vNormal + vec3(g.x, 0.0, g.y) * joint), gr.slope);
+  s.albedo = col * (0.84 + 0.16 * gr.ao);
   s.roughness = mix(0.55, 0.86, joint);
   return s;
 }
@@ -506,11 +565,11 @@ Surface pavement() {
   float line = smoothstep(0.0, max(0.035, fp * 1.6), joint);
   float cellFade = 1.0 - smoothstep(0.55, 1.6, fp);
   float tone = mix(1.0, 0.80 + 0.22 * hash12(cell), cellFade);
-  vec3 col = vec3(0.215, 0.208, 0.196) * tone;
+  Grain g = grainAt(${SL.pavement}, vWorld.xz, ${SS.pavement.toFixed(2)}, 0.8);
+  vec3 col = vec3(0.215, 0.208, 0.196) * tone * g.albedo;
   col = mix(col * 0.42, col, line);
-  col += (fbm(vWorld.xz * 8.0) - 0.5) * 0.05 * detailFade(0.12);
-  s.normal = vNormal;
-  s.albedo = col;
+  s.normal = bend(vNormal, g.slope);
+  s.albedo = col * (0.86 + 0.14 * g.ao);
   s.roughness = 0.86;
   return s;
 }
@@ -519,14 +578,16 @@ Surface grass() {
   Surface s;
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
-  float fade = detailFade(0.060);
+  // The slow change of colour across a lawn is still noise, because it is
+  // metres across and a tiling map would repeat where you could see it. The
+  // tufts come out of the map, which is what the mip chain is for.
   float n = fbm(vWorld.xz * 2.3);
-  float n2 = mix(0.5, fbm(vWorld.xz * 14.0), fade);
+  Grain g = grainAt(${SL.grass}, vWorld.xz, ${SS.grass.toFixed(2)}, 0.8);
   vec3 a = vec3(0.098, 0.156, 0.068);
   vec3 b = vec3(0.150, 0.218, 0.094);
-  vec3 col = mix(a, b, n) * (0.82 + 0.36 * n2);
-  s.normal = normalize(vNormal + vec3(dFdx(n2), 0.0, dFdy(n2)) * 1.5 * fade);
-  s.albedo = col;
+  vec3 col = mix(a, b, n) * g.albedo;
+  s.normal = bend(vNormal, g.slope);
+  s.albedo = col * (0.78 + 0.22 * g.ao);
   s.roughness = 0.95;
   return s;
 }
@@ -535,10 +596,12 @@ Surface gravel() {
   Surface s;
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
-  vec3 c = cells(vWorld.xz * 11.0);
-  vec3 col = vec3(0.26, 0.245, 0.225) * (0.72 + 0.5 * c.z);
-  s.normal = vNormal;
-  s.albedo = col;
+  // Every stone of it is in the map, with the slope of its own shoulder, so
+  // a railway bed catches the low sun the way ballast does.
+  Grain g = grainAt(${SL.gravel}, vWorld.xz, ${SS.gravel.toFixed(2)}, 0.9);
+  vec3 col = vec3(0.26, 0.245, 0.225) * g.albedo;
+  s.normal = bend(vNormal, g.slope);
+  s.albedo = col * (0.72 + 0.28 * g.ao);
   s.roughness = 0.94;
   return s;
 }
@@ -590,15 +653,16 @@ Surface roofTiles() {
   float rows = fract(p.y);
   float line = smoothstep(0.0, 0.07, rows) * smoothstep(0.0, 0.07, 1.0 - rows);
   float tone = 0.75 + 0.35 * hash12(floor(p));
-  vec3 col = ROOF_TONE[int((vSeed >> 6u) & 3u)] * tone;
+  Grain g = grainAt(${SL.roof}, vUv, ${SS.roof.toFixed(2)}, 0.8);
+  vec3 col = ROOF_TONE[int((vSeed >> 6u) & 3u)] * tone * g.albedo;
   col = mix(col * 0.6, col, line);
-  s.normal = vNormal;
-  s.albedo = col;
+  s.normal = bend(vNormal, g.slope);
+  s.albedo = col * (0.84 + 0.16 * g.ao);
   s.roughness = 0.88;
   return s;
 }
 
-Surface stone(vec3 tint, float rough, float blockScale) {
+Surface stone(vec3 tint, float rough, float blockScale, int layer, float mapScale) {
   Surface s;
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
@@ -610,31 +674,32 @@ Surface stone(vec3 tint, float rough, float blockScale) {
   float fade = detailFadeUv(0.045);
   float line = mix(1.0, smoothstep(0.0, 0.04, joint), fade);
   float tone = mix(1.0, 0.9 + 0.16 * hash12(cell), fade);
-  vec3 col = tint * tone;
+  Grain g = grainAt(layer, vUv, mapScale, 0.75);
+  vec3 col = tint * tone * g.albedo;
   col = mix(col * 0.72, col, line);
-  col *= 1.0 - fbm(vUv * 1.3) * 0.12;
-  s.normal = vNormal;
-  s.albedo = col * (0.74 + 0.26 * vAo);
+  // The joint is a groove, so the face leans into it as well as darkening.
+  s.normal = bend(vNormal, g.slope);
+  s.albedo = col * (0.74 + 0.26 * vAo) * (0.84 + 0.16 * g.ao);
   s.roughness = rough;
   return s;
 }
 
 Surface brick() {
-  Surface s = stone(vec3(0.360, 0.170, 0.120), 0.9, 0.24);
-  return s;
+  return stone(vec3(0.360, 0.170, 0.120), 0.9, 0.24,
+    ${SL.brick}, ${SS.brick.toFixed(2)});
 }
 
 Surface concrete() {
   Surface s;
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
-  float n = fbm(vUv * 2.2) * 0.10 + fbm(vUv * 9.0) * 0.05;
-  vec3 col = vec3(0.310, 0.305, 0.292) * (0.92 + n);
+  Grain g = grainAt(${SL.plaster}, vUv, ${SS.plaster.toFixed(2)}, 0.6);
+  vec3 col = vec3(0.310, 0.305, 0.292) * g.albedo;
   // Shuttering marks.
   float board = smoothstep(0.0, 0.035, abs(fract(vUv.y / 1.2) - 0.5) * 1.2);
   col *= mix(0.9, 1.0, board);
-  s.normal = vNormal;
-  s.albedo = col * (0.72 + 0.28 * vAo);
+  s.normal = bend(vNormal, g.slope);
+  s.albedo = col * (0.72 + 0.28 * vAo) * (0.88 + 0.12 * g.ao);
   s.roughness = 0.88;
   return s;
 }
@@ -646,15 +711,16 @@ Surface stele() {
   s.metallic = 0.0;
   s.emissive = vec3(0.0);
   float fade = detailFadeUv(0.060);
-  float n = (fbm(vUv * 3.0) - 0.5) * 0.16 + (fbm(vUv * 14.0) - 0.5) * 0.09 * fade;
-  vec3 col = vec3(0.108, 0.106, 0.104) * (1.0 + n);
+  Grain g = grainAt(${SL.plaster}, vUv, ${SS.plaster.toFixed(2)}, 0.5);
+  vec3 col = vec3(0.108, 0.106, 0.104) * g.albedo;
   // The horizontal joint where each block was cast.
   float pour = smoothstep(0.0, 0.030, abs(fract(vUv.y / 1.15) - 0.5) * 1.15);
   col *= mix(0.82, 1.0, mix(1.0, pour, fade));
-  // Weathering runs down the faces.
+  // Weathering runs down the faces. Still noise rather than a map, because a
+  // run of dirt is metres long and would repeat where you could see it.
   col *= 1.0 - fbm(vec2(vUv.x * 6.0, vUv.y * 0.7)) * 0.12;
-  s.normal = vNormal;
-  s.albedo = col * (0.70 + 0.30 * vAo);
+  s.normal = bend(vNormal, g.slope);
+  s.albedo = col * (0.70 + 0.30 * vAo) * (0.90 + 0.10 * g.ao);
   s.roughness = 0.92;
   return s;
 }
@@ -693,11 +759,12 @@ Surface glassPanel() {
 
 Surface metalPanel() {
   Surface s;
-  s.albedo = vec3(0.42, 0.44, 0.46) * (0.86 + 0.2 * fbm(vUv * 4.0));
+  Grain g = grainAt(${SL.metal}, vUv, ${SS.metal.toFixed(2)}, 0.5);
+  s.albedo = vec3(0.42, 0.44, 0.46) * g.albedo;
   s.roughness = 0.34;
   s.metallic = 0.7;
   s.emissive = vec3(0.0);
-  s.normal = vNormal;
+  s.normal = bend(vNormal, g.slope);
   return s;
 }
 
@@ -712,7 +779,8 @@ void main() {
   bool wantWindows = (vFlags & FLAG_NO_WINDOWS) == 0u && vLevels > 0u && vHeight > 3.0;
   if (m == ${MAT.FACADE}u) {
     vec3 base = uPalette[int(vSeed & 63u)];
-    if (wantWindows) s = facade(base, 0); else s = stone(base, 0.86, 0.9);
+    if (wantWindows) s = facade(base, 0);
+    else s = stone(base, 0.86, 0.9, ${SL.plaster}, ${SS.plaster.toFixed(2)});
   }
   else if (m == ${MAT.SANDSTONE}u && wantWindows) s = facade(vec3(0.470, 0.418, 0.318), 1);
   else if (m == ${MAT.BRICK}u && wantWindows) s = facade(vec3(0.360, 0.170, 0.120), 2);
@@ -725,7 +793,8 @@ void main() {
   else if (m == ${MAT.WATER}u) s = water();
   else if (m == ${MAT.CONCRETE}u) s = concrete();
   else if (m == ${MAT.STELE}u) s = stele();
-  else if (m == ${MAT.SANDSTONE}u) s = stone(vec3(0.560, 0.500, 0.386), 0.84, 1.35);
+  else if (m == ${MAT.SANDSTONE}u) s = stone(vec3(0.560, 0.500, 0.386), 0.84, 1.35,
+    ${SL.stone}, ${SS.stone.toFixed(2)});
   else if (m == ${MAT.COPPER}u) s = copper();
   else if (m == ${MAT.GLASS}u) s = glassPanel();
   else if (m == ${MAT.BRICK}u) s = brick();

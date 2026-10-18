@@ -695,6 +695,18 @@ work, because the shadow line under a projecting band is what makes a frontage
 read as relief. Only in the middle, where you walk: it costs a quarter of the
 triangles of that district and is only worth that from the pavement.
 
+**Surfaces with real maps.** Ten tiling maps built when the page loads, out
+of the same noise the shader used to run per pixel, handed to the card as one
+array texture with a mip chain and anisotropy on it. They are not albedos: the
+colour of a wall comes from the palette and the colour of a road comes from
+the shader, so a map carries the slope, a multiplier on the albedo and how
+buried a point is in its own relief, all worked out from one height field per
+material. The structure stays procedural, because a road knows where its own
+centre line is and a texture does not; what the maps add is grain that
+survives distance, since the card averages a mip chain down for free and a
+fractal noise run per pixel has to be faded out instead. Still nothing
+downloaded: 2.6 MB of bytes computed in a fifth of a second.
+
 **What stands on the street.** Lamp posts every forty five metres, alternating
 sides the way they do here, cars parked at the kerb down the quieter streets,
 and a bench or a bin at the odd corner. None of it is in the map: OpenStreetMap
@@ -945,6 +957,11 @@ the square is untouched.*
 
 ![Vehicles on Pariser Platz](docs/screenshots/city-05-vehicles.png)
 *A jeep, a tank, a helicopter and a fighter, parked on the square.*
+
+![Cobbles in a low sun](docs/screenshots/surface-01-ground.png)
+*Sett at eight in the morning. Every stone has its own slope, out of a map
+built when the page loaded, and the grain carries into the middle distance
+instead of going smooth at thirty metres.*
 
 ![A street with things on it](docs/screenshots/street-01-furniture.png)
 *A side street in Mitte: cars at the kerb and a lamp post standing beside
