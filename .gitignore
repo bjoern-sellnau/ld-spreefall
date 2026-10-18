@@ -9,3 +9,6 @@ public/world-*.bin
 public/world-*.json
 !public/world-core.bin
 !public/world-core.json
+
+# Throwaway probe scripts: one off browser checks, not part of the suite.
+.probe/

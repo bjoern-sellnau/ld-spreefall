@@ -2171,3 +2171,115 @@ caps residency at 520.
   the one in the file. `src/game/bake.js` can rewrite vertices in place but
   cannot add any. That is the piece to build, and it is the same piece a
   hole in a wall needs before the collision can agree with it.
+
+## 45. The street sign, the embassy, the Tiergarten, and a wood to walk into
+
+- 2026-10-18: the street name moved to the top of the screen. It began under
+  the crosshair, which is the one place in a shooter nothing should sit.
+
+- 2026-10-18: the American embassy was reported missing three times and I
+  agreed twice, on a bad measurement. `tallestNear(-7, 75, 18)` returns 0
+  because the footprint is 60 m by 46 and its middle has no wall within 18 m
+  of it: the walls are 23 m away in z and 30 in x. Asking at the wall gives
+  **22 m**, which is its tagged height, at z 52 and at z 98. It was built all
+  along. What was wrong was its position: Wikipedia gives 52 30 55 N,
+  13 22 42 E and Structurae 52 30 55.12 N, 13 22 42.07 E, and the curated fact
+  had it 34 m north and 51 m west of that. It now stands where the sources put
+  it, and it has a card, so the game names it when you walk up to it.
+
+- 2026-10-18: trees were growing inside the Holocaust memorial. Six of them.
+  The mask the synthetic generator uses carries 1 for carriageway, 2 for park
+  and lawn, 3 for water and 4 for a building and the ground kept clear around
+  it, and the tree scatter refused only water. The stelae field is stamped 4,
+  like a building. Trees now go on open ground and lawn only, which also took
+  **429** trees out of walls and carriageways across the middle district.
+
+- 2026-10-18: and the Tiergarten was a lawn with trees on it rather than a
+  wood. Measured in the park, at its eastern edge and 300 m in, high quality
+  under software rendering:
+
+  | one throw per | trees a hectare | in the park | edge | 300 m in |
+  | --- | --- | --- | --- | --- |
+  | 380 m2 | 21 | 1317 | 112 ms | 144 ms |
+  | 170 m2 | 59 | 3615 | 152 ms | 164 ms |
+  | 130 m2 | 77 | 4705 | 179 ms | 182 ms |
+
+  The middle one is a wood you walk into and costs a third of a frame over
+  the lawn; the thickest is a sixth more again for a difference you cannot
+  see from inside it. A lawn stays open, because the Platz der Republik in
+  front of the Reichstag is grass and is meant to be. Trees are instanced at
+  ten triangles each, so 3564 more of them cost 0.19 MB and no triangles.
+
+## 46. Rubble comes off the wall you shot, not out of the sky
+
+- 2026-10-18: reported as "when I shoot a building the pieces come from
+  above". They did. A collapse stage put its chunks on the line the building
+  broke at, which at the first stage is the roof, and a blast made no chunks
+  at all: it marked the wall and left it. So the only pieces a fight produced
+  fell past you from the roof of whatever you were standing next to.
+
+- 2026-10-18: a hit now knocks spall out of the surface it hit. The same rays
+  that find the walls near a blast throw pieces off them, along the normal,
+  with the blast behind them. Measured against one rocket into a frontage:
+  **0 chunks before, 18 after**, between 0.4 m and 2.7 m above the pavement
+  with the median at 1.4 m, against an eye height of 1.7 m. They come out of
+  the wall where the rocket went in.
+
+- 2026-10-18: and a collapse stage now finds the faces inside its site rather
+  than dropping rubble in a disc around the middle of it. A site is a damage
+  cell about a Berlin block frontage across and its middle is usually in the
+  road. Of the chunks a collapse made, **63 per cent** came down at the foot
+  of a standing wall before, **95 per cent** after.
+
+## 47. The ground you could not see in any district you streamed into
+
+- 2026-10-18: found while photographing the Grosser Stern. Arrive in Ring 3-2
+  and you stand on a grey plain: no ground, no streets, no park, with the
+  skyline visible past it. The collision is there and you walk about on it;
+  the picture is not.
+
+- 2026-10-18: the tile manager marks a tile absent when it asks the world for
+  it and the district has not landed yet, so that the uploader does not spend
+  every frame queueing the same holes. It clears those marks in `onDistrict`,
+  which the world calls when a district lands. `src/main.js` then assigned
+  `world.onDistrict` again, to put the damage back, and the second assignment
+  threw the first one away. Every district streamed in since 42 kept its tiles
+  marked as not there, and the skyline never grew either.
+
+- 2026-10-18: the world now keeps a list of listeners rather than one slot.
+  The tile under the player at the Grosser Stern went from `absent: true,
+  resident: false` to `resident: true`, and the park is a park.
+
+## 48. Berlin west of Mitte: the avenue, the star and the column
+
+- 2026-10-18: the Strasse des 17. Juni stopped at longitude 13.3650, which is
+  the western edge of the middle district, so the avenue ended on a district
+  line and there was no way to walk to the Grosser Stern. It is now laid
+  straight between the two ends that are surveyed, 13.3762/52.51602 at Platz
+  des 18. Maerz and 13.350117/52.514542 at the column, and carries on a
+  kilometre west of the junction. The points between the ends sit on the line;
+  the ones it had dropped south two and a half times too fast.
+
+- 2026-10-18: the Grosser Stern is laid as two arcs of a 95 m ring rather than
+  one closed way, because the line simplifier holds the first and last point
+  of a way fixed and a way whose first point is its last simplifies to
+  nothing. That is why the first attempt built no junction at all. The four
+  other arms are there by name and by the quadrant each leaves in; their
+  courses past the first few hundred metres are not surveyed here.
+
+- 2026-10-18: the Siegessaeule is built: 66.9 m to the top of the Victoria by
+  Structurae and the Bundestag's own note, the viewing platform at 50.66 and
+  the figure 8.32 of the total. A square plinth in a ring of sixteen columns,
+  three drums with gilded rings where they meet, the mosaic hall, and the
+  Victoria. `tallestNear` at the junction returns **66.9**.
+
+- 2026-10-18: gold is a new material. Copper is the same metal left to go
+  green and the city already had it; this is the one that was kept, and it is
+  what makes a column two kilometres down an avenue worth walking towards.
+
+- 2026-10-18: and the surveyed facts are no longer Mitte's private property.
+  A district outside the middle one lays down whatever of them falls in its
+  box before it invents anything, and its lattice streets are cut where they
+  would run through a park, the river or a landmark's clearance. Ring 3-2
+  carries 9 surveyed streets, 1 named building and 1 green, and its invented
+  blocks dropped from 2194 to 1234 because the Tiergarten is in the way now.

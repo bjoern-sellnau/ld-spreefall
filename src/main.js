@@ -773,14 +773,34 @@ async function main() {
    * Whatever the blast knocked off the wall. The raycast tells us which
    * surfaces are near enough to lose something, so debris comes off the
    * building rather than out of the air.
+   *
+   * It marked the wall and left it at that, and the only chunks a blast made
+   * were the ones a collapse stage made, which start at the line the building
+   * broke at. Shoot a shopfront and the pieces fell past you from the roof.
+   * The surfaces found here are the ones the blast actually reached, so they
+   * are also the ones to throw into the street.
    */
   function debris(x, y, z, radius) {
+    // What the pieces have behind them. A rocket is about eight metres of
+    // blast and throws them properly; a grenade at two metres only chips the
+    // render off. Spread over as many surfaces as the rays find, with a
+    // ceiling, so a blast in a courtyard with walls on all sides does not
+    // empty the chunk pool on its own.
+    const force = Math.max(0.35, Math.min(1.4, radius / 8));
+    let thrown = 0;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
       const hit = world.raycast(x, y, z, Math.cos(a), 0.1 - Math.random() * 0.4, Math.sin(a),
         radius * 1.2);
       if (!hit || hit.kind === 'ground') continue;
       effects.impact(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, hit.kind);
+      if (thrown >= 18) continue;
+      // Nearer the middle of the blast is hit harder, which is the difference
+      // between the wall you aimed at and the one across the street.
+      const near = Math.max(0, 1 - hit.t / Math.max(1, radius * 1.2));
+      const n = Math.min(18 - thrown, 1 + Math.round(near * 2.5));
+      gibs.spall(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, n, force * (0.45 + near * 0.8));
+      thrown += n;
     }
   }
 
@@ -1307,6 +1327,31 @@ async function main() {
     }
   }
 
+  /**
+   * Which walls a collapse site actually has, and where. Ten rays out from
+   * the middle just above the pavement, keeping the first point on each
+   * separate face.
+   *
+   * A site is a damage cell about a Berlin block frontage across, and its
+   * middle is usually in the road. Rubble was being dropped in a disc around
+   * that middle, so half of it came down in the carriageway with nothing
+   * above it. What comes off a building comes off its frontage.
+   *
+   * @returns {{x: number, z: number, t: number}[]} points a step off each face
+   */
+  function facesAround(x, y, z, radius, most = 6) {
+    const out = [];
+    const start = Math.random() * Math.PI * 2;
+    for (let i = 0; i < 10 && out.length < most; i++) {
+      const a = start + (i / 10) * Math.PI * 2;
+      const hit = world.raycast(x, y, z, Math.cos(a), 0, Math.sin(a), radius * 1.15);
+      if (!hit || hit.kind === 'ground') continue;
+      if (out.some((p) => Math.hypot(p.x - hit.x, p.z - hit.z) < 4)) continue;
+      out.push({ x: hit.x + hit.nx * 0.5, z: hit.z + hit.nz * 0.5, t: hit.t });
+    }
+    return out;
+  }
+
   demolition.onStage = (site, level, was) => {
     scarTiles(site.x, site.z, site.radius);
     const share = level - was;
@@ -1316,9 +1361,23 @@ async function main() {
     const standing = Math.max(4, world.tallestNear(site.x, site.z, site.radius));
     const breakAt = site.y + standing * (1 - was);
     effects.dust(site.x, breakAt, site.z, site.radius * (0.5 + share * 0.6));
-    gibs.rubble(site.x, breakAt, site.z, site.radius,
-      Math.min(40, 6 + Math.round(site.radius * share * 1.4)),
-      standing * share);
+    const chunks = Math.min(40, 6 + Math.round(site.radius * share * 1.4));
+    const faces = facesAround(site.x, site.y + 2.5, site.z, site.radius);
+    if (faces.length) {
+      // Down the front of the building, a share of the chunks to each face,
+      // and a cloud at the foot of the nearest two: a facade coming down puts
+      // as much dust into the street as it does at the break.
+      const each = Math.max(2, Math.round(chunks / faces.length));
+      faces.sort((a, b) => a.t - b.t);
+      for (let i = 0; i < faces.length; i++) {
+        const f = faces[i];
+        gibs.rubble(f.x, breakAt, f.z, Math.min(5, Math.max(2, site.radius * 0.3)),
+          each, standing * share);
+        if (i < 2) effects.dust(f.x, site.y + 3, f.z, site.radius * 0.3);
+      }
+    } else {
+      gibs.rubble(site.x, breakAt, site.z, site.radius, chunks, standing * share);
+    }
     const away = Math.round(Math.hypot(player.x - site.x, player.z - site.z));
     audio.collapse(away, site.radius * (0.4 + share));
     feed(level >= 1
@@ -3375,6 +3434,20 @@ async function main() {
     drones.setTier(tier);
     soldiers.setTier(tier);
     jets.setTier(tier);
+    // Just a Walk means nothing is ever sent after you, and the tier is the
+    // one thing that got round that. The budgets are held at nought at the
+    // top of the step; the threat level is raised from inside combat.update,
+    // which runs after it, and the jets' own update runs after that again. So
+    // a section spawned by hand and then killed raised the tier, gave the
+    // jets a budget of two, and a flight took off before the next step could
+    // put the budget back. Which is what was reported: soldiers by hand in
+    // Just a Walk, and then jets nobody asked for.
+    if (state.peaceful) {
+      drones.budget = 0;
+      soldiers.budget = 0;
+      jets.budget = 0;
+      return;
+    }
     if (tier === 2) toast('air support inbound');
     feed(`<b>threat level ${tier + 1}</b>`);
     toast(`threat level ${tier + 1}`);

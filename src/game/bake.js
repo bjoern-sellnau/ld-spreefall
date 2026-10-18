@@ -112,6 +112,64 @@ export function settle(p, isGround, height, site) {
 const clampI16 = (v) => (v < -32768 ? -32768 : v > 32767 ? 32767 : v);
 
 /**
+ * Flattens whatever small thing stands at a point onto the road: a parked car
+ * that has gone up, and the bench beside it if it was close enough.
+ *
+ * Nothing in a vertex says car, so what this can go on is height and
+ * position. Ground is left alone, so the road itself stays where it is, and
+ * so is anything whose vertex is higher than `tall`, which is why a wall or a
+ * lamp post standing beside the wreck keeps standing: a wall's own vertices
+ * near the pavement are already at the pavement, and the ones that make it a
+ * wall are above this.
+ *
+ * @param {object} world the streamed city
+ * @param {number} x @param {number} z the middle of it
+ * @param {number} radius metres
+ * @param {number} tall metres above the ground, the tallest thing it takes
+ * @returns {{tiles:number[], moved:number}} tiles to push to the card again
+ */
+export function bakeAway(world, x, z, radius, tall = 2.2) {
+  const tiles = [];
+  let moved = 0;
+  const base = world.groundHeight(x, z);
+  const r2 = radius * radius;
+  const tx0 = Math.max(0, Math.floor((x - radius - world.minX) / world.tileSize));
+  const tx1 = Math.min(world.nx - 1, Math.floor((x + radius - world.minX) / world.tileSize));
+  const tz0 = Math.max(0, Math.floor((z - radius - world.minZ) / world.tileSize));
+  const tz1 = Math.min(world.nz - 1, Math.floor((z + radius - world.minZ) / world.tileSize));
+  for (let tz = tz0; tz <= tz1; tz++) {
+    for (let tx = tx0; tx <= tx1; tx++) {
+      const index = tz * world.nx + tx;
+      const rec = world.tiles[index];
+      if (!rec || !rec.vCount) continue;
+      const [ox, oz] = world.tileOrigin(index);
+      const view = rec.view;
+      let touched = 0;
+      for (let i = 0; i < rec.vCount; i++) {
+        const o = rec.vOff + i * VERTEX_STRIDE;
+        const px = view.getInt16(o, true) / POS_SCALE + ox;
+        const pz = view.getInt16(o + 4, true) / POS_SCALE + oz;
+        const dx = px - x, dz = pz - z;
+        if (dx * dx + dz * dz > r2) continue;
+        const flags = view.getUint8(o + 17);
+        if ((flags & FACADE_FLAG.GROUND) !== 0) continue;
+        const py = view.getInt16(o + 2, true) / POS_SCALE;
+        if (py > base + tall || py < base - 1.0) continue;
+        // Onto the road, a few centimetres clear of it so the two surfaces do
+        // not fight over which one is in front.
+        view.setInt16(o + 2, clampI16(Math.round((base + 0.06) * POS_SCALE)), true);
+        view.setUint8(o + 17, flags | FACADE_FLAG.RUBBLE);
+        // Lying down, so it does not light like the side of a car any more.
+        view.setInt8(o + 7, 110);
+        touched++;
+      }
+      if (touched) { tiles.push(index); moved += touched; }
+    }
+  }
+  return { tiles, moved };
+}
+
+/**
  * Writes a finished site into the city.
  *
  * @param {object} world the streamed city

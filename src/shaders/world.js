@@ -768,6 +768,23 @@ Surface copper() {
   return s;
 }
 
+// Gilded bronze. Copper is the same metal left to go green; this is the one
+// that was kept, which in this city is the Victoria on her column and the
+// cannon barrels set into it. Bright, properly metallic, and with enough
+// roughness that it reads as beaten leaf rather than chrome.
+Surface gilt() {
+  Surface s;
+  float n = fbm(vUv * 5.0);
+  s.albedo = mix(vec3(0.62, 0.46, 0.14), vec3(0.78, 0.62, 0.24), n);
+  s.roughness = 0.26 + 0.12 * n;
+  s.metallic = 0.92;
+  // A little of its own light, so it still catches the eye against a grey sky
+  // from the far end of a two kilometre avenue, which is the whole point of it.
+  s.emissive = s.albedo * 0.05;
+  s.normal = vNormal;
+  return s;
+}
+
 Surface glassPanel() {
   Surface s;
   vec2 p = vec2(vUv.x / 1.5, vUv.y / 3.4);
@@ -827,6 +844,7 @@ void main() {
   else if (m == ${MAT.SANDSTONE}u) s = stone(vec3(0.560, 0.500, 0.386), 0.84, 1.35,
     ${SL.stone}, ${SS.stone.toFixed(2)});
   else if (m == ${MAT.COPPER}u) s = copper();
+  else if (m == ${MAT.GOLD}u) s = gilt();
   else if (m == ${MAT.GLASS}u) s = glassPanel();
   else if (m == ${MAT.BRICK}u) s = brick();
   else if (m == ${MAT.GRAVEL}u) s = gravel();

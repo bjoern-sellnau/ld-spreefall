@@ -567,6 +567,12 @@ function buildDistrict(district) {
   // places.
   let props = 0;
   let lamps = 0, cars = 0;
+  // Where every parked car is, so the game can shoot one. The geometry is
+  // baked into the tiles like the rest of the street furniture and there is
+  // nothing in a vertex that says car, so the list is the only way the game
+  // knows one is there. Three numbers each; a thousand of them is ten
+  // kilobytes of manifest.
+  const carList = [];
   if (tier.props) {
     const LAMPS_ON = new Set(['primary', 'secondary', 'tertiary', 'residential',
       'living_street', 'unclassified', 'pedestrian']);
@@ -657,6 +663,7 @@ function buildDistrict(district) {
               parkedCar(mesh, px, g, pz, yaw,
                 { seed: hashInt(Math.round(px), Math.round(pz)) & 255 });
               pushBoxCollision(collision, px, pz, yaw, 1.78, 4.3, g, g + 1.5);
+              carList.push([round2(px), round2(pz), Math.round(yaw * 100) / 100]);
               props++; cars++;
             }
             sinceCar = 0;
@@ -986,6 +993,7 @@ function buildDistrict(district) {
     stations: stations.map((s) => ({ name: s.tags.name || '', x: round2(s.p[0]), z: round2(s.p[1]), kind: s.tags.railway })),
     roadLines,
     streets: streetNames,
+    cars: carList,
     waterOutlines: waterPolys.map((w) => flatRing(simplify(w.ring, 2.5))),
     greenOutlines: greens.map((g) => flatRing(simplify(g.ring, 3.0))),
     surfaceGrid: {

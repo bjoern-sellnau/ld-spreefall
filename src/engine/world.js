@@ -79,8 +79,15 @@ export class World {
     // numbers per ruin that let it be put back exactly as it was.
     this.scars = new Map();        // district id -> array of scar records
     this.onTreesChanged = null;        // fn(tileIndex) when one has gone
-    this.onDistrict = null;            // fn(district) when one lands
-    this.onDrop = null;                // fn(district, indices) before one goes
+    // A district landing and a district going are each watched by more than
+    // one part of the game: the tile manager has to clear the holes it marked
+    // in the grid while the bytes were still coming, and the game layer has to
+    // put the damage back. These were single slots, and the second assignment
+    // simply threw the first one away, which left every streamed in district
+    // with its tiles marked as not there: you walked into Ring 3-2 and stood
+    // on ground you could not see.
+    this.districtListeners = [];       // fn(district) when one lands
+    this.dropListeners = [];           // fn(district, indices) before one goes
     // What the rest of the game reads. The arrays are the same objects for the
     // life of the world and are filled and emptied in place as districts come
     // and go, so anything holding a reference keeps seeing the truth.
@@ -288,9 +295,15 @@ export class World {
     }
     this.districts.set(entry.id, district);
     this._mergeManifest(district, 1);
-    if (this.onDistrict) this.onDistrict(district);
+    for (const fn of this.districtListeners) fn(district);
     return district;
   }
+
+  /** Called with each district as it lands. More than one caller may ask. */
+  set onDistrict(fn) { if (fn) this.districtListeners.push(fn); }
+
+  /** Called with each district just before it goes. */
+  set onDrop(fn) { if (fn) this.dropListeners.push(fn); }
 
   /**
    * Let a district go: its tiles, its caches and its bytes. The renderer is
@@ -299,7 +312,7 @@ export class World {
   unloadDistrict(id) {
     const district = this.districts.get(id);
     if (!district) return false;
-    if (this.onDrop) this.onDrop(district, district.indices);
+    for (const fn of this.dropListeners) fn(district, district.indices);
     for (const t of district.indices) {
       this.tiles[t] = null;
       this.collisionCache.delete(t);

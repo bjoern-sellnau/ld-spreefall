@@ -162,15 +162,16 @@ html, body {
 #crosshair.aiming i { opacity: 0; }
 #crosshair.holstered i, #crosshair.holstered::after { opacity: 0.18; }
 
-/* The name of the street you are standing in, under the crosshair.
-   Faint while you walk, so it is never in the way of a shot, and brought up
-   for a few seconds whenever it changes, which is the moment you want to
-   read it. Small caps and wide letters because it is a street sign. */
+/* The name of the street you are standing in, across the top of the screen.
+   It began under the crosshair, which is the one place in a shooter that
+   nothing should sit. Faint while you walk and brought up for a few seconds
+   whenever it changes, which is the moment you want to read it. Small caps
+   and wide letters because it is a street sign. */
 #streetname {
   position: absolute;
-  left: 50%; top: 50%;
+  left: 50%; top: 0;
   transform: translate(-50%, 0);
-  margin-top: 34px;
+  margin-top: 18px;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 600;

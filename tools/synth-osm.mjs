@@ -297,49 +297,17 @@ export function buildSyntheticOsm(district = null) {
   mask.fillPolygon(toWorld(MEMORIAL.ring), 4, 4);
 
   // Named buildings.
-  for (const b of BUILDINGS) {
-    const [cx, cz] = project(b.lon, b.lat);
-    const rot = (b.rot || 0) * Math.PI / 180;
-    const cosA = Math.cos(rot), sinA = Math.sin(rot);
-    const hw = b.w / 2, hd = b.d / 2;
-    const clear = b.clear !== undefined ? b.clear : 6;
-    const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([u, v]) => [
-      cx + u * cosA - v * sinA,
-      cz + u * sinA + v * cosA,
-    ]);
-    const lonlat = corners.map(worldToLonLat);
-    const tags = {
-      building: 'yes', name: b.name, height: String(b.h),
-      'building:levels': String(Math.max(1, Math.round(b.h / 4.2))),
-      'building:material': b.material,
-      'building:colour': b.colour,
-      'spreefall:landmark': b.key,
-      'spreefall:kind': b.kind,
-    };
-    if (b.kind === 'courtyard') {
-      // Real courtyard blocks: an inner ring makes it a multipolygon.
-      const ihw = hw - 16, ihd = hd - 16;
-      if (ihw > 6 && ihd > 6) {
-        const inner = [[-ihw, -ihd], [ihw, -ihd], [ihw, ihd], [-ihw, ihd]].map(([u, v]) => [
-          cx + u * cosA - v * sinA,
-          cz + u * sinA + v * cosA,
-        ]).map(worldToLonLat);
-        const outerWay = doc.ring(lonlat, {});
-        const innerWay = doc.ring(inner, {});
-        doc.relation(
-          [{ type: 'way', ref: outerWay, role: 'outer' }, { type: 'way', ref: innerWay, role: 'inner' }],
-          { type: 'multipolygon', ...tags },
-        );
-        mask.stampRect(cx, cz, b.w + clear * 2, b.d + clear * 2, cosA, sinA, 4);
-        continue;
-      }
-    }
-    doc.ring(lonlat, tags);
-    mask.stampRect(cx, cz, b.w + clear * 2, b.d + clear * 2, cosA, sinA, 4);
-  }
+  for (const b of BUILDINGS) emitFactBuilding(doc, mask, b);
 
   // Trees. Four rows of limes down Unter den Linden, plus the Tiergarten and
   // street rows elsewhere.
+  //
+  // Open ground or lawn only. The mask carries 1 for carriageway, 2 for park
+  // and lawn, 3 for water and 4 for a building and the clearance kept around
+  // it, and 255 off the edge. Trees used to be refused only by the water, so
+  // six limes grew up through the stelae field, which is stamped 4 like a
+  // building, and more stood inside the cleared ground around named houses.
+  const treeOk = (x, z) => { const m = mask.get(x, z); return m === 0 || m === 2; };
   let treeCount = 0;
   // Four rows of limes down the central promenade. They start about seventy
   // metres east of Pariser Platz, as they do in life, which is also what keeps
@@ -360,7 +328,7 @@ export function buildSyntheticOsm(district = null) {
     const off = (ROAD_WIDTH[s.def.cls] || 7) / 2 + 3.2;
     for (const side of [-1, 1]) {
       for (const p of sampleAlong(offsetLine(s.world, off * side), 16)) {
-        if (mask.get(p[0], p[1]) === 3) continue;
+        if (!treeOk(p[0], p[1])) continue;
         const [lon, lat] = worldToLonLat(p);
         doc.node(lat, lon, { natural: 'tree' });
         treeCount++;
@@ -375,12 +343,31 @@ export function buildSyntheticOsm(district = null) {
       minZ = Math.min(minZ, p[1]); maxZ = Math.max(maxZ, p[1]);
     }
     const area = (maxX - minX) * (maxZ - minZ);
-    const n = Math.min(1400, Math.floor(area / 380));
+    // How thickly a green is wooded. One throw per 380 square metres of the
+    // bounding box left the Tiergarten at 21 trees a hectare, which is a lawn
+    // with a few trees on it rather than a wood you walk into. The throws are
+    // candidates, not trees: one outside the ring, on a road or on a building
+    // is dropped, so what lands is lower than the rate.
+    //
+    // Measured in the Tiergarten, at the eastern edge and 300 m in, on high
+    // quality under software rendering, which is the slowest thing this runs
+    // on and so the honest one:
+    //
+    //   per 380   21 trees a hectare   1317 trees   112 ms   144 ms
+    //   per 170   59 trees a hectare   3615 trees   152 ms   164 ms
+    //   per 130   77 trees a hectare   4705 trees   179 ms   182 ms
+    //
+    // The middle one is a wood and costs a third of a frame over the lawn;
+    // the thickest is a sixth more again for a difference you cannot see from
+    // inside it. A lawn is left open, because the Platz der Republik in front
+    // of the Reichstag is grass and is meant to be.
+    const per = park.kind === 'park' ? 170 : 1100;
+    const n = Math.floor(area / per);
     for (let i = 0; i < n; i++) {
       const x = minX + rnd() * (maxX - minX);
       const z = minZ + rnd() * (maxZ - minZ);
       if (!pointInRing(x, z, world)) continue;
-      if (mask.get(x, z) === 1 || mask.get(x, z) === 3) continue;
+      if (!treeOk(x, z)) continue;
       const [lon, lat] = worldToLonLat([x, z]);
       doc.node(lat, lon, { natural: 'tree' });
       treeCount++;
@@ -528,6 +515,54 @@ function pointAt(pts, dist) {
   return null;
 }
 
+/**
+ * One of the surveyed buildings, as an OSM way with the tags the builder
+ * reads, and the ground kept clear around it stamped into the mask.
+ *
+ * Both generators use this: the middle district places all of them, and a
+ * district outside it places the ones that fall in its own box.
+ */
+function emitFactBuilding(doc, mask, b) {
+  const [cx, cz] = project(b.lon, b.lat);
+  const rot = (b.rot || 0) * Math.PI / 180;
+  const cosA = Math.cos(rot), sinA = Math.sin(rot);
+  const hw = b.w / 2, hd = b.d / 2;
+  const clear = b.clear !== undefined ? b.clear : 6;
+  const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([u, v]) => [
+    cx + u * cosA - v * sinA,
+    cz + u * sinA + v * cosA,
+  ]);
+  const lonlat = corners.map(worldToLonLat);
+  const tags = {
+    building: 'yes', name: b.name, height: String(b.h),
+    'building:levels': String(Math.max(1, Math.round(b.h / 4.2))),
+    'building:material': b.material,
+    'building:colour': b.colour,
+    'spreefall:landmark': b.key,
+    'spreefall:kind': b.kind,
+  };
+  if (b.kind === 'courtyard') {
+    // Real courtyard blocks: an inner ring makes it a multipolygon.
+    const ihw = hw - 16, ihd = hd - 16;
+    if (ihw > 6 && ihd > 6) {
+      const inner = [[-ihw, -ihd], [ihw, -ihd], [ihw, ihd], [-ihw, ihd]].map(([u, v]) => [
+        cx + u * cosA - v * sinA,
+        cz + u * sinA + v * cosA,
+      ]).map(worldToLonLat);
+      const outerWay = doc.ring(lonlat, {});
+      const innerWay = doc.ring(inner, {});
+      doc.relation(
+        [{ type: 'way', ref: outerWay, role: 'outer' }, { type: 'way', ref: innerWay, role: 'inner' }],
+        { type: 'multipolygon', ...tags },
+      );
+      mask.stampRect(cx, cz, b.w + clear * 2, b.d + clear * 2, cosA, sinA, 4);
+      return;
+    }
+  }
+  doc.ring(lonlat, tags);
+  mask.stampRect(cx, cz, b.w + clear * 2, b.d + clear * 2, cosA, sinA, 4);
+}
+
 function sampleAlong(pts, spacing) {
   const out = [];
   const total = lineLength(pts);
@@ -598,6 +633,125 @@ function districtSeed(district) {
   return h % 100000;
 }
 
+/**
+ * Whatever Berlin actually has inside this district's box, laid down before
+ * the invented lattice so the lattice can be laid around it.
+ *
+ * The surveyed facts in berlin-facts.mjs are not Mitte's private property:
+ * the Strasse des 17. Juni runs out of the middle district and across the one
+ * west of it to the Grosser Stern, and the Siegessaeule stands in the middle
+ * of that junction. Until now only the middle district read any of it, so the
+ * avenue stopped dead on the district line and the far side was a generic
+ * grid with nothing in it to walk towards.
+ *
+ * Everything is filtered by the box with a margin, because a thing on the
+ * boundary belongs to both extracts and the build decides which district
+ * keeps it.
+ *
+ * @param {OsmDoc} doc @param {Mask} mask
+ * @param {{minX,minZ,maxX,maxZ}} box with the margin already added
+ * @param {() => number} rnd
+ * @returns {{streets: number, buildings: number, parks: number}} what it found
+ */
+function placeFacts(doc, mask, box, rnd) {
+  const inBox = (x, z) => x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ;
+  const touches = (pts) => pts.some(([lon, lat]) => {
+    const [x, z] = project(lon, lat);
+    return inBox(x, z);
+  });
+  const found = { streets: 0, buildings: 0, parks: 0 };
+
+  for (const w of WATERWAYS) {
+    if (!touches(w.pts)) continue;
+    const world = w.pts.map(([lon, lat]) => project(lon, lat));
+    const ring = offsetRibbon(world, w.half);
+    doc.ring(ring.map((p) => worldToLonLat(p)), {
+      natural: 'water', water: 'river', name: w.name, waterway: 'riverbank',
+    });
+    mask.fillPolygon(ring, 3, 6);
+  }
+
+  const parks = [];
+  for (const park of PARKS) {
+    if (!touches(park.ring)) continue;
+    const world = park.ring.map(([lon, lat]) => project(lon, lat));
+    doc.ring(park.ring, park.kind === 'park'
+      ? { leisure: 'park', name: park.name }
+      : { landuse: 'grass', name: park.name });
+    mask.fillPolygon(world, 2, 3);
+    parks.push({ park, world });
+    found.parks++;
+  }
+
+  const streets = [];
+  for (const st of STREETS) {
+    if (!touches(st.pts)) continue;
+    if (st.cls === 'pedestrian_area') {
+      doc.ring(st.pts, { highway: 'pedestrian', area: 'yes', name: st.name, surface: st.surface });
+      mask.fillPolygon(st.pts.map(([lon, lat]) => project(lon, lat)), 1, 2);
+      continue;
+    }
+    const tags = { highway: st.cls, name: st.name, surface: st.surface };
+    if (st.lanes) tags.lanes = String(st.lanes);
+    tags.width = String(ROAD_WIDTH[st.cls] || 7);
+    doc.line(st.pts, tags);
+    const world = st.pts.map(([lon, lat]) => project(lon, lat));
+    streets.push({ def: st, world });
+    mask.stampPolyline(world, (ROAD_WIDTH[st.cls] || 7) / 2 + 1.2, 1);
+    found.streets++;
+  }
+
+  for (const b of BUILDINGS) {
+    const [cx, cz] = project(b.lon, b.lat);
+    if (!inBox(cx, cz)) continue;
+    emitFactBuilding(doc, mask, b);
+    found.buildings++;
+  }
+
+  for (const c of LANDMARK_CARDS) {
+    const [cx, cz] = project(c.lon, c.lat);
+    if (!inBox(cx, cz)) continue;
+    doc.node(c.lat, c.lon, {
+      tourism: 'attraction', name: c.name,
+      'spreefall:card': c.key,
+      'spreefall:radius': String(c.radius),
+      'spreefall:text': c.text,
+    });
+  }
+
+  for (const st of STATIONS) {
+    const [cx, cz] = project(st.lon, st.lat);
+    if (!inBox(cx, cz)) continue;
+    doc.node(st.lat, st.lon, {
+      railway: st.kind === 'station' ? 'station' : 'subway_entrance',
+      name: st.name,
+      ...(st.kind === 'subway' ? { station: 'subway' } : {}),
+    });
+  }
+
+  // Trees: the same woodland density the middle district uses, over the part
+  // of each park that falls in this box.
+  for (const { park, world } of parks) {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of world) {
+      minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+      minZ = Math.min(minZ, p[1]); maxZ = Math.max(maxZ, p[1]);
+    }
+    const per = park.kind === 'park' ? 170 : 1100;
+    const n = Math.floor(((maxX - minX) * (maxZ - minZ)) / per);
+    for (let i = 0; i < n; i++) {
+      const x = minX + rnd() * (maxX - minX);
+      const z = minZ + rnd() * (maxZ - minZ);
+      if (!inBox(x, z) || !pointInRing(x, z, world)) continue;
+      const m = mask.get(x, z);
+      if (m !== 0 && m !== 2) continue;
+      const [lon, lat] = worldToLonLat([x, z]);
+      doc.node(lat, lon, { natural: 'tree' });
+    }
+  }
+  return found;
+}
+
 function syntheticDistrict(district) {
   const b = district.bounds;
   const rnd = mulberry32(districtSeed(district));
@@ -623,13 +777,38 @@ function syntheticDistrict(district) {
     return [rot(ax, az), rot(bx, bz)];
   };
 
+  // Berlin first, the invention around it.
+  const facts = placeFacts(doc, mask, {
+    minX: x0, minZ: z0, maxX: x1, maxZ: z1,
+  }, rnd);
+  if (facts.streets || facts.buildings || facts.parks) {
+    console.log(`  ${district.id} carries ${facts.streets} surveyed streets, `
+      + `${facts.buildings} named buildings and ${facts.parks} greens`);
+  }
+
   const streetWorld = [];
   const emit = (pts, cls, name) => {
     const tags = { highway: cls, name, surface: cls === 'residential' ? 'asphalt' : 'asphalt' };
     tags.width = String(ROAD_WIDTH[cls] || 7);
-    doc.line(pts.map(worldToLonLat), tags);
-    streetWorld.push({ def: { cls, name, surface: 'asphalt' }, world: pts });
-    mask.stampPolyline(pts, (ROAD_WIDTH[cls] || 7) / 2 + 1.2, 1);
+    // An invented street stops at whatever is really there. The line is
+    // sampled every ten metres and each free run is emitted on its own, so an
+    // avenue runs up to the Tiergarten and starts again on the far side
+    // rather than being bulldozed through it. Free is open ground or another
+    // road, because a road crossing a road is a junction.
+    const runs = [];
+    let run = null;
+    for (const p of sampleAlong(pts, 10)) {
+      const m = mask.get(p[0], p[1]);
+      if (m === 0 || m === 1) {
+        if (!run) { run = [p]; runs.push(run); } else run.push(p);
+      } else run = null;
+    }
+    for (const line of runs) {
+      if (line.length < 2 || lineLength(line) < 60) continue;
+      doc.line(line.map(worldToLonLat), tags);
+      streetWorld.push({ def: { cls, name, surface: 'asphalt' }, world: line });
+      mask.stampPolyline(line, (ROAD_WIDTH[cls] || 7) / 2 + 1.2, 1);
+    }
   };
 
   // Avenues one way, side streets the other, with the spacing wandering so the
@@ -684,7 +863,8 @@ function syntheticDistrict(district) {
     const off = (ROAD_WIDTH[s.def.cls] || 7) / 2 + 3.0;
     for (const side of [-1, 1]) {
       for (const p of sampleAlong(offsetLine(s.world, off * side), 18)) {
-        if (mask.get(p[0], p[1]) === 3) continue;
+        const m = mask.get(p[0], p[1]);
+        if (m !== 0 && m !== 2) continue;
         const [lon, lat] = worldToLonLat(p);
         doc.node(lat, lon, { natural: 'tree' });
       }
