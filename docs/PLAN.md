@@ -2548,3 +2548,102 @@ caps residency at 520.
 - 2026-10-18: the train runs whether or not you are near it and is only drawn
   when you are. Stepping it only when it was near froze it the moment it ran
   out past the edge of that circle, which is to say for good.
+
+## 58. Two builds of every district, and a flight over the coarse one
+
+- 2026-10-18: the question was whether a district could carry two tiers, a
+  fine one to walk in and a coarse one for a fast travel flight to pass over,
+  and what to do where the two meet. The answer to the second half is that
+  they never meet: the tier is chosen by what the player is doing, not by how
+  far away something is. Walking, everything within reach is the district's
+  own build. Flying, everything new is the overflight build. The two moments
+  the choice changes are the take off and the landing, which is where the
+  camera is already four hundred metres up and moving.
+
+- 2026-10-18: what the flight looks like today, measured before changing
+  anything. Mitte to Steglitz, sampled every half second: from 4.5 s to 6.5 s
+  of an eleven second flight the camera is over districts with nothing drawn
+  at all, `visible: 0`, `tris: 0`. That is the local city, where seventy
+  three of eighty one districts have no extract. The deployed one is worse in
+  a different way: every district is built, so the streamer tries to pull the
+  fine city at four hundred metres a second. A district is in reach for about
+  six seconds and weighs between three and fourteen megabytes gzipped.
+
+- 2026-10-18: so every district inside the ring is built twice. The second
+  build is a tier of its own rather than the sketch tier the outskirts use,
+  and the difference is the minimum area. The sketch tier drops everything
+  under 600 m2, which kept eighteen per cent of the buildings in the three
+  districts this was measured on, and a city with one house in five reads as
+  a bombed one from the air rather than a coarse one. The overflight tier
+  keeps everything over 250 m2 and makes all of it the box that fits it.
+
+- 2026-10-18: two things were switched off in it and had to go back on,
+  because both are cheaper on than off and this tree has measured each of
+  them before. A flat roof is a cap plus a parapet and a parapet is two
+  triangles an edge, so `roofs: false` made i24 larger than its own fine
+  build, 8.76 MB against 8.06. A window is one flag bit on a vertex and a
+  fragment shader, so `windows: false` saves nothing at all.
+
+- 2026-10-18: what it costs, gzipped, own build against overflight build:
+  Mitte 4.76 to 1.57 MB, Ring 4-1 2.46 to 1.94, Ring 3-2 0.81 to 0.46, and
+  Steglitz 2.86 to 2.85. The last one decided where the second build stops.
+  Out past the ring two thirds of what a district weighs is building walls,
+  the overflight tier keeps the same walls, and the saving disappears. Tier 3
+  and tier 4 fly over themselves.
+
+- 2026-10-18: these are numbers from the synthetic city, because Overpass is
+  not reachable from this container, and they understate the case. The real
+  ring districts are two to four times heavier than their synthetic stand
+  ins, and the overflight tier's minimum area bites hardest where there are
+  many small buildings, which is exactly what the synthetic generator does
+  not make. The deploy prints the real table.
+
+- 2026-10-18: the runtime change is small, because the tile manager already
+  took each tile's mesh through `tileMesh(rec)`, which was written so a
+  crater could give a tile its own buffer. A variant is a second pair of
+  files on the same index entry; `loadDistrict` picks the pair and nothing
+  downstream knows the difference, because both builds carry the same global
+  tile indices and each carries its own height field size.
+
+- 2026-10-18: the variant only decides what a fresh fetch asks for. A
+  district already in memory is handed back as it is, because swapping one
+  underneath a player who can see it buys nothing and costs a fetch. The
+  invariant that replaces it is at the other end: the moment a flight lands,
+  every district held at the overflight tier is dropped. So nothing a walker
+  can reach is ever the coarse build, and no two districts you can walk
+  between are at different tiers.
+
+- 2026-10-18: in the air the streamer looks up the line of the flight rather
+  than in a circle, centred fourteen hundred metres ahead of the camera and
+  never past the far end, with a reach of eighteen hundred metres and a tick
+  four times a second. A circle of nine hundred metres at four hundred metres
+  a second gives a district two seconds of warning and spends half of its
+  budget on ground that is already behind.
+
+- 2026-10-18: one defect this turned up that the probe nearly hid. Flying
+  over a district that is not in memory used to call `crossInto`, which is
+  the loading card. It never fired locally because the districts under that
+  flight are unbuilt and the card refuses those by name; on the deployed city
+  every one of them is built and a flight across Berlin would have raised the
+  card over and over. A flight is now never interrupted by it: what has to be
+  stood on is the far end, and that is asked for at the fine tier before the
+  take off.
+
+- 2026-10-18: measured after, Mitte to Ring 1-2, five kilometres: nought
+  frames of card, the corridor arriving as `c2r1.lo`, `c3r0.lo`, `c0r0.lo`,
+  ground drawn under the camera over every district that is built, 36.3 MB
+  held at the peak against a ceiling of 128, and nothing coarse left in
+  memory one second after landing.
+
+- 2026-10-18: and the screenshot said the work was not finished. The corridor
+  came down, the checks were green, and the picture was a green island in
+  grey nothing. The overflight bundle was not the problem: the district held
+  over Ring 3-2 carried 25,450 triangles and 196 tiles with something over
+  six metres on them. The uploader was. Tiles come up within nine hundred
+  metres of the camera, which is a street; from four hundred metres up,
+  looking down at seventy five degrees, it is a disc of 1.8 km with the rest
+  of the view empty. So the tile radius goes to 2.8 km while a flight is
+  running and back to nine hundred when it lands, and the corridor's reach
+  goes to 2.9 km so that no tile comes up without a district behind it. The
+  same shot after that is the Grosser Stern with its avenues going out of it
+  and the streets of the next district beyond.

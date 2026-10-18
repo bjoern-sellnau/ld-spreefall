@@ -29,7 +29,11 @@ function districtFiles() {
     // whole city, and it has no files behind it. Shipping asks only about the
     // ones that do.
     if (d.built === false || !d.bin || !d.json) continue;
-    for (const rel of [`public/${d.bin}`, `public/${d.json}`]) {
+    // Its own pair of files, and the overflight pair beside them where the
+    // district has one: a flight over the city asks for those by name.
+    const pairs = [`public/${d.bin}`, `public/${d.json}`];
+    if (d.lo) pairs.push(`public/${d.lo.bin}`, `public/${d.lo.json}`);
+    for (const rel of pairs) {
       if (fs.existsSync(path.join(ROOT, rel))) out.push(rel);
       else { console.error(`the index lists ${rel}, which is not here`); process.exit(1); }
     }

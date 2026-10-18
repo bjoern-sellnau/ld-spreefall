@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { DISTRICTS, OVERFLIGHT_TIER } from './districts.mjs';
+import { DISTRICTS, OVERFLIGHT_UNTIL } from './districts.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PUB = path.join(ROOT, 'public');
@@ -66,7 +66,7 @@ function main() {
       + `${(d.bytes / 1e6).toFixed(2).padStart(8)} MB${(d.gzip / 1e6).toFixed(2).padStart(9)} MB`
       + `${km2.toFixed(1).padStart(7)}${String(d.buildings).padStart(11)}`
       + `${d.lo ? `${(d.lo.gzip / 1e6).toFixed(2).padStart(10)} MB`
-        : (d.tier >= OVERFLIGHT_TIER ? '           its own' : '        not built')}`);
+        : (d.tier > OVERFLIGHT_UNTIL ? '           its own' : '        not built')}`);
   }
 
   const indexGz = gz(INDEX);

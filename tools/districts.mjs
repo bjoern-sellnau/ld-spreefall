@@ -125,23 +125,57 @@ export const TIERS = [
     trees: 0, driveOnly: true, grid: 5, kerbs: false, groundStep: 200,
     boxBelow: 100000, service: false, surfaceStep: 40.0, roadSimplify: 20.0,
   },
+  {
+    // Not a band of the city: the second build of every district inside the
+    // inner band, for a fast travel flight to pass over at four hundred
+    // metres up. Nothing here is walked on, so the ground, the footstep map
+    // and the height field are the cheapest the build can make them, and
+    // every building is the box that fits it.
+    //
+    // What is not cut is how many buildings there are. The sketch tier above
+    // drops everything under 600 m2, which kept eighteen per cent of them in
+    // the districts this was measured on, and a city with one house in five
+    // reads as a bombed one from the air rather than a coarse one. A box is
+    // ten triangles, so the way to spend less is not to have fewer of them.
+    // The landmarks stay for the same reason: the one thing you look for out
+    // of a window at four hundred metres is the Fernsehturm.
+    //
+    // The roofs and the windows stay on because both are cheaper on than
+    // off, which is measured twice over in this tree: a flat roof is a cap
+    // plus a parapet and a parapet is two triangles an edge, and a window is
+    // one flag bit on the vertex and a fragment shader. Turning them off
+    // here made i24 larger than its own fine build.
+    name: 'overflight',
+    minArea: 250, simplify: 8.0, roofs: true, windows: true, landmarks: true,
+    trees: 0, driveOnly: true, grid: 5, kerbs: false, groundStep: 200,
+    boxBelow: 100000, service: false, surfaceStep: 40.0, roadSimplify: 20.0,
+  },
 ];
 
 /** The id of the district that holds the original box. */
 export const CORE_ID = 'core';
 
 /**
- * The tier a district is built at a second time, for the fast travel flight.
+ * The row of TIERS a district is built at a second time, for the fast travel
+ * flight to pass over.
  *
  * A flight crosses the city at four hundred metres a second, which gives a
- * district under six seconds between coming into reach and going past. Its
- * own bundle is between three and forty megabytes and does not arrive in
- * that; the sketch tier is a twentieth of it and does. Measured on i24:
- * 47.33 MB at tier 0, 8.06 at tier 3, 2.28 here.
- *
- * A district already at this tier or coarser has nothing to build twice.
+ * district a few seconds between coming into reach and going past. Its own
+ * bundle is between three and forty megabytes and does not arrive in that.
  */
-export const OVERFLIGHT_TIER = 4;
+export const OVERFLIGHT_TIER = 5;
+
+/**
+ * The coarsest district that is worth building twice.
+ *
+ * Measured on the districts this was written against, gzipped, own build
+ * against overflight build: Mitte 4.76 to 1.57 MB, Ring 4-1 2.46 to 1.94,
+ * Ring 3-2 0.81 to 0.46, and Steglitz 2.86 to 2.85. The last one is the
+ * answer: out past the ring a district is already within a hair of the
+ * overflight row, because two thirds of what it weighs is building walls and
+ * the overflight row keeps the same walls. Those fly over themselves.
+ */
+export const OVERFLIGHT_UNTIL = 2;
 
 /** Degrees of margin a fetch takes around a district, for walls on the cut. */
 export const FETCH_MARGIN = 0.0025;   // about 170 m north to south

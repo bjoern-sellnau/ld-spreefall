@@ -480,7 +480,10 @@ export class Minimap {
     let any = false;
     for (const d of list) {
       // The one you are in draws itself, in full, out of its own manifest.
-      if (!d.sketch || this.world.loaded(d.id)) continue;
+      // A district held at the overflight tier does not: that build carries
+      // no street lines, so during a flight it keeps being drawn from the
+      // sketch rather than dropping off the map.
+      if (!d.sketch || (this.world.loaded(d.id) && !this.world.isOverflight(d.id))) continue;
       any = true;
       for (const w of d.sketch.water) ring(water, w);
       for (const g of d.sketch.green) ring(green, g);

@@ -20,6 +20,8 @@ export class TileManager {
     this.resident = new Map();          // index -> gpu tile
     this.uploadRadius = opts.uploadRadius || 760;
     this.evictRadius = opts.evictRadius || 1000;
+    this.quality = 'high';
+    this.flying = false;
     this.maxResident = opts.maxResident || 520;
     this.uploadsPerFrame = opts.uploadsPerFrame || 6;
     this.visible = [];
@@ -84,9 +86,36 @@ export class TileManager {
   }
 
   setQuality(tier) {
+    this.quality = tier;
     if (tier === 'low') { this.uploadRadius = 460; this.evictRadius = 620; this.uploadsPerFrame = 3; }
     else if (tier === 'medium') { this.uploadRadius = 640; this.evictRadius = 860; this.uploadsPerFrame = 5; }
     else { this.uploadRadius = 900; this.evictRadius = 1200; this.uploadsPerFrame = 8; }
+    if (this.flying) this._flightRadii();
+  }
+
+  /**
+   * How far tiles come up while a fast travel flight is running.
+   *
+   * Nine hundred metres is a street. From four hundred metres up it is an
+   * island: the camera looks down at about seventy five degrees and the
+   * ground it can see runs to the horizon, so a disc of 1.8 km under it is
+   * most of the view missing. The overflight build is what makes a bigger
+   * disc affordable, at about twenty five thousand triangles a district.
+   *
+   * @param {boolean} on true while a flight is running
+   */
+  setFlying(on) {
+    if (!!on === !!this.flying) return;
+    this.flying = !!on;
+    if (this.flying) this._flightRadii();
+    else this.setQuality(this.quality || 'high');
+  }
+
+  _flightRadii() {
+    const far = { low: 1600, medium: 2200 }[this.quality] || 2800;
+    this.uploadRadius = far;
+    this.evictRadius = far + 600;
+    this.uploadsPerFrame = Math.max(this.uploadsPerFrame, 24);
   }
 
   upload(index) {

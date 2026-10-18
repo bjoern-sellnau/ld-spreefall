@@ -18,7 +18,7 @@ import zlib from 'node:zlib';
 import { parseOsmXml, counts } from './osm-xml.mjs';
 import { annotate } from './annotate.mjs';
 import { project, BBOX, CITY, worldBounds, cityGrid, ORIGIN } from './geo.mjs';
-import { DISTRICTS, TIERS, CORE_ID, OVERFLIGHT_TIER, districtById } from './districts.mjs';
+import { DISTRICTS, TIERS, CORE_ID, OVERFLIGHT_TIER, OVERFLIGHT_UNTIL, districtById } from './districts.mjs';
 import { Mesh } from './mesh.mjs';
 import { Terrain } from './terrain.mjs';
 import { fbm2, hashInt } from './noise.mjs';
@@ -227,7 +227,7 @@ function main() {
   const fineOnly = process.argv.includes('--fine-only');
   for (const district of wanted) {
     buildDistrict(district);
-    if (!fineOnly && district.tier < OVERFLIGHT_TIER) buildDistrict(district, true);
+    if (!fineOnly && district.tier <= OVERFLIGHT_UNTIL) buildDistrict(district, true);
   }
   writeIndexSummary();
 }

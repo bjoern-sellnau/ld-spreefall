@@ -2880,7 +2880,9 @@ async function main() {
     // before the bytes arrive, the ground answers nought everywhere, and a
     // floor worked out from that would stay at nought for a district built
     // on a hill.
-    const key = entry ? `${entry.id}:${world.loaded(entry.id) ? 'in' : 'out'}` : null;
+    const key = entry
+      ? `${entry.id}:${world.loaded(entry.id) ? (world.isOverflight(entry.id) ? 'lo' : 'in') : 'out'}`
+      : null;
     if (bedrockFor === key) return;
     bedrockFor = key;
     if (!entry) { renderer.bedrock = null; return; }
@@ -3306,19 +3308,22 @@ async function main() {
     });
     state.travelTo = { x: tx, z: tz };
     state.mode = 'travel';
+    // Up there the view runs to the horizon, so the tiles have to come up
+    // much further out than they do in a street.
+    tiles.setFlying(true);
     // The place you are flying to may be in a district that is not in memory,
     // and the flight is seven seconds of warning that you are coming. Start
     // fetching it now and bring the tiles in along the way, so the city is
     // there when you arrive rather than appearing around you afterwards.
     const far = world.entryAt(tx, tz);
-    if (far && !world.loaded(far.id)) {
+    if (far && (!world.loaded(far.id) || world.isOverflight(far.id))) {
       // The flight is the loading screen: it takes seven seconds and the
       // district lands inside that, so there is nothing to wait for at the
       // far end. If it does not, the landing holds in the air until it does.
       // Anything still falling where you are standing goes into the record
       // before you leave it behind.
       demolition.bakeAll();
-      world.loadDistrict(far.id).then(() => {
+      world.reloadFine(far.id).then(() => {
         tiles.uploadsPerFrame = 10000;
         tiles.updateResidency(tx, tz, loop.frame);
         tiles.uploadsPerFrame = 8;
@@ -3442,6 +3447,17 @@ async function main() {
   // on a count, because a district is anything from three to seventeen
   // megabytes.
   const STREAM = { reach: 900, drop: 2600, most: 6, bytes: 128e6, every: 0.5 };
+  // And the same thing for a flight, which is a different problem. The
+  // camera crosses the city at four hundred metres a second, so a circle of
+  // nine hundred metres around it gives a district two seconds of warning
+  // and most of them would land behind you. This reaches further, looks up
+  // the line of the flight rather than in a circle, and asks more often.
+  // It can afford to: an overflight bundle is under a megabyte.
+  //
+  // The reach is a little more than the distance the tiles come up from at
+  // this height, because a tile with no district behind it is a hole in the
+  // ground rather than a tile that is merely coarse.
+  const FLIGHT = { reach: 2900, drop: 4200, most: 10, bytes: 128e6, every: 0.25, lead: 1400 };
   let streamDue = 0;
 
   /**
@@ -3453,18 +3469,47 @@ async function main() {
     el.district.textContent = world.nameAt(x, z) || 'Berlin';
     el.district.classList.toggle('loading', !!state.crossing);
     if (!here || state.crossing) return;
+    // Which of the two builds a fresh fetch asks for. A flight crosses the
+    // city at four hundred metres a second, which leaves a district a few
+    // seconds between coming into reach and going past, and its own bundle
+    // is between three and forty megabytes. The overflight bundle is a
+    // twentieth of that and arrives. Walking never asks for it, which is
+    // what keeps two districts you can walk between at the same tier.
+    const flying = state.mode === 'travel';
+    const variant = flying ? 'over' : 'fine';
+    const plan = flying ? FLIGHT : STREAM;
+    // In the air the circle is centred ahead of the camera, on the line it is
+    // flying, so what comes down is the corridor rather than what is already
+    // behind. Never past the far end, or the last few seconds would be spent
+    // holding districts on the other side of where you are landing.
+    let cx = x, cz = z;
+    if (flying && state.travelTo) {
+      const dx = state.travelTo.x - x, dz = state.travelTo.z - z;
+      const away = Math.hypot(dx, dz);
+      if (away > 1) {
+        const step = Math.min(FLIGHT.lead, away);
+        cx = x + (dx / away) * step;
+        cz = z + (dz / away) * step;
+      }
+    }
     // Fetching is throttled: it walks the whole catalogue of eighty one
     // districts, and nothing it decides can change inside half a second of
-    // walking.
+    // walking, or a quarter of one of flying.
     streamDue -= dt;
     if (streamDue <= 0) {
-      streamDue = STREAM.every;
-      world.keepAround(x, z, STREAM.reach, STREAM.drop, STREAM.most, STREAM.bytes);
+      streamDue = plan.every;
+      world.keepAround(cx, cz, plan.reach, plan.drop, plan.most, plan.bytes, variant);
     }
     // And if you are somehow standing on ground that is not in yet, which is
     // a fast travel or a deep link rather than a walk, the card is still
     // there to wait behind.
-    if (!world.loaded(here)) { crossInto(x, z); return; }
+    // Flying over ground that is not in yet is not a reason to stop the
+    // flight and raise the card. What has to be stood on is the far end, and
+    // beginTravel asked for that at the fine tier before the take off.
+    if (!world.loaded(here)) {
+      if (state.mode !== 'travel') crossInto(x, z);
+      return;
+    }
     // Arriving somewhere new. This used to happen inside the card, which was
     // also the only place that knew you had changed district; now that you
     // can walk across without one, the arrival is noticed here instead.
@@ -4518,9 +4563,16 @@ async function main() {
       el.hud.classList.add('flying');
       // Nobody is put down on ground that has not arrived. The flight holds
       // its last frame, a few hundred metres up, until the district is in.
-      if (p.finished && state.travelTo && !world.isLoaded(state.travelTo.x, state.travelTo.z)) {
+      const landing = state.travelTo ? world.idAt(state.travelTo.x, state.travelTo.z) : null;
+      if (p.finished && state.travelTo
+        && (!world.isLoaded(state.travelTo.x, state.travelTo.z) || world.isOverflight(landing))) {
         el.district.textContent = `landing in ${world.nameAt(state.travelTo.x, state.travelTo.z) || 'Berlin'}`;
         el.district.classList.add('loading');
+        // Held up because what is under the landing is the coarse build.
+        // The take off asked for the city and the memory ceiling can have
+        // let it go again since, so ask once more rather than hold here for
+        // good waiting on a fetch nobody started.
+        if (landing && world.isOverflight(landing)) world.reloadFine(landing).catch(() => {});
       } else if (p.finished) {
         const at = state.travelTo;
         player.teleport(at.x, at.z);
@@ -4541,6 +4593,12 @@ async function main() {
         el.hud.classList.remove('flying');
         travel.cancel();
         state.travelTo = null;
+        tiles.setFlying(false);
+        // The corridor is let go at the moment the flight ends. Those are
+        // the coarse build, a walker must never be able to reach one, and
+        // the streamer brings back whatever is near at the fine tier within
+        // half a second.
+        world.dropOverflight(world.idAt(at.x, at.z));
         if (!isTouch && state.lockWanted) relock();
       }
     } else if (state.mode === 'landing') {
