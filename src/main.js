@@ -1156,6 +1156,8 @@ async function main() {
     effects.shake = Math.min(1.6, effects.shake + 0.8);
   };
 
+  mechs.onEject = () => { if (state.inMech) leaveMech(false); };
+
   mechs.onDestroyed = (m) => {
     explode(m.x, m.y + 3.0, m.z, { radius: 26, damage: 420 }, { weapon: 'mech' });
     gibs.rubble(m.x, m.y + 2.0, m.z, 9, 16, 2.4);
@@ -2043,7 +2045,7 @@ async function main() {
           const r = away * scale * (0.9 + Math.random() * 0.2);
           const x = player.x + Math.cos(a) * r;
           const z = player.z + Math.sin(a) * r;
-          if (!world.isLoaded(x, z)) continue;
+          if (!placeable(x, z)) continue;
           let boxed = false;
           for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             if (world.raycast(x, world.groundHeight(x, z) + 3.0, z, dx, 0, dz, clear)) {
@@ -2055,13 +2057,28 @@ async function main() {
         }
       }
     }
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      const x = player.x + Math.cos(a) * away;
-      const z = player.z + Math.sin(a) * away;
-      if (world.isLoaded(x, z)) return { x, z, a };
+    // Nothing anywhere near that has room. Take whatever ground will have
+    // one, working outwards: a machine standing against a lamp post is a
+    // machine, and no machine at all is a button that does nothing.
+    for (let r = away; r <= away * 12; r *= 1.6) {
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2 + r;
+        const x = player.x + Math.cos(a) * r;
+        const z = player.z + Math.sin(a) * r;
+        if (placeable(x, z)) return { x, z, a };
+      }
     }
     return null;
+  }
+
+  /**
+   * Is this somewhere a machine may be put down at all? Loaded ground, and
+   * not the memorial: the layer refuses one there anyway, and a spot the
+   * spawner is happy with that the layer then throws away is the same as no
+   * spot, with the difference that nobody can see why.
+   */
+  function placeable(x, z) {
+    return world.isLoaded(x, z) && !combat.isSanctuary(x, 0, z);
   }
 
   /**
@@ -3673,6 +3690,16 @@ async function main() {
     state.time += worldDt;
     input.poll();
     updateBedrock();
+
+    // A pilot whose machine is no longer there is put back on their feet.
+    // Everything that takes a mech away in the ordinary course of things
+    // tells the game first, so this never fires in a normal run; what it
+    // catches is the machine going out from under you some other way, and
+    // the alternative is piloting a mech that is not in the world any more,
+    // which locks you out of your own weapons and the key to get out again.
+    if (state.inMech && (!state.inMech.alive || !state.inMech.occupied)) {
+      leaveMech(false);
+    }
 
     // Just a Walk. The budgets are held at nought rather than the layers
     // switched off, so that anything the cheat menu brings out by hand is a

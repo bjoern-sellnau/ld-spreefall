@@ -24,7 +24,7 @@ import { Terrain } from './terrain.mjs';
 import { fbm2, hashInt } from './noise.mjs';
 import {
   extrudeBuilding, ribbon, groundPolygon, box, ringArea, ringCentroid,
-  orientedBox, ringLength,
+  orientedBox, ringLength, lampPost, parkedCar, streetBin, bench,
 } from './geometry.mjs';
 import { LANDMARK_BUILDERS } from './landmarks.mjs';
 import { ROAD_WIDTH } from './synth-osm.mjs';
@@ -550,6 +550,127 @@ function buildDistrict(district) {
     groundPolygon(mesh, a.ring, [], roadMaterial(a.tags), yAt, { lift: 0.05, seed: 3 });
   }
 
+  // --- what stands on the street ------------------------------------------
+  // Lamps, parked cars, bins and benches, laid along the kerb of every street
+  // that has one. They are ordinary mesh rather than an instanced layer of
+  // their own, because a tile is already drawn in one call and a lamp post is
+  // a few dozen triangles. All of it together is 75,000 triangles across
+  // Mitte, against 188,000 for the city it stands in. Where each one goes is
+  // decided by a hash of the position, so two builds put them in the same
+  // places.
+  let props = 0;
+  let lamps = 0, cars = 0;
+  if (tier.props) {
+    const LAMPS_ON = new Set(['primary', 'secondary', 'tertiary', 'residential',
+      'living_street', 'unclassified', 'pedestrian']);
+    const PARKING_ON = new Set(['residential', 'tertiary', 'living_street', 'unclassified']);
+    const chance = (x, z, salt) =>
+      ((hashInt(Math.round(x * 3) + salt, Math.round(z * 3)) >>> 8) & 1023) / 1023;
+    const clear = (x, z) => {
+      if (x < world.minX + 4 || x > world.maxX - 4) return false;
+      if (z < world.minZ + 4 || z > world.maxZ - 4) return false;
+      // Not in the river, and not in the memorial.
+      for (const w of waterPolys) if (pointInRing(x, z, w.ring)) return false;
+      for (const m of memorials) if (pointInRing(x, z, m.ring)) return false;
+      return true;
+    };
+    // And nothing stands inside anything else. Streets cross, so the lamp one
+    // of them puts at its kerb lands on the car the other one parked there,
+    // and the first build of this had a lamp post growing up through a car
+    // roof. A coarse grid of what has been put down already, with the trees
+    // seeded into it, and a new piece has to clear all of it.
+    const CELL = 6;
+    const placed = new Map();
+    const keep = (x, z, r) => {
+      const k = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
+      const list = placed.get(k);
+      if (list) list.push([x, z, r]); else placed.set(k, [[x, z, r]]);
+    };
+    const room = (x, z, r) => {
+      const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+      for (let ix = cx - 1; ix <= cx + 1; ix++) {
+        for (let iz = cz - 1; iz <= cz + 1; iz++) {
+          const list = placed.get(`${ix},${iz}`);
+          if (!list) continue;
+          for (const [px, pz, pr] of list) {
+            if (Math.hypot(px - x, pz - z) < pr + r) return false;
+          }
+        }
+      }
+      return true;
+    };
+    // A tree is a trunk and a canopy over the pavement; a lamp inside one is
+    // the same nonsense as a lamp inside a car.
+    for (const t of trees) keep(t.p[0], t.p[1], 1.6);
+    for (const r of roads) {
+      const cls = r.tags.highway;
+      if (!LAMPS_ON.has(cls)) continue;
+      const explicit = parseLength(r.tags.width);
+      const width = Number.isFinite(explicit) && explicit > 1 ? explicit : (ROAD_WIDTH[cls] || 6);
+      const kerb = width / 2 + 1.0;
+      const line = r.line;
+      // Walk the centreline at a fixed step, so the spacing is the spacing on
+      // the ground rather than one post per node.
+      let run = 0, since = 1e9, sinceCar = 1e9, sinceSeat = 1e9;
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], b = line[i];
+        const dx = b[0] - a[0], dz = b[1] - a[1];
+        const seg = Math.hypot(dx, dz);
+        if (seg < 0.01) continue;
+        const ux = dx / seg, uz = dz / seg;
+        const yaw = Math.atan2(ux, uz);
+        for (let t = 0; t < seg; t += 2) {
+          const x = a[0] + ux * t, z = a[1] + uz * t;
+          run += 2; since += 2; sinceCar += 2; sinceSeat += 2;
+          // The lamps alternate sides down the street, the way they do here.
+          if (since >= 45) {
+            const side = (Math.floor(run / 45) % 2) ? 1 : -1;
+            const px = x - uz * kerb * side, pz = z + ux * kerb * side;
+            if (clear(px, pz) && room(px, pz, 0.9)) {
+              keep(px, pz, 0.9);
+              const g = yAt(px, pz);
+              lampPost(mesh, px, g, pz, yaw + (side > 0 ? -Math.PI / 2 : Math.PI / 2),
+                { seed: hashInt(Math.round(px), Math.round(pz)) & 255 });
+              // As wide as the pole is, rather than as wide as is easy: the
+              // mast is a third of a metre across at the foot and half that
+              // at the lantern, and a box twice its width is a thing you
+              // bump into beside a lamp post rather than on it.
+              pushPostCollision(collision, px, pz, g, g + 6.2, 0.15);
+              props++; lamps++;
+            }
+            since = 0;
+          }
+          if (PARKING_ON.has(cls) && sinceCar >= 20 && chance(x, z, 17) < 0.5) {
+            const side = chance(x, z, 91) < 0.5 ? 1 : -1;
+            const px = x - uz * (width / 2 - 0.1) * side;
+            const pz = z + ux * (width / 2 - 0.1) * side;
+            if (clear(px, pz) && room(px, pz, 2.5)) {
+              keep(px, pz, 2.5);
+              const g = yAt(px, pz);
+              parkedCar(mesh, px, g, pz, yaw,
+                { seed: hashInt(Math.round(px), Math.round(pz)) & 255 });
+              pushBoxCollision(collision, px, pz, yaw, 1.78, 4.3, g, g + 1.5);
+              props++; cars++;
+            }
+            sinceCar = 0;
+          }
+          if (sinceSeat >= 95 && (cls === 'pedestrian' || cls === 'primary')) {
+            const side = chance(x, z, 53) < 0.5 ? 1 : -1;
+            const px = x - uz * (kerb + 1.4) * side, pz = z + ux * (kerb + 1.4) * side;
+            if (clear(px, pz) && room(px, pz, 1.1)) {
+              keep(px, pz, 1.1);
+              const g = yAt(px, pz);
+              if (chance(x, z, 7) < 0.5) bench(mesh, px, g, pz, yaw + Math.PI / 2);
+              else streetBin(mesh, px, g, pz);
+              props++;
+            }
+            sinceSeat = 0;
+          }
+        }
+      }
+    }
+  }
+
   since('roads');
   // --- rails --------------------------------------------------------------
   for (const r of rails) {
@@ -805,7 +926,7 @@ function buildDistrict(district) {
   console.log('vertices: ' + Object.entries(spent).filter(([, v]) => v > 0)
     .map(([k, v]) => `${k} ${Math.round(v / 1000)}k`).join(', ')
     + `  (${roadPoints} road points over ${(roadMetres / 1000).toFixed(1)} km)`);
-  console.log(`geometry: ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${buildingCount} buildings, ${stelae} stelae, ${treeList.length} trees, ${(roadMetres / 1000).toFixed(1)} km of road`);
+  console.log(`geometry: ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${buildingCount} buildings, ${stelae} stelae, ${treeList.length} trees, ${lamps} lamps, ${cars} cars, ${props - lamps - cars} seats and bins, ${(roadMetres / 1000).toFixed(1)} km of road`);
 
   // --- surface map for footsteps -----------------------------------------
   const surfaceGrid = buildSurfaceGrid(world, roads, areas, greens, waterPolys, memorials, tier.surfaceStep);
@@ -1586,6 +1707,34 @@ function simplify(pts, eps) {
     if (best > 0) { keep[best] = 1; stack.push([i0, best], [best, i1]); }
   }
   return pts.filter((_, i) => keep[i]);
+}
+
+/**
+ * A square of collision round something standing on the pavement: a lamp
+ * post, a bollard. Four segments, the same way a tree trunk is done, so
+ * that what you can see you can also walk into.
+ */
+function pushPostCollision(collision, x, z, base, top, half) {
+  const ring = [[x - half, z - half], [x + half, z - half],
+    [x + half, z + half], [x - half, z + half]];
+  pushFootprintCollision(collision, ring, base, top, SURFACE.STONE);
+}
+
+/**
+ * The same, for something longer than it is wide and parked at an angle: a
+ * car. A square the width of a car is a metre and a half of nothing at each
+ * end that you walk straight through, so this is the real rectangle, turned
+ * the way the thing is turned.
+ */
+function pushBoxCollision(collision, x, z, yaw, wide, long, base, top) {
+  // Along the road is (sin yaw, cos yaw), the same convention the mesh uses,
+  // and across it is the perpendicular.
+  const lx = Math.sin(yaw), lz = Math.cos(yaw);
+  const wx = Math.cos(yaw), wz = -Math.sin(yaw);
+  const hw = wide / 2, hl = long / 2;
+  const at = (a, b) => [x + wx * a + lx * b, z + wz * a + lz * b];
+  const ring = [at(-hw, -hl), at(hw, -hl), at(hw, hl), at(-hw, hl)];
+  pushFootprintCollision(collision, ring, base, top, SURFACE.STONE);
 }
 
 function pushFootprintCollision(collision, ring, base, top, surface) {

@@ -695,6 +695,20 @@ work, because the shadow line under a projecting band is what makes a frontage
 read as relief. Only in the middle, where you walk: it costs a quarter of the
 triangles of that district and is only worth that from the pavement.
 
+**What stands on the street.** Lamp posts every forty five metres, alternating
+sides the way they do here, cars parked at the kerb down the quieter streets,
+and a bench or a bin at the odd corner. None of it is in the map: OpenStreetMap
+knows where the roads are and how wide they are, and the furniture is placed
+off that, at a fixed step along the centreline with the kerb worked out from
+the width, so two builds put the same lamp in the same place. It is what makes
+a street read as a street rather than as a corridor between two walls. Lamps
+and cars carry collision that matches what is drawn, down to the car being a
+rectangle the length of a car rather than a square the width of one, and
+nothing stands inside anything else: a piece that would land on a car, a lamp
+or a tree is dropped, which is 178 of them across Mitte. It costs 75,000
+triangles there, against 188,000 for the city it stands in, and it is on in
+the middle tier only, like the relief.
+
 **The shape of a building is what OpenStreetMap says it is.** Height or
 levels, `building:part` pieces instead of the envelope around them,
 `min_height` for a volume that starts above the street, and the roof: its
@@ -931,6 +945,10 @@ the square is untouched.*
 
 ![Vehicles on Pariser Platz](docs/screenshots/city-05-vehicles.png)
 *A jeep, a tank, a helicopter and a fighter, parked on the square.*
+
+![A street with things on it](docs/screenshots/street-01-furniture.png)
+*A side street in Mitte: cars at the kerb and a lamp post standing beside
+them.*
 
 ![Flying across the city](docs/screenshots/city-03-travel.png)
 *Free travel, halfway across: three hundred metres up over the roofs of Mitte,

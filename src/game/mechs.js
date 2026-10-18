@@ -191,14 +191,20 @@ export class Mechs {
     this.onStep = null;        // fn(mech, hard)
     this.onStomp = null;       // fn(mech, spec)
     this.onDestroyed = null;   // fn(mech)
+    this.onEject = null;       // fn(mech) when the layer takes one out from under its pilot
   }
 
   get count() { return this.active.length; }
 
   reset() {
-    for (const m of this.pool) m.alive = false;
+    // Whoever was flying one is standing in the street again, and is told so
+    // before the machine goes: a pilot left holding a mech that is no longer
+    // in the world has no weapons, no cockpit and no key to get out.
+    const was = this.piloted;
+    for (const m of this.pool) { m.alive = false; m.occupied = false; }
     this.active.length = 0;
     this.piloted = null;
+    if (was && this.onEject) this.onEject(was);
   }
 
   free() { return this.pool.find((m) => !m.alive) || null; }

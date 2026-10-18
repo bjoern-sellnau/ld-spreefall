@@ -1693,3 +1693,77 @@ is what prompted the change.
   is very probably the whole of what was reported as the slow motion not
   working. The constructor now builds every switch out of the one list, and a
   unit test flips every row in the menu on and off again.
+
+## 35. What stands on the street
+
+- 2026-10-18: the second of the three graphics steps, and the one that changes
+  the middle distance most. Lamp posts every forty five metres down anything
+  from a residential street upwards, alternating sides; cars at the kerb every
+  twenty metres on the quieter classes, half the time; a bench or a bin every
+  ninety five metres on the pedestrian and primary streets. All placed off the
+  road centreline at a fixed step, with the kerb worked out from the width the
+  map gives, and all keyed off the same integer hash as everything else, so two
+  builds put the same lamp in the same place.
+
+- 2026-10-18: Mitte went from 187,869 triangles to 263,051: 790 lamps, 1013
+  cars and 72 seats and bins. The eight districts built here come to 15.88 MB
+  gzipped of the 25 MB budget, and Mitte itself, which is what you download to
+  play, is 4.40 MB.
+
+- 2026-10-18: and nothing stands inside anything else. Streets cross, so the
+  lamp one of them puts at its kerb lands on the car the other one parked
+  there, and the first build had exactly that: a lamp post up through a car
+  roof, found by looking at a screenshot of it. What goes down is now kept in
+  a coarse grid with the trees seeded into it, and a piece that overlaps
+  anything already there is dropped. That is 178 of them across Mitte: 92
+  lamps, 78 cars and 8 seats.
+
+- 2026-10-18: collision that matches what is drawn. A lamp is a square 0.30 m
+  across, which is the mast; the first pass used 0.44, and a post twice the
+  width of the thing you can see is something you bump into beside a lamp post
+  rather than on it. A car is the real rectangle, 1.78 by 4.3, turned the way
+  the car is turned: a square the width of a car leaves a metre and a half at
+  each end that you walk straight through.
+
+- 2026-10-18: the machines suite went to 36 of 54 on the back of this, and
+  every one of the eighteen was downstream of two faults that the furniture
+  only brought to the surface.
+
+  The first was in the suite. The check that measures the chaingun stands a
+  target somewhere the mech can see it, and it looked for that spot by sweeping
+  a level ray and then refusing any ground more than three metres off the
+  mech's own level. By the time that check runs the district has been shelled
+  for ten minutes: eleven of its twenty four candidates were blocked and the
+  other thirteen were over a hole, so it gave up, and it gave up silently,
+  behind a skip that said nothing at all. It now sweeps five rings and
+  seventeen bearings, and a shot down into a crater counts as a shot as long
+  as the line is clear.
+
+  Which took two goes to get right, and the second one is the interesting
+  one. Sweeping muzzle to chest found a line and the gun still put forty eight
+  rounds out of forty eight into the city: the guns do not point at the
+  target, they converge on wherever the torso's own ray runs out, which in
+  that street was a hundred and eighty metres past it, and from a muzzle two
+  metres off the centre line that is a different line entirely. The search now
+  turns the torso onto each candidate and asks the mech itself where the shot
+  would go, through the same `muzzle`, `aimPoint` and `aimFrom` the gun uses.
+  The same search is shared with the railgun check instead of being written
+  twice.
+
+  And the street is cleared first. A mech's round goes to the nearest thing on
+  the line, and Rise of the Machines keeps a dozen walking at you: ten of them
+  were standing between the gun and the target, so what the check measured was
+  how long they lasted.
+
+  The second was real. That skip left the player sitting in a mech, and the
+  next check reset the mech layer under them: `state.inMech` went on pointing
+  at a machine that was no longer in the world, so the key that gets you in
+  got you out instead and every mech check after it failed. The layer now says
+  so when it takes a mech out from under its pilot, and the frame loop puts a
+  stranded pilot back on their feet in any case. `tools/test/mechs.test.mjs`
+  holds the layer to it without a browser.
+
+- 2026-10-18: and every skip in the mech half of the suite now says why. Three
+  of them read `no room for one` whatever had actually happened, which is how a
+  reset layer and a blocked firing line both came to look like a street with
+  nowhere to park.

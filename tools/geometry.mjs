@@ -466,6 +466,78 @@ function domeRoof(mesh, ring, y, rh, mat, seed) {
 }
 
 // ---------------------------------------------------------------------------
+// What stands on the street
+
+/**
+ * A Berlin street lamp: a cast post with a slight taper, an arm over the
+ * carriageway and a lantern on the end of it. A few dozen triangles, which
+ * at one every forty five metres is what a street costs to look lived in.
+ *
+ * @param {number} yaw which way the arm reaches, radians
+ */
+export function lampPost(mesh, x, y, z, yaw, opts = {}) {
+  const h = opts.height || 6.2;
+  const reach = opts.reach || 1.1;
+  const flags = FACADE_FLAG.NO_WINDOWS;
+  const o = { flags, seed: opts.seed || 0 };
+  cylinder(mesh, x, y, z, 0.17, 0.10, h, 7, MAT.METAL, o);
+  // The arm, a flattened box leaning out over the road.
+  const ax = x + Math.sin(yaw) * reach * 0.5;
+  const az = z + Math.cos(yaw) * reach * 0.5;
+  box(mesh, ax, y + h - 0.12, az, reach, 0.14, 0.16, MAT.METAL, { ...o, rot: -yaw });
+  // The lantern. Glass, so it catches the sun and reads at dusk.
+  const lx = x + Math.sin(yaw) * reach;
+  const lz = z + Math.cos(yaw) * reach;
+  box(mesh, lx, y + h - 0.34, lz, 0.52, 0.22, 0.34, MAT.GLASS, { ...o, rot: -yaw });
+}
+
+/**
+ * A car at the kerb. Four boxes and a windscreen: a body, a cabin, and the
+ * dark band of glass that makes it read as a car rather than as a crate.
+ * Deliberately low on triangles, because a street has a lot of them.
+ */
+export function parkedCar(mesh, x, y, z, yaw, opts = {}) {
+  const len = opts.length || 4.3;
+  const wide = opts.width || 1.78;
+  const flags = FACADE_FLAG.NO_WINDOWS;
+  const o = { flags, seed: opts.seed || 0, rot: -yaw };
+  // What it is made of stands in for what colour it is, because a car has no
+  // palette of its own in this renderer: dark road grey, concrete grey or
+  // steel, picked off the seed. A street of bright metal boxes reads as a
+  // row of fridges.
+  const shell = [MAT.ASPHALT, MAT.CONCRETE, MAT.ASPHALT, MAT.METAL][(opts.seed || 0) & 3];
+  // The body sits on its wheels rather than on the road.
+  box(mesh, x, y + 0.26, z, wide, 0.62, len, shell, o);
+  // The cabin, shorter and set back.
+  const bx = x - Math.sin(yaw) * 0.15, bz = z - Math.cos(yaw) * 0.15;
+  box(mesh, bx, y + 0.88, bz, wide * 0.92, 0.52, len * 0.52, shell, o);
+  // Glass all the way round the cabin, a hand's breadth proud of it.
+  box(mesh, bx, y + 0.96, bz, wide * 0.95, 0.34, len * 0.54, MAT.GLASS, o);
+  // Wheels, as two dark bars. Four cylinders would be forty triangles for
+  // something nobody looks at.
+  box(mesh, x, y + 0.02, z, wide * 1.02, 0.26, len * 0.78, MAT.ASPHALT, o);
+}
+
+/** A bin: a dark drum on the pavement. */
+export function streetBin(mesh, x, y, z, opts = {}) {
+  cylinder(mesh, x, y, z, 0.26, 0.30, 0.95, 8, MAT.METAL,
+    { flags: FACADE_FLAG.NO_WINDOWS, seed: opts.seed || 0 });
+}
+
+/** A bench: a slab on two legs, facing the way it is turned. */
+export function bench(mesh, x, y, z, yaw, opts = {}) {
+  const flags = FACADE_FLAG.NO_WINDOWS;
+  const o = { flags, seed: opts.seed || 0, rot: -yaw };
+  box(mesh, x, y + 0.42, z, 1.72, 0.09, 0.52, MAT.FACADE, o);
+  box(mesh, x - Math.sin(yaw) * 0.24, y + 0.52, z - Math.cos(yaw) * 0.24,
+    1.72, 0.42, 0.08, MAT.FACADE, o);
+  for (const side of [-0.72, 0.72]) {
+    box(mesh, x + Math.cos(yaw) * side, y, z - Math.sin(yaw) * side,
+      0.1, 0.42, 0.46, MAT.METAL, o);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Ribbons, for roads, pavements and rails
 
 /**

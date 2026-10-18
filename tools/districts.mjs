@@ -63,6 +63,9 @@ export const TIERS = [
     // the shop windows. Only here, because it is two quads an edge on every
     // building and it is only worth that from the pavement.
     relief: true,
+    // And what stands on it: lamps, parked cars, bins and benches. Same
+    // reasoning as the relief, and the same tier.
+    props: true,
     trees: 1, driveOnly: false, grid: 33, kerbs: true, groundStep: 12.5,
     boxBelow: 0, service: true, surfaceStep: 2.5,
     // Even here the centrelines are simplified. OpenStreetMap puts a node
