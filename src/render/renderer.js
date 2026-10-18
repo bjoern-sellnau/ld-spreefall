@@ -222,7 +222,15 @@ export class Renderer {
    * @param {number} radius how far the soot reaches, usually the blast radius
    * @param {number} severity 0 to 1, how black it goes
    */
-  addScar(x, y, z, radius, severity = 1) {
+  /**
+   * A mark on whatever is still standing, and the hole in it.
+   *
+   * `punch` is the radius of the hole, in metres, and nought for a mark that
+   * only sooted the wall. What punches is a shell or a rocket; a rifle round
+   * scorches and no more, which is the difference between a fight in a street
+   * and a building coming apart.
+   */
+  addScar(x, y, z, radius, severity = 1, punch = 0) {
     const i = this._scarNext;
     this.scars[i * 4] = x;
     this.scars[i * 4 + 1] = y;
@@ -230,6 +238,7 @@ export class Renderer {
     this.scars[i * 4 + 3] = radius;
     this.scarInfo[i * 4] = Math.max(0, Math.min(1, severity));
     this.scarInfo[i * 4 + 1] = 0;
+    this.scarInfo[i * 4 + 2] = Math.max(0, punch);
     this._scarNext = (i + 1) % this.MAX_SCARS;
     this.scarCount = Math.min(this.MAX_SCARS, this.scarCount + 1);
   }

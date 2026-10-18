@@ -568,22 +568,33 @@ async function main() {
       state.flash = Math.min(1.1, 0.18 + 1.25 * Math.exp(-dist / 300));
       // Four marks across the blast rather than one, because a single scar
       // that wide reads as a circle painted on the ground.
-      renderer.addScar(x, y, z, splash.radius * 1.1, 1);
+      renderer.addScar(x, y, z, splash.radius * 1.1, 1, 0);
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2 + Math.random();
         const r = splash.radius * 0.55;
         renderer.addScar(x + Math.cos(a) * r, y, z + Math.sin(a) * r,
-          splash.radius * 0.8, 0.9);
+          splash.radius * 0.8, 0.9, 0);
       }
       debris(x, y, z, splash.radius * 0.35);
     } else {
       audio.explosion();
       effects.explode(x, y, z);
       effects.blast(x, y, z, splash.radius);
-      // Mark whatever it went off against. The soot reaches further than the
-      // damage does, which is how a blast looks on a wall.
+      // Mark whatever it went off against, and open it. The soot reaches
+      // further than the damage does, which is how a blast looks on a wall;
+      // the hole is a fraction of the blast, the same way a crater is, and
+      // only a charge with real weight behind it makes one at all.
+      // A fraction of the blast, the way a crater is. The first pass had it at
+      // 0.38 of the radius, which took most of a storey out of a frontage for
+      // one rocket: dramatic, and wrong by about double.
+      const punch = splash.damage >= 90 ? Math.min(3.0, splash.radius * 0.21) : 0;
       renderer.addScar(x, y, z, splash.radius * 1.5,
-        Math.min(1, splash.damage / 180));
+        Math.min(1, splash.damage / 180), punch);
+      // A hole has to have something behind it. The tiles round a blast are
+      // drawn a second time inside out, which is what fills a hole with the
+      // inside of the building instead of with the sky, and until now only a
+      // collapse asked for that.
+      if (punch > 0) scarTiles(x, z, splash.radius);
       debris(x, y, z, splash.radius);
     }
     effects.shake = Math.min(splash.nuke ? 2.6 : 1.4, effects.shake

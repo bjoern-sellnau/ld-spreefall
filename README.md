@@ -700,6 +700,17 @@ work, because the shadow line under a projecting band is what makes a frontage
 read as relief. Only in the middle, where you walk: it costs a quarter of the
 triangles of that district and is only worth that from the pavement.
 
+**A shell opens the wall it goes off against.** A hole is a `discard` inside
+the same ragged noise edge the shader already drew the soot with, so the rim
+and the scorching are the same shape and it reads as torn rather than cut. The
+tiles round a blast are drawn a second time inside out, which is what fills
+the hole with the inside of the building instead of the sky. Measured by
+drawing the frame twice, once with the hole and once with the same scar at
+nought: 2.31 m of hole and 40.5 per cent of the frame different between them.
+Two limits worth knowing: the hole is in the picture only, so the collision
+still has the wall whole and a shot through it stops, and it lives as long as
+the sixteen most recent blast marks. What is permanent is the collapse.
+
 **The city streams.** Walking into another district used to be a card and a
 wait. The neighbour now comes down while you are still nine hundred metres
 inside your own, and crossing is a step: three districts and 26 MB held

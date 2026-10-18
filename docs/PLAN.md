@@ -2089,3 +2089,53 @@ caps residency at 520.
   tails. Three of them are now stood in the open at known distances before
   the shot, which measures the thing the check is named after instead of the
   dice.
+
+## 43. A hole shot in a frontage
+
+- 2026-10-18: a shell that goes off against a wall now opens it. The whole of
+  it is four lines in a loop the fragment shader was already running: `uScars`
+  is a ring of sixteen blast marks, each a centre, a radius and a severity,
+  and the shader already drew a ragged soot edge round every one of them with
+  noise. A hole is a `discard` inside that same ragged edge, so the rim of the
+  hole and the soot around it are the same shape, which is what makes it read
+  as torn rather than as cut with a compass.
+
+- 2026-10-18: two things had to be true for it to show at all, and both took a
+  wrong attempt first.
+
+  The inside out pass has to punch as well. It draws the tiles round a blast a
+  second time with the faces reversed, so that a hole shows the inside of a
+  building rather than the sky. Left out of the hole test, it draws the back
+  of the very wall you just opened, across the hole, and the picture is of
+  nothing having happened. That was the first screenshot.
+
+  And the tiles have to be marked as scarred for that pass to run on them at
+  all, which until now only a collapse asked for. Without it a hole is a hole
+  onto black.
+
+- 2026-10-18: the second attempt failed on a name. The fragment shader had a
+  constant `FLAG_GROUND = 1u`, and bit 1 is the shop window storey at the
+  bottom of a building; the street you walk on is bit 16. So "not the ground"
+  read as "not the ground floor", and the test shot, which went into a
+  shopfront, was the one thing excluded. The vertex shader carries a comment
+  about exactly this trap at the collapse, written by whoever hit it last
+  time. The constant is `FLAG_GROUND_FLOOR` now and the real one is beside it.
+
+- 2026-10-18: measured rather than admired. The city suite draws the frame
+  twice, once with the hole and once with the same scar set to nought and
+  nothing else changed, and counts what moved: 2.31 m of hole, 40.5 per cent
+  of the frame different between the two. If the discard never fired the two
+  buffers would be identical.
+
+- 2026-10-18: what this does not do, said plainly. The hole is in the picture
+  only. The collision still has the wall whole, so you can see an enemy
+  through a hole and your shot will stop in it, and you cannot climb through.
+  The collision model is a segment with a base and a top, which can express a
+  wall cut down and cannot express a wall with a hole in the middle of it and
+  masonry above. Making the two agree needs the wall subdivided, which is the
+  same piece of work small craters need in the ground, and it is the next one.
+
+- 2026-10-18: and the hole lives as long as the sixteen most recent blast
+  marks. It is the damage you have just done rather than a record. What is
+  permanent is still the collapse: enough damage in a cell and the frontage
+  comes down for good.

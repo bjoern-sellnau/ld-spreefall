@@ -223,7 +223,7 @@ uniform vec3 uPalette[64];
 // has fired at costs nothing at all for this.
 #define MAX_SCARS 16
 uniform vec4 uScars[MAX_SCARS];      // xyz centre, w radius
-uniform vec4 uScarInfo[MAX_SCARS];   // x severity 0..1, y age in seconds
+uniform vec4 uScarInfo[MAX_SCARS];   // x severity 0..1, y age in seconds, z hole radius
 uniform int uScarCount;
 uniform int uDebugMode;   // 0 off, 1 material, 2 normals, 3 uv, 4 world position
 // 1 while the damaged tiles are drawn inside out, to fill the holes a blast
@@ -236,10 +236,16 @@ uniform mediump sampler2DArray uSurf;
 
 layout(location = 0) out vec4 fragColour;
 
-const uint FLAG_GROUND = 1u;
+// Bit 1 is the shop window storey at the bottom of a building. Bit 16 is the
+// ground itself, the street you walk on. They are not the same thing and the
+// names here used to say they were: this one was called FLAG_GROUND, and the
+// first thing written against it read it as the street and got the shopfronts
+// instead. The vertex shader carries the same warning at the collapse.
+const uint FLAG_GROUND_FLOOR = 1u;
 const uint FLAG_LANDMARK = 2u;
 const uint FLAG_ROOF_SLOPE = 4u;
 const uint FLAG_NO_WINDOWS = 8u;
+const uint FLAG_IS_GROUND = ${FACADE_FLAG.GROUND}u;
 
 // Procedural detail has no mip chain, so it has to be faded by hand or it turns
 // into moire the moment a pixel covers more than about half a feature. These
@@ -902,6 +908,18 @@ void main() {
   // left on everything that is still standing.
   float scorch = 0.0;
   float shatter = 0.0;
+  // A wall with a hole blown in it, which is the same loop. What stops a
+  // shell is a frontage, so this is for frontages: not the ground, which
+  // craters instead, and not a roof, because the inside of a building is
+  // only drawn where a blast has already marked the tile and a hole in a
+  // roof you can see down through from the air is a different piece of work.
+  //
+  // The inside out pass punches too, and it has to. It draws the same tile a
+  // second time with the faces reversed, so without this the back of the very
+  // wall you just blew open is drawn across the hole and the hole looks like
+  // nothing happened. What you see through it is whatever is behind: the
+  // inside of the far wall, or the floor of the building.
+  bool punchable = (vFlags & FLAG_IS_GROUND) == 0u && abs(vNormal.y) < 0.55;
   for (int i = 0; i < uScarCount; i++) {
     vec3 d = vWorld - uScars[i].xyz;
     float r = uScars[i].w;
@@ -914,6 +932,11 @@ void main() {
     float mark = smoothstep(0.0, 0.45, t + edge - 0.25) * sev;
     scorch = max(scorch, mark);
     shatter = max(shatter, smoothstep(0.1, 0.75, t) * sev);
+    // And the hole itself. The ragged edge is the same noise, so the rim of
+    // the hole and the soot around it are the same shape, which is what makes
+    // it read as torn rather than as a circle cut with a compass.
+    float hole = uScarInfo[i].z;
+    if (punchable && hole > 0.0 && dist < hole * (1.0 + edge * 0.9)) discard;
   }
   if (scorch > 0.001) {
     // Soot: darker, rougher, and it kills the specular on whatever it is on.
