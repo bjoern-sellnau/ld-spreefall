@@ -162,15 +162,16 @@ html, body {
 #crosshair.aiming i { opacity: 0; }
 #crosshair.holstered i, #crosshair.holstered::after { opacity: 0.18; }
 
-/* The name of the street you are standing in, under the crosshair.
-   Faint while you walk, so it is never in the way of a shot, and brought up
-   for a few seconds whenever it changes, which is the moment you want to
-   read it. Small caps and wide letters because it is a street sign. */
+/* The name of the street you are standing in, across the top of the screen.
+   It began under the crosshair, which is the one place in a shooter that
+   nothing should sit. Faint while you walk and brought up for a few seconds
+   whenever it changes, which is the moment you want to read it. Small caps
+   and wide letters because it is a street sign. */
 #streetname {
   position: absolute;
-  left: 50%; top: 50%;
+  left: 50%; top: 0;
   transform: translate(-50%, 0);
-  margin-top: 34px;
+  margin-top: 18px;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 600;
@@ -611,6 +612,39 @@ html, body {
   right: 50%; top: 50%;
   transform: translate(50%, -50%);
   border-radius: 6px;
+}
+
+/* The big map's own controls. The targeting map has had these since it was
+   built; the map you open with M had the wheel and nothing to tell you how
+   far out you were or how to get back to the whole city. */
+#maptools {
+  position: absolute;
+  right: 50%; top: calc(50% + min(30vh, 310px) + 10px);
+  transform: translateX(50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* The heads up layer is click through, so anything in it that is meant to
+     be pressed has to say so. */
+  pointer-events: auto;
+}
+#maptools.hidden { display: none; }
+#maptools button {
+  min-width: 30px;
+  padding: 5px 9px;
+  font: 12px/1 ui-sans-serif, system-ui, sans-serif;
+  color: var(--accent);
+  background: rgba(14, 16, 20, 0.9);
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+  cursor: pointer;
+}
+#maptools button:hover { background: rgba(40, 44, 52, 0.95); }
+#mapzoom {
+  margin-left: 4px;
+  font: 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  color: var(--dim);
 }
 
 #compass {

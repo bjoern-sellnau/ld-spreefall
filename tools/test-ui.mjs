@@ -133,8 +133,45 @@ async function run() {
     mapView.labels > 4 && mapView.names > 8,
     `${mapView.labels} of ${mapView.known} labels drawn, ${mapView.names} streets named`);
   await page.screenshot({ path: path.join(SHOTS, 'ui-04-map.png') });
+
+  // --- and the way back out to the whole of it -----------------------------
+  // The wheel could always zoom this map. What it could not do was get back:
+  // it opens on a few hundred metres around you, the whole city is zoom one,
+  // and that is twenty eight turns of the wheel away.
+  check('the big map has its own controls', await page.isVisible('#maptools'));
+  await page.click('#mapfit');
+  await simulate(page, 0.3);
+  const fitted = await page.evaluate(() => {
+    const s = window.spreefall;
+    const v = s.minimap._view;
+    return {
+      zoom: s.minimap.zoom,
+      span: v ? Math.round(s.minimap.canvas.width / v.scale) : 0,
+      label: document.getElementById('mapzoom').textContent,
+      width: Math.round(s.world.maxX - s.world.minX),
+    };
+  });
+  check('and one of them puts the whole of Berlin on the screen',
+    fitted.zoom === 1 && fitted.span > fitted.width,
+    `${(fitted.span / 1000).toFixed(1)} km across a city ${(fitted.width / 1000).toFixed(1)} km wide`);
+  check('and the readout says how far out you are and how wide the window is',
+    /x/.test(fitted.label) && /km|m/.test(fitted.label), fitted.label.trim());
+  await page.click('#maphere');
+  await simulate(page, 0.3);
+  const back = await page.evaluate(() => {
+    const s = window.spreefall;
+    const v = s.minimap._view;
+    return { span: v ? Math.round(s.minimap.canvas.width / v.scale) : 0,
+      off: Math.round(Math.hypot(s.minimap.centre.x - s.player.x, s.minimap.centre.z - s.player.z)) };
+  });
+  check('and another brings it back onto the street you are standing in',
+    back.span < 2000 && back.off < 2,
+    `${back.span} m across, ${back.off} m off you`);
+  await page.screenshot({ path: path.join(SHOTS, 'ui-08-map-all.png') });
+
   await page.keyboard.press('KeyM');
   await page.waitForTimeout(400);
+  check('and the controls go away with the map', await page.isHidden('#maptools'));
 
   // --- photo mode ----------------------------------------------------------
   await page.evaluate(() => { const s = window.spreefall; s.teleport(1560, -180); s.look(-58, 22); });

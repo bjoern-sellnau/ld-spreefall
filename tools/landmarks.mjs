@@ -26,6 +26,7 @@ export const LANDMARK_BUILDERS = {
   glass_tower: glassTower,
   glass_block: glassBlock,
   slab_tower: slabTower,
+  victory_column: victoryColumn,
   courtyard: null,   // handled by the normal extruder, it already has a hole
   block: null,
 };
@@ -334,6 +335,54 @@ function plainTower(mesh, ring, base, def) {
     wallMat: def.material === 'brick' ? MAT.BRICK : MAT.FACADE,
     roofMat: MAT.ROOF, seed, levels: Math.round(def.h / 3.6), landmark: false, parapet: true,
   });
+}
+
+// The Siegessaeule on the Grosser Stern. Sixty six metres and nine tenths to
+// the top of the Victoria, with the viewing platform at fifty and two thirds
+// and the figure herself eight and a third of that, which is what Structurae
+// and the Bundestag's own note give. The shape is four pieces: a square
+// plinth standing in a ring of columns, three drums of sandstone with the
+// gilded cannon barrels set into them, the mosaic hall and its platform, and
+// the gilded Victoria on top. She is why the thing is gold from two
+// kilometres away, which is the distance the avenue puts you at.
+function victoryColumn(mesh, ring, base, def) {
+  const [cx, cz] = ringCentroid(ring);
+  const seed = 73;
+  const gilded = { seed, flags: LM };
+  // The hall of pillars: sixteen granite columns in a ring round the plinth.
+  const PLINTH = 13.0;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const x = cx + Math.cos(a) * 11.5, z = cz + Math.sin(a) * 11.5;
+    cylinder(mesh, x, base, z, 0.75, 0.68, 9.0, 10, MAT.SANDSTONE, { seed, capTop: false });
+  }
+  cylinder(mesh, cx, base + 9.0, cz, 12.6, 12.6, 1.4, 32, MAT.SANDSTONE, gilded);
+  box(mesh, cx, base, cz, 15.0, PLINTH, 15.0, MAT.SANDSTONE, gilded);
+  box(mesh, cx, base + PLINTH, cz, 11.0, 2.2, 11.0, MAT.SANDSTONE, gilded);
+  // Three drums, each one narrower than the one under it, with a ring of
+  // gilding where they meet: the captured gun barrels.
+  const drums = [
+    [base + 15.2, 12.4, 3.5, 3.2],
+    [base + 27.6, 11.8, 3.2, 2.9],
+    [base + 39.4, 10.4, 2.9, 2.6],
+  ];
+  for (const [y, h, r0, r1] of drums) {
+    cylinder(mesh, cx, y, cz, r0, r1, h, 20, MAT.SANDSTONE, { seed, capTop: false });
+    cylinder(mesh, cx, y + h - 0.5, cz, r1 + 0.22, r1 + 0.22, 0.8, 20, MAT.GOLD,
+      { seed, flags: LM, capTop: false });
+  }
+  // The capital, then the mosaic hall and the platform at 50.66 m.
+  cylinder(mesh, cx, base + 49.8, cz, 3.4, 4.6, 2.4, 20, MAT.SANDSTONE, gilded);
+  cylinder(mesh, cx, base + 50.66, cz, 5.2, 5.2, 0.6, 24, MAT.SANDSTONE, gilded);
+  cylinder(mesh, cx, base + 51.3, cz, 4.0, 4.0, 5.4, 20, MAT.GLASS, { seed, flags: LM, capTop: false });
+  cylinder(mesh, cx, base + 56.7, cz, 4.4, 3.0, 1.9, 20, MAT.GOLD, gilded);
+  // Victoria: a figure, a staff with the wreath, and the wing behind her.
+  const fy = base + 58.6;
+  cylinder(mesh, cx, fy, cz, 1.5, 0.95, 5.4, 14, MAT.GOLD, gilded);
+  sphere(mesh, cx, fy + 6.0, cz, 0.78, 14, 8, MAT.GOLD, gilded);
+  box(mesh, cx - 1.6, fy + 1.2, cz, 0.3, 7.1, 0.3, MAT.GOLD, gilded);
+  box(mesh, cx + 0.2, fy + 2.0, cz, 0.45, 5.2, 2.6, MAT.GOLD, { seed, flags: LM, rot: 0.4 });
+  cylinder(mesh, cx - 1.6, fy + 8.0, cz, 1.05, 1.05, 0.3, 14, MAT.GOLD, gilded);
 }
 
 function glassTower(mesh, ring, base, def) {

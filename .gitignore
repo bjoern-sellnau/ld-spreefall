@@ -9,3 +9,11 @@ public/world-*.bin
 public/world-*.json
 !public/world-core.bin
 !public/world-core.json
+# And both builds of it: the index the repository carries says the middle
+# district has an overflight bundle, so a fresh clone has to have one or a
+# flight out of Mitte asks for a file that is not there.
+!public/world-core.lo.bin
+!public/world-core.lo.json
+
+# Throwaway probe scripts: one off browser checks, not part of the suite.
+.probe/

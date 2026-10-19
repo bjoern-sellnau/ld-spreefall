@@ -218,6 +218,25 @@ void main() {
     albedo = vec3(0.50, 0.47, 0.41);
     rough = 0.72;
     metal = 0.0;
+  } else if (vPart < 26.5) {
+    // Glass, in a windscreen or a canopy. Dark and sharp, with the sky in it.
+    // This runs to 26 rather than to the end of the list because a machine
+    // reads its skull and its rifle out of 25 and 26 and everything that is
+    // not a machine has always had them as glass.
+    albedo = vec3(0.022, 0.030, 0.038);
+    rough = 0.06;
+    metal = 0.85;
+  } else if (vPart < 27.5) {
+    // S-Bahn red. The lower half of a Berlin carriage, which has been this
+    // colour since the twenties.
+    albedo = vec3(0.34, 0.055, 0.045);
+    rough = 0.52;
+    metal = 0.05;
+  } else if (vPart < 28.5) {
+    // And the ochre above the waist.
+    albedo = vec3(0.56, 0.38, 0.09);
+    rough = 0.55;
+    metal = 0.05;
   } else {
     // Glass, in a windscreen or a canopy. Dark and sharp, with the sky in it.
     albedo = vec3(0.022, 0.030, 0.038);

@@ -204,6 +204,22 @@ void main() {
     float r = length(p * vec2(1.0, 0.94));
     float edge = fbm(vUv * 5.0 + s * 3.1) * 0.17 + fbm(vUv * 13.0 + s) * 0.07;
     if (r > 0.5 - edge) discard;
+    // A crown you have your head inside thins out rather than filling the
+    // screen.
+    //
+    // Walk under a lime on foot and your eye is at one metre seven, well
+    // below the canopy, so nothing here applies. Sit in a Titan and your eye
+    // is at six metres three, which on Unter den Linden is the middle of the
+    // crown of every tree in the row: the whole view was leaves, which is
+    // what was reported as the view out of a mech being blocked. So the test
+    // is not distance but whether the eye is in the same band of height as
+    // the leaf and close to it across the ground. The mask opens rather than
+    // fading, because these are drawn in the opaque pass and a half
+    // transparent leaf is a leaf that writes depth over what is behind it.
+    float dy = abs(vWorld.y - uCamPos.y);
+    float across = length(vWorld.xz - uCamPos.xz);
+    float near = (1.0 - smoothstep(1.6, 3.6, dy)) * (1.0 - smoothstep(4.0, 11.0, across));
+    if (near > 0.0 && r > (0.5 - edge) * (1.0 - near * 0.94)) discard;
     float leaf = fbm(vUv * 15.0 + s) * 0.6 + fbm(vUv * 44.0 + s * 2.0) * 0.4;
     vec3 dark = mix(vec3(0.052, 0.092, 0.034), vec3(0.062, 0.108, 0.038), isLime);
     vec3 light = mix(vec3(0.170, 0.270, 0.098), vec3(0.205, 0.305, 0.115), isLime);

@@ -32,6 +32,7 @@ export const MAT = {
   METAL: 13,
   MARKING: 14,
   STELE: 15,      // the memorial concrete, deliberately darker than the rest
+  GOLD: 16,       // gilded bronze: the Victoria, and the rings on her column
 };
 
 export const MATERIAL_NAMES = Object.keys(MAT);

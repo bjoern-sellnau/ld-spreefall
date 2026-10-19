@@ -18,7 +18,7 @@ import zlib from 'node:zlib';
 import { parseOsmXml, counts } from './osm-xml.mjs';
 import { annotate } from './annotate.mjs';
 import { project, BBOX, CITY, worldBounds, cityGrid, ORIGIN } from './geo.mjs';
-import { DISTRICTS, TIERS, CORE_ID, districtById } from './districts.mjs';
+import { DISTRICTS, TIERS, CORE_ID, OVERFLIGHT_TIER, OVERFLIGHT_UNTIL, districtById } from './districts.mjs';
 import { Mesh } from './mesh.mjs';
 import { Terrain } from './terrain.mjs';
 import { fbm2, hashInt } from './noise.mjs';
@@ -221,20 +221,33 @@ function main() {
   } else {
     wanted = [districtById(CORE_ID)];
   }
-  for (const district of wanted) buildDistrict(district);
+  // Every district is built twice: once at its own tier, and once at the
+  // sketch tier for the fast travel flight to pass over. A district that is
+  // already that coarse is its own overflight bundle and is not built again.
+  const fineOnly = process.argv.includes('--fine-only');
+  for (const district of wanted) {
+    buildDistrict(district);
+    if (!fineOnly && district.tier <= OVERFLIGHT_UNTIL) buildDistrict(district, true);
+  }
   writeIndexSummary();
 }
 
-function buildDistrict(district) {
+/**
+ * @param {object} district one row of the district table
+ * @param {boolean} overflight build the sketch tier bundle rather than its own
+ */
+function buildDistrict(district, overflight = false) {
   const t0 = Date.now();
-  const tier = TIERS[district.tier];
+  const tierIndex = overflight ? OVERFLIGHT_TIER : district.tier;
+  const tier = TIERS[tierIndex];
+  const suffix = overflight ? '.lo' : '';
   const RAW_FILE = rawFile(district.id);
   if (!fs.existsSync(RAW_FILE)) {
     console.error(`missing ${RAW_FILE}, run: node tools/fetch-osm.mjs --district=${district.id}`);
     process.exit(1);
   }
   console.log('');
-  console.log(`=== ${district.id}  tier ${district.tier} (${tier.name})  ${district.nx} by ${district.nz} tiles ===`);
+  console.log(`=== ${district.id}${suffix}  tier ${tierIndex} (${tier.name})  ${district.nx} by ${district.nz} tiles ===`);
   const src = fs.readFileSync(RAW_FILE, 'utf8');
   const osm = parseOsmXml(src);
   const c = counts(osm);
@@ -489,6 +502,77 @@ function buildDistrict(district) {
   }
 
   since('parks');
+  // --- where a street crosses water ---------------------------------------
+  // Twelve of them do in Mitte, and until now every one of them was a wall.
+  // The quay wall that stops you walking into the Spree runs along the bank
+  // whether or not there is a street on top of it, so Unter den Linden ended
+  // twenty nine metres short of the Spreekanal and the Museum Island was not
+  // reachable on foot at all.
+  //
+  // Each crossing is worked out here, before the bank is built, so the bank
+  // can leave a gap for it and the roads section can put a deck in the gap.
+  const bridges = [];
+  for (const r of roads) {
+    const cls = r.tags.highway;
+    if (cls === 'steps') continue;
+    const explicit = parseLength(r.tags.width);
+    const width = Number.isFinite(explicit) && explicit > 1 ? explicit : (ROAD_WIDTH[cls] || 6);
+    for (const w of waterPolys) {
+      // Sampled along the line rather than solved: the bank is a polygon with
+      // a hundred points on it and the road has its own bends, and a metre of
+      // step is finer than either.
+      let run = null;
+      let wasDry = false;
+      const line = r.line;
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], b = line[i];
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const steps = Math.max(1, Math.ceil(len));
+        for (let k = 0; k <= steps; k++) {
+          const t = k / steps;
+          const px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t;
+          const wet = pointInRing(px, pz, w.ring);
+          if (wet && !run) { if (wasDry) run = { pts: [[px, pz]], width }; }
+          else if (wet) run.pts.push([px, pz]);
+          else {
+            wasDry = true;
+            if (run) {
+              // It has to be a crossing rather than a road that happens to
+              // run inside the water polygon: dry land on both sides of it,
+              // and short enough to be a bridge. A quay road along the Spree
+              // is wet for two hundred metres, and the first version put a
+              // parapet down the middle of the street it ran into.
+              const span = polylineLength(run.pts);
+              if (span > 4 && span < 70) bridges.push(run);
+              run = null;
+            }
+          }
+        }
+      }
+    }
+  }
+  // A point is on a bridge if it is inside the deck, which is the crossing
+  // widened by the road's own width and a little more for the abutment.
+  const onBridge = (x, z) => {
+    for (const b of bridges) {
+      const reach = b.width * 0.5 + 3.5;
+      for (let i = 1; i < b.pts.length; i++) {
+        const a = b.pts[i - 1], c = b.pts[i];
+        const ex = c[0] - a[0], ez = c[1] - a[1];
+        const l2 = ex * ex + ez * ez || 1;
+        let t = ((x - a[0]) * ex + (z - a[1]) * ez) / l2;
+        t = Math.max(0, Math.min(1, t));
+        const dx = a[0] + ex * t - x, dz = a[1] + ez * t - z;
+        if (dx * dx + dz * dz <= reach * reach) return true;
+      }
+    }
+    return false;
+  };
+  if (bridges.length) {
+    console.log(`bridges: ${bridges.length} crossings, `
+      + `${bridges.map((b) => Math.round(polylineLength(b.pts))).join(' m, ')} m`);
+  }
+
   // --- water --------------------------------------------------------------
   const waterLevel = terrain.waterLevel;
   for (const w of waterPolys) {
@@ -496,10 +580,34 @@ function buildDistrict(district) {
     // The bank: a skirt from the quay edge down to the water, and a wall for
     // collision so the player cannot walk into the Spree.
     const ring = w.ring;
+    // The bank is drawn one ring edge at a time, and those edges are long:
+    // the Spreekanal is eight surveyed points, so one of them can be a
+    // hundred and fifty metres of quay. An edge that passes a bridge is cut
+    // into short pieces first, so that the gap for the bridge is the width of
+    // the bridge rather than the whole edge.
+    const edges = [];
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
       const a = ring[j], b = ring[i];
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (len < 0.05) continue;
+      let near = false;
+      for (let k = 0; k <= 1 && !near; k += 0.02) {
+        if (onBridge(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)) near = true;
+      }
+      const pieces = near ? Math.max(1, Math.ceil(len / 3)) : 1;
+      for (let p = 0; p < pieces; p++) {
+        const t0 = p / pieces, t1 = (p + 1) / pieces;
+        edges.push([
+          [a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0],
+          [a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1],
+        ]);
+      }
+    }
+    for (const [a, b] of edges) {
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < 0.05) continue;
+      // The bank stops at the bridge and starts again on the far side of it.
+      if (onBridge((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)) continue;
       const ya = yAt(a[0], a[1]), yb = yAt(b[0], b[1]);
       const nx = (b[1] - a[1]) / len, nz = -(b[0] - a[0]) / len;
       const v0 = mesh.vertex(a[0], ya + 0.25, a[1], nx, 0.2, nz, 0, 0, MAT.CONCRETE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 200);
@@ -557,6 +665,70 @@ function buildDistrict(district) {
     groundPolygon(mesh, a.ring, [], roadMaterial(a.tags), yAt, { lift: 0.05, seed: 3 });
   }
 
+  // --- the decks ------------------------------------------------------------
+  // The roadway itself is already drawn: the ribbon runs across the water at
+  // street level, because that is where the terrain says the ground is. What
+  // was missing is everything that makes it a bridge rather than a stripe of
+  // tarmac floating over a river: an edge beam you can see from the bank, a
+  // parapet you cannot walk off, and the collision to go with it.
+  let decks = 0;
+  for (const b of bridges) {
+    const line = simplify(b.pts, 0.8);
+    if (line.length < 2) continue;
+    // Out onto the bank at both ends, so the deck meets the street rather
+    // than stopping at the water's edge.
+    const ext = line.map((p) => [p[0], p[1]]);
+    const grow = (from, to, by) => {
+      const dx = to[0] - from[0], dz = to[1] - from[1];
+      const l = Math.hypot(dx, dz) || 1;
+      return [to[0] + (dx / l) * by, to[1] + (dz / l) * by];
+    };
+    ext[0] = grow(ext[1], ext[0], 4);
+    ext[ext.length - 1] = grow(ext[ext.length - 2], ext[ext.length - 1], 4);
+    const half = b.width * 0.5;
+    for (const side of [-1, 1]) {
+      const edge = offsetLine(ext, (half + 0.25) * side);
+      for (let i = 1; i < edge.length; i++) {
+        const a = edge[i - 1], c = edge[i];
+        const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+        if (len < 0.1) continue;
+        const nx = (c[1] - a[1]) / len * side, nz = -(c[0] - a[0]) / len * side;
+        const ya = yAt(a[0], a[1]), yc = yAt(c[0], c[1]);
+        // One face from under the deck to the top of the parapet: the beam
+        // and the rail in one strip, which is what you see from the bank.
+        const v0 = mesh.vertex(a[0], ya - 0.95, a[1], nx, 0, nz, 0, 0,
+          MAT.CONCRETE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 110);
+        const v1 = mesh.vertex(c[0], yc - 0.95, c[1], nx, 0, nz, len, 0,
+          MAT.CONCRETE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 110);
+        const v2 = mesh.vertex(c[0], yc + 0.95, c[1], nx, 0, nz, len, 1.9,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        const v3 = mesh.vertex(a[0], ya + 0.95, a[1], nx, 0, nz, 0, 1.9,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        mesh.quad(v3, v2, v1, v0);
+        // And the inside of the parapet, which is what you see from the road.
+        const w0 = mesh.vertex(a[0], ya, a[1], -nx, 0, -nz, 0, 0,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        const w1 = mesh.vertex(c[0], yc, c[1], -nx, 0, -nz, len, 0,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        const w2 = mesh.vertex(c[0], yc + 0.95, c[1], -nx, 0, -nz, len, 0.95,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        const w3 = mesh.vertex(a[0], ya + 0.95, a[1], -nx, 0, -nz, 0, 0.95,
+          MAT.SANDSTONE, 9, 0, FACADE_FLAG.NO_WINDOWS, 2, 230);
+        mesh.quad(w0, w1, w2, w3);
+        collision.push({ x1: a[0], z1: a[1], x2: c[0], z2: c[1],
+          base: Math.min(ya, yc) - 1, top: Math.max(ya, yc) + 0.95, surface: SURFACE.STONE });
+      }
+    }
+    // The soffit: a flat underside so the river does not show daylight
+    // through the roadway when you look along it.
+    const under = [];
+    for (const p of ext) under.push(p);
+    groundPolygon(mesh, ringOf(ext, half + 0.25), [], MAT.CONCRETE,
+      (x, z) => yAt(x, z) - 0.95, { lift: 0, seed: 9 });
+    decks++;
+  }
+  if (decks) console.log(`bridges: ${decks} decks with parapets`);
+
   // --- what stands on the street ------------------------------------------
   // Lamps, parked cars, bins and benches, laid along the kerb of every street
   // that has one. They are ordinary mesh rather than an instanced layer of
@@ -567,6 +739,12 @@ function buildDistrict(district) {
   // places.
   let props = 0;
   let lamps = 0, cars = 0;
+  // Where every parked car is, so the game can shoot one. The geometry is
+  // baked into the tiles like the rest of the street furniture and there is
+  // nothing in a vertex that says car, so the list is the only way the game
+  // knows one is there. Three numbers each; a thousand of them is ten
+  // kilobytes of manifest.
+  const carList = [];
   if (tier.props) {
     const LAMPS_ON = new Set(['primary', 'secondary', 'tertiary', 'residential',
       'living_street', 'unclassified', 'pedestrian']);
@@ -657,6 +835,7 @@ function buildDistrict(district) {
               parkedCar(mesh, px, g, pz, yaw,
                 { seed: hashInt(Math.round(px), Math.round(pz)) & 255 });
               pushBoxCollision(collision, px, pz, yaw, 1.78, 4.3, g, g + 1.5);
+              carList.push([round2(px), round2(pz), Math.round(yaw * 100) / 100]);
               props++; cars++;
             }
             sinceCar = 0;
@@ -683,24 +862,85 @@ function buildDistrict(district) {
   for (const r of rails) {
     const elevated = r.tags.bridge === 'yes' || r.tags.railway === 'rail';
     if (elevated) {
-      // The Stadtbahn runs on a brick viaduct 6 m above the street.
+      // The Stadtbahn runs on a brick viaduct 6 m above the street, and a
+      // Berlin viaduct is a row of arches rather than a wall. It was a wall
+      // here: two faces from the pavement to the deck, with collision to
+      // match, which is a 6.6 m barrier across every street the railway
+      // crosses. Friedrichstrasse was stopped dead at it.
+      //
+      // So the face is built bay by bay. A pier takes the full height, the
+      // arch between two piers is open from the pavement to its crown, and
+      // the spandrel above the crown carries on to the deck. The collision is
+      // the same three pieces: pier, nothing, spandrel, which is exactly what
+      // a segment with its own base and top can say.
       const line = r.line;
       const yv = (x, z) => yAt(x, z) + 6.2;
       ribbon(mesh, line, 6.0, MAT.GRAVEL, yv, { lift: 0 });
+      const BAY = 9.0;          // middle to middle of two piers
+      const PIER = 3.0;         // how much of that is pier
+      const SPRING = 3.0;       // where the arch starts to curve
+      const RISE = 1.9;         // and how far it rises to its crown
+      const DECK = 6.6;
+      const brick = (x, y, z, nx, nz, u, v) => mesh.vertex(x, y, z, nx, 0, nz, u, v,
+        MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, v > 5 ? 255 : 190);
       for (const side of [-1, 1]) {
         const off = offsetLine(line, 6.0 * side);
-        for (let i = 1; i < off.length; i++) {
-          const a = off[i - 1], b = off[i];
-          const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-          if (len < 0.1) continue;
-          const nx = (b[1] - a[1]) / len * side, nz = -(b[0] - a[0]) / len * side;
-          const ya = yAt(a[0], a[1]), yb = yAt(b[0], b[1]);
-          const v0 = mesh.vertex(a[0], ya, a[1], nx, 0, nz, 0, 0, MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, 190);
-          const v1 = mesh.vertex(b[0], yb, b[1], nx, 0, nz, len, 0, MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, 190);
-          const v2 = mesh.vertex(b[0], yb + 6.6, b[1], nx, 0, nz, len, 6.6, MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, 255);
-          const v3 = mesh.vertex(a[0], ya + 6.6, a[1], nx, 0, nz, 0, 6.6, MAT.BRICK, 21, 0, FACADE_FLAG.NO_WINDOWS, 6.2, 255);
-          mesh.quad(v3, v2, v1, v0);
-          collision.push({ x1: a[0], z1: a[1], x2: b[0], z2: b[1], base: -2, top: 6.6, surface: SURFACE.STONE });
+        const total = polylineLength(off);
+        const bays = Math.max(1, Math.round(total / BAY));
+        const step = total / bays;
+        const at = (d) => pointAt(off, Math.max(0, Math.min(total, d)));
+        for (let i = 0; i < bays; i++) {
+          const d0 = i * step;
+          const marks = [d0, d0 + PIER * 0.5, d0 + step - PIER * 0.5, d0 + step];
+          const pts = marks.map((d) => at(d)).filter(Boolean);
+          if (pts.length < 4) continue;
+          const [p0, p1, p2, p3] = pts;
+          const faceDir = (a, b) => {
+            const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+            return [(b[1] - a[1]) / len * side, -(b[0] - a[0]) / len * side, len];
+          };
+          // The pier, floor to deck.
+          {
+            const [nx, nz, len] = faceDir(p0, p1);
+            const ya = yAt(p0[0], p0[1]), yb = yAt(p1[0], p1[1]);
+            mesh.quad(
+              brick(p0[0], ya + DECK, p0[1], nx, nz, 0, DECK),
+              brick(p1[0], yb + DECK, p1[1], nx, nz, len, DECK),
+              brick(p1[0], yb, p1[1], nx, nz, len, 0),
+              brick(p0[0], ya, p0[1], nx, nz, 0, 0),
+            );
+            collision.push({ x1: p0[0], z1: p0[1], x2: p1[0], z2: p1[1],
+              base: -2, top: DECK, surface: SURFACE.STONE });
+          }
+          // The wall over the arch, drawn in columns from the curve up to the
+          // deck, so that everything above the opening is brick and the
+          // opening itself is the shape of an arch. The first attempt drew a
+          // straight band and hung the curve under it, which from the street
+          // read as a row of teeth.
+          {
+            const steps = 8;
+            for (let k = 0; k < steps; k++) {
+              const t0 = k / steps, t1 = (k + 1) / steps;
+              const arch = (t) => SPRING + RISE * Math.sin(Math.PI * t);
+              const q0 = at(d0 + PIER * 0.5 + (step - PIER) * t0);
+              const q1 = at(d0 + PIER * 0.5 + (step - PIER) * t1);
+              if (!q0 || !q1) continue;
+              const [ax, az, l2] = faceDir(q0, q1);
+              const y0 = yAt(q0[0], q0[1]), y1 = yAt(q1[0], q1[1]);
+              mesh.quad(
+                brick(q0[0], y0 + DECK, q0[1], ax, az, 0, DECK),
+                brick(q1[0], y1 + DECK, q1[1], ax, az, l2, DECK),
+                brick(q1[0], y1 + arch(t1), q1[1], ax, az, l2, arch(t1)),
+                brick(q0[0], y0 + arch(t0), q0[1], ax, az, 0, arch(t0)),
+              );
+            }
+            // One segment for the whole opening, from the springing up. A
+            // round arch is lower at its sides than in the middle and this
+            // takes the lower of the two, which is the safe way round: what
+            // you can walk under you can shoot under.
+            collision.push({ x1: p1[0], z1: p1[1], x2: p2[0], z2: p2[1],
+              base: yAt(p1[0], p1[1]) + SPRING, top: DECK, surface: SURFACE.STONE });
+          }
         }
       }
     } else {
@@ -970,7 +1210,7 @@ function buildDistrict(district) {
     generator: 'spreefall build-world',
     district: district.id,
     name,
-    tier: district.tier,
+    tier: tierIndex,
     tx: district.tx,
     tz: district.tz,
     nx: district.nx,
@@ -985,7 +1225,15 @@ function buildDistrict(district) {
     landmarks: buildLandmarkCards(attractions, landmarkIndex),
     stations: stations.map((s) => ({ name: s.tags.name || '', x: round2(s.p[0]), z: round2(s.p[1]), kind: s.tags.railway })),
     roadLines,
+    // Where the railways run, and which of them are up on a viaduct. A train
+    // needs a line to run along and the game has no other way to know one.
+    railLines: rails.map((r) => ({
+      kind: r.tags.railway,
+      up: r.tags.bridge === 'yes' || r.tags.railway === 'rail',
+      pts: simplify(r.line, 2).flatMap((p) => [round2(p[0]), round2(p[1])]),
+    })).filter((r) => r.pts.length >= 4),
     streets: streetNames,
+    cars: carList,
     waterOutlines: waterPolys.map((w) => flatRing(simplify(w.ring, 2.5))),
     greenOutlines: greens.map((g) => flatRing(simplify(g.ring, 3.0))),
     surfaceGrid: {
@@ -1004,16 +1252,70 @@ function buildDistrict(district) {
     tiles: bundle.tiles,
   };
 
+  // The overflight manifest carries only what the streamer and the renderer
+  // read. Street names, parked cars, railway lines, landmark cards and the
+  // outlines the map draws are the same place at either tier, they are
+  // already in the fine manifest, and nobody reads them from four hundred
+  // metres up at four hundred metres a second. Leaving them in made the
+  // overflight manifest 0.32 MB against the fine one's 0.33.
+  if (overflight) {
+    manifest.landmarks = [];
+    manifest.stations = [];
+    manifest.roadLines = [];
+    manifest.railLines = [];
+    manifest.streets = [];
+    manifest.cars = [];
+    manifest.waterOutlines = [];
+    manifest.greenOutlines = [];
+    manifest.overflight = true;
+  }
+
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const binName = `world-${district.id}.bin`;
-  const jsonName = `world-${district.id}.json`;
+  const binName = `world-${district.id}${suffix}.bin`;
+  const jsonName = `world-${district.id}${suffix}.json`;
   fs.writeFileSync(path.join(OUT_DIR, binName), bundle.buffer);
   fs.writeFileSync(path.join(OUT_DIR, jsonName), JSON.stringify(manifest));
 
   const binBytes = bundle.buffer.length;
   const jsonBytes = fs.statSync(path.join(OUT_DIR, jsonName)).size;
-  const sketch = citySketch(roadLines, manifest.waterOutlines, manifest.greenOutlines);
   const gz = gzipSize(path.join(OUT_DIR, binName)) + gzipSize(path.join(OUT_DIR, jsonName));
+
+  const reportBuild = () => {
+    const binMB = binBytes / 1e6;
+    const jsonMB = jsonBytes / 1e6;
+    console.log('');
+    console.log(`name            ${name}`);
+    console.log(`tiles           ${bundle.tiles.length} of ${bundle.tileCountX} by ${bundle.tileCountZ} (${bundle.nonEmpty} non empty)`);
+    console.log(`triangles       ${mesh.triangleCount}`);
+    console.log(`vertices        ${mesh.vertexCount}`);
+    console.log(`collision segs  ${collision.length}`);
+    console.log(`${binName.padEnd(18)}${binMB.toFixed(2)} MB`);
+    console.log(`${jsonName.padEnd(18)}${jsonMB.toFixed(2)} MB`);
+    console.log(`over the wire   ${(gz / 1e6).toFixed(2)} MB gzipped`);
+    const sp = bundle.spend;
+    const kb = (v) => `${(v / 1024).toFixed(0)} kB`;
+    console.log(`bytes           vertices ${kb(sp.vertices)}, indices ${kb(sp.indices)}, `
+      + `height fields ${kb(sp.grids)}, walls ${kb(sp.segments)}, trees ${kb(sp.trees)}, `
+      + `footsteps ${kb(sp.surface)}`);
+    console.log(`max tile        ${bundle.maxTileKB.toFixed(1)} kB, ${bundle.maxTileTris} triangles`);
+    console.log(`mean tile       ${bundle.meanTileKB.toFixed(1)} kB`);
+    console.log(`built in        ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  };
+
+  if (overflight) {
+    // The overflight bundle is a second pair of files against the entry the
+    // fine build already wrote, not an entry of its own. Everything else
+    // about the district, its name, its sketch and what can be seen from it,
+    // is the same place and is not worked out twice.
+    updateVariant(district, {
+      bin: binName, json: jsonName,
+      bytes: binBytes + jsonBytes, gzip: gz,
+      tier: tierIndex, triangles: mesh.triangleCount,
+    });
+    reportBuild();
+    return;
+  }
+  const sketch = citySketch(roadLines, manifest.waterOutlines, manifest.greenOutlines);
   updateIndex(district, {
     name, tier: district.tier,
     bin: binName, json: jsonName,
@@ -1031,25 +1333,7 @@ function buildDistrict(district) {
     builtAt: new Date().toISOString(),
   });
 
-  const binMB = binBytes / 1e6;
-  const jsonMB = jsonBytes / 1e6;
-  console.log('');
-  console.log(`name            ${name}`);
-  console.log(`tiles           ${bundle.tiles.length} of ${bundle.tileCountX} by ${bundle.tileCountZ} (${bundle.nonEmpty} non empty)`);
-  console.log(`triangles       ${mesh.triangleCount}`);
-  console.log(`vertices        ${mesh.vertexCount}`);
-  console.log(`collision segs  ${collision.length}`);
-  console.log(`${binName.padEnd(16)}${binMB.toFixed(2)} MB`);
-  console.log(`${jsonName.padEnd(16)}${jsonMB.toFixed(2)} MB`);
-  console.log(`over the wire   ${(gz / 1e6).toFixed(2)} MB gzipped`);
-  const sp = bundle.spend;
-  const kb = (v) => `${(v / 1024).toFixed(0)} kB`;
-  console.log(`bytes           vertices ${kb(sp.vertices)}, indices ${kb(sp.indices)}, `
-    + `height fields ${kb(sp.grids)}, walls ${kb(sp.segments)}, trees ${kb(sp.trees)}, `
-    + `footsteps ${kb(sp.surface)}`);
-  console.log(`max tile        ${bundle.maxTileKB.toFixed(1)} kB, ${bundle.maxTileTris} triangles`);
-  console.log(`mean tile       ${bundle.meanTileKB.toFixed(1)} kB`);
-  console.log(`built in        ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  reportBuild();
 }
 
 // ---------------------------------------------------------------------------
@@ -1135,6 +1419,27 @@ function readIndex() {
  * The index is written after every district, so a build that is interrupted
  * leaves behind a city of the districts that finished rather than nothing.
  */
+/**
+ * Record a district's overflight bundle against the entry it already has.
+ *
+ * The fine build runs first and writes the entry; this adds the second pair
+ * of files to it. Nothing else about the district is touched, because the
+ * overflight bundle is the same place at a coarser tier and not a place of
+ * its own.
+ *
+ * @param {object} district one row of the district table
+ * @param {object} lo bin, json, bytes, gzip, tier and triangles
+ */
+function updateVariant(district, lo) {
+  const index = readIndex();
+  if (!index) return;
+  const entry = index.districts.find((d) => d.id === district.id);
+  if (!entry) return;
+  entry.lo = lo;
+  index.builtAt = new Date().toISOString();
+  fs.writeFileSync(INDEX_FILE, JSON.stringify(index));
+}
+
 function updateIndex(district, entry) {
   const previous = readIndex();
   // The header is written fresh every time and the district list is carried
@@ -1593,6 +1898,30 @@ function ringInside(inner, outer) {
  *   One that will not may not claim an outline, or the building disappears.
  * @returns {number} how many outlines were taken over by their pieces
  */
+/** A point a given distance along a polyline, or null past the end. */
+function pointAt(pts, dist) {
+  let left = dist;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len <= 0) continue;
+    if (left <= len) {
+      const t = left / len;
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    }
+    left -= len;
+  }
+  const last = pts[pts.length - 1];
+  return last ? [last[0], last[1]] : null;
+}
+
+/** The outline of a ribbon: one side out, the other back. */
+function ringOf(line, half) {
+  const left = offsetLine(line, half);
+  const right = offsetLine(line, -half);
+  return [...left, ...right.reverse()];
+}
+
 export function markBuildingParts(list, buildable = () => true) {
   const CELL = 120;
   const grid = new Map();

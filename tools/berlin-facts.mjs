@@ -79,8 +79,44 @@ export const STREETS = [
     pts: [[13.3768, 52.51340], [13.3810, 52.51348], [13.3845, 52.51356]] },
   { name: 'Cora-Berliner-Strasse', cls: 'residential', surface: 'sett', lanes: 1,
     pts: [[13.3800, 52.51452], [13.3801, 52.51392], [13.3802, 52.51344]] },
+  // The east west axis, dead straight from the Gate to the Siegessaeule, which
+  // are the two ends it is surveyed between: 13.3762/52.51602 at Platz des 18.
+  // Maerz and 13.350117/52.514542 at the column, the latter from Structurae.
+  // It used to stop at 13.3650, which is the western edge of the middle
+  // district, so the avenue ended at a district line and the Grosser Stern
+  // was not reachable along it. The points between the ends sit on the line.
   { name: 'Strasse des 17. Juni', cls: 'primary', surface: 'asphalt', lanes: 6,
-    pts: [[13.3650, 52.51478], [13.3690, 52.51521], [13.3730, 52.51565], [13.3762, 52.51602]] },
+    pts: [[13.351519, 52.514542], [13.3560, 52.514794], [13.3610, 52.515077],
+          [13.3660, 52.515360], [13.3710, 52.515643], [13.3762, 52.51602]] },
+  // West of the junction it carries on towards Ernst-Reuter-Platz. Only the
+  // first kilometre of that is laid here, which is as far as the districts
+  // this repository builds go.
+  { name: 'Strasse des 17. Juni', cls: 'primary', surface: 'asphalt', lanes: 6,
+    pts: [[13.348715, 52.514542], [13.342441, 52.514542], [13.336093, 52.514542]] },
+  // The Grosser Stern itself: a ring about 95 m out from the column, which is
+  // the carriageway the five streets meet on. It is laid as two arcs rather
+  // than one closed way, because the line simplifier takes the first and last
+  // point of a way as fixed and a way whose first and last point are the same
+  // simplifies to nothing at all.
+  { name: 'Grosser Stern', cls: 'primary', surface: 'asphalt', lanes: 4,
+    pts: [[13.351519, 52.514542], [13.351413, 52.514213], [13.351109, 52.513934],
+          [13.350654, 52.513748], [13.350117, 52.513683], [13.349580, 52.513748],
+          [13.349125, 52.513934], [13.348821, 52.514213], [13.348715, 52.514542]] },
+  { name: 'Grosser Stern', cls: 'primary', surface: 'asphalt', lanes: 4,
+    pts: [[13.348715, 52.514542], [13.348821, 52.514871], [13.349125, 52.515150],
+          [13.349580, 52.515336], [13.350117, 52.515401], [13.350654, 52.515336],
+          [13.351109, 52.515150], [13.351413, 52.514871], [13.351519, 52.514542]] },
+  // The four other arms of the star, by name and by the quadrant each one
+  // leaves in. Their courses past the first few hundred metres are not
+  // surveyed here, so each is laid straight: the junction is the point.
+  { name: 'Spreeweg', cls: 'secondary', surface: 'asphalt', lanes: 2,
+    pts: [[13.351109, 52.515150], [13.352831, 52.516205], [13.354605, 52.517292]] },
+  { name: 'Altonaer Strasse', cls: 'secondary', surface: 'asphalt', lanes: 2,
+    pts: [[13.349125, 52.515150], [13.347403, 52.516205], [13.345629, 52.517292]] },
+  { name: 'Hofjaegerallee', cls: 'secondary', surface: 'asphalt', lanes: 2,
+    pts: [[13.351109, 52.513934], [13.352831, 52.512879], [13.354605, 52.511792]] },
+  { name: 'Fasanerieallee', cls: 'secondary', surface: 'asphalt', lanes: 2,
+    pts: [[13.349125, 52.513934], [13.347403, 52.512879], [13.345629, 52.511792]] },
   { name: 'Tiergartenstrasse', cls: 'secondary', surface: 'asphalt', lanes: 2,
     pts: [[13.3650, 52.51000], [13.3700, 52.51010], [13.3745, 52.51032]] },
   { name: 'Lennestrasse', cls: 'secondary', surface: 'asphalt', lanes: 2,
@@ -169,10 +205,15 @@ export const WATERWAYS = [
 
 // Green space outlines.
 export const PARKS = [
+  // The park used to stop at 13.3650, the middle district's western edge, so
+  // half of it was outside the city this builds. It runs on westwards past
+  // the Grosser Stern. The eastern half is as surveyed; the western outline
+  // is laid to the shape of the park rather than to its boundary stones.
   { name: 'Grosser Tiergarten', kind: 'park',
     ring: [[13.3650, 52.51900], [13.3720, 52.51820], [13.3757, 52.51740], [13.3760, 52.51620],
            [13.3745, 52.51520], [13.3752, 52.51380], [13.3752, 52.51060], [13.3700, 52.51030],
-           [13.3650, 52.51020]] },
+           [13.3650, 52.51020], [13.3540, 52.51130], [13.3420, 52.51250], [13.3360, 52.51440],
+           [13.3370, 52.51640], [13.3430, 52.51760], [13.3540, 52.51860]] },
   { name: 'Lustgarten', kind: 'park',
     ring: [[13.3982, 52.51824], [13.4008, 52.51830], [13.4008, 52.51872], [13.3982, 52.51866]] },
   { name: 'Marx-Engels-Forum', kind: 'park',
@@ -228,8 +269,18 @@ export const BUILDINGS = [
     w: 58, d: 42, h: 23, kind: 'block', material: 'stone', colour: '#dcd6c8', clear: 14 },
   { key: 'akademie', name: 'Akademie der Kuenste', lat: 52.51660, lon: 13.37905,
     w: 40, d: 36, h: 22, kind: 'block', material: 'glass', colour: '#b8c6cc', clear: 14 },
-  { key: 'us_embassy', name: 'Botschaft der Vereinigten Staaten', lat: 52.51562, lon: 13.37760,
+  // Pariser Platz 2. Wikipedia gives 52 30 55 N, 13 22 42 E and Structurae
+  // 52 30 55.12 N, 13 22 42.07 E, which is where this now stands; it was 34 m
+  // north and 51 m west of that, on the wrong side of the square's corner.
+  { key: 'us_embassy', name: 'Botschaft der Vereinigten Staaten', lat: 52.515311, lon: 13.378353,
     w: 60, d: 46, h: 22, kind: 'block', material: 'stone', colour: '#ded7c2', clear: 14 },
+  // The Siegessaeule on the Grosser Stern. 66.89 m to the top of the Victoria
+  // by Structurae, 66.9 by the Bundestag's own note and 67 rounded by the
+  // city; the viewing platform is at 50.66 and the figure is 8.32 of the
+  // total. The footprint is the square plinth, not the ring of columns.
+  { key: 'siegessaeule', name: 'Siegessaeule', lat: 52.514542, lon: 13.350117,
+    w: 16, d: 16, h: 66.9, kind: 'victory_column', material: 'sandstone',
+    colour: '#cdbfa0', clear: 58 },
   { key: 'altes_museum', name: 'Altes Museum', lat: 52.51980, lon: 13.39830,
     w: 87, d: 58, h: 26, kind: 'temple', material: 'sandstone', colour: '#cfc2a2', clear: 24 },
   { key: 'neues_museum', name: 'Neues Museum', lat: 52.52023, lon: 13.39760,
@@ -306,6 +357,12 @@ export const MEMORIAL = {
 
 // Landmark cards shown in game.
 export const LANDMARK_CARDS = [
+  { key: 'siegessaeule', name: 'Siegessaeule', lat: 52.514542, lon: 13.350117, radius: 90,
+    text: 'Raised in 1873 for three won wars and moved here from the Koenigsplatz by the Nazis in 1939, which is also when it gained a drum and grew to 66.9 m. Berlin calls the Victoria on top Goldelse.' },
+  { key: 'grosser_tiergarten', name: 'Grosser Tiergarten', lat: 52.51440, lon: 13.35800, radius: 120,
+    text: 'The Elector\'s hunting ground, laid out as a park by Lenne in the 1830s. It was cut down for firewood in the winters after 1945 and planted again, tree by tree, from 1949.' },
+  { key: 'us_embassy', name: 'Botschaft der Vereinigten Staaten', lat: 52.515311, lon: 13.378353, radius: 55,
+    text: 'Pariser Platz 2, on the plot the embassy held from 1939. It stood empty inside the death strip for twenty eight years and the new house opened on 4 July 2008.' },
   { key: 'brandenburg_gate', name: 'Brandenburg Gate', lat: 52.51627, lon: 13.37770, radius: 55,
     text: 'Carl Gotthard Langhans finished this sandstone gate in 1791 as a city toll gate, and for twenty eight years after 1961 it stood walled off inside the death strip.' },
   { key: 'reichstag', name: 'Reichstag', lat: 52.51861, lon: 13.37617, radius: 70,

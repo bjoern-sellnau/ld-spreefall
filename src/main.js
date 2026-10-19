@@ -1,7 +1,7 @@
 // SPREE|FALL. Entry point: load the world, build the renderer, run the loop.
 
 import { createContext } from './engine/gl.js';
-import { World } from './engine/world.js';
+import { World, tileMesh } from './engine/world.js';
 import { TileManager } from './engine/tiles.js';
 import { Camera } from './engine/camera.js';
 import { Input } from './engine/input.js';
@@ -26,6 +26,10 @@ import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
 import { Gibs } from './game/gibs.js';
+import { Cars } from './game/cars.js';
+import { Trains, TRAIN } from './game/trains.js';
+import { bakeCrush } from './game/bake.js';
+import { fineGround, holeInWall } from './game/remesh.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
@@ -36,7 +40,7 @@ import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
-import { PLAYER, SPAWN, SURFACE } from './shared/constants.js';
+import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -48,6 +52,8 @@ const el = {
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
+  mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
+  mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -212,6 +218,8 @@ async function main() {
   const pickups = new Pickups(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const cheats = new Cheats();
   const gibs = new Gibs(world);
+  const cars = new Cars(world);
+  const trains = new Trains(world);
   const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
   // A ruin that has stopped moving is written into the city's own bytes, and
   // the card needs the new ones. Nothing else changes: the same ruin, drawn
@@ -226,6 +234,18 @@ async function main() {
   // away when the district is unloaded, so the record goes to the world,
   // which puts it back the next time the district is loaded.
   demolition.onScar = (scar) => world.recordScar(scar);
+
+  // A crater needs vertices inside it to move, and the ground is a quad grid
+  // at 12.5 m in the middle of town. Before anything is displaced the ground
+  // around the hole is cut down to three metres an edge, which is finer than
+  // the collision field it has to agree with, and the tiles that changed go
+  // back to the card. The worked area is wider than the crater's own reach so
+  // that the join between cut and uncut ground sits where nothing moves.
+  demolition.onCrater = (site) => {
+    const reach = site.craterRadius * DEMO.rimOut + 6;
+    const changed = fineGround(world, site.x, site.z, reach);
+    if (changed.length) tiles.refresh(changed);
+  };
 
   /**
    * Puts the ruins back in a district that has just been loaded.
@@ -404,6 +424,8 @@ async function main() {
       try { return localStorage.getItem('spreefall.walk') === '1'; } catch { return false; }
     })(),
     blastSlow: 0,
+    // While a Stinger is running down what it locked onto.
+    airSlow: 0,
     // Seconds of slow motion left over a kill that emptied the street. Kept
     // apart from blastSlow because they are different switches and either
     // may be on without the other.
@@ -531,6 +553,9 @@ async function main() {
       } else {
         effects.impact(shot.end.x, shot.end.y, shot.end.z,
           shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
+        // And if what it went into was a parked car, the car has an opinion
+        // about it. Two magazines or one rocket and it goes up.
+        hitCar(shot.end.x, shot.end.y, shot.end.z, spec.damage || 12);
       }
     }
     if (shot.target) {
@@ -587,7 +612,12 @@ async function main() {
       // A fraction of the blast, the way a crater is. The first pass had it at
       // 0.38 of the radius, which took most of a storey out of a frontage for
       // one rocket: dramatic, and wrong by about double.
-      const punch = splash.damage >= 90 ? Math.min(3.0, splash.radius * 0.21) : 0;
+      // Not everything that goes off cuts a hole through masonry. A car going
+      // up is a tank of petrol: it burns, it throws its own panels about, and
+      // it leaves a wreck. Giving it a punch took the wreck away again, and
+      // the lamp post beside it with it.
+      const punch = splash.punch === false ? 0
+        : (splash.damage >= 90 ? Math.min(3.0, splash.radius * 0.21) : 0);
       renderer.addScar(x, y, z, splash.radius * 1.5,
         Math.min(1, splash.damage / 180), punch);
       // A hole has to have something behind it. The tiles round a blast are
@@ -595,6 +625,21 @@ async function main() {
       // inside of the building instead of with the sky, and until now only a
       // collapse asked for that.
       if (punch > 0) scarTiles(x, z, splash.radius);
+      // And the hole is cut into the wall rather than only drawn over it. The
+      // shader's version is one of sixteen marks and goes when the ring comes
+      // round again; this one is in the buffers and in the collision, so what
+      // you can see through you can also shoot and walk through, and it is
+      // still there an hour later.
+      // With the buildings switch off the city stays standing, and that
+      // includes not having holes cut in it.
+      if (punch > 0 && demolition.buildings) {
+        const opened = holeInWall(world, x, y, z, punch);
+        if (opened.length) {
+          tiles.refresh(opened);
+          for (const i of opened) renderer.scarredTiles.add(i);
+        }
+        demolition.punch(x, y, z, punch);
+      }
       debris(x, y, z, splash.radius);
     }
     effects.shake = Math.min(splash.nuke ? 2.6 : 1.4, effects.shake
@@ -693,7 +738,10 @@ async function main() {
     // And what it did to the city itself. Small blasts add up on a grid and
     // bring a frontage down when they have done enough; a warhead takes its
     // whole radius at once.
-    demolition.blast(x, y, z, splash.radius, splash.damage);
+    // Some blasts do not dig: a car going up is a tank of petrol and a lot of
+    // noise, and it should not leave a shell hole under its own wreck, which
+    // is what left the burnt out shell standing in the air over one.
+    demolition.blast(x, y, z, splash.radius, splash.damage, splash.crater !== false);
     // Anything that leaves a mark sets light to the trees in it. The radius
     // is wider than the blast, because fire spreads and a blast does not.
     fires.ignite(x, y, z, splash.radius * (splash.nuke ? 1.15 : 1.9),
@@ -756,6 +804,23 @@ async function main() {
       if (!reach(v.x, v.y + 1.0, v.z)) continue;
       vehicles.damage(v, splash.damage * (1 - r / splash.radius));
     }
+    // A charge that landed looking for a car. It takes the nearest one within
+    // reach and that car is the bomb: the shaped charge is small, what goes
+    // off is a tank of petrol with a street around it.
+    if (body && body.carbomb) {
+      const car = cars.at(x, z, body.carbomb);
+      if (car) {
+        cars.destroy(car);
+        feed('<b>car bomb</b> armed');
+      }
+    }
+    // Every parked car in it. A blast beside one sets it off, which sets off
+    // the one parked in front of it, which is a street you can take apart one
+    // bonnet at a time.
+    for (const car of cars.near(x, z, splash.radius * 0.9)) {
+      const r = Math.hypot(car.x - x, car.z - z);
+      cars.hurt(car, splash.damage * (1 - r / (splash.radius * 0.9)));
+    }
     // And you, unless you are inside something, in which case the thing you
     // are inside has already taken it above and taking it twice would mean a
     // rocket that kills the pilot through the armour it just dented.
@@ -773,14 +838,34 @@ async function main() {
    * Whatever the blast knocked off the wall. The raycast tells us which
    * surfaces are near enough to lose something, so debris comes off the
    * building rather than out of the air.
+   *
+   * It marked the wall and left it at that, and the only chunks a blast made
+   * were the ones a collapse stage made, which start at the line the building
+   * broke at. Shoot a shopfront and the pieces fell past you from the roof.
+   * The surfaces found here are the ones the blast actually reached, so they
+   * are also the ones to throw into the street.
    */
   function debris(x, y, z, radius) {
+    // What the pieces have behind them. A rocket is about eight metres of
+    // blast and throws them properly; a grenade at two metres only chips the
+    // render off. Spread over as many surfaces as the rays find, with a
+    // ceiling, so a blast in a courtyard with walls on all sides does not
+    // empty the chunk pool on its own.
+    const force = Math.max(0.35, Math.min(1.4, radius / 8));
+    let thrown = 0;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
       const hit = world.raycast(x, y, z, Math.cos(a), 0.1 - Math.random() * 0.4, Math.sin(a),
         radius * 1.2);
       if (!hit || hit.kind === 'ground') continue;
       effects.impact(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, hit.kind);
+      if (thrown >= 18) continue;
+      // Nearer the middle of the blast is hit harder, which is the difference
+      // between the wall you aimed at and the one across the street.
+      const near = Math.max(0, 1 - hit.t / Math.max(1, radius * 1.2));
+      const n = Math.min(18 - thrown, 1 + Math.round(near * 2.5));
+      gibs.spall(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, n, force * (0.45 + near * 0.8));
+      thrown += n;
     }
   }
 
@@ -1100,7 +1185,115 @@ async function main() {
       }
       return;
     }
+
+    // --- the heavy arms ---------------------------------------------------
+
+    if (arm.kind === 'laser') {
+      // A beam rather than a round: no spread, no travel, and it does not
+      // stop at the first thing it burns through. What it lands on catches.
+      const hit = world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, arm.range);
+      const reach = hit ? hit.t : arm.range;
+      const end = {
+        x: from.x + dir.x * reach, y: from.y + dir.y * reach, z: from.z + dir.z * reach,
+      };
+      effects.lance(from.x, from.y, from.z, end.x, end.y, end.z, 1.0, 0.42, 0.18);
+      effects.flash(from.x, from.y, from.z, 2.4, 1.0, 0.5, 0.2, 0.06);
+      const through = new Set();
+      for (let i = 0; i < arm.pierce; i++) {
+        if (!mechHit(from, dir, reach, arm.damage, through)) break;
+      }
+      if (hit) {
+        effects.flash(end.x, end.y, end.z, 2.0, 1.0, 0.55, 0.2, 0.07);
+        effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+        demolition.blast(end.x, end.y, end.z, 3.0, arm.damage);
+        scarTiles(end.x, end.z, 4);
+        hitCar(end.x, end.y, end.z, arm.damage);
+        // It cuts, and what it cuts smoulders. Not every shot, or a held
+        // trigger would set a street alight in a second and a half.
+        if (Math.random() < 0.08) fires.ignite(end.x, world.groundHeight(end.x, end.z), end.z, 5, 0.6);
+      }
+      return;
+    }
+
+    if (arm.kind === 'flak') {
+      // Lead it onto whatever is in the air in front of you, and let the
+      // shell burst beside it. With nothing up there it is a heavy shell on
+      // a long fuse, which is a different and perfectly good thing to have.
+      const target = airLock(from, dir, arm.lockRange, arm.lockCone);
+      const d = spread(arm.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
+        splash: arm.splash, weapon: 'mech',
+        fuse: arm.fuse,
+        target, proximity: target ? arm.proximity : 0,
+      });
+      if (m === state.inMech && target) toast('flak, on it');
+      return;
+    }
+
+    if (arm.kind === 'stinger') {
+      const target = airLock(from, dir, arm.lockRange, arm.lockCone);
+      if (!target) {
+        if (m === state.inMech) toast('nothing in the air');
+        return;
+      }
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: dir.x * arm.speed, vy: dir.y * arm.speed, vz: dir.z * arm.speed,
+        splash: arm.splash, weapon: 'mech',
+        homing: { turn: 5.5, reach: arm.lockRange }, target,
+      });
+      // And the world slows while it runs it down, which is the whole point
+      // of locking something up rather than leading it.
+      if (m === state.inMech) {
+        state.airSlow = arm.slow;
+        feed('<b>stinger</b> locked');
+      }
+      return;
+    }
+
+    if (arm.kind === 'carbomb') {
+      const d = spread(arm.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
+        splash: arm.splash, weapon: 'mech', carbomb: arm.reach,
+      });
+      return;
+    }
+
+    if (arm.kind === 'empbomb') {
+      const d = spread(arm.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
+        splash: arm.splash, weapon: 'mech', emp: arm.emp,
+      });
+      return;
+    }
   };
+
+  /**
+   * What is in the air in front of the barrel: the nearest jet or drone
+   * inside a narrow cone. Flak leads it, the Stinger chases it.
+   *
+   * @returns {object|null} the body, which is what a homing shot steers at
+   */
+  function airLock(from, dir, range, cone) {
+    let best = null, bestT = Infinity;
+    const look = (body, y) => {
+      const vx = body.x - from.x, vy = y - from.y, vz = body.z - from.z;
+      const t = vx * dir.x + vy * dir.y + vz * dir.z;
+      if (t <= 6 || t > range) return;
+      const off = Math.hypot(vx - dir.x * t, vy - dir.y * t, vz - dir.z * t);
+      if (off > cone * t) return;
+      if (t < bestT) { bestT = t; best = body; }
+    };
+    for (const j of jets.active) if (j.health > 0) look(j, j.y);
+    for (const d of drones.active) if (d.health > 0) look(d, d.y);
+    return best;
+  }
 
   mechs.onArmChange = (m, arm) => {
     if (m !== state.inMech) return;
@@ -1176,16 +1369,178 @@ async function main() {
   // did to it back. It used to be put back by hand at the two places that
   // waited for a fetch; the streamer fetches without waiting for anything, so
   // the record is restored where the bytes arrive instead.
-  world.onDistrict = (d) => { restoreScars(d.id); };
+  world.onDistrict = (d) => { restoreScars(d.id); cars.add(d); trains.gather(); };
+  world.onDrop = (d) => { cars.drop(d); };
+  // Anything already in memory by the time this is wired up, which is the
+  // district the game boots into.
+  for (const d of world.districts.values()) cars.add(d);
+  trains.gather();
+  // One going over while you are under the arches, heard rather than seen.
+  trains.onPass = (away) => audio.jetPass ? audio.jetPass(away) : null;
+
+  // --- the parked cars ------------------------------------------------------
+  // A car is four boxes baked into a tile with a collision box beside it, so
+  // what is left of one that has gone up has to be written back into the same
+  // bytes: the geometry onto the road and the collision box down with it.
+  cars.onFlatten = (car) => {
+    const { tiles: changed } = bakeCrush(world, car.x, car.z, 3.1, 2.2);
+    if (changed.length) {
+      tiles.refresh(changed);
+      for (const i of changed) renderer.scarredTiles.add(i);
+    }
+    // And nothing to walk into any more. The segments inside the footprint
+    // are cut to the road, which is what the collapse of a frontage does to
+    // its walls, through the same per tile split so the whole street does not
+    // come down with the car.
+    const base = world.groundHeight(car.x, car.z);
+    const seen = new Set();
+    world.forEachSegmentTile(car.x - 3, car.z - 3, car.x + 3, car.z + 3,
+      (segs, count, index) => { seen.add(index); });
+    for (const index of seen) {
+      const segs = demolition.splitTile(index);
+      const count = segs.length / 6;
+      for (let i = 0; i < count; i++) {
+        const o = i * 6;
+        const mx = (segs[o] + segs[o + 2]) * 0.5;
+        const mz = (segs[o + 1] + segs[o + 3]) * 0.5;
+        if (Math.hypot(mx - car.x, mz - car.z) > 2.9) continue;
+        // Only what is car sized. A frontage that happens to run past the
+        // kerb is metres tall and is left exactly where it is.
+        if (segs[o + 5] - segs[o + 4] > 2.4) continue;
+        // Still something to bump into: a burnt out shell is knee high and
+        // solid, not a mark on the road.
+        if (segs[o + 5] > base + 0.72) { segs[o + 5] = base + 0.72; }
+      }
+    }
+    world.heightCache.clear();
+  };
+
+  // What setting one off looks like. The blast itself goes through the same
+  // explode() everything else uses, so it hurts what is standing next to it,
+  // cuts the frontage behind it and leaves a mark on the road; a petrol fire
+  // on top of that, because a car that goes up goes on burning.
+  const carBlasts = [];
+  cars.onDestroyed = (car) => {
+    // Not at once, and not all at the same moment: a row of cars going up one
+    // after the other is a chain, and a chain that fires inside its own blast
+    // is a thousand deep stack of them.
+    carBlasts.push({ x: car.x, z: car.z, at: state.time + 0.08 + Math.random() * 0.3 });
+  };
+
+  function updateCarBlasts() {
+    for (let i = carBlasts.length - 1; i >= 0; i--) {
+      if (carBlasts[i].at > state.time) continue;
+      const b = carBlasts.splice(i, 1)[0];
+      const y = world.groundHeight(b.x, b.z);
+      explode(b.x, y + 0.8, b.z, CAR_BLAST, { weapon: 'car' });
+      gibs.rubble(b.x, y + 1.1, b.z, 4.5, 12, 1.6);
+      fires.ignite(b.x, y, b.z, 7, 1);
+      effects.flame(b.x, y + 0.7, b.z, 4.4, 1);
+      burning.push({ x: b.x, y, z: b.z, radius: 6.0, left: 16, damagePerSecond: 26 });
+      feed('<i>car</i> burning');
+    }
+  }
+
+  /**
+   * What goes into the street when a car does. Less than a rocket and more
+   * than a grenade, and it reaches far enough to take the next car along with
+   * it, which is the whole pleasure of a row of them.
+   */
+  const CAR_BLAST = { radius: 11, damage: 120, crater: false, punch: false };
+
+  /**
+   * A round or a blast landing on a parked car.
+   *
+   * @returns {boolean} whether that was the one that set it off
+   */
+  function hitCar(x, y, z, damage) {
+    const car = cars.at(x, z, 2.4);
+    if (!car) return false;
+    if (y > world.groundHeight(x, z) + 2.2) return false;
+    return cars.hurt(car, damage);
+  }
 
   mechs.onEject = () => { if (state.inMech) leaveMech(false); };
 
   mechs.onDestroyed = (m) => {
     explode(m.x, m.y + 3.0, m.z, { radius: 26, damage: 420 }, { weapon: 'mech' });
     gibs.rubble(m.x, m.y + 2.0, m.z, 9, 16, 2.4);
+    // Eight metres of reactor and ammunition going up at once. The blast is
+    // what it does to the street; this is what it looks like, and it is the
+    // one thing on fire in this city that is worth standing back from. A
+    // column up the height of the machine, three secondary bursts out of the
+    // wreck, and ground that goes on burning long enough to be a problem for
+    // whoever walks in after it.
+    const g = world.groundHeight(m.x, m.z);
+    effects.flame(m.x, m.y + 2.0, m.z, 11.0, 1);
+    for (let i = 0; i < 3; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 2 + Math.random() * 5;
+      const fx = m.x + Math.cos(a) * r, fz = m.z + Math.sin(a) * r;
+      effects.flame(fx, world.groundHeight(fx, fz) + 0.6, fz, 5.5, 0.9);
+      fires.ignite(fx, world.groundHeight(fx, fz), fz, 9, 1);
+    }
+    fires.ignite(m.x, g, m.z, 12, 1);
+    burning.push({ x: m.x, y: g, z: m.z, radius: 9.5, left: 26, damagePerSecond: 34 });
+    renderer.addScar(m.x, g, m.z, 14, 1, 0);
+    audio.flameWall();
     feed(`<b>${m.spec.name.toLowerCase()} down</b>`);
     if (state.inMech === m) leaveMech(true);
   };
+
+  /**
+   * Every machine on its feet, against the trees it is standing in. Checked a
+   * few times a second rather than every step: a Titan walks at eleven metres
+   * a second and a tree is four metres across, so nothing is walked past
+   * between one check and the next.
+   */
+  let treeSweep = 0;
+  function walkOverTrees() {
+    treeSweep++;
+    if (treeSweep % 8) return;
+    for (const m of mechs.active) {
+      if (!m.alive) continue;
+      flattenTrees(m.x, m.z, (m.spec.radius || 2.3) + 1.2);
+    }
+  }
+
+  /**
+   * Eight metres of machine walking into a lime.
+   *
+   * The view out of a Titan is at six metres, which on Unter den Linden is
+   * the middle of the canopy, and the whole screen was leaves. The crowns
+   * nearest the camera thin out so you can see past them at all, and this is
+   * the other half of it: a machine that walks through a row of trees leaves
+   * no row of trees. Trunks go out of the instance buffer and out of the
+   * collision, which is the same thing a fire does to them.
+   *
+   * @returns {number} how many went down
+   */
+  function flattenTrees(x, z, radius) {
+    const w = world;
+    let n = 0;
+    const tx0 = Math.max(0, Math.floor((x - radius - w.minX) / w.tileSize));
+    const tx1 = Math.min(w.nx - 1, Math.floor((x + radius - w.minX) / w.tileSize));
+    const tz0 = Math.max(0, Math.floor((z - radius - w.minZ) / w.tileSize));
+    const tz1 = Math.min(w.nz - 1, Math.floor((z + radius - w.minZ) / w.tileSize));
+    for (let tz = tz0; tz <= tz1; tz++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const data = w.trees(tz * w.nx + tx);
+        if (!data) continue;
+        for (let i = 0; i < data.length; i += 5) {
+          const px = data[i], py = data[i + 1], pz = data[i + 2];
+          if (Math.hypot(px - x, pz - z) > radius) continue;
+          if (!w.killTree(px, pz)) continue;
+          const h = data[i + 3];
+          effects.dust(px, py + h * 0.5, pz, h * 0.35);
+          gibs.rubble(px, py + h * 0.4, pz, 2.4, 5, h * 0.3);
+          n++;
+        }
+      }
+    }
+    if (n) audio.treeFall(Math.hypot(player.x - x, player.z - z));
+    return n;
+  }
 
   /**
    * How near a point is to a ray, for working out whether a shot that was not
@@ -1307,6 +1662,31 @@ async function main() {
     }
   }
 
+  /**
+   * Which walls a collapse site actually has, and where. Ten rays out from
+   * the middle just above the pavement, keeping the first point on each
+   * separate face.
+   *
+   * A site is a damage cell about a Berlin block frontage across, and its
+   * middle is usually in the road. Rubble was being dropped in a disc around
+   * that middle, so half of it came down in the carriageway with nothing
+   * above it. What comes off a building comes off its frontage.
+   *
+   * @returns {{x: number, z: number, t: number}[]} points a step off each face
+   */
+  function facesAround(x, y, z, radius, most = 6) {
+    const out = [];
+    const start = Math.random() * Math.PI * 2;
+    for (let i = 0; i < 10 && out.length < most; i++) {
+      const a = start + (i / 10) * Math.PI * 2;
+      const hit = world.raycast(x, y, z, Math.cos(a), 0, Math.sin(a), radius * 1.15);
+      if (!hit || hit.kind === 'ground') continue;
+      if (out.some((p) => Math.hypot(p.x - hit.x, p.z - hit.z) < 4)) continue;
+      out.push({ x: hit.x + hit.nx * 0.5, z: hit.z + hit.nz * 0.5, t: hit.t });
+    }
+    return out;
+  }
+
   demolition.onStage = (site, level, was) => {
     scarTiles(site.x, site.z, site.radius);
     const share = level - was;
@@ -1316,9 +1696,23 @@ async function main() {
     const standing = Math.max(4, world.tallestNear(site.x, site.z, site.radius));
     const breakAt = site.y + standing * (1 - was);
     effects.dust(site.x, breakAt, site.z, site.radius * (0.5 + share * 0.6));
-    gibs.rubble(site.x, breakAt, site.z, site.radius,
-      Math.min(40, 6 + Math.round(site.radius * share * 1.4)),
-      standing * share);
+    const chunks = Math.min(40, 6 + Math.round(site.radius * share * 1.4));
+    const faces = facesAround(site.x, site.y + 2.5, site.z, site.radius);
+    if (faces.length) {
+      // Down the front of the building, a share of the chunks to each face,
+      // and a cloud at the foot of the nearest two: a facade coming down puts
+      // as much dust into the street as it does at the break.
+      const each = Math.max(2, Math.round(chunks / faces.length));
+      faces.sort((a, b) => a.t - b.t);
+      for (let i = 0; i < faces.length; i++) {
+        const f = faces[i];
+        gibs.rubble(f.x, breakAt, f.z, Math.min(5, Math.max(2, site.radius * 0.3)),
+          each, standing * share);
+        if (i < 2) effects.dust(f.x, site.y + 3, f.z, site.radius * 0.3);
+      }
+    } else {
+      gibs.rubble(site.x, breakAt, site.z, site.radius, chunks, standing * share);
+    }
     const away = Math.round(Math.hypot(player.x - site.x, player.z - site.z));
     audio.collapse(away, site.radius * (0.4 + share));
     feed(level >= 1
@@ -1698,7 +2092,7 @@ async function main() {
       const row = document.createElement('div');
       row.className = 'marm';
       const key = document.createElement('u');
-      key.textContent = String(i + 1);
+      key.textContent = String((i + 1) % 10);
       const name = document.createElement('span');
       name.textContent = ARMS[i].name;
       const ammo = document.createElement('b');
@@ -2486,7 +2880,9 @@ async function main() {
     // before the bytes arrive, the ground answers nought everywhere, and a
     // floor worked out from that would stay at nought for a district built
     // on a hill.
-    const key = entry ? `${entry.id}:${world.loaded(entry.id) ? 'in' : 'out'}` : null;
+    const key = entry
+      ? `${entry.id}:${world.loaded(entry.id) ? (world.isOverflight(entry.id) ? 'lo' : 'in') : 'out'}`
+      : null;
     if (bedrockFor === key) return;
     bedrockFor = key;
     if (!entry) { renderer.bedrock = null; return; }
@@ -2912,19 +3308,22 @@ async function main() {
     });
     state.travelTo = { x: tx, z: tz };
     state.mode = 'travel';
+    // Up there the view runs to the horizon, so the tiles have to come up
+    // much further out than they do in a street.
+    tiles.setFlying(true);
     // The place you are flying to may be in a district that is not in memory,
     // and the flight is seven seconds of warning that you are coming. Start
     // fetching it now and bring the tiles in along the way, so the city is
     // there when you arrive rather than appearing around you afterwards.
     const far = world.entryAt(tx, tz);
-    if (far && !world.loaded(far.id)) {
+    if (far && (!world.loaded(far.id) || world.isOverflight(far.id))) {
       // The flight is the loading screen: it takes seven seconds and the
       // district lands inside that, so there is nothing to wait for at the
       // far end. If it does not, the landing holds in the air until it does.
       // Anything still falling where you are standing goes into the record
       // before you leave it behind.
       demolition.bakeAll();
-      world.loadDistrict(far.id).then(() => {
+      world.reloadFine(far.id).then(() => {
         tiles.uploadsPerFrame = 10000;
         tiles.updateResidency(tx, tz, loop.frame);
         tiles.uploadsPerFrame = 8;
@@ -3048,6 +3447,17 @@ async function main() {
   // on a count, because a district is anything from three to seventeen
   // megabytes.
   const STREAM = { reach: 900, drop: 2600, most: 6, bytes: 128e6, every: 0.5 };
+  // And the same thing for a flight, which is a different problem. The
+  // camera crosses the city at four hundred metres a second, so a circle of
+  // nine hundred metres around it gives a district two seconds of warning
+  // and most of them would land behind you. This reaches further, looks up
+  // the line of the flight rather than in a circle, and asks more often.
+  // It can afford to: an overflight bundle is under a megabyte.
+  //
+  // The reach is a little more than the distance the tiles come up from at
+  // this height, because a tile with no district behind it is a hole in the
+  // ground rather than a tile that is merely coarse.
+  const FLIGHT = { reach: 2900, drop: 4200, most: 10, bytes: 128e6, every: 0.25, lead: 1400 };
   let streamDue = 0;
 
   /**
@@ -3059,18 +3469,47 @@ async function main() {
     el.district.textContent = world.nameAt(x, z) || 'Berlin';
     el.district.classList.toggle('loading', !!state.crossing);
     if (!here || state.crossing) return;
+    // Which of the two builds a fresh fetch asks for. A flight crosses the
+    // city at four hundred metres a second, which leaves a district a few
+    // seconds between coming into reach and going past, and its own bundle
+    // is between three and forty megabytes. The overflight bundle is a
+    // twentieth of that and arrives. Walking never asks for it, which is
+    // what keeps two districts you can walk between at the same tier.
+    const flying = state.mode === 'travel';
+    const variant = flying ? 'over' : 'fine';
+    const plan = flying ? FLIGHT : STREAM;
+    // In the air the circle is centred ahead of the camera, on the line it is
+    // flying, so what comes down is the corridor rather than what is already
+    // behind. Never past the far end, or the last few seconds would be spent
+    // holding districts on the other side of where you are landing.
+    let cx = x, cz = z;
+    if (flying && state.travelTo) {
+      const dx = state.travelTo.x - x, dz = state.travelTo.z - z;
+      const away = Math.hypot(dx, dz);
+      if (away > 1) {
+        const step = Math.min(FLIGHT.lead, away);
+        cx = x + (dx / away) * step;
+        cz = z + (dz / away) * step;
+      }
+    }
     // Fetching is throttled: it walks the whole catalogue of eighty one
     // districts, and nothing it decides can change inside half a second of
-    // walking.
+    // walking, or a quarter of one of flying.
     streamDue -= dt;
     if (streamDue <= 0) {
-      streamDue = STREAM.every;
-      world.keepAround(x, z, STREAM.reach, STREAM.drop, STREAM.most, STREAM.bytes);
+      streamDue = plan.every;
+      world.keepAround(cx, cz, plan.reach, plan.drop, plan.most, plan.bytes, variant);
     }
     // And if you are somehow standing on ground that is not in yet, which is
     // a fast travel or a deep link rather than a walk, the card is still
     // there to wait behind.
-    if (!world.loaded(here)) { crossInto(x, z); return; }
+    // Flying over ground that is not in yet is not a reason to stop the
+    // flight and raise the card. What has to be stood on is the far end, and
+    // beginTravel asked for that at the fine tier before the take off.
+    if (!world.loaded(here)) {
+      if (state.mode !== 'travel') crossInto(x, z);
+      return;
+    }
     // Arriving somewhere new. This used to happen inside the card, which was
     // also the only place that knew you had changed district; now that you
     // can walk across without one, the arrival is noticed here instead.
@@ -3375,6 +3814,20 @@ async function main() {
     drones.setTier(tier);
     soldiers.setTier(tier);
     jets.setTier(tier);
+    // Just a Walk means nothing is ever sent after you, and the tier is the
+    // one thing that got round that. The budgets are held at nought at the
+    // top of the step; the threat level is raised from inside combat.update,
+    // which runs after it, and the jets' own update runs after that again. So
+    // a section spawned by hand and then killed raised the tier, gave the
+    // jets a budget of two, and a flight took off before the next step could
+    // put the budget back. Which is what was reported: soldiers by hand in
+    // Just a Walk, and then jets nobody asked for.
+    if (state.peaceful) {
+      drones.budget = 0;
+      soldiers.budget = 0;
+      jets.budget = 0;
+      return;
+    }
     if (tier === 2) toast('air support inbound');
     feed(`<b>threat level ${tier + 1}</b>`);
     toast(`threat level ${tier + 1}`);
@@ -3452,6 +3905,7 @@ async function main() {
     gibs.clear();
     demolition.reset();
     fires.reset();
+    cars.reset();
     renderer.clearCollapses();
     renderer.clearFires();
     effects.clear();
@@ -3543,6 +3997,7 @@ async function main() {
     if (state.targeting) return;              // the target map has its own
     if (minimap.big) {
       minimap.zoomAt(ev.clientX, ev.clientY, ev.deltaY < 0 ? 1.18 : 1 / 1.18);
+      mapTools();
       ev.preventDefault();
       return;
     }
@@ -3563,7 +4018,46 @@ async function main() {
     ev.preventDefault();
   }, { passive: false });
 
-  el.btnMap.addEventListener('click', () => minimap.toggle({ x: player.x, z: player.z }));
+  // --- the big map's controls ----------------------------------------------
+  // The map you open with M could always be zoomed with the wheel, and that
+  // was all it could do: it opens on a few hundred metres around you, the
+  // whole of Berlin is zoom one, and there was no way back to it short of
+  // twenty eight turns of the wheel. So it has the same three buttons the
+  // targeting map has had since it was built, plus a readout of how far out
+  // you are and how wide the window is in metres.
+  function mapTools() {
+    el.mapTools.classList.toggle('hidden', !minimap.big);
+    if (!minimap.big) return;
+    // A locked pointer belongs to the game, and while it is locked the canvas
+    // takes every click: the buttons were there and could not be pressed.
+    if (!photo.active) input.exitLock();
+    const across = minimap.spanAcross();
+    // How far out, and how wide the window is in metres. The second number is
+    // the one that means anything standing in the city; the first is the one
+    // that tells you the wheel did something.
+    const wide = across >= 2000
+      ? `${(across / 1000).toFixed(1)} km` : `${Math.round(across)} m`;
+    el.mapZoom.textContent = `${minimap.zoom.toFixed(1)}x  ${wide} across`;
+  }
+  function mapZoomStep(factor) {
+    const r = el.minimap.getBoundingClientRect();
+    minimap.zoomAt(r.left + r.width / 2, r.top + r.height / 2, factor);
+    mapTools();
+  }
+  el.btnMap.addEventListener('click', () => {
+    minimap.toggle({ x: player.x, z: player.z });
+    mapTools();
+    if (!minimap.big && !isTouch && !photo.active) input.requestLock();
+  });
+  el.mapIn.addEventListener('click', () => mapZoomStep(1.5));
+  el.mapOut.addEventListener('click', () => mapZoomStep(1 / 1.5));
+  el.mapFit.addEventListener('click', () => { minimap.resetView(); mapTools(); });
+  el.mapHere.addEventListener('click', () => {
+    minimap.centre = { x: player.x, z: player.z };
+    minimap.openSpan = 0;
+    minimap.zoom = Math.max(minimap.zoom, 60);
+    mapTools();
+  });
   el.btnTravel.addEventListener('click', () => openTravel());
   el.btnHelp.addEventListener('click', () => el.help.classList.toggle('hidden'));
   el.helpClose.addEventListener('click', () => el.help.classList.add('hidden'));
@@ -3640,7 +4134,9 @@ async function main() {
     // man sitting inside eight metres of armour.
     if (state.inMech && state.inMech.spec.arms && !photo.active) {
       if (code.startsWith('Digit')) {
-        const n = Number(code.slice(5));
+        // Nought is the tenth, the way a number row runs out.
+        const raw = Number(code.slice(5));
+        const n = raw === 0 ? 10 : raw;
         if (n >= 1 && n <= ARMS.length) { mechs.selectArm(state.inMech, n - 1); return; }
         // A number past the end of the mech's loadout is not the pilot's
         // rifle. Six used to fall through to what the man inside is carrying
@@ -3666,7 +4162,11 @@ async function main() {
     }
     switch (code) {
       case 'KeyP': togglePhoto(); break;
-      case 'KeyM': minimap.toggle({ x: player.x, z: player.z }); break;
+      case 'KeyM':
+        minimap.toggle({ x: player.x, z: player.z });
+        mapTools();
+        if (!minimap.big && !isTouch && !photo.active) input.requestLock();
+        break;
       case 'KeyH': el.help.classList.toggle('hidden'); break;
       case 'KeyN': {
         const on = audio.toggle();
@@ -3767,6 +4267,12 @@ async function main() {
       state.killSlow = Math.max(0, state.killSlow - dt);
       scale = Math.min(scale, 0.25);
     }
+    // A Stinger in the air. Shallower than a blast, because you are still
+    // flying the machine while you watch it.
+    if (state.airSlow > 0) {
+      state.airSlow = Math.max(0, state.airSlow - dt);
+      scale = Math.min(scale, 0.34);
+    }
     if (state.killRest > 0) state.killRest = Math.max(0, state.killRest - dt);
     if (state.mode === 'cinema') {
       scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
@@ -3823,6 +4329,8 @@ async function main() {
       fires.update(worldDt, player);
       fireWalls.update(worldDt);
       updateBurning(worldDt);
+      updateCarBlasts();
+      trains.update(worldDt, player);
       ion.update(worldDt);
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
@@ -3855,6 +4363,7 @@ async function main() {
       // as everything around it is a reflex that does nothing at all, which
       // is how it felt from the cockpit.
       mechs.update(selfDt, { x: player.x, y: player.y, z: player.z }, controls);
+      walkOverTrees();
       trampleUnderfoot(m);
       // A torso only turns so far up and down, and the view is held to the
       // same limit: looking past where the guns can point would mean a
@@ -3997,12 +4506,15 @@ async function main() {
     fires.update(worldDt, player);
     fireWalls.update(worldDt);
     updateBurning(worldDt);
+    updateCarBlasts();
+    trains.update(worldDt, player);
     ion.update(worldDt);
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     // And the ones hunting you keep walking whether or not you are in one.
     if (!state.inMech) {
       mechs.update(worldDt, { x: player.x, y: player.y, z: player.z }, null);
+      walkOverTrees();
     }
     rainTick(worldDt);
     titanTick(worldDt);
@@ -4051,9 +4563,16 @@ async function main() {
       el.hud.classList.add('flying');
       // Nobody is put down on ground that has not arrived. The flight holds
       // its last frame, a few hundred metres up, until the district is in.
-      if (p.finished && state.travelTo && !world.isLoaded(state.travelTo.x, state.travelTo.z)) {
+      const landing = state.travelTo ? world.idAt(state.travelTo.x, state.travelTo.z) : null;
+      if (p.finished && state.travelTo
+        && (!world.isLoaded(state.travelTo.x, state.travelTo.z) || world.isOverflight(landing))) {
         el.district.textContent = `landing in ${world.nameAt(state.travelTo.x, state.travelTo.z) || 'Berlin'}`;
         el.district.classList.add('loading');
+        // Held up because what is under the landing is the coarse build.
+        // The take off asked for the city and the memory ceiling can have
+        // let it go again since, so ask once more rather than hold here for
+        // good waiting on a fetch nobody started.
+        if (landing && world.isOverflight(landing)) world.reloadFine(landing).catch(() => {});
       } else if (p.finished) {
         const at = state.travelTo;
         player.teleport(at.x, at.z);
@@ -4074,6 +4593,12 @@ async function main() {
         el.hud.classList.remove('flying');
         travel.cancel();
         state.travelTo = null;
+        tiles.setFlying(false);
+        // The corridor is let go at the moment the flight ends. Those are
+        // the coarse build, a walker must never be able to reach one, and
+        // the streamer brings back whatever is near at the fine tier within
+        // half a second.
+        world.dropOverflight(world.idAt(at.x, at.z));
         if (!isTouch && state.lockWanted) relock();
       }
     } else if (state.mode === 'landing') {
@@ -4307,7 +4832,7 @@ async function main() {
       renderer.actors.updateSparks(effects.list);
       renderer.actors.updatePickups(pickups.live, camera.position);
       renderer.actors.updateGibs(gibs.active);
-      renderer.actors.updateVehicles(vehicles.active);
+      renderer.actors.updateVehicles([...vehicles.active, ...trains.cars]);
       renderer.actors.updateMechs(mechs.active);
       renderer.drawActors = true;
     } else {
@@ -4324,7 +4849,7 @@ async function main() {
       renderer.actors.updateSparks(live ? effects.list : []);
       renderer.actors.updatePickups(live ? pickups.live : [], camera.position);
       renderer.actors.updateGibs(live ? gibs.active : []);
-      renderer.actors.updateVehicles(live ? vehicles.active : []);
+      renderer.actors.updateVehicles(live ? [...vehicles.active, ...trains.cars] : []);
       renderer.actors.updateMechs(live ? mechs.active : []);
       renderer.drawActors = live;
     }
@@ -4415,6 +4940,7 @@ async function main() {
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live,
         vehicles.active.filter((v) => v.alive && !v.occupied && v.health > 0));
+      if (minimap.big) mapTools();
       el.found.textContent = String(landmarks.foundInGoal);
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
       const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -4467,7 +4993,8 @@ async function main() {
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input, minimap,
-    combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs,
+    combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs, cars,
+    trains, trainSpec: TRAIN,
     demolition, demoSpec: DEMO, demoBite: bite, demoCrater: craterAt, travelSpec: TRAVEL,
     fires,
     explode(x, y, z, splash, body) { return explode(x, y, z, splash, body || null); },
@@ -4558,6 +5085,58 @@ async function main() {
     // layer sets the same flag when a mouse button is down.
     holdFire(on) { input.fire = !!on; },
     fireWalls,
+    /**
+     * The height of the ground as it is actually drawn at a point: the tile's
+     * own triangles, the ones on the card, rather than the collision field.
+     *
+     * The two are meant to agree, and the whole reason a crater had to be
+     * 55 m across was that at 12.5 m of ground quad they could not. This is
+     * what lets a test say so in metres instead of by eye.
+     *
+     * @returns {number|null} metres, or null where nothing is drawn
+     */
+    drawnGround(x, z) {
+      const index = world.tileIndex(x, z);
+      if (index < 0) return null;
+      const rec = world.tiles[index];
+      if (!rec) return null;
+      const m = tileMesh(rec);
+      if (!m.vCount || !m.iCount) return null;
+      const [ox, oz] = world.tileOrigin(index);
+      const idx = m.i32
+        ? new Uint32Array(m.buffer, m.iOff, m.iCount)
+        : new Uint16Array(m.buffer, m.iOff, m.iCount);
+      const at = (i) => {
+        const o = m.vOff + i * VERTEX_STRIDE;
+        return [
+          m.view.getInt16(o, true) / POS_SCALE + ox,
+          m.view.getInt16(o + 2, true) / POS_SCALE,
+          m.view.getInt16(o + 4, true) / POS_SCALE + oz,
+          m.view.getUint8(o + 17),
+        ];
+      };
+      let best = null;
+      for (let i = 0; i < idx.length; i += 3) {
+        const a = at(idx[i]), b = at(idx[i + 1]), c = at(idx[i + 2]);
+        if (!(a[3] & FACADE_FLAG.GROUND)) continue;
+        // Barycentric, in the ground plane.
+        const d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
+        if (Math.abs(d) < 1e-6) continue;
+        const u = ((b[2] - c[2]) * (x - c[0]) + (c[0] - b[0]) * (z - c[2])) / d;
+        const v = ((c[2] - a[2]) * (x - c[0]) + (a[0] - c[0]) * (z - c[2])) / d;
+        const w = 1 - u - v;
+        if (u < -0.001 || v < -0.001 || w < -0.001) continue;
+        const y = u * a[1] + v * b[1] + w * c[1];
+        // The topmost ground under the point: a street drawn over a pavement
+        // drawn over the base grid is three triangles deep in places.
+        if (best === null || y > best) best = y;
+      }
+      return best;
+    },
+    /** A round into a parked car, for the tests. */
+    hitCarForTest(x, z, damage) {
+      return hitCar(x, world.groundHeight(x, z) + 0.9, z, damage);
+    },
     burningGround: burning,
     machines, machineSpec: MACHINES,
     // The same way one arrives in the mode: with the warhead rolled for it,

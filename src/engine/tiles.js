@@ -2,6 +2,7 @@
 // and hands the renderer a frustum culled list every frame.
 
 import { VERTEX_STRIDE } from '../shared/constants.js';
+import { tileMesh } from './world.js';
 
 export const ATTRIB = {
   POSITION: 0,
@@ -19,6 +20,8 @@ export class TileManager {
     this.resident = new Map();          // index -> gpu tile
     this.uploadRadius = opts.uploadRadius || 760;
     this.evictRadius = opts.evictRadius || 1000;
+    this.quality = 'high';
+    this.flying = false;
     this.maxResident = opts.maxResident || 520;
     this.uploadsPerFrame = opts.uploadsPerFrame || 6;
     this.visible = [];
@@ -83,9 +86,36 @@ export class TileManager {
   }
 
   setQuality(tier) {
+    this.quality = tier;
     if (tier === 'low') { this.uploadRadius = 460; this.evictRadius = 620; this.uploadsPerFrame = 3; }
     else if (tier === 'medium') { this.uploadRadius = 640; this.evictRadius = 860; this.uploadsPerFrame = 5; }
     else { this.uploadRadius = 900; this.evictRadius = 1200; this.uploadsPerFrame = 8; }
+    if (this.flying) this._flightRadii();
+  }
+
+  /**
+   * How far tiles come up while a fast travel flight is running.
+   *
+   * Nine hundred metres is a street. From four hundred metres up it is an
+   * island: the camera looks down at about seventy five degrees and the
+   * ground it can see runs to the horizon, so a disc of 1.8 km under it is
+   * most of the view missing. The overflight build is what makes a bigger
+   * disc affordable, at about twenty five thousand triangles a district.
+   *
+   * @param {boolean} on true while a flight is running
+   */
+  setFlying(on) {
+    if (!!on === !!this.flying) return;
+    this.flying = !!on;
+    if (this.flying) this._flightRadii();
+    else this.setQuality(this.quality || 'high');
+  }
+
+  _flightRadii() {
+    const far = { low: 1600, medium: 2200 }[this.quality] || 2800;
+    this.uploadRadius = far;
+    this.evictRadius = far + 600;
+    this.uploadsPerFrame = Math.max(this.uploadsPerFrame, 24);
   }
 
   upload(index) {
@@ -94,27 +124,29 @@ export class TileManager {
     const rec = world.tiles[index];
     if (!rec) { this.absent.add(index); return null; }
     const [ox, oz] = world.tileOrigin(index);
+    // Its own buffer if the game has re-meshed it, the file's bytes if not.
+    const m = tileMesh(rec);
     const tile = {
       index, ox, oz,
-      minX: ox + rec.min[0], minY: rec.min[1], minZ: oz + rec.min[2],
-      maxX: ox + rec.max[0], maxY: rec.max[1], maxZ: oz + rec.max[2],
-      count: rec.iCount,
-      indexType: rec.i32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT,
-      tris: rec.tris,
+      minX: ox + m.min[0], minY: m.min[1], minZ: oz + m.min[2],
+      maxX: ox + m.max[0], maxY: m.max[1], maxZ: oz + m.max[2],
+      count: m.iCount,
+      indexType: m.i32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT,
+      tris: m.tris,
       vao: null, vbo: null, ibo: null,
       treeVao: null, treeVbo: null, treeCount: 0,
       bytes: 0,
       lastUsed: 0,
     };
 
-    if (rec.iCount > 0) {
+    if (m.iCount > 0) {
       const vao = gl.createVertexArray();
       gl.bindVertexArray(vao);
 
       const vbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
       gl.bufferData(gl.ARRAY_BUFFER,
-        new Uint8Array(rec.d.buffer, rec.vOff, rec.vCount * VERTEX_STRIDE), gl.STATIC_DRAW);
+        new Uint8Array(m.buffer, m.vOff, m.vCount * VERTEX_STRIDE), gl.STATIC_DRAW);
 
       gl.enableVertexAttribArray(ATTRIB.POSITION);
       gl.vertexAttribIPointer(ATTRIB.POSITION, 3, gl.SHORT, VERTEX_STRIDE, 0);
@@ -129,16 +161,16 @@ export class TileManager {
 
       const ibo = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-      const ibytes = rec.iCount * (rec.i32 ? 4 : 2);
+      const ibytes = m.iCount * (m.i32 ? 4 : 2);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
-        new Uint8Array(rec.d.buffer, rec.iOff, ibytes), gl.STATIC_DRAW);
+        new Uint8Array(m.buffer, m.iOff, ibytes), gl.STATIC_DRAW);
 
       gl.bindVertexArray(null);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
       tile.vao = vao; tile.vbo = vbo; tile.ibo = ibo;
-      tile.bytes = rec.vCount * VERTEX_STRIDE + ibytes;
+      tile.bytes = m.vCount * VERTEX_STRIDE + ibytes;
     }
 
     const trees = world.trees(index);

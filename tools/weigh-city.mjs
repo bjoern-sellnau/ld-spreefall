@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { DISTRICTS } from './districts.mjs';
+import { DISTRICTS, OVERFLIGHT_UNTIL } from './districts.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PUB = path.join(ROOT, 'public');
@@ -52,20 +52,25 @@ function main() {
     codeGz += gz(f);
   }
 
-  console.log('district  tier  name                      deployed   download   km2    buildings');
-  let raw = 0, download = 0, area = 0, buildings = 0;
+  console.log('district  tier  name                      deployed   download   km2    buildings   overflight');
+  let raw = 0, download = 0, area = 0, buildings = 0, loRaw = 0, loGz = 0, loCount = 0;
   for (const d of rows) {
     const def = DISTRICTS.find((x) => x.id === d.id);
     const km2 = def
       ? ((def.bounds.maxX - def.bounds.minX) * (def.bounds.maxZ - def.bounds.minZ)) / 1e6 : 0;
     raw += d.bytes; download += d.gzip; area += km2; buildings += d.buildings;
+    // The second bundle, the one a fast travel flight passes over. A district
+    // already at the sketch tier has none and flies over itself.
+    if (d.lo) { loRaw += d.lo.bytes; loGz += d.lo.gzip; loCount++; }
     console.log(`${d.id.padEnd(9)} ${String(d.tier).padEnd(5)} ${String(d.name).slice(0, 24).padEnd(24)}`
       + `${(d.bytes / 1e6).toFixed(2).padStart(8)} MB${(d.gzip / 1e6).toFixed(2).padStart(9)} MB`
-      + `${km2.toFixed(1).padStart(7)}${String(d.buildings).padStart(11)}`);
+      + `${km2.toFixed(1).padStart(7)}${String(d.buildings).padStart(11)}`
+      + `${d.lo ? `${(d.lo.gzip / 1e6).toFixed(2).padStart(10)} MB`
+        : (d.tier > OVERFLIGHT_UNTIL ? '           its own' : '        not built')}`);
   }
 
   const indexGz = gz(INDEX);
-  const total = download + indexGz + codeGz;
+  const total = download + loGz + indexGz + codeGz;
   const missing = DISTRICTS.length - rows.length;
   console.log('');
   console.log(`districts       ${rows.length} of ${DISTRICTS.length} built${missing ? `, ${missing} missing` : ''}`);
@@ -74,6 +79,8 @@ function main() {
   console.log(`code and page   ${(codeRaw / 1e6).toFixed(2)} MB deployed, ${(codeGz / 1e6).toFixed(2)} MB gzipped`);
   console.log(`index           ${(fs.statSync(INDEX).size / 1e6).toFixed(2)} MB deployed, ${(indexGz / 1e6).toFixed(2)} MB gzipped`);
   console.log(`districts       ${(raw / 1e6).toFixed(2)} MB deployed, ${(download / 1e6).toFixed(2)} MB gzipped`);
+  console.log(`overflight      ${(loRaw / 1e6).toFixed(2)} MB deployed, ${(loGz / 1e6).toFixed(2)} MB gzipped, `
+    + `${loCount} of them`);
   console.log(`per km2         ${(download / Math.max(1, area) / 1e6).toFixed(3)} MB of download`);
   console.log('');
   // No ceiling to compare it against any more. The whole city deployed is a

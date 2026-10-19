@@ -68,8 +68,11 @@ function main() {
   const index = JSON.parse(fs.readFileSync(INDEX, 'utf8'));
 
   // The page and the code come down whatever else does, and so does the index.
-  let code = 0;
-  for (const f of [path.join(ROOT, 'index.html'), ...walk(path.join(ROOT, 'src'))]) code += gz(f);
+  let code = 0, codeRaw = 0;
+  for (const f of [path.join(ROOT, 'index.html'), ...walk(path.join(ROOT, 'src'))]) {
+    code += gz(f);
+    codeRaw += fs.statSync(f).size;
+  }
   const fixed = code + gz(INDEX);
 
   const rows = index.districts
@@ -89,6 +92,10 @@ function main() {
 
   const city = rows.reduce((a, d) => a + d.gzip, 0);
   const deployed = rows.reduce((a, d) => a + d.bytes, 0);
+  // The overflight bundles are deployed beside the fine ones and count
+  // against the page host's ceiling, even though a walker never fetches one.
+  const loGz = rows.reduce((a, d) => a + (d.lo ? d.lo.gzip : 0), 0);
+  const loRaw = rows.reduce((a, d) => a + (d.lo ? d.lo.bytes : 0), 0);
   console.log('');
   console.log(`districts          ${rows.length} of ${DISTRICTS.length} built`);
   // The one number that decides whether this is playable at all: what comes
@@ -99,6 +106,15 @@ function main() {
     + `${tooBig.length ? '  OVER' : ''}`);
   console.log(`the whole city     ${(city / 1e6).toFixed(2)} MB of download, `
     + `${(deployed / 1e6).toFixed(2)} MB deployed`);
+  console.log(`overflight         ${(loGz / 1e6).toFixed(2)} MB of download, `
+    + `${(loRaw / 1e6).toFixed(2)} MB deployed`);
+  // GitHub Pages will not serve a published site over a gigabyte, and the
+  // site is the fine city plus the overflight bundles plus the code. This is
+  // the number that decides whether a deploy is possible at all, so it is
+  // printed whether or not anything else is over a budget.
+  const site = deployed + loRaw + codeRaw + fs.statSync(INDEX).size;
+  console.log(`published site     ${(site / 1e6).toFixed(2)} MB of 1000 MB`
+    + `${site > 1000e6 ? '   OVER, the host will not serve it' : ''}`);
 
   if (tooBig.length) {
     console.log('');

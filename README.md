@@ -620,19 +620,31 @@ standing on a boundary arrives whole in both.
 | block | out to the ring | 19 | buildings over 120 m2, flat roofs, no windows, driving roads only, 9 point field |
 | outline | the rest of the city | 36 | buildings over 250 m2, 5 point field |
 | sketch | the edge of the box | 21 | buildings over 600 m2, the shape of a place rather than a place |
+| overflight | a second build of tiers 0 to 2 | 24 | buildings over 250 m2, all of them boxes, 200 m ground, for a fast travel flight to pass over |
 
 **The streaming.** `World` holds an index of all eighty one and the bytes of
-one. Tile records carry their index in the global grid and a reference to the
-district buffer their offsets point into, so the collision, the height field,
-the raycasts and the renderer all carry on addressing the city by tile index
-and do not know which file the bytes came from. Walking at a boundary brings up
-a loading screen that names the district you are entering, how big it is, and a
-place in it worth walking to; the bytes come down, the district you were in is
-let go, and you come out on the other side on the ground. The map is the whole
-city whatever is loaded, drawn from the index, dim for the eighty you do not
-have, and you can zoom from a street out to all of Berlin and back. Free travel
-across the city loads the destination during the flight and will not put you
-down until the ground is there.
+as many as fit: the one you are in, every one within nine hundred metres,
+nothing past 2.6 km, and a ceiling of six districts and 128 MB. Tile records
+carry their index in the global grid and a reference to the district buffer
+their offsets point into, so the collision, the height field, the raycasts and
+the renderer all carry on addressing the city by tile index and do not know
+which file the bytes came from, or which of the two builds of that district it
+is. Walking across a boundary is a step rather than a wait: the neighbour comes
+down while you are still walking towards it, and the one behind you stays. The
+loading screen is still there for arriving somewhere that is not in memory,
+which is a fast travel or a link rather than a walk. The map is the whole city
+whatever is loaded, drawn from the index, dim for the ones you do not have, and
+you can zoom from a street out to all of Berlin and back.
+
+**The flight.** Free travel crosses the city at four hundred metres a second,
+which leaves a district a few seconds between coming into reach and going
+past, and its own bundle does not arrive in that. So the streamer asks for the
+overflight build instead, and looks up the line of the flight rather than in a
+circle. The destination is the exception: it is fetched at the district's own
+tier the moment you pick it, and the landing holds in the air until it is
+there. The moment the flight ends, every district held at the overflight tier
+is let go, so a walker can never reach one and no two districts you can walk
+between are at different tiers.
 
 **What it weighs.** All of Berlin at these tiers is 304 MB deployed and 107 MB
 over the wire, measured on 13 October 2026 with every one of the eighty one

@@ -483,15 +483,36 @@ async function run() {
       const tz = (far.bounds.minZ + far.bounds.maxZ) / 2;
       const started = s.beginTravel(tx, tz);
       const loadedAtStart = s.world.loadedIds.slice();
+      // What the flight passes over, sampled every frame: a card would be a
+      // flight interrupted, a built district under the camera with nothing
+      // drawn would be a hole in Berlin, and a coarse district is the whole
+      // point of the overflight build.
+      let card = 0, overBuilt = 0, overNothing = 0, sawCoarse = 0, peakMB = 0;
       for (let i = 0; i < 1800; i++) {
         await new Promise((r) => requestAnimationFrame(r));
+        if (s.crossingShown()) card++;
+        const c = s.camera.position;
+        const under = s.world.entryAt(c[0], c[2]);
+        if (under && s.world.isBuilt(under)) {
+          overBuilt++;
+          if (s.drawnGround(c[0], c[2]) === null) overNothing++;
+        }
+        if (s.world.loadedIds.some((id) => s.world.isOverflight(id))) sawCoarse++;
+        peakMB = Math.max(peakMB, s.world.residentBytes / 1e6);
         if (s.state.mode === 'walk') break;
       }
+      // And a moment of standing still afterwards, so the walking streamer
+      // has run at least once before this is asked what is held.
+      for (let i = 0; i < 60; i++) await new Promise((r) => requestAnimationFrame(r));
       return {
         started,
         loadedAtStart,
+        card, overBuilt, overNothing, sawCoarse,
+        peakMB: Math.round(peakMB * 10) / 10,
+        coarseAfter: s.world.loadedIds.filter((id) => s.world.isOverflight(id)),
         landedIn: s.world.nameAt(s.player.x, s.player.z),
         onGround: Math.abs(s.player.y - s.world.groundHeight(s.player.x, s.player.z)) < 1.2,
+        landedOnCity: !s.world.isOverflight(s.world.idAt(s.player.x, s.player.z)),
         out: Math.round(Math.hypot(s.player.x - tx, s.player.z - tz)),
         mode: s.state.mode,
       };
@@ -592,6 +613,20 @@ async function run() {
       `${flight.loadedAtStart.join(', ')} at take off, landed ${flight.out} m out in ${flight.landedIn}`);
     check('and puts you down on ground rather than in the air',
       flight.onGround);
+    // --- the overflight build -----------------------------------------
+    check('the flight is never held up by the card',
+      flight.card === 0, `${flight.card} frames of card`);
+    check('and never passes over a built district with nothing drawn under it',
+      flight.overNothing === 0,
+      `${flight.overBuilt - flight.overNothing} of ${flight.overBuilt} frames over drawn ground`);
+    check('the corridor comes down as the overflight build',
+      flight.sawCoarse > 0, `coarse districts held on ${flight.sawCoarse} frames`);
+    check('and is let go the moment the flight ends',
+      flight.coarseAfter.length === 0 && flight.landedOnCity,
+      flight.coarseAfter.length ? `still coarse: ${flight.coarseAfter.join(', ')}`
+        : `landed on the ${flight.landedOnCity ? 'city' : 'sketch'}, peak ${flight.peakMB} MB`);
+    check('and the whole flight stays inside the memory ceiling',
+      flight.peakMB <= 128, `${flight.peakMB} MB at its worst`);
   }
 
   await browser.close();

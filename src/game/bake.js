@@ -21,6 +21,7 @@
 // shader drew a moment earlier is a building that jumps as it settles.
 
 import { VERTEX_STRIDE, POS_SCALE, FACADE_FLAG, GROUND_SCALE } from '../shared/constants.js';
+import { tileMesh } from '../engine/world.js';
 
 const COLLAPSE_WAVE = 0.7;
 const CRATER_RIM = 0.18;
@@ -112,6 +113,75 @@ export function settle(p, isGround, height, site) {
 const clampI16 = (v) => (v < -32768 ? -32768 : v > 32767 ? 32767 : v);
 
 /**
+ * Crushes whatever small thing stands at a point: a parked car that has gone
+ * up, and the bench beside it if it was close enough.
+ *
+ * It is not flattened away to nothing. A car that has burnt out is still a
+ * car shaped thing in the road, half the height it was and black, and that
+ * reads from the far end of the street where a mark on the tarmac does not.
+ *
+ * Nothing in a vertex says car, so what this can go on is height and
+ * position. Ground is left alone, so the road itself stays where it is, and
+ * so is anything whose vertex is higher than `tall`, which is why a wall or a
+ * lamp post standing beside the wreck keeps standing: a wall's own vertices
+ * near the pavement are already at the pavement, and the ones that make it a
+ * wall are above this.
+ *
+ * @param {object} world the streamed city
+ * @param {number} x @param {number} z the middle of it
+ * @param {number} radius metres
+ * @param {number} tall metres above the ground, the tallest thing it takes
+ * @param {number} squash what is left of its height, as a fraction
+ * @returns {{tiles:number[], moved:number}} tiles to push to the card again
+ */
+export function bakeCrush(world, x, z, radius, tall = 2.2, squash = 0.42) {
+  const tiles = [];
+  let moved = 0;
+  const base = world.groundHeight(x, z);
+  const r2 = radius * radius;
+  const tx0 = Math.max(0, Math.floor((x - radius - world.minX) / world.tileSize));
+  const tx1 = Math.min(world.nx - 1, Math.floor((x + radius - world.minX) / world.tileSize));
+  const tz0 = Math.max(0, Math.floor((z - radius - world.minZ) / world.tileSize));
+  const tz1 = Math.min(world.nz - 1, Math.floor((z + radius - world.minZ) / world.tileSize));
+  for (let tz = tz0; tz <= tz1; tz++) {
+    for (let tx = tx0; tx <= tx1; tx++) {
+      const index = tz * world.nx + tx;
+      const rec = world.tiles[index];
+      if (!rec) continue;
+      const m = tileMesh(rec);
+      if (!m.vCount) continue;
+      const [ox, oz] = world.tileOrigin(index);
+      const view = m.view;
+      let touched = 0;
+      for (let i = 0; i < m.vCount; i++) {
+        const o = m.vOff + i * VERTEX_STRIDE;
+        const px = view.getInt16(o, true) / POS_SCALE + ox;
+        const pz = view.getInt16(o + 4, true) / POS_SCALE + oz;
+        const dx = px - x, dz = pz - z;
+        if (dx * dx + dz * dz > r2) continue;
+        const flags = view.getUint8(o + 17);
+        if ((flags & FACADE_FLAG.GROUND) !== 0) continue;
+        const py = view.getInt16(o + 2, true) / POS_SCALE;
+        if (py > base + tall || py < base - 1.0) continue;
+        // Down onto its wheels and then some, keeping a few centimetres of
+        // clearance so the shell and the road do not fight over which one is
+        // in front.
+        const was = Math.max(0, py - base);
+        const now = base + 0.05 + was * squash;
+        if (Math.abs(now - py) < 0.02) continue;
+        view.setInt16(o + 2, clampI16(Math.round(now * POS_SCALE)), true);
+        // The fragment shader reads this and treats it as rubble: burnt, dark
+        // and matt, which is what is left of a car that has gone up.
+        view.setUint8(o + 17, flags | FACADE_FLAG.RUBBLE);
+        touched++;
+      }
+      if (touched) { tiles.push(index); moved += touched; }
+    }
+  }
+  return { tiles, moved };
+}
+
+/**
  * Writes a finished site into the city.
  *
  * @param {object} world the streamed city
@@ -134,12 +204,14 @@ export function bakeSite(world, site) {
     for (let tx = tx0; tx <= tx1; tx++) {
       const index = tz * world.nx + tx;
       const rec = world.tiles[index];
-      if (!rec || !rec.vCount) continue;
+      if (!rec) continue;
+      const m = tileMesh(rec);
+      if (!m.vCount) continue;
       const [ox, oz] = world.tileOrigin(index);
-      const view = rec.view;
+      const view = m.view;
       let touched = 0;
-      for (let i = 0; i < rec.vCount; i++) {
-        const o = rec.vOff + i * VERTEX_STRIDE;
+      for (let i = 0; i < m.vCount; i++) {
+        const o = m.vOff + i * VERTEX_STRIDE;
         p.x = view.getInt16(o, true) / POS_SCALE + ox;
         p.y = view.getInt16(o + 2, true) / POS_SCALE;
         p.z = view.getInt16(o + 4, true) / POS_SCALE + oz;
@@ -167,7 +239,7 @@ export function bakeSite(world, site) {
         moved += touched;
         // The tile's own box has to grow with what moved, or a flattened
         // block is culled away while its rubble is still on screen.
-        rec.min[1] = Math.min(rec.min[1], -site.depth - 2);
+        m.min[1] = Math.min(m.min[1], -site.depth - 2);
       }
     }
   }

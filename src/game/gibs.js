@@ -72,6 +72,72 @@ export class Gibs {
    * @returns {number} how many chunks it actually made
    */
   /**
+   * What a hit knocks out of the wall it hit, at the wall and going the way
+   * the wall faces.
+   *
+   * A collapse and an impact are not the same event and were being drawn as
+   * one. A storey coming away falls, so its chunks start at the line the
+   * building broke at and gravity does the rest, which is what rubble() does.
+   * A rocket into a shopfront throws the shopfront into the street, and
+   * putting those chunks on the break line meant they appeared at roof height
+   * and rained down on you: the pieces came from above, which is nothing like
+   * what a hit at eye level looks like. These start on the surface, go out
+   * along its normal with the blast behind them, and are small and short
+   * lived, because what comes off a wall is facing and render, not masonry.
+   *
+   * @param {number} x @param {number} y @param {number} z on the surface
+   * @param {number} nx @param {number} ny @param {number} nz its normal
+   * @param {number} count how many pieces
+   * @param {number} force 0 to 1, how hard it was hit
+   * @returns {number} how many chunks it made
+   */
+  spall(x, y, z, nx, ny, nz, count = 4, force = 1) {
+    const n = Math.min(MAX, count);
+    // A frame to spread them in: two directions across the face, so the
+    // pieces leave in a cone off the wall rather than along one line.
+    const up = Math.abs(ny) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const tx = up[1] * nz - up[2] * ny;
+    const ty = up[2] * nx - up[0] * nz;
+    const tz = up[0] * ny - up[1] * nx;
+    const bx = ny * tz - nz * ty;
+    const by = nz * tx - nx * tz;
+    const bz = nx * ty - ny * tx;
+    for (let i = 0; i < n; i++) {
+      const g = this._free();
+      g.alive = true;
+      // Spread over the patch the blast took off, a metre or so of wall.
+      const u = (Math.random() - 0.5) * 2.2;
+      const v = (Math.random() - 0.5) * 2.2;
+      g.x = x + nx * 0.25 + tx * u + bx * v;
+      g.y = y + ny * 0.25 + ty * u + by * v;
+      g.z = z + nz * 0.25 + tz * u + bz * v;
+      const out = (3.5 + Math.random() * 7.5) * force;
+      const spread = 0.35;
+      g.vx = nx * out + (tx * (Math.random() - 0.5) + bx * (Math.random() - 0.5)) * out * spread;
+      g.vy = ny * out + (ty * (Math.random() - 0.5) + by * (Math.random() - 0.5)) * out * spread
+        + 1.2 + Math.random() * 2.6;
+      g.vz = nz * out + (tz * (Math.random() - 0.5) + bz * (Math.random() - 0.5)) * out * spread;
+      g.yaw = Math.random() * 6.28;
+      g.pitch = Math.random() * 6.28;
+      g.roll = Math.random() * 6.28;
+      g.spinY = (Math.random() - 0.5) * 16;
+      g.spinX = (Math.random() - 0.5) * 16;
+      g.spinZ = (Math.random() - 0.5) * 16;
+      g.scale = 0.5 + Math.random() * 1.2;
+      g.part = Math.random() < 0.72 ? 21 : 22;
+      g.maxLife = 9 + Math.random() * 8;
+      g.life = g.maxLife;
+      g.resting = false;
+      g.dripAt = 0;
+      g.wet = false;
+      g.mass = 1.4 + g.scale;
+      g.heap = null;
+      this.active.push(g);
+    }
+    return n;
+  }
+
+  /**
    * A building coming down. The same chunks, made of concrete and brick
    * instead, thrown outward along the ground rather than up: a wall falls
    * into the street, it does not go into the air.

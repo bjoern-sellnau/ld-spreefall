@@ -2171,3 +2171,479 @@ caps residency at 520.
   the one in the file. `src/game/bake.js` can rewrite vertices in place but
   cannot add any. That is the piece to build, and it is the same piece a
   hole in a wall needs before the collision can agree with it.
+
+## 45. The street sign, the embassy, the Tiergarten, and a wood to walk into
+
+- 2026-10-18: the street name moved to the top of the screen. It began under
+  the crosshair, which is the one place in a shooter nothing should sit.
+
+- 2026-10-18: the American embassy was reported missing three times and I
+  agreed twice, on a bad measurement. `tallestNear(-7, 75, 18)` returns 0
+  because the footprint is 60 m by 46 and its middle has no wall within 18 m
+  of it: the walls are 23 m away in z and 30 in x. Asking at the wall gives
+  **22 m**, which is its tagged height, at z 52 and at z 98. It was built all
+  along. What was wrong was its position: Wikipedia gives 52 30 55 N,
+  13 22 42 E and Structurae 52 30 55.12 N, 13 22 42.07 E, and the curated fact
+  had it 34 m north and 51 m west of that. It now stands where the sources put
+  it, and it has a card, so the game names it when you walk up to it.
+
+- 2026-10-18: trees were growing inside the Holocaust memorial. Six of them.
+  The mask the synthetic generator uses carries 1 for carriageway, 2 for park
+  and lawn, 3 for water and 4 for a building and the ground kept clear around
+  it, and the tree scatter refused only water. The stelae field is stamped 4,
+  like a building. Trees now go on open ground and lawn only, which also took
+  **429** trees out of walls and carriageways across the middle district.
+
+- 2026-10-18: and the Tiergarten was a lawn with trees on it rather than a
+  wood. Measured in the park, at its eastern edge and 300 m in, high quality
+  under software rendering:
+
+  | one throw per | trees a hectare | in the park | edge | 300 m in |
+  | --- | --- | --- | --- | --- |
+  | 380 m2 | 21 | 1317 | 112 ms | 144 ms |
+  | 170 m2 | 59 | 3615 | 152 ms | 164 ms |
+  | 130 m2 | 77 | 4705 | 179 ms | 182 ms |
+
+  The middle one is a wood you walk into and costs a third of a frame over
+  the lawn; the thickest is a sixth more again for a difference you cannot
+  see from inside it. A lawn stays open, because the Platz der Republik in
+  front of the Reichstag is grass and is meant to be. Trees are instanced at
+  ten triangles each, so 3564 more of them cost 0.19 MB and no triangles.
+
+## 46. Rubble comes off the wall you shot, not out of the sky
+
+- 2026-10-18: reported as "when I shoot a building the pieces come from
+  above". They did. A collapse stage put its chunks on the line the building
+  broke at, which at the first stage is the roof, and a blast made no chunks
+  at all: it marked the wall and left it. So the only pieces a fight produced
+  fell past you from the roof of whatever you were standing next to.
+
+- 2026-10-18: a hit now knocks spall out of the surface it hit. The same rays
+  that find the walls near a blast throw pieces off them, along the normal,
+  with the blast behind them. Measured against one rocket into a frontage:
+  **0 chunks before, 18 after**, between 0.4 m and 2.7 m above the pavement
+  with the median at 1.4 m, against an eye height of 1.7 m. They come out of
+  the wall where the rocket went in.
+
+- 2026-10-18: and a collapse stage now finds the faces inside its site rather
+  than dropping rubble in a disc around the middle of it. A site is a damage
+  cell about a Berlin block frontage across and its middle is usually in the
+  road. Of the chunks a collapse made, **63 per cent** came down at the foot
+  of a standing wall before, **95 per cent** after.
+
+## 47. The ground you could not see in any district you streamed into
+
+- 2026-10-18: found while photographing the Grosser Stern. Arrive in Ring 3-2
+  and you stand on a grey plain: no ground, no streets, no park, with the
+  skyline visible past it. The collision is there and you walk about on it;
+  the picture is not.
+
+- 2026-10-18: the tile manager marks a tile absent when it asks the world for
+  it and the district has not landed yet, so that the uploader does not spend
+  every frame queueing the same holes. It clears those marks in `onDistrict`,
+  which the world calls when a district lands. `src/main.js` then assigned
+  `world.onDistrict` again, to put the damage back, and the second assignment
+  threw the first one away. Every district streamed in since 42 kept its tiles
+  marked as not there, and the skyline never grew either.
+
+- 2026-10-18: the world now keeps a list of listeners rather than one slot.
+  The tile under the player at the Grosser Stern went from `absent: true,
+  resident: false` to `resident: true`, and the park is a park.
+
+## 48. Berlin west of Mitte: the avenue, the star and the column
+
+- 2026-10-18: the Strasse des 17. Juni stopped at longitude 13.3650, which is
+  the western edge of the middle district, so the avenue ended on a district
+  line and there was no way to walk to the Grosser Stern. It is now laid
+  straight between the two ends that are surveyed, 13.3762/52.51602 at Platz
+  des 18. Maerz and 13.350117/52.514542 at the column, and carries on a
+  kilometre west of the junction. The points between the ends sit on the line;
+  the ones it had dropped south two and a half times too fast.
+
+- 2026-10-18: the Grosser Stern is laid as two arcs of a 95 m ring rather than
+  one closed way, because the line simplifier holds the first and last point
+  of a way fixed and a way whose first point is its last simplifies to
+  nothing. That is why the first attempt built no junction at all. The four
+  other arms are there by name and by the quadrant each leaves in; their
+  courses past the first few hundred metres are not surveyed here.
+
+- 2026-10-18: the Siegessaeule is built: 66.9 m to the top of the Victoria by
+  Structurae and the Bundestag's own note, the viewing platform at 50.66 and
+  the figure 8.32 of the total. A square plinth in a ring of sixteen columns,
+  three drums with gilded rings where they meet, the mosaic hall, and the
+  Victoria. `tallestNear` at the junction returns **66.9**.
+
+- 2026-10-18: gold is a new material. Copper is the same metal left to go
+  green and the city already had it; this is the one that was kept, and it is
+  what makes a column two kilometres down an avenue worth walking towards.
+
+- 2026-10-18: and the surveyed facts are no longer Mitte's private property.
+  A district outside the middle one lays down whatever of them falls in its
+  box before it invents anything, and its lattice streets are cut where they
+  would run through a park, the river or a landmark's clearance. Ring 3-2
+  carries 9 surveyed streets, 1 named building and 1 green, and its invented
+  blocks dropped from 2194 to 1234 because the Tiergarten is in the way now.
+
+## 49. Cars you can shoot, and what a mech does to a row of limes
+
+- 2026-10-18: a parked car was four boxes baked into a tile with a collision
+  box beside it and nothing anywhere that said car. The builder now writes
+  down where it put each one, three numbers each, 1017 of them in Mitte and
+  about ten kilobytes of manifest, and the game keeps the list. A round or a
+  blast looks up the list rather than the geometry.
+
+- 2026-10-18: what is left of one is written back into the same bytes. The
+  geometry is crushed to 42 per cent of its height and marked as rubble, which
+  is dark and matt, and the collision box is cut to 72 cm: a burnt out shell
+  you still walk round, not a mark on the tarmac. Measured, a car goes from
+  **1.51 m standing to 0.72 m**. It is remembered per district, so a street
+  you burnt is still burnt when you come back to it from the far side of
+  Berlin.
+
+- 2026-10-18: the blast is the ordinary one, 11 m and 120, so it hurts what is
+  beside it, cuts the frontage behind it and reaches the next car along. The
+  chain is queued rather than recursive: a row of cars going up one after the
+  other was otherwise a thousand deep stack of explosions inside each other.
+
+- 2026-10-18: the view out of a mech was reported as still blocked. It was not
+  a building. The pilot's eye is at 6.3 m, and on Unter den Linden that is the
+  middle of the crown of every lime in the row: the whole screen was leaves.
+  A crown now opens up when the eye is inside it, which is a test on the
+  height difference and the distance across the ground rather than on distance
+  alone, so a man walking under the same tree still has a tree over him. And a
+  machine that walks through a row of trees leaves no row of trees.
+
+## 50. Five more arms for the Titan
+
+- 2026-10-18: an 88 mm flak gun whose shell bursts beside what is in the air
+  rather than on it, a power laser that goes through three bodies and sets
+  what it cuts alight, a car bomb that turns the nearest parked car into the
+  charge, a Stinger that locks an aircraft up and slows the world to a third
+  while the missile runs it down, and an EMP bomb that stops everything with a
+  motor in it for seven seconds inside 48 m. Ten arms now, so the number row
+  runs 1 to 9 and nought.
+
+- 2026-10-18: measured, every arm fires and takes a round out of its own
+  magazine, the flak and the Stinger both bring a jet down from 200 m, the car
+  bomb destroys the car it was aimed at from 29 m, and the Stinger's lock puts
+  2.4 s of slow motion on the clock.
+
+## 51. Jets in Just a Walk
+
+- 2026-10-18: reported as spawning a section of soldiers in Just a Walk and
+  then jets arriving. The budgets are held at nought at the top of the fixed
+  step, but the threat level is raised from inside `combat.update`, which runs
+  after it, and the jets' own update runs after that again. Killing what you
+  spawned raised the tier, gave the jets a budget of two, and a flight took
+  off before the next step could put the budget back. The tier now holds every
+  budget at nought in Just a Walk rather than setting them.
+
+## 52. Tiles the game can re-mesh
+
+- 2026-10-18: section 44 ended by naming the piece that had to be built: a
+  tile's vertices are a packed slice of the district's bytes and the tile
+  manager uploads them as they come, so nothing could give a tile a mesh that
+  was not the one in the file. `src/engine/world.js` now has `tileMesh(rec)`,
+  which hands back either the file's slice or the tile's own buffer, and the
+  uploader, the baker and the crusher all go through it. The collision and the
+  trees stay where they were: they are read by their own offsets into the
+  district's bytes and nothing about re-meshing touches them.
+
+- 2026-10-18: `src/game/remesh.js` is the cutter. The triangles a blast
+  reaches are split at their longest edge until that edge is short enough,
+  each new vertex interpolated from the two it sits between so the material,
+  the surface, the texture coordinates and the normal all carry over exactly,
+  and the midpoint of an edge is shared between the two triangles that own it
+  or the halves pull apart and leave a crack. Nothing here moves a vertex:
+  displacing them is still the baker's job and the shader's, out of the same
+  crater shape they always used.
+
+- 2026-10-18: the first version tested the triangle's corners against the
+  hole and missed the case that matters most, which is one long thin triangle
+  lying right across the street with both its ends a hundred metres away. It
+  tests boxes now, and prunes: a child that has fallen outside the worked
+  area is kept whole, so a 100 m sliver is cut only where the hole is.
+
+## 53. Craters small enough to be craters
+
+- 2026-10-18: the floor was 55 m of blast, and the reason was never the look
+  of it: the ground is a 12.5 m grid, a hole eight metres across had no
+  vertices inside it, and the picture would have stayed flat while the
+  collision dipped. With the ground cut finer where a blast lands, the floor
+  is what the collision field can follow instead.
+
+- 2026-10-18: measured, drawing the ground out of the tile buffers and
+  comparing it with the height field you stand on, worst case across the hole:
+
+  | blast | crater | depth | re-meshed | as it was |
+  | --- | --- | --- | --- | --- |
+  | 8 m | 4.5 m | 0.62 m | 0.15 m | 0.33 m |
+  | 20 m | 4.5 m | 0.62 m | 0.15 m | 0.34 m |
+  | 60 m | 12.6 m | 4.79 m | 0.37 m | 3.75 m |
+  | 120 m | 25.2 m | 9.58 m | 0.19 m | 4.75 m |
+
+  A warhead used to draw a hole four and three quarter metres away from the
+  one you could walk into. The tile it lands in goes from 342 vertices to
+  3469, which is 60 kB and about six thousand triangles against the city's
+  850,000.
+
+- 2026-10-18: so a rocket digs now, and the numbers that decide how deep are
+  stated rather than guessed. A crater narrower than two ground samples is a
+  dimple nothing can stand in, so there is a floor of 4.5 m on the radius. A
+  bowl sampled every `step` metres is out by about `depth * (step / radius)`
+  squared at its worst, so the depth is capped at `0.30 * (radius / step)`
+  squared: 0.62 m for a rocket, and no cap at all by the time a warhead is
+  digging twenty five metres across.
+
+- 2026-10-18: 0.55 was the first value, which gave a rocket 1.14 m. It reads
+  well and a fighter cannot take off over it, which the suite said before I
+  did. Half a metre of dish nine metres across is a shell hole you can drive
+  through, which is the one that stays.
+
+- 2026-10-18: a hole in the road is its own site now, with `walls: false`, and
+  it is kept apart from the sites that bring frontages down. The first version
+  let the two merge, and since a crater site is at level one from the moment
+  it opens, a frontage that merged with one went from standing to a heap in a
+  single step. A car going up does not dig at all: it is a tank of petrol, and
+  a shell hole under its own wreck left the burnt out shell standing in the
+  air over one.
+
+## 54. A hole in a wall you can shoot through
+
+- 2026-10-18: the shader has punched a hole in a facade since 38.3, out of the
+  ring of sixteen most recent blast marks. Nothing else knew about it. You
+  could put a rocket through a shopfront, see the inside of the building
+  through the hole, and still not be able to shoot or walk through what was
+  visibly no longer there, and the mark went when the ring came round again.
+
+- 2026-10-18: the hole is now cut out of the tile and out of the collision.
+  The wall is subdivided to a quarter of the hole's radius and every piece
+  whose middle is inside it is dropped, which is why the edge is ragged rather
+  than a circle. A collision segment runs between two points and stands
+  between a base and a top, which is exactly enough to say wall, then nothing,
+  then wall again above it: the piece across the hole becomes a sill under it
+  and a lintel over it, and the pieces either side are left whole.
+
+- 2026-10-18: measured on a frontage on Unter den Linden. A wall 17.1 m away,
+  one rocket, and the same line then reaches past eighty metres with nothing
+  in it; a line out of the same eye angled up over the hole still stops at
+  17.1 m; and `tallestNear` says 27.1 m of building is still standing. In the
+  suite, which runs in streets it has already wrecked, the same thing is
+  measured on the wall itself: a wall 0.4 m from the burst before, and nothing
+  within 1.89 m of it after.
+
+## 55. Bridges, because the river was a wall
+
+- 2026-10-18: asked whether bridges work. They did not, and the way they did
+  not is worse than a missing bridge. The quay wall that stops you walking
+  into the Spree is drawn along the whole bank whether or not there is a
+  street on top of it, so every street that crosses the water ended at the
+  water. Measured on Unter den Linden going east: a ray at knee height is
+  stopped **29 m** short of the Spreekanal, and walking it with the real
+  controller gets you the same 29 m. Twelve surveyed streets cross the Spree
+  or the Spreekanal in Mitte, which is twelve dead ends, and the Museum Island
+  could not be reached on foot at all.
+
+- 2026-10-18: the roadway itself was never the problem. The ribbon already
+  runs across the water at street level, because the terrain says the ground
+  is there. What was missing was the gap in the bank and everything that makes
+  the crossing read as a bridge.
+
+- 2026-10-18: a crossing is now found by walking each road a metre at a time
+  against each water polygon and keeping the wet runs that have dry land on
+  both sides and are under seventy metres long. Without the dry ends a quay
+  road that runs inside the river polygon for two hundred metres counts as a
+  bridge, and the first version put a parapet down the middle of the street it
+  ran into: 19 crossings became 11 once both tests were in.
+
+- 2026-10-18: the bank is cut into three metre pieces where it passes a
+  crossing, and the pieces on the bridge are left out. Dropping whole ring
+  edges instead was the first attempt and it is useless here: the Spreekanal
+  is eight surveyed points, so one edge of its bank is a hundred and fifty
+  metres of quay, and taking one out opens the river for the length of a
+  street. The deck gets an edge beam and a parapet either side, with the
+  collision to match, and a soffit so the river does not show daylight through
+  the roadway.
+
+- 2026-10-18: measured again on the same line. Nothing stops the ray now, and
+  the walk crosses the canal and carries on into the far side. Mitte went from
+  263,268 to 266,046 triangles for the eleven of them.
+
+- 2026-10-18: and a thing found on the way, not fixed here: something 26 m
+  tall stands across Unter den Linden at about x 1270, which is where the
+  curated buildings put the Kronprinzenpalais. A building on the carriageway
+  is a separate bug from the bridges and is written down rather than fixed in
+  the same breath.
+
+## 56. The map that shows the whole city, and the way back
+
+- 2026-10-18: asked for a mode that shows the whole map, like the one free
+  travel opens, with the wheel to zoom. The wheel has zoomed this map since 12b
+  and the whole of Berlin has always been zoom one. What was missing was any
+  way to get there: the map opens on a few hundred metres around you, which at
+  1.18 a click is twenty eight turns of the wheel from the city.
+
+- 2026-10-18: so the big map has the controls the targeting map has had since
+  it was built, plus two of its own. In and out, **all of it**, which is the
+  whole 45.8 by 37.5 km box, and **me**, which comes back onto the street you
+  are standing in. The readout says how far out you are and how wide the
+  window is: 1.0x and 101.6 km across at full fit, and metres when you are in
+  among the streets.
+
+- 2026-10-18: the window is wider than the city at full fit because the canvas
+  is letterboxed and the fit is the smaller of the two ratios, so the whole
+  box is on the screen in both directions. The number is the window's, not
+  Berlin's, and it says `across` for that reason.
+
+- 2026-10-18: and the thing that made the buttons useless before they were
+  tested: a locked pointer belongs to the game and the canvas takes every
+  click, so the controls were drawn and could not be pressed. Opening the map
+  lets the pointer go, closing it takes it back.
+
+- 2026-10-18: not done, and not for a technical reason. Laying a map service
+  over it to compare was asked for in the same breath, and this project's
+  rules say no runtime dependencies and nothing from a CDN: a tile from
+  anybody's server at play time breaks that. The comparison that is available
+  offline is the one the map already draws, which is our own geometry out of
+  the OSM extract. Most of the grid is empty here because 73 of the 81
+  districts are not built in this checkout and Overpass cannot be reached from
+  this machine, not because the map is wrong.
+
+## 57. The viaduct is a bridge, and there is an S-Bahn on it
+
+- 2026-10-18: bridges over streets, not only over water. The Stadtbahn already
+  ran on a brick viaduct 6 m up, and that viaduct was two unbroken faces from
+  the pavement to the deck with collision to match: a 6.6 m wall across every
+  street the railway crosses. Six surveyed streets cross it in Mitte.
+  Measured on Friedrichstrasse: a ray at knee height is stopped **32 m** short
+  of the crossing, by a wall 6.3 m tall.
+
+- 2026-10-18: a Berlin viaduct is a row of arches. It is built bay by bay now:
+  nine metres from pier to pier, three of that pier, and between them an
+  opening that curves from three metres up to a crown at nearly five. The wall
+  above the arch is drawn in columns from the curve to the deck, so everything
+  over the opening is brick and the opening is the shape of an arch; the first
+  attempt drew a straight band with the curve hung under it and from the
+  street that read as a row of teeth. The collision is the same three pieces:
+  pier, nothing, and the wall above the springing, which is exactly what a
+  segment with its own base and top can say.
+
+- 2026-10-18: Friedrichstrasse now runs under it, and a shot at deck height
+  still stops in brick. 263,268 to 278,942 triangles for the arches across
+  Mitte.
+
+- 2026-10-18: and then an S-Bahn on it, because a city with a railway through
+  the middle of it should have something on the railway. Three carriages nose
+  to tail, seventeen metres each, running at sixty kilometres an hour along
+  the line the builder now writes into the manifest, at the height of the
+  deck. Red below the waist and ochre above it, which is the paint Berlin has
+  used since the twenties. It is scenery with a timetable: nothing shoots it
+  and nothing rides it.
+
+- 2026-10-18: drawn through the vehicle pipeline, which already takes a mesh
+  and a list of positions, so a carriage costs an instance rather than a draw
+  call. The one thing that had to change there is that the vehicles all shared
+  one ceiling of eight instances and the carriages wanted their own.
+
+- 2026-10-18: the train runs whether or not you are near it and is only drawn
+  when you are. Stepping it only when it was near froze it the moment it ran
+  out past the edge of that circle, which is to say for good.
+
+## 58. Two builds of every district, and a flight over the coarse one
+
+- 2026-10-18: the question was whether a district could carry two tiers, a
+  fine one to walk in and a coarse one for a fast travel flight to pass over,
+  and what to do where the two meet. The answer to the second half is that
+  they never meet: the tier is chosen by what the player is doing, not by how
+  far away something is. Walking, everything within reach is the district's
+  own build. Flying, everything new is the overflight build. The two moments
+  the choice changes are the take off and the landing, which is where the
+  camera is already four hundred metres up and moving.
+
+- 2026-10-18: what the flight looks like today, measured before changing
+  anything. Mitte to Steglitz, sampled every half second: from 4.5 s to 6.5 s
+  of an eleven second flight the camera is over districts with nothing drawn
+  at all, `visible: 0`, `tris: 0`. That is the local city, where seventy
+  three of eighty one districts have no extract. The deployed one is worse in
+  a different way: every district is built, so the streamer tries to pull the
+  fine city at four hundred metres a second. A district is in reach for about
+  six seconds and weighs between three and fourteen megabytes gzipped.
+
+- 2026-10-18: so every district inside the ring is built twice. The second
+  build is a tier of its own rather than the sketch tier the outskirts use,
+  and the difference is the minimum area. The sketch tier drops everything
+  under 600 m2, which kept eighteen per cent of the buildings in the three
+  districts this was measured on, and a city with one house in five reads as
+  a bombed one from the air rather than a coarse one. The overflight tier
+  keeps everything over 250 m2 and makes all of it the box that fits it.
+
+- 2026-10-18: two things were switched off in it and had to go back on,
+  because both are cheaper on than off and this tree has measured each of
+  them before. A flat roof is a cap plus a parapet and a parapet is two
+  triangles an edge, so `roofs: false` made i24 larger than its own fine
+  build, 8.76 MB against 8.06. A window is one flag bit on a vertex and a
+  fragment shader, so `windows: false` saves nothing at all.
+
+- 2026-10-18: what it costs, gzipped, own build against overflight build:
+  Mitte 4.76 to 1.57 MB, Ring 4-1 2.46 to 1.94, Ring 3-2 0.81 to 0.46, and
+  Steglitz 2.86 to 2.85. The last one decided where the second build stops.
+  Out past the ring two thirds of what a district weighs is building walls,
+  the overflight tier keeps the same walls, and the saving disappears. Tier 3
+  and tier 4 fly over themselves.
+
+- 2026-10-18: these are numbers from the synthetic city, because Overpass is
+  not reachable from this container, and they understate the case. The real
+  ring districts are two to four times heavier than their synthetic stand
+  ins, and the overflight tier's minimum area bites hardest where there are
+  many small buildings, which is exactly what the synthetic generator does
+  not make. The deploy prints the real table.
+
+- 2026-10-18: the runtime change is small, because the tile manager already
+  took each tile's mesh through `tileMesh(rec)`, which was written so a
+  crater could give a tile its own buffer. A variant is a second pair of
+  files on the same index entry; `loadDistrict` picks the pair and nothing
+  downstream knows the difference, because both builds carry the same global
+  tile indices and each carries its own height field size.
+
+- 2026-10-18: the variant only decides what a fresh fetch asks for. A
+  district already in memory is handed back as it is, because swapping one
+  underneath a player who can see it buys nothing and costs a fetch. The
+  invariant that replaces it is at the other end: the moment a flight lands,
+  every district held at the overflight tier is dropped. So nothing a walker
+  can reach is ever the coarse build, and no two districts you can walk
+  between are at different tiers.
+
+- 2026-10-18: in the air the streamer looks up the line of the flight rather
+  than in a circle, centred fourteen hundred metres ahead of the camera and
+  never past the far end, with a reach of eighteen hundred metres and a tick
+  four times a second. A circle of nine hundred metres at four hundred metres
+  a second gives a district two seconds of warning and spends half of its
+  budget on ground that is already behind.
+
+- 2026-10-18: one defect this turned up that the probe nearly hid. Flying
+  over a district that is not in memory used to call `crossInto`, which is
+  the loading card. It never fired locally because the districts under that
+  flight are unbuilt and the card refuses those by name; on the deployed city
+  every one of them is built and a flight across Berlin would have raised the
+  card over and over. A flight is now never interrupted by it: what has to be
+  stood on is the far end, and that is asked for at the fine tier before the
+  take off.
+
+- 2026-10-18: measured after, Mitte to Ring 1-2, five kilometres: nought
+  frames of card, the corridor arriving as `c2r1.lo`, `c3r0.lo`, `c0r0.lo`,
+  ground drawn under the camera over every district that is built, 36.3 MB
+  held at the peak against a ceiling of 128, and nothing coarse left in
+  memory one second after landing.
+
+- 2026-10-18: and the screenshot said the work was not finished. The corridor
+  came down, the checks were green, and the picture was a green island in
+  grey nothing. The overflight bundle was not the problem: the district held
+  over Ring 3-2 carried 25,450 triangles and 196 tiles with something over
+  six metres on them. The uploader was. Tiles come up within nine hundred
+  metres of the camera, which is a street; from four hundred metres up,
+  looking down at seventy five degrees, it is a disc of 1.8 km with the rest
+  of the view empty. So the tile radius goes to 2.8 km while a flight is
+  running and back to nine hundred when it lands, and the corridor's reach
+  goes to 2.9 km so that no tile comes up without a district behind it. The
+  same shot after that is the Grosser Stern with its avenues going out of it
+  and the streets of the next district beyond.

@@ -144,6 +144,51 @@ export const ARMS = [
     pellets: 14, damage: 78, spread: 0.11, range: 75,
     interval: 0.7, magazine: 8, reload: 2.9, shake: 0.4, sound: 'mechgun',
   },
+  // A very large anti aircraft gun. The shell bursts beside whatever is in
+  // the air rather than on it, which is what flak is: it does not have to hit.
+  // On the ground it is an ordinary heavy shell with a long fuse.
+  {
+    id: 'flak', name: '88 mm Flak', kind: 'flak', mount: 'chaingun',
+    speed: 520, interval: 0.34, spread: 0.008,
+    splash: { radius: 30, damage: 300, force: 16 },
+    proximity: 17, fuse: 4.0, lockRange: 900, lockCone: 0.22,
+    magazine: 24, reload: 4.6, shake: 0.5, sound: 'mechcannon',
+  },
+  // A beam that does not stop at the first wall. Held down it is continuous,
+  // and what it cuts through goes on burning.
+  {
+    id: 'laser', name: 'Power Laser', kind: 'laser', mount: 'chaingun',
+    damage: 150, interval: 0.05, range: 420, pierce: 3,
+    magazine: 320, reload: 5.0, shake: 0.018, sound: 'rail',
+  },
+  // A charge thrown at a parked car. It is a small bomb on its own and a very
+  // large one when it lands on a car, which is the whole idea: the street
+  // does the work and you only have to pick which car.
+  {
+    id: 'carbomb', name: 'Car Bomb', kind: 'carbomb', mount: 'rockets',
+    speed: 62, interval: 1.6, spread: 0.005,
+    splash: { radius: 9, damage: 150, force: 10 },
+    reach: 7,
+    magazine: 4, reload: 4.4, shake: 0.3, sound: 'rpg',
+  },
+  // Lock onto something flying and the world slows down while the missile
+  // runs it down, so that you watch it arrive instead of waiting for it.
+  {
+    id: 'stinger', name: 'Stinger', kind: 'stinger', mount: 'rockets',
+    speed: 165, interval: 1.0, lockRange: 800, lockCone: 0.30,
+    splash: { radius: 15, damage: 560, force: 14 }, slow: 2.4,
+    magazine: 6, reload: 3.8, shake: 0.25, sound: 'rpg',
+  },
+  // And the one for the other machines: nothing with a motor in it moves
+  // inside the pulse, which on something eight metres tall is seven seconds
+  // of standing still in the open.
+  {
+    id: 'empbomb', name: 'EMP Bomb', kind: 'empbomb', mount: 'rockets',
+    speed: 92, interval: 2.0, spread: 0.004,
+    splash: { radius: 7, damage: 40, force: 5 },
+    emp: { radius: 48, seconds: 7 },
+    magazine: 4, reload: 5.2, shake: 0.32, sound: 'rpg',
+  },
 ];
 
 /** The arm by id, for the interface and the tests. */

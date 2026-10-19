@@ -615,6 +615,37 @@ async function run() {
     quiet.made === 4 && quiet.up === 4 && quiet.moved && quiet.stillUp === 4,
     `${quiet.up} up, ${quiet.moved ? 'flying' : 'frozen'}`);
 
+  // Killing what you spawned raises the threat level, and the threat level is
+  // what gives the jets a budget. The budgets are held at nought at the top of
+  // the step and the tier is applied from inside combat.update, which runs
+  // after it: for the rest of that step the jets had a budget and a flight
+  // took off. Reported as soldiers by hand in Just a Walk and then jets.
+  const tiered = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset();
+    s.state.peaceful = true;
+    s.soldiers.enabled = true; s.drones.enabled = true; s.jets.enabled = true;
+    s.combat.reset();
+    // Straight to the level that calls for air support, the way a fight gets
+    // there, and then let the city run.
+    for (let t = 0; t <= 4; t++) if (s.combat.onTier) s.combat.onTier(t);
+    const t0 = s.loop.simTime;
+    while (s.loop.simTime - t0 < 10) await new Promise((r) => requestAnimationFrame(r));
+    const out = {
+      jets: s.jets.active.length, drones: s.drones.active.length,
+      budgets: [s.jets.budget, s.drones.budget, s.soldiers.budget],
+    };
+    s.state.peaceful = false;
+    s.soldiers.enabled = false; s.drones.enabled = false; s.jets.enabled = false;
+    s.soldiers.reset(); s.drones.reset(); s.jets.reset();
+    s.combat.reset();
+    return out;
+  });
+  check('and the threat level never calls in air support in Just a Walk',
+    tiered.jets === 0 && tiered.drones === 0,
+    `${tiered.jets} jets and ${tiered.drones} drones at threat five, budgets ${tiered.budgets.join('/')}`);
+
   // --- the people who live here --------------------------------------------
   const folk = await page.evaluate(async () => {
     const s = window.spreefall;

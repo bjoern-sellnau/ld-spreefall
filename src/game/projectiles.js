@@ -130,6 +130,11 @@ export class Projectiles {
     b.thermite = o.thermite || null;
     b.emp = o.emp || null;
     b.mechKill = o.mechKill || null;
+    // Flak: how near the thing it was fired at the shell has to get before it
+    // bursts. A shell that has to hit an aircraft is a shell that never does.
+    b.proximity = o.proximity || 0;
+    // And the charge that is looking for a parked car to be.
+    b.carbomb = o.carbomb || 0;
     b.spin = 0;
     b.seed = Math.random();
     this.active.push(b);
@@ -170,6 +175,19 @@ export class Projectiles {
       if (b.fuse !== Infinity) {
         b.fuse -= dt;
         if (b.fuse <= 0) { this.explode(b); continue; }
+      }
+      // Close enough to what it was fired at. The target is a body rather
+      // than a point, so a shell chasing a jet bursts where the jet is now.
+      if (b.proximity > 0 && b.target) {
+        const t = b.target;
+        if (t.health === undefined || t.health > 0) {
+          if (Math.hypot(t.x - b.x, (t.y || 0) - b.y, t.z - b.z) <= b.proximity) {
+            this.explode(b);
+            continue;
+          }
+        } else {
+          b.proximity = 0;
+        }
       }
       // Anything with a burn time goes off where it runs out, so nothing
       // loiters over the city waiting for a wall.

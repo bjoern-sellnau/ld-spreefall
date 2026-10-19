@@ -67,6 +67,7 @@ export class World {
     this.tiles = new Array(this.nx * this.nz).fill(null);
     this.districts = new Map();        // id -> loaded district
     this.pending = new Map();          // id -> promise, so two asks are one fetch
+    this.missing = new Set();          // ids the index promised and the server has not
     this.collisionCache = new Map();
     this.heightCache = new Map();
     // Trees that have burnt down, by tile index and ordinal within the tile.
@@ -79,8 +80,15 @@ export class World {
     // numbers per ruin that let it be put back exactly as it was.
     this.scars = new Map();        // district id -> array of scar records
     this.onTreesChanged = null;        // fn(tileIndex) when one has gone
-    this.onDistrict = null;            // fn(district) when one lands
-    this.onDrop = null;                // fn(district, indices) before one goes
+    // A district landing and a district going are each watched by more than
+    // one part of the game: the tile manager has to clear the holes it marked
+    // in the grid while the bytes were still coming, and the game layer has to
+    // put the damage back. These were single slots, and the second assignment
+    // simply threw the first one away, which left every streamed in district
+    // with its tiles marked as not there: you walked into Ring 3-2 and stood
+    // on ground you could not see.
+    this.districtListeners = [];       // fn(district) when one lands
+    this.dropListeners = [];           // fn(district, indices) before one goes
     // What the rest of the game reads. The arrays are the same objects for the
     // life of the world and are filled and emptied in place as districts come
     // and go, so anything holding a reference keeps seeing the truth.
@@ -95,6 +103,10 @@ export class World {
       landmarks: [],
       stations: [],
       roadLines: [],
+      // The railways, so the game can run a train along one. Only the
+      // elevated ones matter for that: the Stadtbahn is on a viaduct and a
+      // tram is in the street with everything else.
+      railLines: [],
       // Street name labels, from whichever districts are in memory. The
       // district you are standing in is the one whose names you can read.
       streets: [],
@@ -199,17 +211,24 @@ export class World {
    * in flight gets the same promise, which is what stops the player walking
    * back and forth across a boundary from fetching it twice.
    *
+   * @param {string} id the district
+   * @param {Function|null} onProgress called with 0 to 1 as the bytes arrive
+   * @param {string} variant 'fine' for the district's own tier, 'over' for
+   *   the overflight bundle a fast travel flight passes over. The variant
+   *   only decides what a fresh fetch asks for: a district already in memory
+   *   is handed back as it is, because swapping one underneath a player who
+   *   can see it buys nothing and costs a fetch.
    * @returns {Promise<object|null>} the district, or null when there is no
    *   such district in the index
    */
-  loadDistrict(id, onProgress = null) {
+  loadDistrict(id, onProgress = null, variant = 'fine') {
     if (this.districts.has(id)) return Promise.resolve(this.districts.get(id));
     const waiting = this.pending.get(id);
     if (waiting) return waiting;
     const entry = this.entryFor(id);
     if (!entry) return Promise.resolve(null);
     if (!this.isBuilt(entry)) return Promise.resolve(null);
-    const job = this._fetchDistrict(entry, onProgress)
+    const job = this._fetchDistrict(entry, onProgress, variant === 'over' && entry.lo ? entry.lo : null)
       .then((district) => {
         this.pending.delete(id);
         return district;
@@ -222,14 +241,18 @@ export class World {
     return job;
   }
 
-  async _fetchDistrict(entry, onProgress) {
-    const manifest = await fetch(`${this.base}${entry.json}`).then((r) => {
-      if (!r.ok) throw new Error(`${entry.json}: ${r.status}`);
+  async _fetchDistrict(entry, onProgress, lo = null) {
+    // Either the district's own pair of files or its overflight pair. They
+    // are two builds of the same box and interchangeable everywhere below:
+    // same tile indices, same global grid, their own height field size.
+    const files = lo || entry;
+    const manifest = await fetch(`${this.base}${files.json}`).then((r) => {
+      if (!r.ok) throw new Error(`${files.json}: ${r.status}`);
       return r.json();
     });
-    const res = await fetch(`${this.base}${entry.bin}`);
-    if (!res.ok) throw new Error(`${entry.bin}: ${res.status}`);
-    const total = parseInt(res.headers.get('content-length') || '0', 10) || entry.bytes;
+    const res = await fetch(`${this.base}${files.bin}`);
+    if (!res.ok) throw new Error(`${files.bin}: ${res.status}`);
+    const total = parseInt(res.headers.get('content-length') || '0', 10) || files.bytes;
     let buffer;
     if (res.body && onProgress) {
       const reader = res.body.getReader();
@@ -265,6 +288,10 @@ export class World {
       entry,
       manifest,
       tier: manifest.tier,
+      // Which of the two builds this is. The map asks, because a district
+      // held at the overflight tier carries no street lines to draw and has
+      // to keep being drawn from its sketch in the index.
+      overflight: !!manifest.overflight,
       name: manifest.name || entry.name || entry.id,
       buffer,
       view: new DataView(buffer),
@@ -288,9 +315,15 @@ export class World {
     }
     this.districts.set(entry.id, district);
     this._mergeManifest(district, 1);
-    if (this.onDistrict) this.onDistrict(district);
+    for (const fn of this.districtListeners) fn(district);
     return district;
   }
+
+  /** Called with each district as it lands. More than one caller may ask. */
+  set onDistrict(fn) { if (fn) this.districtListeners.push(fn); }
+
+  /** Called with each district just before it goes. */
+  set onDrop(fn) { if (fn) this.dropListeners.push(fn); }
 
   /**
    * Let a district go: its tiles, its caches and its bytes. The renderer is
@@ -299,7 +332,7 @@ export class World {
   unloadDistrict(id) {
     const district = this.districts.get(id);
     if (!district) return false;
-    if (this.onDrop) this.onDrop(district, district.indices);
+    for (const fn of this.dropListeners) fn(district, district.indices);
     for (const t of district.indices) {
       this.tiles[t] = null;
       this.collisionCache.delete(t);
@@ -314,7 +347,8 @@ export class World {
   _mergeManifest(district, sign) {
     const m = this.manifest;
     const d = district.manifest;
-    const lists = ['landmarks', 'stations', 'roadLines', 'streets', 'waterOutlines', 'greenOutlines'];
+    const lists = ['landmarks', 'stations', 'roadLines', 'railLines', 'streets',
+      'waterOutlines', 'greenOutlines'];
     if (sign > 0) {
       for (const key of lists) {
         for (const item of (d[key] || [])) {
@@ -382,7 +416,47 @@ export class World {
     return e ? e.id : null;
   }
 
-  keepAround(x, z, reach = 900, drop = 2600, max = 9, maxBytes = Infinity) {
+  /** True if this district has a second, coarser bundle to fly over. */
+  hasOverflight(id) {
+    const entry = this.entryFor(id);
+    return !!(entry && entry.lo);
+  }
+
+  /** True if what is in memory for this district is the overflight bundle. */
+  isOverflight(id) {
+    const d = this.districts.get(id);
+    return !!(d && d.overflight);
+  }
+
+  /**
+   * Make sure a district is in at its own tier, swapping out the overflight
+   * bundle if that is what is there. Used at either end of a flight: you
+   * land on the city, never on the sketch of it.
+   */
+  reloadFine(id, onProgress = null) {
+    if (this.isOverflight(id)) this.unloadDistrict(id);
+    return this.loadDistrict(id, onProgress, 'fine');
+  }
+
+  /**
+   * Let go of every district held at the overflight tier. Called when a
+   * flight ends, so that nothing a walker can reach is ever the coarse build
+   * and no two districts you can walk between are at different tiers.
+   *
+   * @param {string|null} keep one to leave alone, the one being landed in
+   * @returns {number} how many were dropped
+   */
+  dropOverflight(keep = null) {
+    let n = 0;
+    for (const id of [...this.districts.keys()]) {
+      if (id === keep || !this.isOverflight(id)) continue;
+      this.unloadDistrict(id);
+      n++;
+    }
+    return n;
+  }
+
+  keepAround(x, z, reach = 900, drop = 2600, max = 9, maxBytes = Infinity, variant = 'fine') {
     const want = new Set();
     const here = this.entryAt(x, z);
     if (here) want.add(here.id);
@@ -395,7 +469,18 @@ export class World {
       if (away <= reach) want.add(d.id);
     }
     for (const id of want) {
-      if (!this.districts.has(id)) this.loadDistrict(id);
+      // A fetch the streamer starts has nobody waiting on it, so a district
+      // whose bytes are not on the server has to be swallowed here or it is
+      // an unhandled rejection every half second. The index can promise a
+      // district a deploy did not finish building.
+      if (!this.districts.has(id)) {
+        this.loadDistrict(id, null, variant).catch(() => {
+          if (!this.missing.has(id)) {
+            this.missing.add(id);
+            console.warn(`spreefall: ${id} is in the index but not on the server`);
+          }
+        });
+      }
     }
     for (const id of this.districts.keys()) {
       if (want.has(id)) continue;
@@ -474,6 +559,18 @@ export class World {
   gridOf(index) {
     const hf = this.heightField(index);
     return hf ? hf.n : COLLISION_GRID;
+  }
+
+  /**
+   * How far apart the ground samples are at a point, in metres: 3.125 in the
+   * middle of town and coarser outside it. Anything digging a hole has to
+   * know, because a hole narrower than this cannot be in the collision at all
+   * and so has no business being in the picture either.
+   */
+  groundStep(x, z) {
+    const index = this.tileIndex(x, z);
+    if (index < 0) return this.tileSize / (COLLISION_GRID - 1);
+    return this.tileSize / Math.max(1, this.gridOf(index) - 1);
   }
 
   /** Bilinear ground height. Outside the box it clamps to the edge tile. */
@@ -864,4 +961,33 @@ export class World {
     for (const set of this.deadTrees.values()) n += set.size;
     return n;
   }
+}
+
+/**
+ * The vertices and indices a tile draws from.
+ *
+ * Normally that is a slice of the district's own bytes, exactly as the file
+ * laid it out. A tile the game has re-meshed carries its own buffer instead:
+ * a crater needs vertices inside it to move, and a 12.5 m ground quad has
+ * none. Everything that reads or writes a tile's geometry goes through here,
+ * so that the uploader, the baker and the re-mesher cannot disagree about
+ * which buffer is the real one.
+ *
+ * The collision and the trees are not in here. They stay in the district's
+ * bytes, which is where `rec.cOff` and `rec.trOff` point, and nothing about
+ * re-meshing touches them.
+ *
+ * @param {object} rec a tile record
+ * @returns {{buffer: ArrayBuffer, view: DataView, vOff: number, vCount: number,
+ *   iOff: number, iCount: number, i32: boolean, tris: number,
+ *   min: number[], max: number[]}}
+ */
+export function tileMesh(rec) {
+  return rec.mesh || {
+    buffer: rec.d.buffer, view: rec.view,
+    vOff: rec.vOff, vCount: rec.vCount,
+    iOff: rec.iOff, iCount: rec.iCount,
+    i32: !!rec.i32, tris: rec.tris,
+    min: rec.min, max: rec.max,
+  };
 }
