@@ -2859,3 +2859,32 @@ caps residency at 520.
   three city runs and 36 m in six runs of the same steps on their own; the
   cause is not found, and the check now says what you were sitting in when
   it fails, which is the next thing to know.
+
+## 63. The viaduct on the real city
+
+- 2026-10-19: the branch's browser check against the live city had been red
+  for four pushes on two viaduct checks, which pass on the synthetic city
+  every time. Both were written for the synthetic city. The first stood at
+  x 637, z -422, which is Friedrichstrasse under the Stadtbahn there and
+  something else in OpenStreetMap's Berlin; the second ran a train on the
+  first railway in the list and wanted exactly three carriages, and the
+  real city has seventy six railway lines and thirty three carriages.
+
+- 2026-10-19: under the checks were three real faults. The viaduct's piers
+  stood every nine metres whatever was under them, so a street got under
+  the railway only when it happened to meet an arch; piers now give way
+  where a street crosses, with a lintel from the crown of the arches up,
+  4.9 m clear. Each bay drew only the first half of its pier, which left a
+  slot a metre and a half wide from the pavement to the deck at the end of
+  every bay; both halves are drawn now. And OpenStreetMap maps a railway as
+  many short ways, each of which was a line with its own train, so the
+  Stadtbahn was eleven trains shuttling up and down a hundred and fifty
+  metres each; ways that meet end to end and go on in the same direction
+  are joined into one line. Railways in a tunnel or under cover, which were
+  built as viaducts standing in the street over them, are left out.
+
+- 2026-10-19: the checks find the crossings in the map instead: every place
+  a road crosses a railway on a viaduct, up to twelve, each walked through
+  at head height and shot at deck height, and a failure names the street
+  and how far in it was stopped. The train is run up to a crossing on the
+  line that passes it.
