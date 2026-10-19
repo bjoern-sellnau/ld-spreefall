@@ -15,6 +15,8 @@
 // project: the ground height field under the feet and the collision segments
 // in front of the hull, out of the raycast the bullets use.
 
+import { CHASSIS, mechKey } from './chassis.js';
+
 export const MECH = {
   // Theirs. Slower than you, hits hard at range, and does not give ground.
   reaper: {
@@ -81,6 +83,49 @@ export const MECH = {
     stomp: { radius: 11, damage: 420, force: 26, speed: 9 },
   },
 };
+
+MECH.titan.chassis = 'warden';
+MECH.reaper.chassis = 'warden';
+
+/**
+ * The other nine, yours and theirs, out of the chassis table: the Titan and
+ * the Reaper with the numbers each chassis changes laid over them. Nested
+ * rows (the chaingun, the rockets, the shield, the dash, the stomp) are
+ * merged a field at a time, so a chassis that only changes the size of its
+ * salvo keeps the Titan's rocket speed and splash.
+ */
+function overlay(base, over) {
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over || {})) {
+    out[k] = v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object'
+      ? { ...base[k], ...v } : v;
+  }
+  return out;
+}
+for (const c of CHASSIS) {
+  const shape = {
+    height: c.height, radius: c.radius, eye: c.eye, chase: c.chase, chaseUp: c.chaseUp,
+    chassis: c.id,
+  };
+  const mine = overlay(overlay(MECH.titan, shape), c.mine);
+  mine.cockpit = c.cockpit;
+  mine.chaingun = { ...mine.chaingun, muzzle: c.muzzle.chaingun };
+  mine.rockets = { ...mine.rockets, muzzle: c.muzzle.rockets };
+  mine.arm = c.arm;
+  const foe = overlay(overlay(MECH.reaper, shape), c.foe);
+  foe.chaingun = { ...foe.chaingun, muzzle: c.muzzle.chaingun };
+  foe.rockets = { ...foe.rockets, muzzle: c.muzzle.rockets };
+  if (c === CHASSIS[0]) {
+    // The first chassis is the Titan and the Reaper, under the names the
+    // game has always used for them.
+    Object.assign(MECH.titan, { arm: c.arm });
+    continue;
+  }
+  mine.name = c.name;
+  foe.name = c.name;
+  MECH[mechKey(c.id, true)] = mine;
+  MECH[mechKey(c.id, false)] = foe;
+}
 
 /**
  * Calling one down.
@@ -296,7 +341,8 @@ export class Mechs {
     m.stepAt = 0;
     // The loadout, for the ones that have one. A magazine per arm, so
     // switching away from an empty railgun and back does not refill it.
-    m.arm = 0;
+    // Each chassis arrives holding the weapon it was built round.
+    m.arm = Math.max(0, ARMS.findIndex((a) => a.id === spec.arm));
     m.armTimer = 0;
     m.reloadLeft = 0;
     m.charge = 0;

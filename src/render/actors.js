@@ -3,6 +3,8 @@
 // project ships no models.
 
 import { createProgram } from '../engine/gl.js';
+import { CHASSIS } from '../game/chassis.js';
+import { MECH_BUILDERS } from './mechmeshes.js';
 import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
@@ -858,45 +860,18 @@ export const MECH_HIP = 4.2;
  * yours. That is the whole difference between a thing hunting you and the
  * thing you are standing in: one number per instance.
  */
-export function buildMechMesh() {
+/**
+ * One chassis, as a mesh: the builder in `mechmeshes.js` for it, handed the
+ * row out of the chassis table so that its guns are where the shots leave.
+ */
+export function buildChassisMesh(c) {
   const m = new MeshBuild();
-  for (const side of [-1, 1]) {
-    const x = side * 1.25;
-    m.box(x, 0.35, -0.25, 1.45, 0.70, 3.00, 12);        // foot
-    m.box(x, 1.05, 0.10, 0.95, 0.80, 1.10, 2);          // ankle
-    m.box(x, 2.10, 0.00, 1.15, 1.70, 1.25, 0);          // shin
-    m.box(x, 3.00, -0.05, 1.00, 0.55, 1.05, 2);         // knee
-    m.box(x, 3.75, 0.05, 1.35, 1.25, 1.45, 0);          // thigh
-  }
-  // Hips and the waist the torso turns on.
-  m.box(0, 4.35, 0, 3.10, 0.95, 1.95, 0);
-  m.box(0, 4.85, 0, 1.60, 0.55, 1.30, 2);
-
-  // Torso.
-  m.box(0, 5.75, 0.05, 3.00, 1.60, 2.10, 0);
-  m.box(0, 6.45, 0.35, 2.30, 0.70, 1.60, 0);            // engine deck
-  m.box(0, 5.70, -1.12, 2.00, 1.00, 0.22, 24);          // canopy
-  m.box(0, 6.25, -0.95, 0.70, 0.26, 0.26, 1);           // the eye
-  m.box(0, 5.05, 0.95, 1.10, 0.90, 0.50, 1);            // reactor, at the back
-
-  // Shoulders, and what is hung off them.
-  for (const side of [-1, 1]) m.box(side * 1.85, 6.05, 0.05, 0.95, 1.10, 1.60, 2);
-  // The chaingun on the right arm: a block and four barrels.
-  m.box(2.05, 5.60, -0.70, 0.90, 0.95, 2.20, 7);
-  for (const dx of [-0.22, 0.22]) {
-    for (const dy of [-0.2, 0.2]) {
-      m.box(2.05 + dx, 5.60 + dy, -2.35, 0.16, 0.16, 1.40, 7);
-    }
-  }
-  // The rocket pod on the left: six tubes in a block.
-  m.box(-2.05, 6.30, -0.35, 1.30, 1.10, 1.80, 7);
-  for (const dx of [-0.38, 0, 0.38]) {
-    for (const dy of [-0.26, 0.26]) {
-      m.box(-2.05 + dx, 6.30 + dy, -1.30, 0.26, 0.26, 0.30, 8);
-    }
-  }
+  MECH_BUILDERS[c.id](m, c);
   return m;
 }
+
+/** The Warden, which is what the game called a mech before there were ten. */
+export function buildMechMesh() { return buildChassisMesh(CHASSIS[0]); }
 
 /**
  * Where a mech's guns are, in its own coordinates, for the game layer. These
@@ -944,7 +919,10 @@ export class Actors {
     // Three vec4s: where it is and which way its legs point, then the stride,
     // the torso and the hit flash, then whether it is yours and how far over
     // it has gone.
-    this.mech = this._uploadMesh(buildMechMesh(), MAX_MECHS, 3);
+    // A mesh per chassis, each with room for every mech there can be, since
+    // nothing stops all eight on the street being the same one.
+    this.mechMeshes = CHASSIS.map((c) => ({ chassis: c, mesh: this._uploadMesh(buildChassisMesh(c), MAX_MECHS, 3) }));
+    this.mech = this.mechMeshes[0].mesh;
     // What you can get into. The fighter you can fly is the same mesh as the
     // ones that come after you, because it is the same aircraft.
     this.vehicles = {
@@ -1308,52 +1286,76 @@ export class Actors {
   /** @param {Array} list live mechs */
   updateMechs(list) {
     const gl = this.gl;
-    const data = this.mech.instData;
-    let n = 0;
-    for (const m of list) {
-      if (!m.alive || n >= MAX_MECHS) continue;
-      const o = n * 12;
-      data[o] = m.x; data[o + 1] = m.y; data[o + 2] = m.z; data[o + 3] = m.yaw;
-      // The torso angle is relative to the legs, because that is what the
-      // shader turns it by.
-      data[o + 4] = m.walk;
-      data[o + 5] = m.torso - m.yaw;
-      data[o + 6] = m.hitFlash;
-      data[o + 7] = m.pitch;
-      data[o + 8] = m.mine ? 1 : 0;
-      data[o + 9] = m.health > 0 ? 0 : Math.min(1, (m.dying || 0) / 1.6);
-      data[o + 10] = m.dashLeft > 0 ? 1 : 0;
-      data[o + 11] = 0;
-      n++;
+    for (const { chassis, mesh } of this.mechMeshes) {
+      const data = mesh.instData;
+      let n = 0;
+      for (const m of list) {
+        if (!m.alive || n >= MAX_MECHS) continue;
+        if ((m.spec.chassis || 'warden') !== chassis.id) continue;
+        const o = n * 12;
+        data[o] = m.x; data[o + 1] = m.y; data[o + 2] = m.z; data[o + 3] = m.yaw;
+        // The torso angle is relative to the legs, because that is what the
+        // shader turns it by.
+        data[o + 4] = m.walk;
+        data[o + 5] = m.torso - m.yaw;
+        data[o + 6] = m.hitFlash;
+        data[o + 7] = m.pitch;
+        data[o + 8] = m.mine ? 1 : 0;
+        data[o + 9] = m.health > 0 ? 0 : Math.min(1, (m.dying || 0) / 1.6);
+        data[o + 10] = m.dashLeft > 0 ? 1 : 0;
+        data[o + 11] = 0;
+        n++;
+      }
+      mesh.instanceCount = n;
+      if (n > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 12);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
     }
-    this.mech.instanceCount = n;
-    if (n > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.mech.instVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 12);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+
+  /** How many mechs are drawn this frame, and how many triangles that is. */
+  get mechStats() {
+    let count = 0, tris = 0;
+    for (const { mesh } of this.mechMeshes) {
+      count += mesh.instanceCount;
+      tris += mesh.instanceCount * (mesh.count / 3);
     }
+    return { count, tris };
   }
 
   drawMechs() {
-    if (!this.mech.instanceCount) return 0;
     const gl = this.gl;
-    this.progMech.use();
-    gl.bindVertexArray(this.mech.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.mech.count, this.mech.indexType, 0,
-      this.mech.instanceCount);
+    let draws = 0;
+    for (const { chassis, mesh } of this.mechMeshes) {
+      if (!mesh.instanceCount) continue;
+      // Where its legs stop, and whether it walks on two or four, are the
+      // chassis' own: the shader splits the mesh there.
+      this.progMech.use()
+        .float('uHip', chassis.hip)
+        .float('uGait', chassis.gait === 'quad' ? 1 : 0)
+        .float('uHipZ', chassis.hipZ || 0);
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawMechShadows(lightViewProj) {
-    if (!this.mech.instanceCount) return 0;
     const gl = this.gl;
-    this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
-    gl.bindVertexArray(this.mech.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.mech.count, this.mech.indexType, 0,
-      this.mech.instanceCount);
+    let draws = 0;
+    for (const { mesh } of this.mechMeshes) {
+      if (!mesh.instanceCount) continue;
+      this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawVehicles() {
@@ -1510,7 +1512,8 @@ export class Actors {
 
   dispose() {
     const gl = this.gl;
-    for (const mesh of [this.drone, this.soldier, this.jet, this.gib, this.mech,
+    for (const mesh of [this.drone, this.soldier, this.jet, this.gib,
+      ...this.mechMeshes.map((e) => e.mesh),
       ...Object.values(this.weapons),
       ...Object.values(this.props), ...Object.values(this.pickups),
       ...Object.values(this.vehicles)]) {

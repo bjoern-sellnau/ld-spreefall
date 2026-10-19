@@ -580,6 +580,16 @@ async function run() {
       const dx = px - eye0.x, dy = py - eye0.y, dz = pz - eye0.z;
       const len = Math.hypot(dx, dy, dz) || 1;
       if (s.world.raycast(eye0.x, eye0.y, eye0.z, dx / len, dy / len, dz / len, len)) continue;
+      // And the line it is actually fired down, at the road short of them:
+      // clear to the group was not the same as clear to there, and a lamp
+      // post seven metres out on that line set the pulse off at the player's
+      // feet in one of three runs here.
+      const ax = s.player.x + (px - s.player.x) * 0.85, az = s.player.z + (pz - s.player.z) * 0.85;
+      const ay = s.world.groundHeight(ax, az) + 0.2;
+      const fx = ax - eye0.x, fy = ay - eye0.y, fz = az - eye0.z;
+      const fl = Math.hypot(fx, fy, fz) || 1;
+      const block = s.world.raycast(eye0.x, eye0.y, eye0.z, fx / fl, fy / fl, fz / fl, fl);
+      if (block && block.t < fl - 1.5) continue;
       for (let i = 0; i < 4; i++) {
         const sd = s.soldiers.spawnNear(px, pz, 2, 9);
         if (sd) { s.makeMachine(sd); sd.stunLeft = 0; group.push(sd); }

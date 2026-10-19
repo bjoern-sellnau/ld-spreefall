@@ -681,7 +681,7 @@ export class Renderer {
       draws += this.actors.drawSoldiers();
       tris += this.actors.soldier.instanceCount * (this.actors.soldier.count / 3);
       draws += this.actors.drawMechs();
-      tris += this.actors.mech.instanceCount * (this.actors.mech.count / 3);
+      tris += this.actors.mechStats.tris;
       draws += this.actors.drawProjectiles();
       for (const kind in this.actors.props) {
         const mesh = this.actors.props[kind];

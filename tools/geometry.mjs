@@ -73,7 +73,7 @@ export function orientedBox(ring) {
  * @param {Mesh} mesh
  * @param {{outer:[number,number][], holes:[number,number][][]}} foot
  * @param {object} o base, height, roofShape, roofHeight, minHeight, wallMat,
- *                   roofMat, seed, levels, landmark, uOffset
+ *                   roofMat, seed, levels, landmark, uOffset, noGroundFloor
  */
 export function extrudeBuilding(mesh, foot, o) {
   const base = o.base;
@@ -104,8 +104,9 @@ export function extrudeBuilding(mesh, foot, o) {
       const nx = dz / len, nz = -dx / len;
       const u0 = run, u1 = run + len;
       const flags = landmarkFlag | noWin;
-      const v0 = mesh.vertex(a[0], bottom, a[1], nx, 0, nz, u0, 0, wallMat, seed, levels, flags | FACADE_FLAG.GROUND_FLOOR, hgt, 150);
-      const v1 = mesh.vertex(b[0], bottom, b[1], nx, 0, nz, u1, 0, wallMat, seed, levels, flags | FACADE_FLAG.GROUND_FLOOR, hgt, 150);
+      const foot = o.noGroundFloor ? flags : flags | FACADE_FLAG.GROUND_FLOOR;
+      const v0 = mesh.vertex(a[0], bottom, a[1], nx, 0, nz, u0, 0, wallMat, seed, levels, foot, hgt, 150);
+      const v1 = mesh.vertex(b[0], bottom, b[1], nx, 0, nz, u1, 0, wallMat, seed, levels, foot, hgt, 150);
       const v2 = mesh.vertex(b[0], wallTop, b[1], nx, 0, nz, u1, o.height + (o.skirt !== undefined ? o.skirt : 1.2), wallMat, seed, levels, flags, hgt, 255);
       const v3 = mesh.vertex(a[0], wallTop, a[1], nx, 0, nz, u0, o.height + (o.skirt !== undefined ? o.skirt : 1.2), wallMat, seed, levels, flags, hgt, 255);
       // Viewed from above, +z runs south, so a ring that is counter clockwise in

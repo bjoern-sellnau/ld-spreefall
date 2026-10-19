@@ -10,6 +10,8 @@
 // because it is your game, but the interface says plainly that it was not a
 // clean run and the end screen says so too.
 
+import { CHASSIS, chassisById, mechKey } from './chassis.js';
+
 const KEY = 'spreefall.cheats';
 
 /**
@@ -140,6 +142,10 @@ export class Cheats {
     // The numeric settings, by id, starting at what the game ships with.
     this.values = {};
     for (const s of SETTINGS) this.values[s.id] = s.def;
+    // Which mech you are sent, and which of theirs come for you. A choice
+    // rather than a cheat: it does not mark the run, and all off leaves it
+    // where you put it.
+    this.mechs = { mine: CHASSIS[0].id, foe: CHASSIS[0].id };
     // Set the first time anything is switched on, and never cleared, so that
     // turning a cheat off again does not launder the run.
     this.used = false;
@@ -217,6 +223,34 @@ export class Cheats {
     return SETTINGS.some((s) => this.value(s.id) !== s.def);
   }
 
+  /**
+   * Pick a chassis for one side. Theirs may also be 'random', which is a
+   * new throw of the dice for every one that arrives.
+   *
+   * @param {'mine'|'foe'} side
+   * @returns {boolean} whether it was one there is
+   */
+  chooseMech(side, id) {
+    if (side !== 'mine' && side !== 'foe') return false;
+    const ok = CHASSIS.some((c) => c.id === id) || (side === 'foe' && id === 'random');
+    if (!ok) return false;
+    this.mechs[side] = id;
+    this.save();
+    if (this.onChange) this.onChange(`mech:${side}`, id);
+    return true;
+  }
+
+  /** The mech table key for the next one of yours to come down. */
+  myMech() { return mechKey(this.mechs.mine, true); }
+
+  /** And for the next one of theirs, thrown again each time when random. */
+  foeMech(rand = Math.random) {
+    const id = this.mechs.foe === 'random'
+      ? CHASSIS[Math.floor(rand() * CHASSIS.length) % CHASSIS.length].id
+      : chassisById(this.mechs.foe).id;
+    return mechKey(id, false);
+  }
+
   /** Everything off. Does not clear the mark on the run. */
   reset() {
     for (const id of KEYS) this[id] = DEFAULTS[id];
@@ -227,7 +261,7 @@ export class Cheats {
 
   save() {
     try {
-      const out = { values: this.values };
+      const out = { values: this.values, mechs: this.mechs };
       for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
@@ -245,6 +279,12 @@ export class Cheats {
         for (const s of SETTINGS) {
           const v = saved.values[s.id];
           if (Number.isFinite(v)) this.values[s.id] = Math.min(s.max, Math.max(s.min, v));
+        }
+      }
+      if (saved.mechs) {
+        if (CHASSIS.some((c) => c.id === saved.mechs.mine)) this.mechs.mine = saved.mechs.mine;
+        if (saved.mechs.foe === 'random' || CHASSIS.some((c) => c.id === saved.mechs.foe)) {
+          this.mechs.foe = saved.mechs.foe;
         }
       }
       if (this.any) this.used = true;

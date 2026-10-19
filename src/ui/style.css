@@ -1006,6 +1006,29 @@ html, body {
   text-transform: none;
   opacity: 0.68;
 }
+/* The mech pickers: a chip per chassis, gold on the one that is picked,
+   and a line under the row saying what it is for. */
+#cheats .chips { gap: 6px; }
+#cheats .chip {
+  margin: 0;
+  padding: 5px 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #cfcabf;
+  font: 600 11.5px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  cursor: pointer;
+}
+#cheats .chip:hover { background: rgba(255, 255, 255, 0.1); }
+#cheats .chip.on { background: var(--accent); color: #15171b; border-color: var(--accent); }
+#cheats #cheatfoe .chip.on { background: #d2574a; border-color: #d2574a; color: #fff; }
+#cheats .mechsay {
+  flex: 1 0 100%;
+  font-size: 11px;
+  color: var(--dim);
+}
 /* A switch is a whole row you can click, because a 12 pixel checkbox in a
    first person game is a thing you miss. */
 #cheats .sw {

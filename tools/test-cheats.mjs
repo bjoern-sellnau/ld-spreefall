@@ -817,6 +817,55 @@ async function run() {
     `${waves.live.soldiers} soldiers, ${waves.live.drones} drones, ${waves.live.jets} jets`);
   check('and none of them in the weapons free zone', waves.inZone === 0);
 
+  // --- which mech, yours and theirs --------------------------------------
+  const picked = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const chips = (side) => [...document.querySelectorAll(`[data-mech^="${side}:"]`)].map((b) => b.dataset.mech);
+    const mineChips = chips('mine'), foeChips = chips('foe');
+    // Yours: pick one with the chip, as a player would, and call it down.
+    document.querySelector('[data-mech="mine:bruin"]').click();
+    const lit = document.querySelector('[data-mech="mine:bruin"]').classList.contains('on');
+    s.mechs.reset();
+    const call = s.dropRide('titan');
+    const inbound = s.state.titanInbound ? s.state.titanInbound.type : null;
+    s.state.titanInbound = null;
+    document.getElementById('titanfall').classList.add('hidden');
+    const bruin = s.mechs.spawn('bruin', s.player.x + 30, s.player.z, 0);
+    const arm = bruin ? s.mechs.arm(bruin).id : null;
+    // Theirs: one chassis, then the dice.
+    s.mechs.reset();
+    document.querySelector('[data-mech="foe:heron"]').click();
+    s.spawnWave('reapers', 2);
+    const herons = s.mechs.active.map((m) => m.type);
+    s.mechs.reset();
+    document.querySelector('[data-mech="foe:random"]').click();
+    const seen = new Set();
+    for (let i = 0; i < 60; i++) seen.add(s.cheats.foeMech());
+    s.spawnWave('reapers', 2);
+    const randoms = s.mechs.active.map((m) => m.type);
+    // Every one of them is drawn, by the mesh of its own chassis.
+    for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+    const drawn = s.renderer.actors.mechStats.count;
+    const live = s.mechs.active.filter((m) => m.alive).length;
+    s.mechs.reset();
+    s.cheats.chooseMech('mine', 'warden');
+    s.cheats.chooseMech('foe', 'warden');
+    return { mineChips: mineChips.length, foeChips: foeChips.length, lit, call: !!call, inbound, arm,
+      herons, seen: seen.size, randoms, drawn, live };
+  });
+  check('the menu offers ten mechs for you and ten and random for them',
+    picked.mineChips === 10 && picked.foeChips === 11, `${picked.mineChips} and ${picked.foeChips}`);
+  check('the one you pick is the one that is called down',
+    picked.lit && picked.call && picked.inbound === 'bruin', `${picked.inbound} inbound`);
+  check('and it comes down holding the weapon it was built round', picked.arm === 'leadwall', picked.arm);
+  check('theirs come as the chassis you pick',
+    picked.herons.length === 2 && picked.herons.every((t) => t === 'heron-foe'), picked.herons.join(', '));
+  check('or a different one each time on random',
+    picked.seen >= 7 && picked.randoms.every((t) => t === 'reaper' || /-foe$/.test(t)),
+    `${picked.seen} kinds in sixty throws`);
+  check('and every one on the street is drawn', picked.drawn === picked.live && picked.live > 0,
+    `${picked.drawn} of ${picked.live}`);
+
   // The two rows that were missing: machines and people walking past.
   const kinds = await page.evaluate(() => {
     const s = window.spreefall;

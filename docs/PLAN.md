@@ -2802,3 +2802,60 @@ caps residency at 520.
   cranked delta, two canted fins, missiles, and wheels that fold away more
   than 25 m up. Where each one stands was changed with it: the helicopter
   stands on its skids and the fighter's middle is 1.9 m over the road.
+
+## 62. Ten mechs, yours and theirs, and what OpenStreetMap does to a landmark
+
+- 2026-10-19: ten chassis, each a row in `src/game/chassis.js` and a shape
+  in `src/render/mechmeshes.js`: Warden (the one the game had), Bruin,
+  Heron, Lynx, Bastion, Hornet, Colossus, Mantis, Ram and Wraith. A row is
+  size, hip height, gait, speed, turn, armour, shield, jump, dash, landing,
+  the two muzzles and the arm weapon it arrives holding, and the mech table
+  makes two specs out of each, yours over the Titan's numbers and theirs
+  over the Reaper's, so the first chassis is still the Titan and the Reaper
+  under the names everything already asks for. The names and shapes are
+  ours; a brawler, a marksman, a raptor, a spider and a fortress are the
+  genre's.
+
+- 2026-10-19: the mech shader took its hip line as a constant, 4.2 m. It is
+  a uniform now, set per chassis with the gait, because a raptor's hips are
+  at 3.6 and a colossus' at 5.4, and the spider walks its diagonals together
+  with each leg swinging about its own root. The rule the mesh has to keep
+  for that is checked for every chassis in the unit tests: no triangle
+  across the hip line, no leg triangle across the middle, every triangle
+  wound outwards, and a barrel within sixty centimetres of each muzzle. The
+  first run of it found four of the ten with a shield, a knee or a gun
+  reaching under the hips.
+
+- 2026-10-19: yours wear the chassis' colour, theirs all wear gunmetal with
+  red trim, chosen in the shader from the same instance number that already
+  turned the core blue. The cheat menu has a row of chips for each side;
+  theirs has Random, a new throw for every one that arrives, from the menu
+  and in Rise of the Machines. The choice is kept with the cheats but is not
+  one: it does not mark the run, and all off leaves it alone.
+
+- 2026-10-19: the live Reichstag, from the link at -114.2, -176.1. The live
+  city is built from OpenStreetMap, where the local one is synthetic, and
+  the build skipped any outline with building:part pieces in it before it
+  asked whether the outline was a landmark. If OpenStreetMap maps the
+  Reichstag as an outline with pieces, which large buildings usually are,
+  the live site drew those pieces and never the model built from the
+  Bundestag's own figures. The landmark is now asked about first, and every
+  piece inside it and the envelope round it are left to the model. The
+  floating building is very likely the other half of the same rule: pieces
+  that start at fifteen or twenty metres with nothing mapped under them,
+  drawn without the outline that would have held them up, with a shop band
+  at their foot. Such an outline is now built as the podium up to where its
+  lowest raised piece starts, and a volume that starts above the street
+  gets no shop band. The live site is closed to this container (the proxy
+  refuses github.io, and Overpass), so this is reasoned from the code and
+  the tagging scheme and checked with unit tests on made up pieces, not
+  seen on the real data; the next build of the live city is the check.
+
+- 2026-10-19: two checks failed once each and passed when run again. The
+  EMP launcher check picked its target group by a clear line to the group
+  but fired at the road short of it, so something on that second line could
+  set the pulse off seven metres out; the group is now chosen by the line
+  the rocket actually flies. The helicopter climb check read 0 m once in
+  three city runs and 36 m in six runs of the same steps on their own; the
+  cause is not found, and the check now says what you were sitting in when
+  it fails, which is the next thing to know.

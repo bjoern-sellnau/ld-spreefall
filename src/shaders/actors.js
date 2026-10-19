@@ -302,6 +302,29 @@ void main() {
     albedo = vec3(0.15, 0.155, 0.12);
     rough = 0.6;
     metal = 0.35;
+  } else if (vPart > 49.5 && vPart < 62.5) {
+    // Mech paint. Ten liveries for yours, one per chassis, then theirs, then
+    // the two trims. Flat military paint with a little wear on the edges the
+    // light catches.
+    int k = int(vPart + 0.5) - 50;
+    vec3 c = vec3(0.30, 0.33, 0.37);                     // Warden, steel blue
+    if (k == 1) c = vec3(0.34, 0.24, 0.14);              // Bruin, bear brown
+    else if (k == 2) c = vec3(0.62, 0.63, 0.62);         // Heron, pale grey
+    else if (k == 3) c = vec3(0.55, 0.45, 0.28);         // Lynx, sand
+    else if (k == 4) c = vec3(0.24, 0.27, 0.16);         // Bastion, olive
+    else if (k == 5) c = vec3(0.10, 0.10, 0.10);         // Hornet, black
+    else if (k == 6) c = vec3(0.36, 0.09, 0.07);         // Colossus, oxblood
+    else if (k == 7) c = vec3(0.11, 0.30, 0.30);         // Mantis, teal
+    else if (k == 8) c = vec3(0.62, 0.30, 0.08);         // Ram, signal orange
+    else if (k == 9) c = vec3(0.075, 0.07, 0.095);       // Wraith, dark violet
+    else if (k == 10) c = vec3(0.11, 0.115, 0.125);      // theirs: gunmetal
+    else if (k == 11) c = vec3(0.70, 0.56, 0.10);        // your trim: yellow
+    else if (k == 12) c = vec3(0.55, 0.04, 0.03);        // their trim: red
+    float wear = vnoise(vWorld.xz * 2.3 + vWorld.y * 1.7);
+    albedo = c * (0.82 + 0.3 * wear);
+    rough = k == 9 ? 0.85 : 0.6;
+    metal = 0.25;
+    if (k == 12) emissive = vec3(0.35, 0.02, 0.01);
   } else if (vPart > 43.5 && vPart < 44.5) {
     // Undercarriage legs and wheels.
     albedo = vec3(0.12, 0.125, 0.13);
@@ -610,7 +633,12 @@ flat out float vPart;
 flat out float vFlash;
 out float vViewDist;
 
-const float HIP = 4.2;
+// Where the legs stop, whether there are two or four of them, and for four
+// how far fore and aft of the middle their roots are. The chassis' own, set
+// for each chassis' draw.
+uniform float uHip;
+uniform float uGait;
+uniform float uHipZ;
 
 mat3 rotY(float a) {
   float c = cos(a), s = sin(a);
@@ -631,12 +659,15 @@ void main() {
   float stride = iState.x;
   float swing = sin(stride) * 0.38;
 
-  if (p.y < HIP) {
+  if (p.y < uHip) {
     // A leg. The two of them are in opposition, and the lower half of each
     // swings a little further than the upper, which is enough of a knee.
+    // With four, the diagonals go together, the way a dog walks, and each
+    // leg swings about its own root rather than about the middle.
     float side = p.x < 0.0 ? 1.0 : -1.0;
-    vec3 hip = vec3(p.x, HIP, 0.0);
-    float amount = swing * side * (p.y < 2.6 ? 1.25 : 1.0);
+    if (uGait > 0.5) side *= p.z < 0.0 ? 1.0 : -1.0;
+    vec3 hip = vec3(p.x, uHip, uGait > 0.5 ? sign(p.z) * uHipZ : 0.0);
+    float amount = swing * side * (p.y < uHip * 0.62 ? 1.25 : 1.0);
     mat3 r = rotX(amount);
     p = hip + r * (p - hip);
     n = r * n;
@@ -644,7 +675,7 @@ void main() {
     // The torso, which is where the guns are. It turns relative to the legs
     // and it pitches, and both happen about the hip line so that nothing
     // tears at the waist.
-    vec3 base = vec3(0.0, HIP, 0.0);
+    vec3 base = vec3(0.0, uHip, 0.0);
     mat3 t = rotY(iState.y) * rotX(iState.w);
     p = base + t * (p - base);
     n = t * n;
@@ -668,6 +699,10 @@ void main() {
   // blue instead, which is part 11, and that is the only thing that tells the
   // two apart at a distance.
   vPart = (aInfo.x < 1.5 && aInfo.x > 0.5 && iExtra.x > 0.5) ? 11.0 : aInfo.x;
+  // Theirs are all in one livery, whichever chassis it is: gunmetal where
+  // yours carries its own colour, and red where yours has its trim.
+  if (iExtra.x < 0.5 && aInfo.x > 49.5 && aInfo.x < 59.5) vPart = 60.0;
+  if (iExtra.x < 0.5 && aInfo.x > 60.5 && aInfo.x < 61.5) vPart = 62.0;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);

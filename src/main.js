@@ -25,6 +25,7 @@ import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
+import { CHASSIS } from './game/chassis.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
@@ -74,6 +75,7 @@ const el = {
   modeNote: $('modenote'), timePick: $('timepick'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
+  cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'), vehicleKeys: $('vehiclekeys'),
   vehicleHull: $('vehiclehull'), vehicleSpeed: $('vehiclespeed'),
   vehicleSpeedUnit: $('vehiclespeedunit'),
@@ -2396,7 +2398,9 @@ async function main() {
     cheats.used = true;
     applyCheats();
     // A mech is not in the vehicle table at all, and it does not walk out of
-    // a side street: it is dropped.
+    // a side street: it is dropped. Asking for a Titan is asking for whichever
+    // chassis is picked in the menu.
+    if (type === 'titan') type = cheats.myMech();
     if (MECH[type]) return callTitan(type);
     // A fighter needs a runway, and a street is not one. Asked for from the
     // menu it arrives in the air, already flying, with you in it: the cheat
@@ -2962,6 +2966,38 @@ async function main() {
       });
       el.cheatRides.appendChild(b);
     }
+    // Which mech is yours, and which of theirs: a chip per chassis, lit on
+    // the one that is picked, with what it is for written under the row.
+    for (const side of ['mine', 'foe']) {
+      const host = side === 'mine' ? el.cheatMine : el.cheatFoe;
+      const say = document.createElement('div');
+      say.className = 'mechsay';
+      const chips = [];
+      const show = () => {
+        const id = cheats.mechs[side];
+        for (const c of chips) c.el.classList.toggle('on', c.id === id);
+        const row = CHASSIS.find((c) => c.id === id);
+        say.textContent = row ? `${row.name}: ${row.role}` : 'a different one every time';
+      };
+      const options = [...CHASSIS.map((c) => ({ id: c.id, label: c.name, note: c.role })),
+        ...(side === 'foe' ? [{ id: 'random', label: 'Random', note: 'a different one every time' }] : [])];
+      for (const o of options) {
+        const b = document.createElement('button');
+        b.className = 'chip';
+        b.dataset.mech = `${side}:${o.id}`;
+        b.textContent = o.label;
+        b.title = o.note;
+        b.addEventListener('click', () => {
+          cheats.chooseMech(side, o.id);
+          show();
+          toast(side === 'mine' ? `${o.label} on the next titanfall` : `theirs: ${o.label.toLowerCase()}`);
+        });
+        host.appendChild(b);
+        chips.push({ id: o.id, el: b });
+      }
+      host.appendChild(say);
+      show();
+    }
     for (const sp of SPAWNS) {
       const b = document.createElement('button');
       b.className = 'act';
@@ -3145,7 +3181,7 @@ async function main() {
     // And the heavy ones, walking in from further out.
     const heavies = mechs.active.filter((m) => !m.mine && m.health > 0).length;
     if (machines.tickMech(dt, heavies)) {
-      spawnMech('reaper', MACHINES.mechFrom
+      spawnMech(cheats.foeMech(), MACHINES.mechFrom
         + Math.random() * (MACHINES.mechTo - MACHINES.mechFrom));
     }
     // The hum, and the two tone they give when one of them has you. Spread
@@ -3217,7 +3253,7 @@ async function main() {
       } else if (kind === 'jets') {
         if (jets.spawnFar(player.x, player.z)) made++;
       } else if (kind === 'reapers') {
-        if (spawnMech('reaper', 60 + Math.random() * 60)) made++;
+        if (spawnMech(cheats.foeMech(), 60 + Math.random() * 60)) made++;
       } else if (kind === 'machines') {
         // The same soldier layer and the same spawner, and then the same one
         // line the end of the world mode uses to turn a soldier into one.

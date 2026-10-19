@@ -748,6 +748,9 @@ async function run() {
     if (!heli || !jet) return { climbed: -1, stalled: -1, stall: 0 };
     s.teleport(heli.x + 2, heli.z);
     s.toggleVehicle();
+    // What it got you into, and whether it could, for when it climbs nowhere.
+    const inside = s.state.inVehicle === heli ? 'heli'
+      : (s.state.inVehicle ? s.state.inVehicle.type : (s.state.inMech ? 'a mech' : `nothing, mode ${s.state.mode}`));
     const y0 = heli.y;
     s.input.keys.add('Space');
     s.input.jumpHeld = true;
@@ -766,9 +769,9 @@ async function run() {
     for (let i = 0; i < 90; i++) s.vehicles.update(1 / 60, null, i / 60);
     const stalled = high - jet.y;
     return { climbed: Math.round(climbed), stalled: Math.round(stalled),
-      stall: s.vehicleSpec.jet.stall };
+      stall: s.vehicleSpec.jet.stall, inside };
   });
-  check('a helicopter climbs when you hold space', fly.climbed > 20, `${fly.climbed} m`);
+  check('a helicopter climbs when you hold space', fly.climbed > 20, `${fly.climbed} m, in ${fly.inside}`);
   check('and a fighter below its stall speed falls out of the sky',
     fly.stalled > 20, `${fly.stalled} m in a second and a half, under ${fly.stall} m/s`);
 

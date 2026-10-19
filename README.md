@@ -592,10 +592,35 @@ forty, sidesteps rather than standing still, and fires five rounds then waits
 two seconds. Rockets only past fifty five metres. Rise of the Machines keeps
 two of them on the streets; the cheat menu will drop a pair wherever you are.
 
-The whole body is one mesh and one instanced draw call, and the walk, the
-torso turn, the pitch, the stride bob and the fall are all in the vertex
-shader. The only thing that distinguishes yours from theirs is one number per
-instance, which turns the red core blue.
+There are ten of them, and the cheat menu has a row for yours and a row for
+theirs. Yours is the one the next titanfall brings; theirs is the one that
+comes for you, from the menu and in Rise of the Machines, and can be random,
+a new throw for each one that arrives.
+
+| | |
+|---|---|
+| Warden | the all rounder: chaingun, rocket pod, a dash and a shield |
+| Bruin | heavy brawler: slow, broad, a shotgun fist and a big shield |
+| Heron | tall marksman: long legs, a railgun on the shoulder, thin armour |
+| Lynx | light raptor: reverse knees, very fast, a long dash, little armour |
+| Bastion | walking fortress: shoulder shields, a cannon, the biggest shield |
+| Hornet | missile boat: two racks of ten, jump jets that clear a roof |
+| Colossus | eleven metres: slow as a tram, a landing that flattens a square |
+| Mantis | four legged spider: low, wide, climbs what the others cannot |
+| Ram | chicken walker: no arms, a head full of guns and a charge like a train |
+| Wraith | faceted and dark: fast, a beam on the arm, a shield that comes back quickly |
+
+Each one is a row of numbers in `src/game/chassis.js` (size, where its hips
+are, speed, turn, armour, shield, jump, dash, the landing, where its guns
+are and which arm weapon it arrives holding) and a shape in
+`src/render/mechmeshes.js` built round the same numbers. Yours wears the
+chassis' own colour and theirs all wear gunmetal with red trim, which is how
+you tell them apart across a square whatever they are.
+
+Each chassis is one mesh and one instanced draw call, and the walk, the torso
+turn, the pitch, the stride bob and the fall are all in the vertex shader,
+which splits the mesh at that chassis' hip line; the spider's legs go in
+diagonal pairs, each about its own root.
 
 ## The city is eighty one districts
 
