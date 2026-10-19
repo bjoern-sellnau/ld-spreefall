@@ -22,11 +22,17 @@
 import { VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from '../shared/constants.js';
 import { tileMesh } from '../engine/world.js';
 
-/** As fine as it is worth cutting: the collision field is 3.125 m in Mitte. */
+/** The coarsest a crater is cut. A small one asks for finer, see main.js. */
 export const FINE_EDGE = 3.0;
 
-/** A ceiling on the splitting, so one blast cannot turn a tile into a million. */
-const MAX_DEPTH = 12;
+/**
+ * A ceiling on the splitting, so one blast cannot turn a tile into a million.
+ * Each step halves the longest edge of one piece, so this many steps take a
+ * ground quad of 200 m, which is what the outskirts are built from, down to
+ * under a metre. Only the pieces over the hole are split, so it is the size
+ * of the hole that sets the cost and not this number.
+ */
+const MAX_DEPTH = 18;
 
 /**
  * Cuts the ground finer around a point, in every tile it reaches.
@@ -230,12 +236,27 @@ function reworkTile(world, index, o) {
   }
 
   // And then the hole itself: every piece whose middle is inside it goes.
+  // Only pieces of what this pass works on, though, and only frontages. It
+  // took everything with its middle in the sphere, the street included, and
+  // the street round a crater has just been cut into metre pieces, so the
+  // second rocket into the same spot took the middle out of the crater and
+  // left a hole in the map you could see out of the bottom of. The shader's
+  // own hole has the same rule: not the ground and not a roof.
   let dropped = 0;
   if (o.drop) {
     const r2 = radius * radius;
     const left = [];
+    const frontage = (a, b, c) => {
+      if (isGround(a) || isGround(b) || isGround(c)) return false;
+      const ux = pos[b][0] - pos[a][0], uy = pos[b][1] - pos[a][1], uz = pos[b][2] - pos[a][2];
+      const vx = pos[c][0] - pos[a][0], vy = pos[c][1] - pos[a][1], vz = pos[c][2] - pos[a][2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const l = Math.hypot(nx, ny, nz);
+      return l > 1e-9 && Math.abs(ny) / l < 0.55;
+    };
     for (let i = 0; i < kept.length; i += 3) {
       const a = kept[i], b = kept[i + 1], c = kept[i + 2];
+      if (!frontage(a, b, c)) { left.push(a, b, c); continue; }
       const mx = (pos[a][0] + pos[b][0] + pos[c][0]) / 3;
       const my = (pos[a][1] + pos[b][1] + pos[c][1]) / 3;
       const mz = (pos[a][2] + pos[b][2] + pos[c][2]) / 3;

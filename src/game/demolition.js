@@ -189,6 +189,7 @@ export class Demolition {
     // caches and let them be read from the bundle again.
     this.world.collisionCache.clear();
     this.world.heightCache.clear();
+    this.world.clearCraters();
   }
 
   _key(ix, iz) { return `${ix},${iz}`; }
@@ -366,11 +367,11 @@ export class Demolition {
     site.opened = false;
     if (crater > site.craterRadius) {
       site.craterRadius = crater;
-      // As deep as the shape says, or as deep as the ground underneath can be
-      // made to agree with, whichever is less.
-      const step = this.world.groundStep(site.x, site.z);
-      const follows = DEMO.craterSlack * (crater / step) * (crater / step);
-      site.depth = Math.min(DEMO.maxCraterDepth, crater * DEMO.craterDepth, follows);
+      // As deep as the shape says. It used to be capped by how far apart the
+      // collision samples were, which made a rocket's hole 0.6 m deep in the
+      // middle of town and a centimetre outside it; the collision follows
+      // the bowl itself now, and the picture is cut fine enough to.
+      site.depth = Math.min(DEMO.maxCraterDepth, crater * DEMO.craterDepth);
       // The ground here is a quad grid, and a hole wants vertices inside it.
       // The layer above cuts the ground finer before anything is moved, which
       // is what lets a crater be smaller than one of those quads.
@@ -680,36 +681,15 @@ export class Demolition {
    * @param {number} level how much of it to add, which may be negative
    */
   applyCrater(shape, level) {
-    const w = this.world;
-    const site = shape;
-    const r = site.craterRadius * DEMO.rimOut;
-    const tx0 = Math.max(0, Math.floor((site.x - r - w.minX) / w.tileSize));
-    const tx1 = Math.min(w.nx - 1, Math.floor((site.x + r - w.minX) / w.tileSize));
-    const tz0 = Math.max(0, Math.floor((site.z - r - w.minZ) / w.tileSize));
-    const tz1 = Math.min(w.nz - 1, Math.floor((site.z + r - w.minZ) / w.tileSize));
-    let moved = 0;
-    for (let tz = tz0; tz <= tz1; tz++) {
-      for (let tx = tx0; tx <= tx1; tx++) {
-        const index = tz * w.nx + tx;
-        const hf = w.heightField(index);
-        if (!hf) continue;
-        // How fine the field is depends on which district the tile is in, so
-        // it is read off the field rather than assumed.
-        const grid = hf.n || COLLISION_GRID;
-        const step = w.tileSize / (grid - 1);
-        const [ox, oz] = w.tileOrigin(index);
-        for (let j = 0; j < grid; j++) {
-          for (let i = 0; i < grid; i++) {
-            const px = ox + i * step, pz = oz + j * step;
-            const d = craterAt(px, pz, site, level);
-            if (d === 0) continue;
-            hf[j * grid + i] += Math.round(d * GROUND_SCALE);
-            moved++;
-          }
-        }
-      }
-    }
-    return moved;
+    // The bowl goes into the world as a shape, and the ground height is the
+    // field plus every shape over it. It used to be written into the field
+    // itself, which is one sample every 3.1 m in the middle of town and one
+    // every 25 m out past the ring: a hole a few metres across fell between
+    // the samples, so every crater had to be kept shallow enough that the
+    // field's guess at it was not far off, and out of town that was a
+    // centimetre. Now the collision is the bowl, at any size.
+    shape.level = Math.max(0, Math.min(1, (shape.level || 0) + level));
+    return this.world.setCrater(shape);
   }
 
   /**

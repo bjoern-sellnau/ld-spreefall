@@ -68,7 +68,7 @@ Cloudflare Pages, or any static host. There is nothing to run on the server.
 | C | the cheat menu |
 | F | get into the nearest vehicle, or out of the one you are in |
 | driving | W forward, S back, A D steer, Shift brake, left mouse fires |
-| flying | W S throttle, A D roll, mouse flies it, Space climbs, right mouse drops |
+| flying | it flies where you look; W S throttle (a fighter holds it), A D turn, Space climbs, right mouse drops |
 | F4 | debug overlay |
 | V | free travel: pick a place on the map and fly there |
 | Q | back to the weapon you had before |
@@ -163,6 +163,11 @@ What is under the hood:
   the names and the numbers are ours. Each one is a row in
   `src/game/arsenal.js`, because every difference between a rifle and a shotgun
   that the game cares about is a number.
+- And on the wheel, past those, a void cannon: a slow green ball that reaches
+  out to everybody within sixteen metres of where it is going, sends a tendril
+  to everybody within forty eight of where it lands, and cuts a hole eighteen
+  metres across into the frontage it hits. The joke is the oldest one in the
+  arena shooters; the name is ours.
 - Hold the sight on something with the launcher and it locks, and the rocket
   chases what it locked rather than where you were pointing when you fired.
 - Recoil kicks and comes back. The view carries the climb as an offset and gets
@@ -243,6 +248,7 @@ visits.
 | Blood | hits spray |
 | Ultra gore | the three above, considerably more of it |
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
+| Overkill | every kill an execution: the skeleton out of the body, pieces raining down, a fountain, a word across the screen |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 | Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
 
@@ -257,7 +263,7 @@ it brings the block down onto a street that stays level. Both are honoured by
 the picture, by the collision and by the ruin that is written into the city
 afterwards, so what you walk on is always what you can see.
 
-What the five gore switches actually are:
+What the six gore switches actually are:
 
 - **Tearing apart** replaces the death animation with its absence. There is no
   body to fall, so the soldier leaves the fight at once and a dozen chunks
@@ -287,9 +293,15 @@ What the five gore switches actually are:
   across the street rather than onto its back. It is the one gore switch that
   does not tear anybody apart, and that is on purpose: coming apart is the
   absence of a death, so there would be no body left to throw. Turn the
-  tearing switch on as well and you get both, with every one of the ninety
-  six pieces the pool holds on a single body. Past this the pools are empty,
-  so there is no switch above it.
+  tearing switch on as well and you get both, with a hundred and twenty
+  pieces on a single body.
+- **Overkill** is the switch above it, which needed bigger pools first: two
+  hundred and fifty six pieces, two thousand sparks. Every kill comes apart
+  whatever else is on, the skeleton leaves the body the way the round was
+  going, a second burst goes up and rains back down, a fountain stands where
+  they were for nearly three seconds, the walls round them are sprayed, and
+  the clock stops for half a second while a word is stamped across the
+  screen, counting a run of kills inside three seconds.
 
 And the last kill:
 
@@ -415,6 +427,11 @@ saw was a tank reversing.
 | Tank | 12 m/s, two and a half thousand health, one shell every two and a half seconds |
 | Helicopter | hovers; space climbs, right mouse holds the rockets |
 | Fighter | 180 m/s, and it stops flying below 38 |
+
+Both aircraft fly where you look. The mouse, or A and D, turn the view, and
+the aircraft turns its nose onto it as fast as it can, banking into the turn
+on its own; W and S are the throttle. A fighter turns harder the faster it is
+going and only lifts its nose off the road once it has the speed to fly.
 
 They divide into two kinds rather than four. Something with wheels follows
 the ground, refuses a kerb taller than it can climb, leans into a slope, and

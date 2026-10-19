@@ -326,6 +326,118 @@ async function run() {
   check('a rocket into a wall leaves a mark on it', !scar.error && scar.now > scar.was,
     `${scar.was} to ${scar.now} marks`);
 
+  // --- the void cannon -------------------------------------------------------
+  // How much of a frontage one shot opens, measured the way you would find
+  // out: rays at a grid laid over the face of the wall, before and after, and
+  // how many of them now go through it rather than stopping on it. Each
+  // weapon gets a wall of its own, found from its own corner of Mitte, so the
+  // second is not measured through the hole the first one made.
+  const opening = (weaponId, starts) => page.evaluate(({ id, starts }) => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.jets.reset();
+    s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false; s.drones.enabled = false; s.jets.enabled = false;
+    s.cheats.reset();
+    // A frontage seen square on, at least eighteen metres high, between
+    // twenty five and sixty metres away.
+    let best = null;
+    for (const [px, pz] of starts) {
+      s.teleport(px, pz);
+      const ey = s.player.y + 1.7;
+      for (let a = 0; a < 360; a += 4) {
+        const r = a * Math.PI / 180;
+        const dx = Math.cos(r), dz = Math.sin(r);
+        const h = s.world.raycast(px, ey, pz, dx, 0, dz, 60);
+        if (!h || h.kind === 'ground' || h.t < 25) continue;
+        if (-(dx * h.nx + dz * h.nz) < 0.9) continue;
+        if (s.world.tallestNear(h.x - h.nx, h.z - h.nz, 2) < 18) continue;
+        if (!best || h.t < best.t) best = { ...h, px, pz };
+      }
+      if (best) break;
+    }
+    if (!best) return { error: 'no wall' };
+    s.teleport(best.px, best.pz);
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    // Along the face and up it, a metre apart: twenty one across, fifteen up.
+    const tx = -best.nz, tz = best.nx;
+    const grid = () => {
+      const open = new Set();
+      for (let v = -1; v <= 13; v++) {
+        for (let u = -10; u <= 10; u++) {
+          const px = best.x + tx * u, py = eye.y + 2 + v, pz = best.z + tz * u;
+          const dx = px - eye.x, dy = py - eye.y, dz = pz - eye.z;
+          const l = Math.hypot(dx, dy, dz);
+          const h = s.world.raycast(eye.x, eye.y, eye.z, dx / l, dy / l, dz / l, l + 1);
+          if (!h || h.t > l + 0.6) open.add(`${u},${v}`);
+        }
+      }
+      return open;
+    };
+    const before = grid();
+    const dx = best.x - eye.x, dy = eye.y + 3 - eye.y, dz = best.z - eye.z;
+    const l = Math.hypot(dx, dy, dz);
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.asin(dy / l) * 180 / Math.PI);
+    s.camera.update(16 / 9);
+    s.weapon.select(id); s.weapon.cooldown = 0; s.weapon.spread = 0;
+    s.shoot();
+    for (let i = 0; i < 60 * 5 && s.projectiles.count; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const health = Math.round(s.combat.health);
+    const after = grid();
+    // Only the cells this shot opened, so a gap that was there already does
+    // not count towards the width of the hole.
+    const opened = [...after].filter((k) => !before.has(k)).map((k) => Number(k.split(',')[0]));
+    const span = opened.length ? Math.max(...opened) - Math.min(...opened) + 1 : 0;
+    s.combat.reset();
+    // The street at the foot of the wall, which a hole in a wall must leave
+    // where it is.
+    const fx = best.x + best.nx * 1.2, fz = best.z + best.nz * 1.2;
+    const floor = s.drawnGround(fx, fz);
+    return { before: before.size, after: after.size, span, health,
+      floor: floor !== null, dist: Math.round(best.t) };
+  }, { id: weaponId, starts });
+  const rpgHole = await opening('rpg', [[120, -30], [300, 60]]);
+  const voidHole = await opening('void', [[-150, 90], [520, -80], [700, 40]]);
+  const gained = (h) => h.after - h.before;
+  check('the void cannon opens a frontage, not a window',
+    !voidHole.error && !rpgHole.error && gained(voidHole) > 5 * Math.max(3, gained(rpgHole)),
+    voidHole.error || rpgHole.error
+      || `${gained(rpgHole)} of 315 rays through after a rocket, ${gained(voidHole)} after the ball, ${voidHole.dist} m off`);
+  // Measured along the wall it hit, which is where a corner or the end of
+  // a frontage cuts it short: eighteen metres of sphere, of which the wall
+  // in this test has eleven or so to give.
+  check('and the hole is ten metres across or more, where a rocket makes four',
+    voidHole.span >= 10 && voidHole.span >= 2.5 * rpgHole.span,
+    `${voidHole.span} m, against ${rpgHole.span} m for the rocket`);
+  check('and the street in front of it is still there', voidHole.floor);
+  check('and you can fire it at a wall that close and walk away',
+    voidHole.health > 60, `health ${voidHole.health}`);
+
+  const zap = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false;
+    s.teleport(81, 0); s.look(90, 0);
+    s.camera.update(16 / 9);
+    // One to the side of the line of flight, one far down it: the first is
+    // reached on the way past, the second by the burst where the ball lands.
+    const side = s.spawnSoldier(-25, 9);
+    const far = s.spawnSoldier(-70, 0);
+    s.weapon.select('void'); s.weapon.cooldown = 0; s.weapon.spread = 0;
+    s.shoot();
+    let sideAt = -1;
+    let t = 0;
+    for (let i = 0; i < 60 * 6 && s.projectiles.count; i++) {
+      s.fixedForTest(1 / 60); t++;
+      if (sideAt < 0 && side.state === 5) sideAt = t;
+    }
+    for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
+    return { side: side.state === 5, sideAt, far: far.state === 5, flight: t };
+  });
+  check('a soldier beside the line of flight is taken on the way past',
+    zap.side && zap.sideAt > 0 && zap.sideAt < zap.flight, `at frame ${zap.sideAt} of ${zap.flight}`);
+  check('and one down range is taken where it lands', zap.far);
+
   // --- jets -----------------------------------------------------------------
   const jet = await page.evaluate(() => {
     const s = window.spreefall;

@@ -2700,3 +2700,105 @@ caps residency at 520.
   capped at three metres, so it is not the hole either. The view was looking
   south east from the Reichstag's west front; a link from the game with the
   building in the middle of the frame is what this needs next.
+
+## 60. Chunks from the sky, craters that are craters, overkill and the void cannon
+
+- 2026-10-19: chunks falling out of the sky. Measured at the moment each
+  piece of rubble appears, against what is standing within four metres of
+  it, over eight frontages in Mitte hit with four rockets a face: 22 of 53
+  pieces started more than two metres above anything there, the worst 13.1
+  m. A stage of a collapse put its rubble at the break line of the whole
+  site, which for a site spanning a tall and a low building is the tall
+  one's break line over the low one's roof. Each face now drops its share
+  from its own height (`tallestNear` round that face), and a face with
+  nothing standing on it drops nothing. Same measurement after: 0 of 68,
+  worst 0.0 m.
+
+- 2026-10-19: craters were not craters. A crater was a shader displacement
+  with a collision field sampled on a coarse grid, and the second rocket into
+  the same spot cut the ground triangles out along with the wall, so on one
+  street 45 of 1,421 samples across a crater had no ground drawn at all, and
+  you could see out of the bottom of the map. Craters are now analytic: one
+  profile in `src/shared/crater.js`, a bowl with a lip, which the collision
+  adds to the ground height and the remesh follows. The ground round a
+  crater is cut finer the deeper the bowl is, so the middle of a small one
+  is not a metre shallower in the picture than under your feet. And a hole
+  in a wall only ever takes frontage: ground and roofs stay. After: 0 holes
+  in 1,421 samples, the drawn ground within 0.10 m of the collision
+  everywhere, the deepest bowl 2.39 m, and standing in the middle of it puts
+  you 2.83 m down on ground that is drawn 2.92 m down.
+
+- 2026-10-19: a crater leaves the ground burnt rather than holed. The bake
+  writes how burnt each ground vertex is into the spare byte of the vertex
+  (byte 16, which on the ground was unused), falling off from the middle of
+  the bowl to one and a half radii, and the shader darkens it into a ragged
+  black patch with two octaves of noise on its edge.
+
+- 2026-10-19: the cheat menu spawns machines (six, the same one line the
+  end of the world mode uses to make one out of a soldier) and passers by
+  (eight, within sixty metres). Spawning passers by after machines turned up
+  a real bug: the soldier pool reuses its objects and the machine flag was
+  never cleared, so six of the eight passers by came out in steel with a
+  red eye. The reset clears it now, with the stun and the beam charge.
+
+- 2026-10-19: Overkill, past the top of the gore menu. Every kill comes
+  apart whatever else is switched on; the skeleton leaves the body the way
+  the round was going; a second burst goes straight up and rains down; a
+  fountain stands where they were for nearly three seconds; every wall
+  within nine metres is sprayed; the clock stops for half a second while a
+  word is stamped across the screen, with a run counter for kills inside
+  three seconds and a sting under it. The pools were made bigger for it
+  (256 pieces, 2048 sparks, 1536 drawn a pass) rather than letting a bigger
+  multiplier run into the old ceiling. The words are our own; the idea is
+  the fighting games'.
+
+- 2026-10-19: the void cannon. A slow green ball, after the oldest joke in
+  the arena shooters, under a name of its own: it reaches out to everybody
+  within sixteen metres of its path as it goes, and where it lands a tendril
+  goes to everybody within forty eight metres that a wall does not hide. It
+  cuts a hole nine metres in radius into whatever it meets, in the buffers
+  and in the collision. The first version also handed the building grid its
+  full 700, which brought the whole block down on top of the hole; the grid
+  now gets a heavy rocket's worth, and the hole is the point. Measured on a
+  frontage seen square on: a rocket opens 16 rays of a one metre grid, 4 m
+  across; the ball opens 104, 11 m across, which is the whole width that
+  wall had to give. You take eight per cent of it yourself.
+
+## 61. A fighter you can fly, and vehicles that look like vehicles
+
+- 2026-10-19: "the fighter cannot be steered". Three reasons, all in the
+  controls rather than in the flight model. The mouse was a rate: the
+  camera's pitch went into the stick, so looking up once kept the nose
+  climbing until it hit its stop, and only looking exactly at the horizon
+  stopped it. A and D turned the aircraft the opposite way to the one they
+  named in the air, and the bank was the wrong way round as well: under the
+  shader's rotZ a positive roll lifts the right wing, and the old stick
+  leaned right while it turned left. And the throttle was a spring, so
+  letting go of W took a fighter from cruise to its stall in about two
+  seconds. Both aircraft now fly where you look: the hull turns its nose
+  onto the view as fast as the airframe allows (0.7 rad/s for the fighter,
+  scaled down below one and a half times its stall, 1.3 for the
+  helicopter), banks into the turn by itself, and A and D turn the view, so
+  the keys alone fly it too. The fighter's throttle is a lever that stays
+  where you leave it. The city suite flies one off the menu: 0 degrees off
+  after a 69 degree turn left and after a 138 degree turn right, a bank of
+  plus and minus 1.05 the right way round, no height lost looking at the
+  horizon, and D turns it right.
+
+- 2026-10-19: "the vehicle designs are extremely bad". They were: every one
+  of them was painted in the drone's near black, the wheels on the jeep and
+  the tank were cylinders about a vertical axis, which is a wheel lying flat
+  on the road, and the helicopter's rotor turned about the drone's four
+  hubs, which put a wobble in it. `MeshBuild` has an x axis now and a
+  `plate` for wings, fins and sloped armour; the palette has olive drab,
+  rubber, fighter grey, the gunship's green, headlights, an afterburner and
+  hubs. The jeep is a four by four built round its wheels, with arches, a
+  raked windscreen, seats, a roll bar and a gun on a post. The tank has
+  tracks with six road wheels, an idler and a sprocket a side, skirts, a
+  sloped glacis, a turret with angled cheeks and a bustle, and a long gun
+  with an evacuator. The helicopter is a gunship with a stepped canopy, stub
+  wings and pods, a tapering tail, four blades turning about the mast and a
+  tail rotor turning about its own hub. The fighter tapers to a nose, has a
+  cranked delta, two canted fins, missiles, and wheels that fold away more
+  than 25 m up. Where each one stands was changed with it: the helicopter
+  stands on its skids and the fighter's middle is 1.9 m over the road.

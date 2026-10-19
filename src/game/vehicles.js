@@ -23,7 +23,7 @@ export const VEHICLE = {
     // Where you sit, and where the camera hangs behind you.
     eye: 1.55, chase: 9.5, chaseUp: 3.4,
     radius: 1.5, length: 4.4,
-    gun: { kind: 'hitscan', damage: 26, interval: 0.09, spread: 0.022, muzzle: [0, 1.9, -1.2] },
+    gun: { kind: 'hitscan', damage: 26, interval: 0.09, spread: 0.022, muzzle: [0, 2.4, -1.35] },
     climb: 0.9,          // the tallest kerb it will go up
   },
   tank: {
@@ -33,7 +33,7 @@ export const VEHICLE = {
     health: 2600, mass: 4,
     eye: 2.5, chase: 15, chaseUp: 5.5,
     radius: 2.1, length: 7.4,
-    gun: { kind: 'shell', damage: 240, interval: 2.6, spread: 0.004, muzzle: [0, 2.5, -5.0],
+    gun: { kind: 'shell', damage: 240, interval: 2.6, spread: 0.004, muzzle: [0, 2.1, -5.9],
       speed: 160, splash: { radius: 11, damage: 260 } },
     climb: 1.4,
   },
@@ -42,10 +42,16 @@ export const VEHICLE = {
     topSpeed: 52, accel: 16, drag: 0.55,
     lift: 16, gravity: 9.8, maxClimb: 14,
     turn: 1.2, pitchRate: 0.9, rollRate: 1.6, bank: 0.55,
+    // Flying by looking: how fast it turns its nose to where you look, in
+    // radians a second, and how far it leans while it does.
+    aimTurn: 1.3, aimBank: 0.35,
     health: 700, mass: 2,
     eye: 1.8, chase: 14, chaseUp: 4.5,
     radius: 3.2,
-    gun: { kind: 'hitscan', damage: 34, interval: 0.075, spread: 0.018, muzzle: [0, -0.6, -3.2] },
+    gun: { kind: 'hitscan', damage: 34, interval: 0.075, spread: 0.018, muzzle: [0, 0.88, -3.35] },
+    // Where its origin is when it is standing on the ground: the bottom of
+    // the skids, so nothing.
+    rest: 0,
     rocket: { interval: 0.5, speed: 110, splash: { radius: 13, damage: 190 } },
   },
   jet: {
@@ -58,10 +64,16 @@ export const VEHICLE = {
     // How much speed the wheels take off a second while it is on the ground.
     roll: 0.35,
     turn: 0.5, pitchRate: 0.85, rollRate: 2.4, bank: 1.0,
+    // About a rate one turn and a half: a full circle in nine seconds at
+    // speed, which is tight enough to come round on a target over Mitte.
+    aimTurn: 0.7, aimBank: 1.05,
     health: 900, mass: 2,
     eye: 1.2, chase: 26, chaseUp: 6,
     radius: 4.5,
-    gun: { kind: 'hitscan', damage: 44, interval: 0.06, spread: 0.012, muzzle: [0, -0.3, -7] },
+    gun: { kind: 'hitscan', damage: 44, interval: 0.06, spread: 0.012, muzzle: [0.7, 0.3, -5.6] },
+    // On its wheels the middle of the fuselage is under two metres up, and
+    // the hull a bullet has to hit is centred there rather than above it.
+    rest: 1.9, hitUp: 0,
     rocket: { interval: 0.9, speed: 190, splash: { radius: 22, damage: 420 } },
   },
 };
@@ -291,7 +303,15 @@ export class Vehicles {
     const rollIn = c ? c.roll : 0;
     const lift = c ? c.lift : 0;
 
-    v.throttle += (clamp(throttle, s.stall ? 0 : -1, 1) - v.throttle) * Math.min(1, dt * 2);
+    if (s.stall && c && c.aimYaw !== undefined) {
+      // A fighter's throttle is a lever, not a spring: W opens it, S closes
+      // it, and letting go leaves it where it is. As a spring it went back
+      // to idle the moment you let go, which took a fighter from cruise to
+      // its stall in about two seconds and out of the sky after that.
+      v.throttle = clamp(v.throttle + throttle * dt * 0.7, 0, 1);
+    } else {
+      v.throttle += (clamp(throttle, s.stall ? 0 : -1, 1) - v.throttle) * Math.min(1, dt * 2);
+    }
 
     if (s.stall === undefined) {
       // A helicopter. Thrust is up out of its own rotor disc, so pitching
@@ -311,13 +331,17 @@ export class Vehicles {
       v.vy = Math.sin(v.pitch) * v.speed * flying - s.gravity * (1 - flying) * 2.2;
     }
 
-    v.yaw += steer * s.turn * dt;
-    v.pitch = clamp(v.pitch + pitchIn * s.pitchRate * dt, -1.2, 1.2);
-    v.roll = clamp(v.roll + rollIn * s.rollRate * dt, -1.4, 1.4);
-    // Banking turns you, which is how an aircraft actually changes heading.
-    v.yaw -= Math.sin(v.roll) * s.bank * dt;
-    if (!rollIn) v.roll += (0 - v.roll) * Math.min(1, dt * 1.4);
-    if (!pitchIn && s.stall === undefined) v.pitch += (0 - v.pitch) * Math.min(1, dt * 1.8);
+    if (c && c.aimYaw !== undefined) {
+      this._steerToAim(v, dt, c);
+    } else {
+      v.yaw += steer * s.turn * dt;
+      v.pitch = clamp(v.pitch + pitchIn * s.pitchRate * dt, -1.2, 1.2);
+      v.roll = clamp(v.roll + rollIn * s.rollRate * dt, -1.4, 1.4);
+      // Banking turns you, which is how an aircraft actually changes heading.
+      v.yaw -= Math.sin(v.roll) * s.bank * dt;
+      if (!rollIn) v.roll += (0 - v.roll) * Math.min(1, dt * 1.4);
+      if (!pitchIn && s.stall === undefined) v.pitch += (0 - v.pitch) * Math.min(1, dt * 1.8);
+    }
 
     const fwd = Math.cos(v.pitch) * v.speed;
     v.x += Math.sin(v.yaw) * -fwd * dt;
@@ -329,7 +353,10 @@ export class Vehicles {
     // the ground by its own weight every frame, and counting that as an
     // impact destroys it where it stands, which is exactly what the first
     // version of this did.
-    const g = this.world.groundHeight(v.x, v.z) + s.radius * 0.6;
+    const ground = this.world.groundHeight(v.x, v.z);
+    const g = ground + (s.rest ?? s.radius * 0.6);
+    // Wheels down near the ground and up once it is properly flying.
+    v.gearDown = v.y - g < 25;
     if (v.y < g) {
       const impact = v.grounded ? 0 : Math.max(0, -v.vy) + Math.abs(v.speed) * 0.3;
       v.y = g;
@@ -361,6 +388,47 @@ export class Vehicles {
       this.damage(v, Math.abs(v.speed) * 9);
       v.speed *= -0.1;
     }
+  }
+
+  /**
+   * Flying by looking. The camera is the stick: the hull turns its nose
+   * towards wherever you are looking, as fast as the airframe allows, and
+   * banks into the turn by itself. The first version took the mouse as a
+   * rate, so looking up once kept the nose climbing until it hit the stop,
+   * and the keys turned the aircraft the opposite way to the one they named;
+   * between the two a fighter could not be flown at all.
+   *
+   * A fighter turns faster the faster it is going, up to its limit, and on
+   * the ground it only lifts its nose once it has the speed to fly. A
+   * helicopter turns on the spot and leans into where it is going.
+   */
+  _steerToAim(v, dt, c) {
+    const s = v.spec;
+    let err = c.aimYaw - v.yaw;
+    err = Math.atan2(Math.sin(err), Math.cos(err));
+    const fighter = s.stall !== undefined;
+    const authority = fighter ? clamp(v.speed / (s.stall * 1.5), 0.15, 1) : 1;
+    const maxRate = s.aimTurn * authority;
+    const rate = clamp(err * 2.4, -maxRate, maxRate);
+    v.yaw += rate * dt;
+    // Into the turn. The shader rolls about the nose with rotZ, under which
+    // a positive roll lifts the right wing, which is a bank to the left, and
+    // a left turn is the one that takes yaw up. The old stick had this the
+    // other way round as well: it leaned right while it turned left.
+    const wantRoll = clamp(rate / Math.max(0.01, s.aimTurn) * s.aimBank, -s.aimBank, s.aimBank);
+    v.roll += (wantRoll - v.roll) * Math.min(1, dt * 3);
+    let wantPitch;
+    if (fighter) {
+      // Nose where you are looking. Lift is taken care of by the speed, so
+      // level is level; on the runway only once it is fast enough to rotate.
+      wantPitch = clamp(c.aimPitch, -0.9, 0.9);
+      if (v.grounded && v.speed < s.stall) wantPitch = Math.min(0, wantPitch);
+    } else {
+      // A helicopter's nose goes down to go forward and up to stop.
+      wantPitch = clamp(-v.throttle * 0.22, -0.3, 0.3);
+    }
+    const step = s.pitchRate * dt;
+    v.pitch += clamp(wantPitch - v.pitch, -step, step);
   }
 
   // --- what they shoot -----------------------------------------------------
@@ -395,7 +463,7 @@ export class Vehicles {
     for (const v of this.active) {
       if (!v.alive || v.health <= 0) continue;
       const r = v.spec.radius;
-      const cy = v.y + r * 0.7;
+      const cy = v.y + (v.spec.hitUp ?? r * 0.7);
       const ex = v.x - ox, ey = cy - oy, ez = v.z - oz;
       const t = ex * dx + ey * dy + ez * dz;
       if (t < 0 || t > best) continue;

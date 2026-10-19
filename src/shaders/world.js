@@ -159,6 +159,12 @@ flat out uint vFlags;
 flat out float vHeight;
 out float vAo;
 out float vFall;
+// How burnt the ground is here, kept in the storeys byte of a ground vertex,
+// which a street has no use for. Written once by the bake when a crater has
+// finished, so the mark stays after the ring of sixteen blast marks has
+// moved on. Interpolated, so the edge of the burn is soft across the fine
+// pieces a crater is cut into.
+out float vBurnt;
 
 void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
@@ -192,6 +198,7 @@ void main() {
   vSeed = aPacked.y;
   vLevels = aPacked.z;
   vFlags = aPacked.w;
+  vBurnt = (aPacked.w & ${FACADE_FLAG.GROUND}u) != 0u ? float(aPacked.z) / 255.0 : 0.0;
   vHeight = bHeight;
   gl_Position = uViewProj * vec4(p, 1.0);
 }
@@ -215,6 +222,7 @@ flat in uint vFlags;
 flat in float vHeight;
 in float vAo;
 in float vFall;
+in float vBurnt;
 
 // Distance to the eye, per fragment. It used to be a varying, which is wrong the
 // moment a triangle is large: a square the size of Pariser Platz has its corners
@@ -961,6 +969,13 @@ void main() {
     // it read as torn rather than as a circle cut with a compass.
     float hole = uScarInfo[i].z;
     if (punchable && hole > 0.0 && dist < hole * (1.0 + edge * 0.9)) discard;
+  }
+  // And the ground a crater was dug in, burnt for good. A ragged edge out of
+  // the same noise as the blast marks, so the soot reads as thrown rather
+  // than painted on with a compass.
+  if (vBurnt > 0.002) {
+    float rag = vnoise(vWorld.xz * 0.9) * 0.45 + vnoise(vWorld.xz * 3.1) * 0.2;
+    scorch = max(scorch, smoothstep(0.05, 0.6, vBurnt + rag - 0.3) * 0.97);
   }
   if (scorch > 0.001) {
     // Soot: darker, rougher, and it kills the specular on whatever it is on.

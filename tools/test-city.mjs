@@ -941,6 +941,56 @@ async function run() {
   check('and the menu hands you one already in the air',
     takeoff.inIt && takeoff.up > 100, `${takeoff.up} m up, flying`);
 
+  // --- and it goes where you look ---------------------------------------------
+  const steer = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setCheat('godmode', true);
+    s.vehicles.reset();
+    const j = s.dropRide('jet');
+    if (!j) return { error: 'no ride' };
+    const deg = 180 / Math.PI;
+    const off = (want) => Math.round(Math.abs(Math.atan2(Math.sin(j.yaw - want), Math.cos(j.yaw - want))) * deg);
+    const hold = (yaw, pitch, seconds) => {
+      let bank = 0;
+      for (let i = 0; i < 60 * seconds; i++) {
+        s.look(yaw * deg, pitch);
+        s.fixedForTest(1 / 60);
+        if (Math.abs(j.roll) > Math.abs(bank)) bank = j.roll;
+      }
+      return bank;
+    };
+    const yaw0 = j.yaw;
+    const leftBank = hold(yaw0 + 1.2, 0, 5);
+    const left = off(yaw0 + 1.2);
+    const rightBank = hold(yaw0 - 1.2, 0, 7);
+    const right = off(yaw0 - 1.2);
+    // Level, looking at the horizon: it should hold its height.
+    hold(j.yaw, 0, 2);
+    const y0 = j.y;
+    hold(j.yaw, 0, 3);
+    const drift = Math.round((j.y - y0) / 3);
+    // And with the keys alone: right turns right, the same as on foot.
+    const before = j.yaw;
+    s.input.keys.add('KeyD');
+    for (let i = 0; i < 60 * 2; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('KeyD');
+    const keyTurn = Math.atan2(Math.sin(j.yaw - before), Math.cos(j.yaw - before));
+    const alive = j.health > 0;
+    if (s.state.inVehicle) s.toggleVehicle();
+    return { left, right, leftBank, rightBank, drift, keyTurn, alive };
+  });
+  check('a fighter turns onto where you look, left and right',
+    !steer.error && steer.left < 8 && steer.right < 8 && steer.alive,
+    steer.error || `${steer.left} and ${steer.right} degrees off after the turn`);
+  check('and banks into the turn it is making',
+    // Positive roll lifts the right wing in the shader's rotZ: a left bank.
+    steer.leftBank > 0.3 && steer.rightBank < -0.3,
+    `${(steer.leftBank || 0).toFixed(2)} turning left, ${(steer.rightBank || 0).toFixed(2)} turning right`);
+  check('and holds its height looking at the horizon', Math.abs(steer.drift) < 6,
+    `${steer.drift} m a second`);
+  check('and the right key turns it right', steer.keyTurn < -0.3,
+    `${(steer.keyTurn || 0).toFixed(2)} rad`);
+
   check('forward drives where you are looking, however it was parked',
     facing.every((f) => f.towardsView > 0.97),
     facing.map((f) => f.towardsView).join(', '));

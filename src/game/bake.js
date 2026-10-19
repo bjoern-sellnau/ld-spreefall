@@ -124,6 +124,17 @@ export function settle(p, isGround, height, site) {
 const clampI16 = (v) => (v < -32768 ? -32768 : v > 32767 ? 32767 : v);
 
 /**
+ * How burnt the ground is at a point round a finished crater: all of it in
+ * the bowl, fading out across the lip, a little past where the ground was
+ * thrown up. Soot goes further than the hole does.
+ */
+export function craterBurn(x, z, site) {
+  const reach = site.craterRadius * 1.6;
+  const r = Math.hypot(x - site.x, z - site.z);
+  return 1 - smoothstep(site.craterRadius * 0.45, reach, r);
+}
+
+/**
  * Crushes whatever small thing stands at a point: a parked car that has gone
  * up, and the bench beside it if it was close enough.
  *
@@ -230,7 +241,17 @@ export function bakeSite(world, site) {
         const isGround = (flags & FACADE_FLAG.GROUND) !== 0;
         const height = view.getUint16(o + 18, true) / 16;
         const startY = p.y;
+        // The ground round a crater is burnt, and stays burnt: the storeys
+        // byte of a ground vertex is free, and the shader reads it as soot.
+        let burntNow = false;
+        if (isGround && site.craterRadius > 0) {
+          const burn = craterBurn(p.x, p.z, site);
+          const was = view.getUint8(o + 16);
+          const now = Math.round(burn * 255);
+          if (now > was) { view.setUint8(o + 16, now); burntNow = true; }
+        }
         const fall = settle(p, isGround, height, site);
+        if (burntNow) touched++;
         if (fall <= 0 && p.y === startY) continue;
         view.setInt16(o, clampI16(Math.round((p.x - ox) * POS_SCALE)), true);
         view.setInt16(o + 2, clampI16(Math.round(p.y * POS_SCALE)), true);

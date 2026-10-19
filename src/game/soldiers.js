@@ -87,6 +87,12 @@ class Soldier {
     // Out of the same pool as everybody else, so whatever the last one was
     // has to be forgotten here rather than left to surprise somebody.
     this.civilian = false;
+    // And a machine is a soldier with three fields set on it, which a passer
+    // by drawn from the same slot afterwards kept: steel, a red eye and a
+    // beam rifle on somebody out for a walk.
+    this.machine = false;
+    this.stunLeft = 0;
+    this.beamCharge = 0;
     this.panicLeft = 0;
     this.who = 0;
     // Coming up out of the street. For as long as this is running he is

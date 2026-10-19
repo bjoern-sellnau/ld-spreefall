@@ -186,6 +186,31 @@ export const WEAPONS = {
     // you have to lead is a rocket that lands where it was.
     lock: { time: 0.8, cone: 0.2, range: 360, turn: 4.2 },
   },
+  // The big one, out of the same tradition as the arena four: a slow ball of
+  // green that tears out at everybody it passes and leaves a hole in the
+  // city you could drive a tram through. The idea is the genre's oldest
+  // joke, the name and the numbers are ours.
+  void: {
+    name: 'Void cannon', short: 'VOID', kind: KIND.LAUNCH, slot: null,
+    magazine: 1, reserve: 5, reloadTime: 3.2, fireInterval: 1.8, auto: false,
+    projectile: 'void', muzzleSpeed: 26, range: 500,
+    spreadHip: 0.004, spreadAim: 0.001, spreadPerShot: 0, spreadMax: 0.004,
+    spreadRecover: 0.2,
+    recoilKick: 0.05, recoilSide: 0.008, recoilRetain: 0.4,
+    aimFov: 54, sound: 'void',
+    // A hole nine metres across the face of whatever it meets, which is most
+    // of a Berlin frontage between two windows. self is the share of the
+    // blast you take yourself, which for this is very little: a gun that
+    // kills whoever fires it at a wall in front of him is a gun nobody fires.
+    // wreck is what reaches the building grid, which is a heavy rocket's
+    // worth: the hole is the point, not the block coming down over it.
+    splash: { radius: 24, damage: 700, force: 46, punch: 9, self: 0.08,
+      wreck: { radius: 12, damage: 200 } },
+    // What comes off the ball: tendrils at everybody within aura of it on the
+    // way, and at everybody within reach of where it lands, as long as a wall
+    // is not in the way.
+    void: { aura: 16, auraDamage: 70, every: 0.14, reach: 48, damage: 450 },
+  },
   flamer: {
     name: 'Flamethrower', short: 'FLAMER', kind: KIND.STREAM, slot: 7,
     // The magazine is fuel, and it burns down about four times a second while
@@ -231,11 +256,12 @@ WEAPONS.flamer.hold = { x: 0.200, y: -0.126, z: -0.330, pitch: -0.008, yaw: 0.12
 WEAPONS.railgun.hold = { x: 0.215, y: -0.142, z: -0.500, pitch: -0.018, yaw: 0.118, roll: 0.04 };
 WEAPONS.plasma.hold = { x: 0.220, y: -0.146, z: -0.430, pitch: -0.014, yaw: 0.130, roll: 0.05 };
 WEAPONS.flak.hold = { x: 0.225, y: -0.150, z: -0.440, pitch: -0.010, yaw: 0.128, roll: 0.05 };
+WEAPONS.void.hold = { x: 0.220, y: -0.150, z: -0.430, pitch: -0.014, yaw: 0.126, roll: 0.05 };
 WEAPONS.splinter.hold = { x: 0.215, y: -0.140, z: -0.420, pitch: -0.012, yaw: 0.135, roll: 0.06 };
 
 export const LOADOUT = [
   'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'flamer', 'incendiary',
-  'emp', 'mechkiller', 'railgun', 'plasma', 'flak', 'splinter',
+  'emp', 'mechkiller', 'railgun', 'plasma', 'flak', 'splinter', 'void',
 ];
 
 export function weaponBySlot(slot) {

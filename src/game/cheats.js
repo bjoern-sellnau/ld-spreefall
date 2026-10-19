@@ -12,10 +12,17 @@
 
 const KEY = 'spreefall.cheats';
 
+/**
+ * The gore multiplier at the overkill setting. The pools it draws on were
+ * made larger for it, so this is what they now hold rather than a number
+ * that runs into a ceiling and stops meaning anything.
+ */
+export const OVERKILL_SCALE = 12;
+
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
-  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore'];
+  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -43,6 +50,11 @@ export const GORE = [
   { id: 'blood', label: 'Blood', note: 'hits spray, and it lands on the street' },
   { id: 'ultraGore', label: 'Ultra gore', note: 'all of the above, considerably more of it' },
   { id: 'maxGore', label: 'Ultra gore, and then some', note: 'as much blood as the pools can hold and a shot that throws a body across the street; add the tearing switch and every piece the game owns comes with it' },
+  // Past the top, and on purpose out of proportion: the fighting games that
+  // put a word across the screen when somebody is finished. Every kill comes
+  // apart, the skeleton leaves the body, pieces go up and rain down for a
+  // second or two, and a fountain stands where they were.
+  { id: 'overkill', label: 'Overkill', note: 'every kill an execution: the skeleton leaves the body, pieces rain down, a fountain stands where they were and a word goes across the screen' },
 ];
 
 /**
@@ -70,6 +82,8 @@ export const SPAWNS = [
   { id: 'drones', label: 'Drones', note: 'four, overhead', count: 4 },
   { id: 'jets', label: 'Jets', note: 'two, running in from half a kilometre', count: 2 },
   { id: 'reapers', label: 'Enemy mechs', note: 'two, eight metres of walking gun', count: 2 },
+  { id: 'machines', label: 'Machines', note: 'six of them, steel under the skin and a beam rifle each', count: 6 },
+  { id: 'civilians', label: 'Passers by', note: 'eight people on their way somewhere, who run from a shot', count: 8 },
 ];
 
 /**
@@ -146,6 +160,7 @@ export class Cheats {
    * run out: past this there is nothing left to spend.
    */
   get goreScale() {
+    if (this.overkill) return OVERKILL_SCALE;
     if (this.maxGore) return 7.5;
     return this.ultraGore ? 4.2 : 1;
   }
@@ -155,9 +170,11 @@ export class Cheats {
   // there is no body left to throw, so a switch whose whole point is the
   // throw cannot also be the one that takes the body away. Turn on the
   // tearing switch as well and you get both, with every piece the pool has.
-  get gibbing() { return this.gib || this.ultraGore; }
-  get bleeding() { return this.blood || this.ultraGore || this.maxGore; }
-  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore; }
+  // Overkill takes all three: it is the one switch where nobody is left
+  // lying in the street in one piece.
+  get gibbing() { return this.gib || this.ultraGore || this.overkill; }
+  get bleeding() { return this.blood || this.ultraGore || this.maxGore || this.overkill; }
+  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore || this.overkill; }
 
   set(id, on) {
     if (!(id in this) || typeof this[id] !== 'boolean') return false;
