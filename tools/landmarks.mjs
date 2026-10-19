@@ -4,7 +4,7 @@
 
 import { MAT, FACADE_FLAG } from '../src/shared/constants.js';
 import {
-  extrudeBuilding, box, cylinder, dome, sphere, spire, colonnade,
+  extrudeBuilding, box, cylinder, dome, sphere, spire, colonnade, pediment,
   orientedBox, ringCentroid, flatRoof,
 } from './geometry.mjs';
 
@@ -87,34 +87,52 @@ function brandenburgGate(mesh, ring, base, def) {
 
 // The Reichstag: a stone block with corner towers, a portico and Foster's dome.
 function reichstag(mesh, ring, base, def) {
+  // Measured, not guessed. The roof terrace is 24 m up and the top of the
+  // dome is 47 m above the ground, and the dome itself is 23.5 m tall and
+  // about 38 m across (berlinstadtservice, Bundestag). This used to be a
+  // 30 m block with the dome on top of that, which put the glass at 54.5 m.
+  //
+  // The corner towers were cut down and stripped in Baumgarten's rebuild of
+  // the sixties (Bundestag, entwicklungsstadt): flat topped, no lanterns,
+  // somewhat lower than Wallot's 46 m. They had pyramid spires here, which
+  // the building has not had in sixty years. Their exact height today is not
+  // in any source this was checked against, so they keep the 10 m they had
+  // and lose only the points.
   const f = frame(ring);
   const rot = Math.atan2(f.uz, f.ux);
   const seed = 11;
-  const H = 30;
+  const H = 24;
   extrudeBuilding(mesh, { outer: ring, holes: [] }, {
     base, height: H, roofShape: 'flat', wallMat: MAT.SANDSTONE, roofMat: MAT.SANDSTONE,
-    seed, levels: 5, landmark: true, noWindows: false, parapet: true,
+    seed, levels: 4, landmark: true, noWindows: false, parapet: true,
   });
   const hu = f.lu / 2, hv = f.lv / 2;
   const P = (u, v) => [f.cx + u * f.ux + v * f.vx, f.cz + u * f.uz + v * f.vz];
-  // Four corner towers.
+  // Four corner towers, flat topped with a crowning slab a metre proud.
   for (const su of [-1, 1]) for (const sv of [-1, 1]) {
     const [tx, tz] = P(su * (hu - 7), sv * (hv - 7));
     box(mesh, tx, base + H, tz, 15, 10, 15, MAT.SANDSTONE, { seed, rot, flags: LM });
-    spire(mesh, tx, base + H + 10, tz, 15, 5.5, MAT.SANDSTONE, { seed, rot, flags: LM });
+    box(mesh, tx, base + H + 10, tz, 16.5, 1.2, 16.5, MAT.SANDSTONE, { seed, rot, flags: LM });
   }
-  // West portico.
-  const [px, pz] = P(-hu - 3.0, 0);
+  // The west portico: six columns, an entablature, and a pediment over them.
+  // The pediment is a gable with its triangle to the west, which is where
+  // DEM DEUTSCHEN VOLKE is cut into the frieze below it. It used to be a
+  // 26 m square pyramid that stood out ten metres past the columns.
+  const colH = 16.5;
   const [c0x, c0z] = P(-hu - 3.0, -12);
   const [c1x, c1z] = P(-hu - 3.0, 12);
-  colonnade(mesh, base, c0x, c0z, c1x, c1z, 6, 1.35, 21, MAT.SANDSTONE, seed);
-  box(mesh, px, base + 22.4, pz, 7, 3.0, 30, MAT.SANDSTONE, { seed, rot, flags: LM });
-  spire(mesh, px, base + 25.4, pz, 26, 5.0, MAT.SANDSTONE, { seed, rot: rot + Math.PI / 4, flags: LM });
-  // The dome: a glass drum and a shallow cap, with the inner cone.
-  cylinder(mesh, f.cx, base + H + 1.0, f.cz, 19, 19, 3.0, 28, MAT.SANDSTONE, { seed, flags: LM, capTop: false });
-  cylinder(mesh, f.cx, base + H + 4.0, f.cz, 18, 17, 9.0, 28, MAT.GLASS, { seed, flags: LM, capTop: false });
-  dome(mesh, f.cx, base + H + 13.0, f.cz, 17, 11.5, 28, 8, MAT.GLASS, { seed, flags: LM });
-  cylinder(mesh, f.cx, base + H + 4.0, f.cz, 5.5, 1.2, 14.0, 16, MAT.METAL, { seed, flags: LM });
+  colonnade(mesh, base, c0x, c0z, c1x, c1z, 6, 1.35, colH, MAT.SANDSTONE, seed);
+  const [px, pz] = P(-hu - 2.5, 0);
+  box(mesh, px, base + colH + 0.4, pz, 7, 2.6, 29, MAT.SANDSTONE, { seed, rot, flags: LM });
+  pediment(mesh, px, base + colH + 3.0, pz, 29, 7, 4.6, MAT.SANDSTONE, { seed, rot, flags: LM });
+  // The dome sits straight on the roof terrace: a low sandstone ring, then
+  // the glass shell to 47 m.
+  cylinder(mesh, f.cx, base + H, f.cz, 19.5, 19.5, 1.5, 28, MAT.SANDSTONE, { seed, flags: LM, capTop: false });
+  dome(mesh, f.cx, base + H + 1.5, f.cz, 19, 21.5, 28, 9, MAT.GLASS, { seed, flags: LM });
+  // And the mirrored cone inside it, which narrows downwards into the
+  // chamber rather than upwards: it gathers light from the top and throws
+  // it down. It was drawn the other way up.
+  cylinder(mesh, f.cx, base + H + 1.5, f.cz, 2.5, 8.0, 15.0, 16, MAT.METAL, { seed, flags: LM });
 }
 
 // The Cathedral: a cruciform block, a big copper dome on a drum, four corner

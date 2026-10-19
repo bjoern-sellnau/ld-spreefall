@@ -25,6 +25,7 @@ import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
+import { CHASSIS } from './game/chassis.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
@@ -46,7 +47,7 @@ const $ = (id) => document.getElementById(id);
 const el = {
   canvas: $('view'), loading: $('loading'), loadbar: $('loadbar'), loadnote: $('loadnote'),
   title: $('title'), play: $('playbtn'), hud: $('hud'), minimap: $('minimap'),
-  compass: $('compasslabel'), cards: $('cardhost'), toast: $('toast'), debug: $('debug'),
+  compass: $('compasslabel'), cards: $('cardhost'), toast: $('toast'), overkill: $('overkill'), debug: $('debug'),
   found: $('found'), total: $('total'), district: $('district'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
@@ -74,6 +75,7 @@ const el = {
   modeNote: $('modenote'), timePick: $('timepick'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
+  cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'), vehicleKeys: $('vehiclekeys'),
   vehicleHull: $('vehiclehull'), vehicleSpeed: $('vehiclespeed'),
   vehicleSpeedUnit: $('vehiclespeedunit'),
@@ -241,9 +243,20 @@ async function main() {
   // the collision field it has to agree with, and the tiles that changed go
   // back to the card. The worked area is wider than the crater's own reach so
   // that the join between cut and uncut ground sits where nothing moves.
+  //
+  // How fine depends on the hole. The collision is the bowl itself, so the
+  // picture has to be close to it everywhere, and a flat piece across a
+  // curved bowl is furthest out in the middle, by about an eighth of its
+  // edge squared times the curvature there. Keeping that under fifteen
+  // centimetres is an edge of a metre in a rocket's hole and three in a
+  // warhead's; three everywhere left the middle of a small crater a metre
+  // shallower in the picture than underfoot, which is standing inside the
+  // ground and looking out of the bottom of the map.
   demolition.onCrater = (site) => {
     const reach = site.craterRadius * DEMO.rimOut + 6;
-    const changed = fineGround(world, site.x, site.z, reach);
+    const edge = Math.max(0.7, Math.min(3.0,
+      site.craterRadius * Math.sqrt(0.1 / Math.max(0.05, site.depth))));
+    const changed = fineGround(world, site.x, site.z, reach, edge);
     if (changed.length) tiles.refresh(changed);
   };
 
@@ -430,6 +443,8 @@ async function main() {
     // apart from blastSlow because they are different switches and either
     // may be on without the other.
     killSlow: 0,
+    // The overkill setting's beat: half a second of nearly nothing moving.
+    goreStop: 0,
     // And how long before another one may do it again.
     killRest: 0,
     mapMode: 'nuke',
@@ -616,8 +631,10 @@ async function main() {
       // up is a tank of petrol: it burns, it throws its own panels about, and
       // it leaves a wreck. Giving it a punch took the wreck away again, and
       // the lamp post beside it with it.
+      // A weapon built to open a building says how far, in its own row.
       const punch = splash.punch === false ? 0
-        : (splash.damage >= 90 ? Math.min(3.0, splash.radius * 0.21) : 0);
+        : typeof splash.punch === 'number' ? splash.punch
+          : (splash.damage >= 90 ? Math.min(3.0, splash.radius * 0.21) : 0);
       renderer.addScar(x, y, z, splash.radius * 1.5,
         Math.min(1, splash.damage / 180), punch);
       // A hole has to have something behind it. The tiles round a blast are
@@ -735,13 +752,22 @@ async function main() {
       }
     }
 
+    // The void cannon's ball, landing: a green flash the size of the blast,
+    // and a tendril out to everybody within reach that a wall does not hide.
+    const voidSpec = row && row.void ? row.void : null;
+    if (voidSpec) voidBurst(x, y, z, splash, voidSpec);
+
     // And what it did to the city itself. Small blasts add up on a grid and
     // bring a frontage down when they have done enough; a warhead takes its
     // whole radius at once.
     // Some blasts do not dig: a car going up is a tank of petrol and a lot of
     // noise, and it should not leave a shell hole under its own wreck, which
     // is what left the burnt out shell standing in the air over one.
-    demolition.blast(x, y, z, splash.radius, splash.damage, splash.crater !== false);
+    // A charge can say what it does to the grid apart from what it does to
+    // people: the void cannon kills across a square and opens a frontage,
+    // and bringing the whole block down on top of the hole was not the idea.
+    const wreck = splash.wreck || splash;
+    demolition.blast(x, y, z, wreck.radius, wreck.damage, splash.crater !== false);
     // Anything that leaves a mark sets light to the trees in it. The radius
     // is wider than the blast, because fire spreads and a blast does not.
     fires.ignite(x, y, z, splash.radius * (splash.nuke ? 1.15 : 1.9),
@@ -827,11 +853,116 @@ async function main() {
     const toPlayer = Math.hypot(player.x - x, player.y + PLAYER.eye - by, player.z - z);
     if (!state.inMech && !state.inVehicle && toPlayer < splash.radius
       && reach(player.x, player.y + PLAYER.eye, player.z)) {
-      combat.hurt(splash.damage * 0.55 * (1 - toPlayer / splash.radius),
+      combat.hurt(splash.damage * (splash.self ?? 0.55) * (1 - toPlayer / splash.radius),
         x, z, player.x, player.z);
     }
     if (killed > 1) toast(`${killed} at once`);
     return killed;
+  }
+
+  // --- the void cannon ------------------------------------------------------
+  /**
+   * Everybody within reach of a point who can be seen from it: soldiers,
+   * drones and mechs, each with the height a tendril should arrive at.
+   */
+  function voidTargets(x, y, z, reach) {
+    const out = [];
+    const seen = (ax, ay, az) => world.lineOfSight(x, y, z, ax, ay, az);
+    for (const sd of soldiers.active) {
+      if (!sd.alive || sd.health <= 0) continue;
+      if (Math.hypot(sd.x - x, sd.y + 1.1 - y, sd.z - z) > reach) continue;
+      if (seen(sd.x, sd.y + 1.1, sd.z)) out.push({ kind: 'soldier', t: sd, y: sd.y + 1.1 });
+    }
+    for (const d of drones.active) {
+      if (d.health <= 0) continue;
+      if (Math.hypot(d.x - x, d.y - y, d.z - z) > reach) continue;
+      if (seen(d.x, d.y, d.z)) out.push({ kind: 'drone', t: d, y: d.y });
+    }
+    for (const mk of mechs.active) {
+      if (mk.health <= 0 || mk === state.inMech) continue;
+      const mid = mk.y + mk.spec.height * 0.72;
+      if (Math.hypot(mk.x - x, mid - y, mk.z - z) > reach) continue;
+      if (seen(mk.x, mid, mk.z)) out.push({ kind: 'mech', t: mk, y: mid });
+    }
+    return out;
+  }
+
+  /** A green tendril from one point to another, crooked, and gone in a blink. */
+  function tendril(ax, ay, az, bx, by, bz) {
+    const n = 4;
+    let px = ax, py = ay, pz = az;
+    for (let i = 1; i <= n; i++) {
+      const k = i / n;
+      const j = i < n ? 0.9 : 0;
+      const qx = ax + (bx - ax) * k + (Math.random() - 0.5) * j;
+      const qy = ay + (by - ay) * k + (Math.random() - 0.5) * j;
+      const qz = az + (bz - az) * k + (Math.random() - 0.5) * j;
+      effects.lance(px, py, pz, qx, qy, qz, 0.35, 1.0, 0.3);
+      px = qx; py = qy; pz = qz;
+    }
+    effects.flash(bx, by, bz, 1.2, 0.4, 1.0, 0.35, 0.18);
+  }
+
+  /** What a tendril does to whatever it reached. */
+  function voidHit(v, damage, fromX, fromZ) {
+    const t = v.t;
+    if (v.kind === 'soldier') {
+      const r = Math.hypot(t.x - fromX, t.z - fromZ) || 1;
+      if (soldiers.damage(t, damage, { x: (t.x - fromX) / r, y: 0, z: (t.z - fromZ) / r })) {
+        creditTarget(t, false, 'soldier');
+        return true;
+      }
+    } else if (v.kind === 'drone') {
+      if (drones.damage(t, damage)) { creditTarget(t, false, 'drone'); return true; }
+    } else if (mechs.damage(t, damage * 2)) {
+      creditTarget(t, false, 'mech');
+      return true;
+    }
+    return false;
+  }
+
+  /** The ball landing: a green flash and a tendril to everybody in reach. */
+  function voidBurst(x, y, z, splash, spec) {
+    effects.flash(x, y, z, splash.radius * 0.9, 0.35, 1.0, 0.3, 0.5);
+    effects.flash(x, y, z, splash.radius * 0.4, 0.8, 1.0, 0.7, 0.3);
+    for (let i = 0; i < 90; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const b = Math.acos(2 * Math.random() - 1);
+      const r = Math.random() * splash.radius * 0.7;
+      effects.spark(x + Math.sin(b) * Math.cos(a) * r, y + Math.cos(b) * r * 0.6 + 1,
+        z + Math.sin(b) * Math.sin(a) * r, 0.35, 1.0, 0.3);
+    }
+    state.flash = Math.max(state.flash, 0.35);
+    let n = 0;
+    for (const v of voidTargets(x, y + 1, z, spec.reach)) {
+      tendril(x, y + 1, z, v.t.x, v.y, v.t.z);
+      if (voidHit(v, spec.damage, x, z)) n++;
+    }
+    if (n) feed(`<b>void</b> ${n} taken`);
+    return n;
+  }
+
+  /**
+   * The ball in flight: green sparks off it, and every so often a tendril out
+   * to whoever it is passing, which is the part that makes it more than a
+   * slow rocket.
+   */
+  function voidTick(dt) {
+    for (const b of projectiles.active) {
+      if (b.kind !== 'void' || !b.alive) continue;
+      const spec = WEAPONS.void.void;
+      for (let i = 0; i < 3; i++) {
+        effects.spark(b.x + (Math.random() - 0.5) * 1.4, b.y + (Math.random() - 0.5) * 1.4,
+          b.z + (Math.random() - 0.5) * 1.4, 0.35, 1.0, 0.3);
+      }
+      b.zap = (b.zap ?? 0) - dt;
+      if (b.zap > 0) continue;
+      b.zap = spec.every;
+      for (const v of voidTargets(b.x, b.y, b.z, spec.aura)) {
+        tendril(b.x, b.y, b.z, v.t.x, v.y, v.t.z);
+        voidHit(v, spec.auraDamage, b.x, b.z);
+      }
+    }
   }
 
   /**
@@ -1690,29 +1821,45 @@ async function main() {
   demolition.onStage = (site, level, was) => {
     scarTiles(site.x, site.z, site.radius);
     const share = level - was;
-    // How tall whatever is in the site still was before this stage. The
-    // tallest wall inside it is the best answer available without asking the
-    // geometry, and asking the geometry would mean a raycast per stage.
-    const standing = Math.max(4, world.tallestNear(site.x, site.z, site.radius));
-    const breakAt = site.y + standing * (1 - was);
-    effects.dust(site.x, breakAt, site.z, site.radius * (0.5 + share * 0.6));
     const chunks = Math.min(40, 6 + Math.round(site.radius * share * 1.4));
     const faces = facesAround(site.x, site.y + 2.5, site.z, site.radius);
-    if (faces.length) {
+    // Each face breaks at its own height. The break line used to be the
+    // tallest wall anywhere in the site, and the chunks went down every
+    // face the rays found at that height: a rocket between a six storey
+    // block and the two storey house beside it dropped stone out of empty
+    // air twelve metres over the house. Measured, two chunks in five came
+    // from more than two metres above anything that was standing under them.
+    const broken = [];
+    for (const f of faces) {
+      const tall = world.tallestNear(f.x, f.z, 1.5);
+      if (tall < 2) continue;
+      broken.push({ ...f, tall, at: site.y + tall * (1 - was) });
+    }
+    let dustAt = site.y + 2;
+    if (broken.length) {
       // Down the front of the building, a share of the chunks to each face,
       // and a cloud at the foot of the nearest two: a facade coming down puts
       // as much dust into the street as it does at the break.
-      const each = Math.max(2, Math.round(chunks / faces.length));
-      faces.sort((a, b) => a.t - b.t);
-      for (let i = 0; i < faces.length; i++) {
-        const f = faces[i];
-        gibs.rubble(f.x, breakAt, f.z, Math.min(5, Math.max(2, site.radius * 0.3)),
-          each, standing * share);
+      const each = Math.max(2, Math.round(chunks / broken.length));
+      broken.sort((a, b) => a.t - b.t);
+      for (let i = 0; i < broken.length; i++) {
+        const f = broken[i];
+        gibs.rubble(f.x, f.at, f.z, Math.min(5, Math.max(2, site.radius * 0.3)),
+          each, f.tall * share);
         if (i < 2) effects.dust(f.x, site.y + 3, f.z, site.radius * 0.3);
+        dustAt = Math.max(dustAt, f.at);
       }
     } else {
-      gibs.rubble(site.x, breakAt, site.z, site.radius, chunks, standing * share);
+      // Nothing found standing round the middle. Whatever is there comes off
+      // whatever is under the middle itself, and if that is nothing the
+      // chunks are kicked up off the ground rather than dropped out of the sky.
+      const tall = world.tallestNear(site.x, site.z, 4);
+      const at = site.y + Math.max(1, tall * (1 - was));
+      gibs.rubble(site.x, at, site.z, Math.min(site.radius, 6), Math.min(chunks, 12),
+        Math.max(1, tall * share));
+      dustAt = at;
     }
+    effects.dust(site.x, dustAt, site.z, site.radius * (0.5 + share * 0.6));
     const away = Math.round(Math.hypot(player.x - site.x, player.z - site.z));
     audio.collapse(away, site.radius * (0.4 + share));
     feed(level >= 1
@@ -1988,7 +2135,7 @@ async function main() {
     el.vehiclePanel.classList.remove('hidden');
     el.vehicleName.textContent = near.spec.name;
     el.vehicleKeys.textContent = near.spec.kind === 'air'
-      ? 'W S throttle, A D roll, mouse flies, Space up, right mouse down, left mouse fires'
+      ? 'it flies where you look; W S throttle, A D turn, Space up, right mouse down, left mouse fires'
       : 'W forward, S back, A D steer, Shift brake, left mouse fires';
     // You look where it is pointing. Before this the camera kept the heading
     // you had on foot, so a tank parked across your line of sight drove off
@@ -2251,7 +2398,9 @@ async function main() {
     cheats.used = true;
     applyCheats();
     // A mech is not in the vehicle table at all, and it does not walk out of
-    // a side street: it is dropped.
+    // a side street: it is dropped. Asking for a Titan is asking for whichever
+    // chassis is picked in the menu.
+    if (type === 'titan') type = cheats.myMech();
     if (MECH[type]) return callTitan(type);
     // A fighter needs a runway, and a street is not one. Asked for from the
     // menu it arrives in the air, already flying, with you in it: the cheat
@@ -2266,6 +2415,8 @@ async function main() {
       const v = vehicles.spawn(type, x, z, yaw, 180);
       if (!v) return null;
       v.speed = spec.stall * 1.6;
+      // Handed over at cruise, with the lever where cruise is.
+      v.throttle = 0.6;
       v.pitch = 0.05;
       if (state.inVehicle) leaveVehicle(false);
       if (state.inMech) leaveMech(false);
@@ -2276,7 +2427,7 @@ async function main() {
         el.vehiclePanel.classList.remove('hidden');
         el.vehicleName.textContent = v.spec.name;
         el.vehicleKeys.textContent =
-          'W S throttle, A D roll, mouse flies, Space up, right mouse down, left mouse fires';
+          'it flies where you look; W S throttle, A D turn, Space up, right mouse down, left mouse fires';
         camera.yaw = v.yaw;
         audio.swap();
       }
@@ -2606,10 +2757,77 @@ async function main() {
       }
     }
     effects.shake = Math.min(1, effects.shake + 0.12);
+    if (cheats.overkill) overkill(s, dir);
     // The kill itself is credited by whoever made it, the same as any other,
     // because a gib is still one dead soldier and not two.
     return n;
   };
+
+  // --- overkill -------------------------------------------------------------
+  // The setting past the top of the gore menu, and deliberately out of all
+  // proportion: the fighting games that stop the clock and put a word across
+  // the screen when somebody is finished. Everything here is on top of the
+  // burst the ordinary switches already made.
+  const fountains = [];
+  const OVERKILL_WORDS = ['OVERKILL', 'SPLATTER', 'TOTAL CARNAGE', 'NO MERCY', 'EXCESSIVE', 'MESSY'];
+  const overkillRun = { streak: 0, at: -10, shown: 0 };
+  function overkill(s, dir) {
+    const floor = world.groundHeight(s.x, s.z);
+    // The skeleton leaves the body the way the round was going, which is the
+    // one picture everybody remembers from the games this is a nod to.
+    gibs.bones(s.x, s.y + 0.9, s.z, dir, 3);
+    // A second burst thrown up rather than out, so it comes back down over
+    // everyone standing near for a second or two after the kill.
+    gibs.burst(s.x, s.y, s.z, { x: 0, y: 0, z: 0 }, 4, 16);
+    // And a fountain where they stood, on the render clock below.
+    fountains.push({ x: s.x, y: floor, z: s.z, life: 2.8, max: 2.8, next: 0 });
+    effects.stain(s.x, floor, s.z, 2.8, 60);
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 1 + Math.random() * 7;
+      const px = s.x + Math.cos(a) * r, pz = s.z + Math.sin(a) * r;
+      effects.stain(px, world.groundHeight(px, pz), pz, 0.3 + Math.random() * 0.7, 60);
+    }
+    // Whatever wall is within nine metres gets sprayed: eight rays out at
+    // chest height, and a burst of blood against every face one of them meets.
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 + Math.random() * 0.3;
+      const hit = world.raycast(s.x, s.y + 1.2, s.z, Math.cos(a), 0, Math.sin(a), 9);
+      if (!hit || hit.kind === 'ground') continue;
+      effects.blood(hit.x + hit.nx * 0.15, hit.y, hit.z + hit.nz * 0.15, hit.nx, 0.15, hit.nz, 3);
+    }
+    // The clock stops for a beat, which is what makes the word land.
+    state.goreStop = Math.max(state.goreStop, 0.5);
+    effects.shake = Math.min(1, effects.shake + 0.35);
+    const now = state.time;
+    overkillRun.streak = now - overkillRun.at < 3 ? overkillRun.streak + 1 : 1;
+    overkillRun.at = now;
+    overkillRun.shown++;
+    const word = OVERKILL_WORDS[(Math.random() * OVERKILL_WORDS.length) | 0];
+    el.overkill.textContent = overkillRun.streak > 1 ? `${word} x${overkillRun.streak}` : word;
+    el.overkill.classList.remove('show');
+    // Read the layout once so the animation starts again from its first frame.
+    void el.overkill.offsetWidth;
+    el.overkill.classList.add('show');
+    clearTimeout(overkill._t);
+    overkill._t = setTimeout(() => el.overkill.classList.remove('show'), 1400);
+    audio.overkill(overkillRun.streak);
+  }
+  function updateFountains(dt) {
+    for (let i = fountains.length - 1; i >= 0; i--) {
+      const f = fountains[i];
+      f.life -= dt;
+      if (f.life <= 0 || !cheats.bleeding) { fountains.splice(i, 1); continue; }
+      f.next -= dt;
+      if (f.next > 0) continue;
+      f.next = 0.06;
+      // Strongest at the start and dying away, the way a pulse does.
+      const k = f.life / f.max;
+      const pulse = 0.75 + 0.25 * Math.sin(f.life * 18);
+      effects.blood(f.x, f.y + 0.3, f.z, (Math.random() - 0.5) * 0.25,
+        (1.2 + 1.4 * k) * pulse, (Math.random() - 0.5) * 0.25, 1.2 + 2.2 * k);
+    }
+  }
   soldiers.onDeath = (s) => {
     if (!cheats.bleeding) return;
     const k = cheats.goreScale;
@@ -2747,6 +2965,38 @@ async function main() {
         else if (!MECH[ride.id]) toast(`${v.spec.name} outside. F to get in.`);
       });
       el.cheatRides.appendChild(b);
+    }
+    // Which mech is yours, and which of theirs: a chip per chassis, lit on
+    // the one that is picked, with what it is for written under the row.
+    for (const side of ['mine', 'foe']) {
+      const host = side === 'mine' ? el.cheatMine : el.cheatFoe;
+      const say = document.createElement('div');
+      say.className = 'mechsay';
+      const chips = [];
+      const show = () => {
+        const id = cheats.mechs[side];
+        for (const c of chips) c.el.classList.toggle('on', c.id === id);
+        const row = CHASSIS.find((c) => c.id === id);
+        say.textContent = row ? `${row.name}: ${row.role}` : 'a different one every time';
+      };
+      const options = [...CHASSIS.map((c) => ({ id: c.id, label: c.name, note: c.role })),
+        ...(side === 'foe' ? [{ id: 'random', label: 'Random', note: 'a different one every time' }] : [])];
+      for (const o of options) {
+        const b = document.createElement('button');
+        b.className = 'chip';
+        b.dataset.mech = `${side}:${o.id}`;
+        b.textContent = o.label;
+        b.title = o.note;
+        b.addEventListener('click', () => {
+          cheats.chooseMech(side, o.id);
+          show();
+          toast(side === 'mine' ? `${o.label} on the next titanfall` : `theirs: ${o.label.toLowerCase()}`);
+        });
+        host.appendChild(b);
+        chips.push({ id: o.id, el: b });
+      }
+      host.appendChild(say);
+      show();
     }
     for (const sp of SPAWNS) {
       const b = document.createElement('button');
@@ -2931,7 +3181,7 @@ async function main() {
     // And the heavy ones, walking in from further out.
     const heavies = mechs.active.filter((m) => !m.mine && m.health > 0).length;
     if (machines.tickMech(dt, heavies)) {
-      spawnMech('reaper', MACHINES.mechFrom
+      spawnMech(cheats.foeMech(), MACHINES.mechFrom
         + Math.random() * (MACHINES.mechTo - MACHINES.mechFrom));
     }
     // The hum, and the two tone they give when one of them has you. Spread
@@ -3003,10 +3253,24 @@ async function main() {
       } else if (kind === 'jets') {
         if (jets.spawnFar(player.x, player.z)) made++;
       } else if (kind === 'reapers') {
-        if (spawnMech('reaper', 60 + Math.random() * 60)) made++;
+        if (spawnMech(cheats.foeMech(), 60 + Math.random() * 60)) made++;
+      } else if (kind === 'machines') {
+        // The same soldier layer and the same spawner, and then the same one
+        // line the end of the world mode uses to turn a soldier into one.
+        const s = soldiers.spawnNear(player.x, player.z, 28, 90);
+        if (s) { makeMachine(s, rollMechKiller()); made++; }
+      } else if (kind === 'civilians') {
+        // Nearer than the soldiers come in, because they are walking past
+        // rather than arriving, and you asked to see them.
+        if (soldiers.spawnCivilianNear(player.x, player.z, 12, 60)) made++;
       }
     }
-    if (kind === 'soldiers') soldiers.budget = Math.max(soldiers.budget, soldiers.active.length);
+    // The soldier layer's budget counts everybody in it, the people walking
+    // past and the machines included, so it goes up with what was asked for
+    // or the next squad is held back to make room for a passer by.
+    if (kind === 'soldiers' || kind === 'machines' || kind === 'civilians') {
+      soldiers.budget = Math.max(soldiers.budget, soldiers.active.length);
+    }
     if (kind === 'drones') drones.budget = Math.max(drones.budget, drones.active.length);
     if (kind === 'jets') jets.budget = Math.max(jets.budget, jets.active.length);
     return made;
@@ -4267,6 +4531,10 @@ async function main() {
       state.killSlow = Math.max(0, state.killSlow - dt);
       scale = Math.min(scale, 0.25);
     }
+    if (state.goreStop > 0) {
+      state.goreStop = Math.max(0, state.goreStop - dt);
+      scale = Math.min(scale, 0.1);
+    }
     // A Stinger in the air. Shallower than a blast, because you are still
     // flying the machine while you watch it.
     if (state.airSlow > 0) {
@@ -4324,6 +4592,7 @@ async function main() {
       const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z, alive: combat.health > 0 };
       combat.update(worldDt);
       projectiles.update(worldDt);
+      voidTick(worldDt);
       gibs.update(worldDt);
       demolition.update(worldDt);
       fires.update(worldDt, player);
@@ -4383,16 +4652,20 @@ async function main() {
     if (state.inVehicle) {
       const v = state.inVehicle;
       const air = v.spec.kind === 'air';
+      // In the air the keys turn the view, the same as the mouse does, and
+      // the aircraft flies where the view is pointing. Right is a yaw that
+      // goes down, the same as it is on foot.
+      if (air && !photo.active && input.moveX) {
+        camera.yaw -= input.moveX * 1.1 * selfDt;
+      }
       const controls = {
         throttle: photo.active ? 0 : input.moveZ,
-        steer: photo.active ? 0 : (air ? input.moveX : -input.moveX),
-        // In the air the mouse flies it: looking up pitches up and the roll
-        // comes off the same stick as the yaw. The sign here was inverted,
-        // which on a helicopter only changed which way it leaned, and on a
-        // fighter meant that pulling back on the stick put the nose into the
-        // road.
-        pitch: air && !photo.active ? clamp(camera.pitch * 1.6, -1, 1) : 0,
-        roll: air && !photo.active ? clamp(input.moveX * -1, -1, 1) : 0,
+        steer: photo.active ? 0 : (air ? 0 : -input.moveX),
+        // Where you are looking, which is where an aircraft goes.
+        aimYaw: air && !photo.active ? camera.yaw : undefined,
+        aimPitch: air && !photo.active ? camera.pitch : undefined,
+        pitch: 0,
+        roll: 0,
         lift: air && !photo.active ? (input.run ? 1 : (input.jumpHeld ? 1 : (input.secondary ? -1 : 0))) : 0,
         brake: !air && input.run,
         fire: input.fire && !photo.active,
@@ -4501,6 +4774,7 @@ async function main() {
     // walking over one in the slow still picks it up.
     pickups.update(worldDt, { x: player.x, y: player.y, z: player.z });
     projectiles.update(worldDt);
+    voidTick(worldDt);
     gibs.update(worldDt);
     demolition.update(worldDt);
     fires.update(worldDt, player);
@@ -4728,6 +5002,7 @@ async function main() {
     // Screen shake from firing and from explosions, applied to the eye rather
     // than to the aim, so it never moves where your shots go.
     effects.update(elapsed);
+    updateFountains(elapsed);
     // The beams are redrawn every frame rather than left to decay, because
     // unlike a spark a beam is a thing that is there until it is not.
     if (ion.firing) {
@@ -5095,6 +5370,11 @@ async function main() {
      *
      * @returns {number|null} metres, or null where nothing is drawn
      */
+    /** The mesh a tile is drawn from, own buffer or district bytes. */
+    tileMeshForTest(index) {
+      const rec = world.tiles[index];
+      return rec ? tileMesh(rec) : null;
+    },
     drawnGround(x, z) {
       const index = world.tileIndex(x, z);
       if (index < 0) return null;

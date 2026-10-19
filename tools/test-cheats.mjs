@@ -64,7 +64,7 @@ async function run() {
   check('every switch the brief asked for is in it',
     ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic', 'slowBlast',
       'wreckBuildings', 'wreckGround', 'lastKill',
-      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore']
+      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
   check('and every button',
@@ -411,6 +411,51 @@ async function run() {
   check('with the blood on its own alpha blended pass',
     stains.alpha > 0 && stains.additive > 0,
     `${stains.additive} additive, ${stains.alpha} alpha`);
+
+  // --- overkill: past the top, on purpose ---------------------------------
+  const over = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const kill = (setting) => {
+      s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
+      for (const id of setting) s.setCheat(id, true);
+      const v = s.spawnSoldier(-10, 1);
+      s.soldiers.damage(v, 9999, { x: -1, y: 0, z: 0.2 });
+      const chunks = s.gibs.count;
+      const bones = s.gibs.active.filter((g) => g.alive && g.part === 23).length;
+      // Thrown up hard enough to come back down from above head height.
+      const rain = s.gibs.active.filter((g) => g.alive && g.vy > 14).length;
+      return { chunks, bones, rain, gibbed: !!v.gibbed };
+    };
+    const ultra = kill(['ultraGore']);
+    const top = kill(['overkill']);
+    const word = document.getElementById('overkill');
+    const shown = { text: word.textContent, on: word.classList.contains('show') };
+    const stop = s.state.goreStop;
+    // A second kill straight after counts as a run.
+    const v2 = s.spawnSoldier(-12, -3);
+    s.soldiers.damage(v2, 9999, { x: -1, y: 0, z: 0 });
+    const streak = word.textContent;
+    // The fountain runs on the render clock: a few real frames, then the
+    // blood in the air that is still going up, which is the fountain and not
+    // the drops falling off the pieces.
+    s.effects.clear();
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    const high = s.effects.list.filter((p) => p.alive && p.kind === 3 && p.vy > 4).length;
+    s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
+    return { ultra, top, shown, stop, high, streak };
+  });
+  check('overkill takes every kill apart, with nothing else switched on',
+    over.top.gibbed && over.top.chunks > over.ultra.chunks * 2.5,
+    `${over.ultra.chunks} pieces at ultra, ${over.top.chunks} at overkill`);
+  check('and the skeleton comes out with it', over.top.bones > 20 && over.ultra.bones === 0,
+    `${over.top.bones} bones`);
+  check('and part of it goes up to rain back down', over.top.rain > 20, `${over.top.rain} pieces going up`);
+  check('and the clock stops for a beat while a word goes across the screen',
+    over.stop > 0 && over.shown.on && over.shown.text.length > 3,
+    `"${over.shown.text}", ${over.stop.toFixed(2)} s`);
+  check('and a fountain keeps going where they stood', over.high > 30,
+    `${over.high} drops going up a few frames on`);
+  check('and a second kill straight after is counted as a run', / x2$/.test(over.streak), over.streak);
 
   // --- what is left of somebody who burned ---------------------------------
   const bones = await page.evaluate(async () => {
@@ -771,6 +816,79 @@ async function run() {
     waves.made.soldiers === 6 && waves.made.drones === 4 && waves.made.jets === 2,
     `${waves.live.soldiers} soldiers, ${waves.live.drones} drones, ${waves.live.jets} jets`);
   check('and none of them in the weapons free zone', waves.inZone === 0);
+
+  // --- which mech, yours and theirs --------------------------------------
+  const picked = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const chips = (side) => [...document.querySelectorAll(`[data-mech^="${side}:"]`)].map((b) => b.dataset.mech);
+    const mineChips = chips('mine'), foeChips = chips('foe');
+    // Yours: pick one with the chip, as a player would, and call it down.
+    document.querySelector('[data-mech="mine:bruin"]').click();
+    const lit = document.querySelector('[data-mech="mine:bruin"]').classList.contains('on');
+    s.mechs.reset();
+    const call = s.dropRide('titan');
+    const inbound = s.state.titanInbound ? s.state.titanInbound.type : null;
+    s.state.titanInbound = null;
+    document.getElementById('titanfall').classList.add('hidden');
+    const bruin = s.mechs.spawn('bruin', s.player.x + 30, s.player.z, 0);
+    const arm = bruin ? s.mechs.arm(bruin).id : null;
+    // Theirs: one chassis, then the dice.
+    s.mechs.reset();
+    document.querySelector('[data-mech="foe:heron"]').click();
+    s.spawnWave('reapers', 2);
+    const herons = s.mechs.active.map((m) => m.type);
+    s.mechs.reset();
+    document.querySelector('[data-mech="foe:random"]').click();
+    const seen = new Set();
+    for (let i = 0; i < 60; i++) seen.add(s.cheats.foeMech());
+    s.spawnWave('reapers', 2);
+    const randoms = s.mechs.active.map((m) => m.type);
+    // Every one of them is drawn, by the mesh of its own chassis.
+    for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+    const drawn = s.renderer.actors.mechStats.count;
+    const live = s.mechs.active.filter((m) => m.alive).length;
+    s.mechs.reset();
+    s.cheats.chooseMech('mine', 'warden');
+    s.cheats.chooseMech('foe', 'warden');
+    return { mineChips: mineChips.length, foeChips: foeChips.length, lit, call: !!call, inbound, arm,
+      herons, seen: seen.size, randoms, drawn, live };
+  });
+  check('the menu offers ten mechs for you and ten and random for them',
+    picked.mineChips === 10 && picked.foeChips === 11, `${picked.mineChips} and ${picked.foeChips}`);
+  check('the one you pick is the one that is called down',
+    picked.lit && picked.call && picked.inbound === 'bruin', `${picked.inbound} inbound`);
+  check('and it comes down holding the weapon it was built round', picked.arm === 'leadwall', picked.arm);
+  check('theirs come as the chassis you pick',
+    picked.herons.length === 2 && picked.herons.every((t) => t === 'heron-foe'), picked.herons.join(', '));
+  check('or a different one each time on random',
+    picked.seen >= 7 && picked.randoms.every((t) => t === 'reaper' || /-foe$/.test(t)),
+    `${picked.seen} kinds in sixty throws`);
+  check('and every one on the street is drawn', picked.drawn === picked.live && picked.live > 0,
+    `${picked.drawn} of ${picked.live}`);
+
+  // The two rows that were missing: machines and people walking past.
+  const kinds = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset();
+    const machines = s.spawnWave('machines', 6);
+    const steel = s.soldiers.active.filter((a) => a.machine && !a.civilian).length;
+    s.soldiers.reset();
+    const civilians = s.spawnWave('civilians', 8);
+    const people = s.soldiers.active.filter((a) => a.civilian && !a.machine).length;
+    const near = s.soldiers.active.filter((a) => a.civilian
+      && Math.hypot(a.x - s.player.x, a.z - s.player.z) <= 61).length;
+    const buttons = [...document.querySelectorAll('[data-spawn]')].map((b) => b.dataset.spawn);
+    s.soldiers.reset();
+    return { machines, steel, civilians, people, near, buttons };
+  });
+  check('the menu has a row for machines and one for passers by',
+    kinds.buttons.includes('machines') && kinds.buttons.includes('civilians'),
+    kinds.buttons.join(', '));
+  check('and the machines row brings six machines',
+    kinds.machines === 6 && kinds.steel === 6, `${kinds.steel} of ${kinds.machines}`);
+  check('and the passers by row brings eight people, close enough to see',
+    kinds.civilians === 8 && kinds.people === 8 && kinds.near === 8,
+    `${kinds.people} people, ${kinds.near} within sixty metres`);
 
   // --- switching the drones off --------------------------------------------
   const noDrones = await page.evaluate(() => {

@@ -798,6 +798,32 @@ html, body {
 }
 #toast.show { opacity: 1; }
 
+/* The overkill word: big, blood red, leaning, and stamped on rather than
+   faded in, the way a fighting game finishes a round. */
+#overkill {
+  position: absolute;
+  left: 50%; top: 30%;
+  transform: translate(-50%, -50%) skewX(-12deg);
+  font: italic 900 clamp(34px, 9vw, 96px)/1 Impact, "Arial Black", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: #c40d0d;
+  -webkit-text-stroke: 2px #2a0000;
+  text-shadow: 0 0 18px rgba(255, 40, 20, 0.55), 4px 6px 0 #1a0000;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 8;
+}
+#overkill.show { animation: stamp 1.4s ease-out forwards; }
+@keyframes stamp {
+  0% { opacity: 0; transform: translate(-50%, -50%) skewX(-12deg) scale(2.6); }
+  12% { opacity: 1; transform: translate(-50%, -50%) skewX(-12deg) scale(0.92); }
+  20% { transform: translate(-50%, -50%) skewX(-12deg) scale(1.04); }
+  28% { transform: translate(-50%, -50%) skewX(-12deg) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) skewX(-12deg) scale(1.08); }
+}
+
 #debug {
   position: absolute;
   left: 14px; top: 14px;
@@ -979,6 +1005,29 @@ html, body {
   letter-spacing: 0.08em;
   text-transform: none;
   opacity: 0.68;
+}
+/* The mech pickers: a chip per chassis, gold on the one that is picked,
+   and a line under the row saying what it is for. */
+#cheats .chips { gap: 6px; }
+#cheats .chip {
+  margin: 0;
+  padding: 5px 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #cfcabf;
+  font: 600 11.5px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  cursor: pointer;
+}
+#cheats .chip:hover { background: rgba(255, 255, 255, 0.1); }
+#cheats .chip.on { background: var(--accent); color: #15171b; border-color: var(--accent); }
+#cheats #cheatfoe .chip.on { background: #d2574a; border-color: #d2574a; color: #fff; }
+#cheats .mechsay {
+  flex: 1 0 100%;
+  font-size: 11px;
+  color: var(--dim);
 }
 /* A switch is a whole row you can click, because a 12 pixel checkbox in a
    first person game is a thing you miss. */

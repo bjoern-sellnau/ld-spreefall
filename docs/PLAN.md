@@ -2647,3 +2647,215 @@ caps residency at 520.
   goes to 2.9 km so that no tile comes up without a district behind it. The
   same shot after that is the Grosser Stern with its avenues going out of it
   and the streets of the next district beyond.
+
+## 59. The Reichstag, Pariser Platz, and a collapse that smeared
+
+- 2026-10-19: a screenshot from the live site, in front of the Reichstag
+  after six rockets: two enormous crumpled sheets where the building had
+  been, one of them the glass of the dome. Measured on a full collapse of the
+  Reichstag, 1,409 vertices moved and 821 of them fell more than thirty
+  metres. The sideways throw was a median 5.2 m, 15.4 m at its worst, and
+  350 vertices went more than eight metres. A falling vertex is thrown out by
+  a share of how far it fell, with its own hash, so for a house the corners
+  of one triangle land a couple of metres apart and it reads as rubble, and
+  for a dome 47 m up they land fifteen apart and the triangle is a sail. The
+  throw now stops growing past ten metres of fall, in `src/game/bake.js` and
+  in the shader together: median 1.7 m, worst 4.1, none over eight. A house
+  that falls less than ten metres is thrown exactly as far as before. The
+  city suite compares the two number for number and passes.
+
+- 2026-10-19: the Reichstag itself was wrong, measured against the
+  Bundestag's own figures and Structurae: the roof terrace is 24 m up and the
+  top of the dome is 47 m, the dome being 23.5 m tall and about 38 across.
+  The model was a 30 m block with the dome on top of that, so the glass
+  stood at 54.5 m. The corner towers carried pyramid spires, which they lost
+  in Baumgarten's rebuild of the sixties. The pediment over the portico was a
+  26 m square pyramid standing ten metres out past the columns; it is a gable
+  now, through a new `pediment` primitive. The mirrored cone inside the dome
+  was drawn the wrong way up.
+
+- 2026-10-19: Pariser Platz. The Akademie der Kuenste stood on the north side
+  of the square, opposite the DZ Bank; it is on the south side, beside it.
+  The square's own list, Baedeker's 1928 guide and Baunetz all say so, and
+  the bank's neighbour note says its east wall is the Akademie's west wall,
+  which is where it now stands. What could not be checked from here: the
+  square's own extent, which starts 28 m east of the Gate's face; the Adlon,
+  whose centre lies north of the square's south edge; and the north side,
+  which has no French embassy, Eugen-Gutmann-Haus, Palais am Pariser Platz
+  or Haus Liebermann in the facts at all. Those need a map, and Overpass and
+  Wikipedia are both closed to this container.
+
+- 2026-10-19: none of the Pariser Platz part reaches the live site. The
+  deployed city is built from the Overpass extract, and `annotate.mjs` leaves
+  any fact whose kind is `block` or `courtyard` alone, so the Adlon, the DZ
+  Bank, the Akademie and the US embassy there are OpenStreetMap's own
+  footprints. The facts table shapes the offline city. The Reichstag and the
+  Gate are different: those are bespoke models and are drawn on the live
+  site, so the Reichstag change is the one you will see.
+
+- 2026-10-19: the same screenshot had a whole building, windows and shop
+  band and all, hanging in the air behind the ruin. It has not been
+  reproduced. Across the full collapse above not one vertex went up, so it
+  is not the collapse lifting anything, and a rocket's hole in a wall is
+  capped at three metres, so it is not the hole either. The view was looking
+  south east from the Reichstag's west front; a link from the game with the
+  building in the middle of the frame is what this needs next.
+
+## 60. Chunks from the sky, craters that are craters, overkill and the void cannon
+
+- 2026-10-19: chunks falling out of the sky. Measured at the moment each
+  piece of rubble appears, against what is standing within four metres of
+  it, over eight frontages in Mitte hit with four rockets a face: 22 of 53
+  pieces started more than two metres above anything there, the worst 13.1
+  m. A stage of a collapse put its rubble at the break line of the whole
+  site, which for a site spanning a tall and a low building is the tall
+  one's break line over the low one's roof. Each face now drops its share
+  from its own height (`tallestNear` round that face), and a face with
+  nothing standing on it drops nothing. Same measurement after: 0 of 68,
+  worst 0.0 m.
+
+- 2026-10-19: craters were not craters. A crater was a shader displacement
+  with a collision field sampled on a coarse grid, and the second rocket into
+  the same spot cut the ground triangles out along with the wall, so on one
+  street 45 of 1,421 samples across a crater had no ground drawn at all, and
+  you could see out of the bottom of the map. Craters are now analytic: one
+  profile in `src/shared/crater.js`, a bowl with a lip, which the collision
+  adds to the ground height and the remesh follows. The ground round a
+  crater is cut finer the deeper the bowl is, so the middle of a small one
+  is not a metre shallower in the picture than under your feet. And a hole
+  in a wall only ever takes frontage: ground and roofs stay. After: 0 holes
+  in 1,421 samples, the drawn ground within 0.10 m of the collision
+  everywhere, the deepest bowl 2.39 m, and standing in the middle of it puts
+  you 2.83 m down on ground that is drawn 2.92 m down.
+
+- 2026-10-19: a crater leaves the ground burnt rather than holed. The bake
+  writes how burnt each ground vertex is into the spare byte of the vertex
+  (byte 16, which on the ground was unused), falling off from the middle of
+  the bowl to one and a half radii, and the shader darkens it into a ragged
+  black patch with two octaves of noise on its edge.
+
+- 2026-10-19: the cheat menu spawns machines (six, the same one line the
+  end of the world mode uses to make one out of a soldier) and passers by
+  (eight, within sixty metres). Spawning passers by after machines turned up
+  a real bug: the soldier pool reuses its objects and the machine flag was
+  never cleared, so six of the eight passers by came out in steel with a
+  red eye. The reset clears it now, with the stun and the beam charge.
+
+- 2026-10-19: Overkill, past the top of the gore menu. Every kill comes
+  apart whatever else is switched on; the skeleton leaves the body the way
+  the round was going; a second burst goes straight up and rains down; a
+  fountain stands where they were for nearly three seconds; every wall
+  within nine metres is sprayed; the clock stops for half a second while a
+  word is stamped across the screen, with a run counter for kills inside
+  three seconds and a sting under it. The pools were made bigger for it
+  (256 pieces, 2048 sparks, 1536 drawn a pass) rather than letting a bigger
+  multiplier run into the old ceiling. The words are our own; the idea is
+  the fighting games'.
+
+- 2026-10-19: the void cannon. A slow green ball, after the oldest joke in
+  the arena shooters, under a name of its own: it reaches out to everybody
+  within sixteen metres of its path as it goes, and where it lands a tendril
+  goes to everybody within forty eight metres that a wall does not hide. It
+  cuts a hole nine metres in radius into whatever it meets, in the buffers
+  and in the collision. The first version also handed the building grid its
+  full 700, which brought the whole block down on top of the hole; the grid
+  now gets a heavy rocket's worth, and the hole is the point. Measured on a
+  frontage seen square on: a rocket opens 16 rays of a one metre grid, 4 m
+  across; the ball opens 104, 11 m across, which is the whole width that
+  wall had to give. You take eight per cent of it yourself.
+
+## 61. A fighter you can fly, and vehicles that look like vehicles
+
+- 2026-10-19: "the fighter cannot be steered". Three reasons, all in the
+  controls rather than in the flight model. The mouse was a rate: the
+  camera's pitch went into the stick, so looking up once kept the nose
+  climbing until it hit its stop, and only looking exactly at the horizon
+  stopped it. A and D turned the aircraft the opposite way to the one they
+  named in the air, and the bank was the wrong way round as well: under the
+  shader's rotZ a positive roll lifts the right wing, and the old stick
+  leaned right while it turned left. And the throttle was a spring, so
+  letting go of W took a fighter from cruise to its stall in about two
+  seconds. Both aircraft now fly where you look: the hull turns its nose
+  onto the view as fast as the airframe allows (0.7 rad/s for the fighter,
+  scaled down below one and a half times its stall, 1.3 for the
+  helicopter), banks into the turn by itself, and A and D turn the view, so
+  the keys alone fly it too. The fighter's throttle is a lever that stays
+  where you leave it. The city suite flies one off the menu: 0 degrees off
+  after a 69 degree turn left and after a 138 degree turn right, a bank of
+  plus and minus 1.05 the right way round, no height lost looking at the
+  horizon, and D turns it right.
+
+- 2026-10-19: "the vehicle designs are extremely bad". They were: every one
+  of them was painted in the drone's near black, the wheels on the jeep and
+  the tank were cylinders about a vertical axis, which is a wheel lying flat
+  on the road, and the helicopter's rotor turned about the drone's four
+  hubs, which put a wobble in it. `MeshBuild` has an x axis now and a
+  `plate` for wings, fins and sloped armour; the palette has olive drab,
+  rubber, fighter grey, the gunship's green, headlights, an afterburner and
+  hubs. The jeep is a four by four built round its wheels, with arches, a
+  raked windscreen, seats, a roll bar and a gun on a post. The tank has
+  tracks with six road wheels, an idler and a sprocket a side, skirts, a
+  sloped glacis, a turret with angled cheeks and a bustle, and a long gun
+  with an evacuator. The helicopter is a gunship with a stepped canopy, stub
+  wings and pods, a tapering tail, four blades turning about the mast and a
+  tail rotor turning about its own hub. The fighter tapers to a nose, has a
+  cranked delta, two canted fins, missiles, and wheels that fold away more
+  than 25 m up. Where each one stands was changed with it: the helicopter
+  stands on its skids and the fighter's middle is 1.9 m over the road.
+
+## 62. Ten mechs, yours and theirs, and what OpenStreetMap does to a landmark
+
+- 2026-10-19: ten chassis, each a row in `src/game/chassis.js` and a shape
+  in `src/render/mechmeshes.js`: Warden (the one the game had), Bruin,
+  Heron, Lynx, Bastion, Hornet, Colossus, Mantis, Ram and Wraith. A row is
+  size, hip height, gait, speed, turn, armour, shield, jump, dash, landing,
+  the two muzzles and the arm weapon it arrives holding, and the mech table
+  makes two specs out of each, yours over the Titan's numbers and theirs
+  over the Reaper's, so the first chassis is still the Titan and the Reaper
+  under the names everything already asks for. The names and shapes are
+  ours; a brawler, a marksman, a raptor, a spider and a fortress are the
+  genre's.
+
+- 2026-10-19: the mech shader took its hip line as a constant, 4.2 m. It is
+  a uniform now, set per chassis with the gait, because a raptor's hips are
+  at 3.6 and a colossus' at 5.4, and the spider walks its diagonals together
+  with each leg swinging about its own root. The rule the mesh has to keep
+  for that is checked for every chassis in the unit tests: no triangle
+  across the hip line, no leg triangle across the middle, every triangle
+  wound outwards, and a barrel within sixty centimetres of each muzzle. The
+  first run of it found four of the ten with a shield, a knee or a gun
+  reaching under the hips.
+
+- 2026-10-19: yours wear the chassis' colour, theirs all wear gunmetal with
+  red trim, chosen in the shader from the same instance number that already
+  turned the core blue. The cheat menu has a row of chips for each side;
+  theirs has Random, a new throw for every one that arrives, from the menu
+  and in Rise of the Machines. The choice is kept with the cheats but is not
+  one: it does not mark the run, and all off leaves it alone.
+
+- 2026-10-19: the live Reichstag, from the link at -114.2, -176.1. The live
+  city is built from OpenStreetMap, where the local one is synthetic, and
+  the build skipped any outline with building:part pieces in it before it
+  asked whether the outline was a landmark. If OpenStreetMap maps the
+  Reichstag as an outline with pieces, which large buildings usually are,
+  the live site drew those pieces and never the model built from the
+  Bundestag's own figures. The landmark is now asked about first, and every
+  piece inside it and the envelope round it are left to the model. The
+  floating building is very likely the other half of the same rule: pieces
+  that start at fifteen or twenty metres with nothing mapped under them,
+  drawn without the outline that would have held them up, with a shop band
+  at their foot. Such an outline is now built as the podium up to where its
+  lowest raised piece starts, and a volume that starts above the street
+  gets no shop band. The live site is closed to this container (the proxy
+  refuses github.io, and Overpass), so this is reasoned from the code and
+  the tagging scheme and checked with unit tests on made up pieces, not
+  seen on the real data; the next build of the live city is the check.
+
+- 2026-10-19: two checks failed once each and passed when run again. The
+  EMP launcher check picked its target group by a clear line to the group
+  but fired at the road short of it, so something on that second line could
+  set the pulse off seven metres out; the group is now chosen by the line
+  the rocket actually flies. The helicopter climb check read 0 m once in
+  three city runs and 36 m in six runs of the same steps on their own; the
+  cause is not found, and the check now says what you were sitting in when
+  it fails, which is the next thing to know.

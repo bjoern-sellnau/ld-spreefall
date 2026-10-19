@@ -40,6 +40,17 @@ void main() {
     vec3 hub = vec3(sign(p.x) * 0.62, p.y, sign(p.z) * 0.62);
     p = hub + rotY(iState.w * (sign(p.x) * sign(p.z) > 0.0 ? 1.0 : -1.0)) * (p - hub);
   }
+  // The helicopter's blades. Its mesh is built with the mast on the origin,
+  // so the main rotor turns about the origin; the tail rotor turns about its
+  // own hub at the end of the boom, faster, on its side.
+  if (aInfo.x > 36.5 && aInfo.x < 37.5) p = rotY(iState.w) * p;
+  if (aInfo.x > 37.5 && aInfo.x < 38.5) {
+    vec3 hub = vec3(p.x, 2.75, 6.3);
+    p = hub + rotX(iState.w * 2.3) * (p - hub);
+  }
+  // A fighter's wheels: down while the channel says two, folded up into the
+  // belly otherwise.
+  if (aInfo.x > 43.5 && aInfo.x < 44.5 && iState.w < 1.5) p = vec3(p.x * 0.5, -0.2, p.z);
   mat3 body = rotY(-iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
@@ -237,6 +248,88 @@ void main() {
     albedo = vec3(0.56, 0.38, 0.09);
     rough = 0.55;
     metal = 0.05;
+  } else if (vPart > 29.5 && vPart < 30.5) {
+    // The void cannon's green, in its cell and in the ball it fires. Brighter
+    // and slower to pulse than plasma, because there is a lot more of it.
+    albedo = vec3(0.02);
+    float pulse = 0.7 + 0.3 * sin(uCamPos.w * 9.0 + vWorld.y * 2.0);
+    emissive = vec3(0.35, 1.0, 0.28) * 9.0 * pulse;
+    rough = 0.1;
+    metal = 0.0;
+  } else if (vPart > 30.5 && vPart < 31.5) {
+    // Olive drab, on the jeep and the tank: flat paint with the dust of the
+    // street in it, lighter on top where the sun has had it.
+    float v = vnoise(vWorld.xz * 1.7 + vWorld.y) * 0.25;
+    albedo = vec3(0.20, 0.215, 0.13) * (0.85 + v + 0.12 * max(n.y, 0.0));
+    rough = 0.78;
+    metal = 0.08;
+  } else if (vPart > 31.5 && vPart < 32.5) {
+    // Tyres and track pads: rubber, nearly black, no shine.
+    albedo = vec3(0.028, 0.027, 0.026);
+    rough = 0.95;
+    metal = 0.0;
+  } else if (vPart > 32.5 && vPart < 33.5) {
+    // The air superiority grey a fighter is painted, with the panel lines.
+    float panel = smoothstep(0.0, 0.03, abs(fract(vWorld.z * 0.9) - 0.5));
+    albedo = vec3(0.30, 0.32, 0.35) * (0.86 + 0.14 * panel);
+    rough = 0.48;
+    metal = 0.3;
+  } else if (vPart > 33.5 && vPart < 34.5) {
+    // Headlights.
+    albedo = vec3(0.6);
+    emissive = vec3(1.0, 0.93, 0.78) * 2.2;
+    rough = 0.2;
+  } else if (vPart > 34.5 && vPart < 35.5) {
+    // The afterburner: orange in the middle of the nozzle.
+    albedo = vec3(0.02);
+    float flick = 0.8 + 0.2 * sin(uCamPos.w * 40.0);
+    emissive = vec3(1.0, 0.45, 0.12) * 6.0 * flick;
+    rough = 0.2;
+    metal = 0.0;
+  } else if (vPart > 35.5 && vPart < 36.5) {
+    // The gunship's dark green.
+    float v = vnoise(vWorld.xz * 2.1 + vWorld.y) * 0.2;
+    albedo = vec3(0.10, 0.125, 0.095) * (0.9 + v);
+    rough = 0.62;
+    metal = 0.15;
+  } else if (vPart > 36.5 && vPart < 38.5) {
+    // Rotor blades.
+    albedo = vec3(0.045, 0.047, 0.05);
+    rough = 0.55;
+    metal = 0.3;
+  } else if (vPart > 38.5 && vPart < 39.5) {
+    // Wheel hubs and road wheels, a shade lighter than the hull round them.
+    albedo = vec3(0.15, 0.155, 0.12);
+    rough = 0.6;
+    metal = 0.35;
+  } else if (vPart > 49.5 && vPart < 62.5) {
+    // Mech paint. Ten liveries for yours, one per chassis, then theirs, then
+    // the two trims. Flat military paint with a little wear on the edges the
+    // light catches.
+    int k = int(vPart + 0.5) - 50;
+    vec3 c = vec3(0.30, 0.33, 0.37);                     // Warden, steel blue
+    if (k == 1) c = vec3(0.34, 0.24, 0.14);              // Bruin, bear brown
+    else if (k == 2) c = vec3(0.62, 0.63, 0.62);         // Heron, pale grey
+    else if (k == 3) c = vec3(0.55, 0.45, 0.28);         // Lynx, sand
+    else if (k == 4) c = vec3(0.24, 0.27, 0.16);         // Bastion, olive
+    else if (k == 5) c = vec3(0.10, 0.10, 0.10);         // Hornet, black
+    else if (k == 6) c = vec3(0.36, 0.09, 0.07);         // Colossus, oxblood
+    else if (k == 7) c = vec3(0.11, 0.30, 0.30);         // Mantis, teal
+    else if (k == 8) c = vec3(0.62, 0.30, 0.08);         // Ram, signal orange
+    else if (k == 9) c = vec3(0.075, 0.07, 0.095);       // Wraith, dark violet
+    else if (k == 10) c = vec3(0.11, 0.115, 0.125);      // theirs: gunmetal
+    else if (k == 11) c = vec3(0.70, 0.56, 0.10);        // your trim: yellow
+    else if (k == 12) c = vec3(0.55, 0.04, 0.03);        // their trim: red
+    float wear = vnoise(vWorld.xz * 2.3 + vWorld.y * 1.7);
+    albedo = c * (0.82 + 0.3 * wear);
+    rough = k == 9 ? 0.85 : 0.6;
+    metal = 0.25;
+    if (k == 12) emissive = vec3(0.35, 0.02, 0.01);
+  } else if (vPart > 43.5 && vPart < 44.5) {
+    // Undercarriage legs and wheels.
+    albedo = vec3(0.12, 0.125, 0.13);
+    rough = 0.5;
+    metal = 0.5;
   } else {
     // Glass, in a windscreen or a canopy. Dark and sharp, with the sky in it.
     albedo = vec3(0.022, 0.030, 0.038);
@@ -540,7 +633,12 @@ flat out float vPart;
 flat out float vFlash;
 out float vViewDist;
 
-const float HIP = 4.2;
+// Where the legs stop, whether there are two or four of them, and for four
+// how far fore and aft of the middle their roots are. The chassis' own, set
+// for each chassis' draw.
+uniform float uHip;
+uniform float uGait;
+uniform float uHipZ;
 
 mat3 rotY(float a) {
   float c = cos(a), s = sin(a);
@@ -561,12 +659,15 @@ void main() {
   float stride = iState.x;
   float swing = sin(stride) * 0.38;
 
-  if (p.y < HIP) {
+  if (p.y < uHip) {
     // A leg. The two of them are in opposition, and the lower half of each
     // swings a little further than the upper, which is enough of a knee.
+    // With four, the diagonals go together, the way a dog walks, and each
+    // leg swings about its own root rather than about the middle.
     float side = p.x < 0.0 ? 1.0 : -1.0;
-    vec3 hip = vec3(p.x, HIP, 0.0);
-    float amount = swing * side * (p.y < 2.6 ? 1.25 : 1.0);
+    if (uGait > 0.5) side *= p.z < 0.0 ? 1.0 : -1.0;
+    vec3 hip = vec3(p.x, uHip, uGait > 0.5 ? sign(p.z) * uHipZ : 0.0);
+    float amount = swing * side * (p.y < uHip * 0.62 ? 1.25 : 1.0);
     mat3 r = rotX(amount);
     p = hip + r * (p - hip);
     n = r * n;
@@ -574,7 +675,7 @@ void main() {
     // The torso, which is where the guns are. It turns relative to the legs
     // and it pitches, and both happen about the hip line so that nothing
     // tears at the waist.
-    vec3 base = vec3(0.0, HIP, 0.0);
+    vec3 base = vec3(0.0, uHip, 0.0);
     mat3 t = rotY(iState.y) * rotX(iState.w);
     p = base + t * (p - base);
     n = t * n;
@@ -598,6 +699,10 @@ void main() {
   // blue instead, which is part 11, and that is the only thing that tells the
   // two apart at a distance.
   vPart = (aInfo.x < 1.5 && aInfo.x > 0.5 && iExtra.x > 0.5) ? 11.0 : aInfo.x;
+  // Theirs are all in one livery, whichever chassis it is: gunmetal where
+  // yours carries its own colour, and red where yours has its trim.
+  if (iExtra.x < 0.5 && aInfo.x > 49.5 && aInfo.x < 59.5) vPart = 60.0;
+  if (iExtra.x < 0.5 && aInfo.x > 60.5 && aInfo.x < 61.5) vPart = 62.0;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);
@@ -838,6 +943,14 @@ void main() {
     albedo = vec3(0.88, 0.74, 0.14);
     rough = 0.55;
     metal = 0.04;
+  } else if (vPart > 29.5 && vPart < 30.5) {
+    // The void cannon's rings and cell: the same green the ball is, pulsing
+    // slowly, and brighter for a moment after it fires.
+    albedo = vec3(0.02);
+    float pulse = 0.75 + 0.25 * sin(uCamPos.w * 5.0 + vModel.z * 30.0);
+    emissive = vec3(0.30, 1.0, 0.25) * (1.6 + uMuzzle * 3.0) * pulse;
+    rough = 0.2;
+    metal = 0.0;
   } else {
     // Muzzle flash cone. It is geometry that exists all the time, so it has to
     // take itself out of the picture between shots rather than draw as a black

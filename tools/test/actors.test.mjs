@@ -5,8 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  buildDroneMesh, buildWeaponMesh, buildSoldierMesh, MACHINE_MUZZLE,
+  buildDroneMesh, buildWeaponMesh, buildSoldierMesh, MACHINE_MUZZLE, buildChassisMesh,
 } from '../../src/render/actors.js';
+import { CHASSIS } from '../../src/game/chassis.js';
 
 function audit(build) {
   const v = build.v;
@@ -114,3 +115,46 @@ test('a machine has a beam rifle in its hands', () => {
   assert.ok(Math.abs(MACHINE_MUZZLE[1] - (emitter.minY + emitter.maxY) / 2) < 0.08,
     'and at the height of the barrel');
 });
+
+
+// --- the ten mechs -----------------------------------------------------------
+// The mech shader splits a mesh at the chassis' hip line and decides which leg
+// a vertex is on from its side of the middle. A triangle across the hip line
+// or across the middle is torn in two as soon as the thing walks, so none may
+// be, and every gun has to be where the table says the shot leaves from.
+for (const c of CHASSIS) {
+  test(`${c.name} is wound outwards, walks without tearing and has its guns where it fires`, () => {
+    const build = buildChassisMesh(c);
+    const r = audit(build);
+    assert.ok(r.tris > 150, `${r.tris} triangles`);
+    assert.equal(r.bad, 0, `${r.bad} of ${r.checked} triangles face inwards`);
+    const v = build.v, idx = build.i;
+    let across = 0, split = 0;
+    for (let t = 0; t < idx.length; t += 3) {
+      const ys = [], xs = [], zs = [];
+      for (let k = 0; k < 3; k++) {
+        const o = idx[t + k] * 8;
+        xs.push(v[o]); ys.push(v[o + 1]); zs.push(v[o + 2]);
+      }
+      const below = ys.filter((y) => y < c.hip).length;
+      if (below > 0 && below < 3) { across++; continue; }
+      if (below === 3) {
+        const sx = new Set(xs.filter((x) => Math.abs(x) > 1e-6).map(Math.sign));
+        const sz = new Set(zs.filter((z) => Math.abs(z) > 1e-6).map(Math.sign));
+        if (sx.size > 1 || (c.gait === 'quad' && sz.size > 1)) split++;
+      }
+    }
+    assert.equal(across, 0, `${across} triangles cross the hip line at ${c.hip} m`);
+    assert.equal(split, 0, `${split} leg triangles cross the middle`);
+    const b = bounds(build);
+    assert.ok(Math.abs(b.maxY - c.height) < c.height * 0.2,
+      `${b.maxY.toFixed(1)} m tall against ${c.height} in the table`);
+    for (const [name, at] of Object.entries(c.muzzle)) {
+      let near = Infinity;
+      for (let o = 0; o < v.length; o += 8) {
+        near = Math.min(near, Math.hypot(v[o] - at[0], v[o + 1] - at[1], v[o + 2] - at[2]));
+      }
+      assert.ok(near < 0.6, `nothing within ${near.toFixed(2)} m of the ${name} muzzle`);
+    }
+  });
+}

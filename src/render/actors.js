@@ -3,6 +3,8 @@
 // project ships no models.
 
 import { createProgram } from '../engine/gl.js';
+import { CHASSIS } from '../game/chassis.js';
+import { MECH_BUILDERS } from './mechmeshes.js';
 import { mat4 } from '../engine/math.js';
 import {
   DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
@@ -11,14 +13,14 @@ import {
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
-const MAX_SPARKS = 512;
+const MAX_SPARKS = 1536;
 const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
 const MAX_VEHICLES = 8;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
-const MAX_GIBS = 96;
+const MAX_GIBS = 256;
 // Past this there is no point drawing a pad: the fog has it anyway.
 const PICKUP_RANGE = 260;
 
@@ -85,23 +87,27 @@ export class MeshBuild {
       const c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
       const at = (c, s, r, t) => (axis === 'y'
         ? [cx + c * r, cy + t, cz + s * r]
-        : [cx + c * r, cy + s * r, cz + t]);
-      const nAt = (c, s) => (axis === 'y' ? [c, 0, s] : [c, s, 0]);
+        : axis === 'x' ? [cx + t, cy + s * r, cz + c * r]
+          : [cx + c * r, cy + s * r, cz + t]);
+      const nAt = (c, s) => (axis === 'y' ? [c, 0, s] : axis === 'x' ? [0, s, c] : [c, s, 0]);
       this.quad(
         [at(c0, s0, rBottom, 0), at(c1, s1, rBottom, 0), at(c1, s1, rTop, h), at(c0, s0, rTop, h)],
         nAt((c0 + c1) / 2, (s0 + s1) / 2), part,
       );
     }
     // Caps.
-    const capN = axis === 'y' ? [0, 1, 0] : [0, 0, 1];
+    // An x axis is what a wheel needs: the first wheels here were y
+    // cylinders, which is a wheel lying flat on the road like a coin.
+    const capN = axis === 'y' ? [0, 1, 0] : axis === 'x' ? [1, 0, 0] : [0, 0, 1];
     for (const [r, t, sign] of [[rTop, h, 1], [rBottom, 0, -1]]) {
       if (r < 0.001) continue;
       for (let i = 0; i < seg; i++) {
         const a0 = (i / seg) * Math.PI * 2, a1 = ((i + 1) / seg) * Math.PI * 2;
         const at = (a, rr) => (axis === 'y'
           ? [cx + Math.cos(a) * rr, cy + t, cz + Math.sin(a) * rr]
-          : [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, cz + t]);
-        const centre = axis === 'y' ? [cx, cy + t, cz] : [cx, cy, cz + t];
+          : axis === 'x' ? [cx + t, cy + Math.sin(a) * rr, cz + Math.cos(a) * rr]
+            : [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, cz + t]);
+        const centre = axis === 'y' ? [cx, cy + t, cz] : axis === 'x' ? [cx + t, cy, cz] : [cx, cy, cz + t];
         const n = capN.map((c) => c * sign);
         const p = sign > 0 ? [centre, at(a0, r), at(a1, r)] : [centre, at(a1, r), at(a0, r)];
         this.tri(p, n, part);
@@ -131,6 +137,38 @@ export class MeshBuild {
           this.i.push(base + 2, base + 1, base, base + 3, base + 2, base);
         }
       }
+    }
+  }
+
+  /**
+   * A flat four cornered panel with a thickness: a wing, a fin, a sloped
+   * armour plate. The corners go round the outline in order, the panel is
+   * pushed half its thickness either way along its own normal, and the four
+   * edges are closed.
+   */
+  plate(pts, thick, part) {
+    const [a, b, c] = pts;
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    let n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+    const l = Math.hypot(n[0], n[1], n[2]) || 1;
+    n = n.map((k) => k / l);
+    const h = thick / 2;
+    const top = pts.map((q) => [q[0] + n[0] * h, q[1] + n[1] * h, q[2] + n[2] * h]);
+    const bot = pts.map((q) => [q[0] - n[0] * h, q[1] - n[1] * h, q[2] - n[2] * h]);
+    this.quad(top, n, part);
+    this.quad([bot[3], bot[2], bot[1], bot[0]], n.map((k) => -k), part);
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      const e = [pts[j][0] - pts[i][0], pts[j][1] - pts[i][1], pts[j][2] - pts[i][2]];
+      let o = [e[1] * n[2] - e[2] * n[1], e[2] * n[0] - e[0] * n[2], e[0] * n[1] - e[1] * n[0]];
+      const ol = Math.hypot(o[0], o[1], o[2]) || 1;
+      o = o.map((k) => k / ol);
+      // Which way is out: away from the middle of the panel.
+      const mid = [0, 1, 2].map((k) => (pts[0][k] + pts[1][k] + pts[2][k] + pts[3][k]) / 4);
+      const em = [0, 1, 2].map((k) => (pts[i][k] + pts[j][k]) / 2 - mid[k]);
+      if (o[0] * em[0] + o[1] * em[1] + o[2] * em[2] < 0) o = o.map((k) => -k);
+      this.quad([bot[i], bot[j], top[j], top[i]], o, part);
     }
   }
 
@@ -285,6 +323,10 @@ export function buildProjectileMesh(kind) {
   } else if (kind === 'flak') {
     m.box(0, 0, 0, 0.14, 0.10, 0.14, 8);
     m.box(0, 0, 0, 0.08, 0.18, 0.08, 8);
+  } else if (kind === 'void') {
+    // One green ball the size of a man's chest. The glow round it is sparks,
+    // drawn by the game layer while it flies.
+    m.icosphere(0, 0, 0, 0.7, 12, 6, 30);
   } else if (kind === 'splinter') {
     m.box(0, 0, 0.06, 0.030, 0.030, 0.22, 11);
     m.box(0, 0, -0.10, 0.012, 0.012, 0.10, 8);
@@ -347,6 +389,23 @@ export function buildPlasmaMesh() {
   m.box(0, -0.090, -0.250, 0.044, 0.110, 0.062, 2);      // grip
   m.box(0, -0.030, -0.430, 0.040, 0.050, 0.090, 2);      // fore grip
   m.cylinder(0, 0.006, -0.826, 0.005, 0.075, -0.170, 10, 7, 'z');
+  return m;
+}
+
+export function buildVoidMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.012, -0.240, 0.090, 0.100, 0.260, 0);      // the housing
+  m.box(0, 0.060, -0.260, 0.040, 0.026, 0.180, 3);       // top rail
+  m.cylinder(0, 0.000, -0.370, 0.058, 0.058, -0.340, 14, 1, 'z');   // the barrel
+  // Three green rings down the barrel and the cell behind them, which is
+  // what tells you at a glance that this is not the plasma rifle.
+  for (const z of [-0.420, -0.520, -0.620]) {
+    m.cylinder(0, 0.000, z, 0.068, 0.068, -0.030, 14, 30, 'z');
+  }
+  m.cylinder(0, 0.000, -0.710, 0.072, 0.050, -0.040, 14, 1, 'z');   // muzzle lip
+  m.box(0, 0.000, -0.300, 0.096, 0.044, 0.070, 30);      // the cell window
+  m.box(0, -0.100, -0.250, 0.044, 0.110, 0.062, 2);      // grip
+  m.box(0, -0.056, -0.450, 0.050, 0.044, 0.110, 2);      // fore grip
   return m;
 }
 
@@ -456,62 +515,116 @@ export function buildGibMesh() {
 }
 
 /**
- * A fighter jet, built nose towards -z like everything else here, about
- * fourteen metres long. Parts: 0 airframe, 5 canopy, 8 intakes and nozzles,
- * 11 the afterburner glow.
+ * A fighter, about fifteen metres long, nose towards -z like everything else
+ * here. The origin is the middle of the fuselage, which sits 1.9 m over the
+ * road on its wheels. Parts: 33 the grey it is painted, 2 dark metal, 24 the
+ * canopy, 8 the missiles, 32 tyres, 35 the afterburner, 44 the undercarriage,
+ * which folds away once it is off the ground.
+ *
+ * The first one was a box with five boxes either side for a wing, in the
+ * same near black as a drone. This is a fuselage that tapers to a nose, a
+ * cranked delta, two fins, and the paint fighters actually wear.
  */
 export function buildJetMesh() {
   const m = new MeshBuild();
-  // Fuselage: a long box with a tapered nose made of two shrinking sections.
-  m.box(0, 0, -1.2, 1.5, 1.3, 7.0, 0);
-  m.box(0, 0.05, -5.2, 1.1, 0.95, 1.2, 0);
-  m.box(0, 0.05, -6.1, 0.7, 0.6, 0.8, 0);
-  m.cylinder(0, 0.05, -6.5, 0.32, 0.04, -0.9, 8, 0, 'z');      // the nose
-  // Canopy.
-  m.box(0, 0.72, -3.4, 0.85, 0.5, 2.2, 5);
-  // Wings, swept back by offsetting each panel further aft as it goes out.
+  const P = 33;
+  // The fuselage, front to back: the radome, the forward body, the wide
+  // middle where the intakes and the wing root are, and the tail.
+  m.cylinder(0, -0.05, -5.0, 0.62, 0.06, -2.6, 14, 2, 'z');
+  m.cylinder(0, 0, -1.2, 0.95, 0.66, -3.8, 14, P, 'z');
+  m.box(0, -0.05, 1.5, 2.1, 1.15, 5.4, P);
+  m.cylinder(0, 0, 4.2, 0.95, 0.78, 2.3, 14, P, 'z');
+  // The spine behind the canopy, which is what gives it a back.
+  m.box(0, 0.62, 0.6, 0.9, 0.35, 4.6, P);
+  // Canopy: a bubble in two pieces, the windscreen and the hood.
+  m.cylinder(0, 0.55, -2.3, 0.46, 0.18, -1.5, 12, 24, 'z');
+  m.box(0, 0.62, -1.7, 0.86, 0.56, 1.3, 24);
+  // Intakes either side under the wing root, black inside.
   for (const side of [-1, 1]) {
-    for (let i = 0; i < 5; i++) {
-      const t = i / 4;
-      m.box(side * (1.0 + t * 3.4), -0.05, -0.4 + t * 2.4,
-        0.9, 0.22 - t * 0.1, 3.2 - t * 1.9, 0);
-    }
-    // Tailplane and fin.
-    m.box(side * 1.3, 0.1, 2.6, 1.6, 0.18, 1.5, 0);
-    m.box(side * 0.55, 1.1, 2.3, 0.16, 1.9, 2.0, 0);
-    // Intake under the wing root.
-    m.box(side * 0.95, -0.45, -2.2, 0.55, 0.6, 2.6, 8);
-    // Engine nozzle at the back, with the glow inside it.
-    m.cylinder(side * 0.45, 0, 2.3, 0.42, 0.46, 0.9, 10, 8, 'z');
-    m.cylinder(side * 0.45, 0, 2.9, 0.34, 0.30, 0.5, 10, 11, 'z');
+    m.box(side * 1.12, -0.25, -0.9, 0.62, 0.9, 2.2, P);
+    m.box(side * 1.12, -0.25, -2.02, 0.5, 0.74, 0.06, 2);
   }
+  // A cranked delta: a long root, a short tip, swept well back.
+  for (const side of [-1, 1]) {
+    m.plate([
+      [side * 1.0, -0.05, -1.8], [side * 5.8, -0.12, 2.6],
+      [side * 5.8, -0.12, 3.6], [side * 1.0, -0.05, 3.8],
+    ], 0.14, P);
+    // Tailplanes.
+    m.plate([
+      [side * 1.0, 0.0, 4.6], [side * 3.4, 0.0, 6.0],
+      [side * 3.4, 0.0, 6.8], [side * 1.0, 0.0, 6.5],
+    ], 0.1, P);
+    // Two fins, canted out the way most of them are now.
+    m.plate([
+      [side * 0.55, 0.55, 3.4], [side * 0.55, 0.55, 6.2],
+      [side * 1.1, 3.0, 6.7], [side * 1.0, 3.0, 5.5],
+    ], 0.1, P);
+    // A missile under each wing and one on each tip.
+    m.cylinder(side * 3.2, -0.42, -0.2, 0.13, 0.13, 2.8, 8, 8, 'z');
+    m.cylinder(side * 3.2, -0.42, -0.2, 0.13, 0.02, -0.4, 8, 8, 'z');
+    m.box(side * 3.2, -0.22, 1.1, 0.06, 0.3, 1.2, 2);
+    m.cylinder(side * 5.85, -0.12, 1.2, 0.09, 0.09, 2.4, 8, 8, 'z');
+    // Main gear, under the intakes.
+    m.box(side * 1.25, -1.2, 1.3, 0.14, 1.3, 0.14, 44);
+    m.cylinder(side * 1.15, -1.57, 1.3, 0.33, 0.33, side * 0.28, 10, 44, 'x');
+  }
+  // Nose gear.
+  m.box(0, -1.15, -4.0, 0.12, 1.2, 0.12, 44);
+  m.cylinder(-0.13, -1.62, -4.0, 0.28, 0.28, 0.26, 10, 44, 'x');
+  // The nozzle and what is burning in it.
+  m.cylinder(0, 0, 6.5, 0.78, 0.66, 0.8, 14, 2, 'z');
+  m.cylinder(0, 0, 7.31, 0.58, 0.52, 0.06, 14, 35, 'z');
   return m;
 }
 
 /**
- * A jeep, about four and a half metres long, nose towards -z like everything
- * else here. Parts: 0 hull, 2 arms for the frame, 6 webbing for the canvas,
- * 8 ordnance steel for the gun, 24 glass.
+ * A light military four by four, four and a half metres long, nose towards -z.
+ * Parts: 31 the olive it is painted, 2 dark metal, 32 tyres, 39 wheel hubs,
+ * 24 glass, 6 the seats, 8 the gun, 34 the headlights.
  */
 export function buildJeepMesh() {
   const m = new MeshBuild();
-  m.box(0, 0.75, -0.1, 1.95, 0.55, 4.10, 0);          // body
-  m.box(0, 1.08, 0.75, 1.80, 0.45, 1.70, 0);          // rear deck
-  m.box(0, 1.20, -1.05, 1.70, 0.35, 1.40, 24);        // windscreen and cab
-  m.box(0, 0.52, -1.95, 1.90, 0.40, 0.30, 0);         // front bumper
-  m.box(0, 1.15, -2.05, 1.60, 0.45, 0.14, 24);        // grille
+  const P = 31;
+  m.box(0, 0.56, 0, 1.4, 0.28, 4.1, 2);                   // the frame
+  // The body is built round the wheels rather than over them: a tub between
+  // the axles, a nose in front of them, a back behind, and wheel arches.
+  m.box(0, 0.98, -0.02, 1.36, 0.6, 4.0, P);
   for (const side of [-1, 1]) {
-    // Wheels, as short cylinders lying on their side.
-    for (const z of [-1.35, 1.25]) {
-      m.cylinder(side * 0.98, 0.45, z, 0.45, 0.45, side * 0.26, 10, 2, 'y');
+    m.box(side * 0.87, 0.98, -0.02, 0.38, 0.6, 1.32, P);   // between the wheels
+    m.box(side * 0.87, 0.98, -1.93, 0.38, 0.6, 0.36, P);   // ahead of the front
+    m.box(side * 0.87, 0.98, 1.88, 0.38, 0.6, 0.44, P);    // behind the back
+    for (const z of [-1.3, 1.25]) {
+      m.box(side * 0.9, 1.31, z, 0.46, 0.08, 1.12, P);     // the arch over it
+      m.cylinder(side * 0.7, 0.43, z, 0.43, 0.43, side * 0.34, 14, 32, 'x');
+      m.cylinder(side * 1.04, 0.43, z, 0.2, 0.2, side * 0.02, 10, 39, 'x');
     }
-    m.box(side * 0.92, 1.35, 0.55, 0.10, 0.90, 0.10, 2);   // roll bar
   }
-  m.box(0, 1.82, 0.55, 1.90, 0.10, 0.10, 2);
-  // The mounted gun on the back.
-  m.cylinder(0, 1.95, 0.30, 0.10, 0.10, 0.55, 8, 8, 'y');
-  m.box(0, 2.30, -0.20, 0.16, 0.16, 1.40, 8);
-  m.box(0, 2.30, 0.45, 0.34, 0.26, 0.40, 8);
+  // Bonnet, sloping a little to the grille.
+  m.plate([[-0.95, 1.36, -0.75], [0.95, 1.36, -0.75], [0.95, 1.24, -2.12], [-0.95, 1.24, -2.12]], 0.1, P);
+  m.box(0, 0.98, -2.12, 1.5, 0.5, 0.08, 2);               // grille
+  for (const side of [-1, 1]) m.box(side * 0.6, 1.08, -2.17, 0.22, 0.16, 0.04, 34);
+  m.box(0, 0.6, -2.22, 1.98, 0.2, 0.22, 2);               // bumper
+  // Windscreen, raked back, in a frame.
+  m.plate([[-0.86, 1.4, -0.66], [0.86, 1.4, -0.66], [0.86, 1.98, -0.46], [-0.86, 1.98, -0.46]], 0.05, 24);
+  for (const side of [-1, 1]) m.box(side * 0.9, 1.7, -0.56, 0.07, 0.62, 0.07, 2);
+  m.box(0, 2.0, -0.46, 1.86, 0.07, 0.07, 2);
+  // Two seats, and the sides and back of the load bed behind them.
+  for (const side of [-1, 1]) {
+    m.box(side * 0.42, 1.4, -0.05, 0.5, 0.18, 0.5, 6);
+    m.box(side * 0.42, 1.68, 0.2, 0.5, 0.5, 0.1, 6);
+    m.box(side * 0.89, 1.48, 1.05, 0.08, 0.36, 1.85, P);
+  }
+  m.box(0, 1.48, 1.98, 1.86, 0.36, 0.08, P);
+  m.cylinder(0, 1.22, 2.02, 0.38, 0.38, 0.26, 14, 32, 'z');   // the spare
+  // Roll bar and the gun on its post.
+  for (const side of [-1, 1]) m.box(side * 0.86, 1.95, 0.55, 0.08, 1.0, 0.08, 2);
+  m.box(0, 2.45, 0.55, 1.8, 0.08, 0.08, 2);
+  m.cylinder(0, 1.3, 0.95, 0.06, 0.06, 1.0, 8, 8, 'y');
+  m.box(0, 2.38, 0.75, 0.18, 0.22, 0.75, 8);
+  m.cylinder(0, 2.4, 0.38, 0.045, 0.045, -0.95, 8, 8, 'z');
+  m.box(0.18, 2.32, 0.8, 0.18, 0.18, 0.3, P);             // the ammunition box
+  m.box(-0.8, 2.2, 1.9, 0.03, 1.5, 0.03, 2);               // aerial
   return m;
 }
 
@@ -555,53 +668,94 @@ export function buildTrainMesh() {
 }
 
 /**
- * A tank, seven and a half metres long with the gun over the front. Parts:
- * 0 hull, 2 track steel, 8 the barrel.
+ * A main battle tank, nine metres with the gun, nose towards -z. Parts: 31
+ * the olive, 2 dark metal and the tracks, 39 road wheels, 8 the gun.
+ *
+ * Tracks with road wheels you can see, a sloped glacis, a turret with angled
+ * cheeks and a bustle, and a long gun with an evacuator on it, which is the
+ * outline anybody reads as a tank. The first one was four stacked boxes.
  */
 export function buildTankMesh() {
   const m = new MeshBuild();
-  m.box(0, 1.15, 0, 3.10, 0.80, 6.40, 0);             // hull
-  m.box(0, 1.70, 0.10, 2.70, 0.40, 4.60, 0);          // glacis
-  m.box(0, 2.15, 0.40, 2.10, 0.60, 2.60, 0);          // turret
-  m.box(0, 2.55, 0.80, 1.10, 0.30, 1.20, 0);          // cupola
-  m.cylinder(0, 2.30, -0.85, 0.17, 0.14, -3.60, 10, 8, 'z');   // barrel
-  m.box(0, 2.30, -1.20, 0.46, 0.46, 0.55, 8);         // mantlet
+  const P = 31;
   for (const side of [-1, 1]) {
-    m.box(side * 1.62, 0.70, 0, 0.55, 1.10, 6.60, 2);      // track
-    for (let i = 0; i < 5; i++) {
-      m.cylinder(side * 1.62, 0.62, -2.4 + i * 1.2, 0.46, 0.46, side * 0.1, 8, 2, 'y');
+    m.box(side * 1.55, 0.55, 0, 0.62, 0.9, 6.5, 2);          // track
+    for (let i = 0; i < 6; i++) {
+      m.cylinder(side * 1.86, 0.42, -2.35 + i * 0.94, 0.36, 0.36, side * 0.05, 12, 39, 'x');
+    }
+    m.cylinder(side * 1.86, 0.72, -3.05, 0.3, 0.3, side * 0.05, 10, 39, 'x');   // idler
+    m.cylinder(side * 1.86, 0.72, 3.05, 0.34, 0.34, side * 0.05, 10, 39, 'x');  // sprocket
+    m.box(side * 1.6, 1.08, -0.3, 0.72, 0.36, 5.9, P);       // skirt
+  }
+  m.box(0, 1.0, 0.15, 2.5, 0.8, 6.2, P);                    // lower hull
+  m.box(0, 1.5, 0.35, 3.3, 0.24, 5.8, P);                   // fenders and deck
+  // The glacis: one sloped plate from the deck down to the nose.
+  m.plate([[-1.6, 1.58, -2.55], [1.6, 1.58, -2.55], [1.4, 0.75, -3.35], [-1.4, 0.75, -3.35]], 0.14, P);
+  m.box(0, 1.6, 2.95, 3.0, 0.3, 0.5, 2);                    // engine deck grille
+  // Turret.
+  m.box(0, 2.08, 0.45, 2.5, 0.62, 2.7, P);
+  for (const side of [-1, 1]) {
+    m.box(side * 0.82, 2.08, -1.15, 0.95, 0.58, 1.0, P, side * 0.42);   // cheeks
+    // Smoke dischargers on the cheek.
+    for (let k = 0; k < 3; k++) {
+      m.cylinder(side * 1.3, 2.25 + k * 0.1, -0.6, 0.06, 0.06, -0.25, 6, 2, 'z');
     }
   }
+  m.box(0, 2.12, 2.15, 2.2, 0.52, 0.9, P);                  // bustle
+  m.cylinder(0.6, 2.38, 0.65, 0.34, 0.3, 0.26, 12, P, 'y'); // commander
+  m.box(-0.55, 2.47, 0.3, 0.6, 0.12, 0.6, 2);               // loader's hatch
+  m.box(0, 2.08, -1.6, 0.66, 0.5, 0.5, P);                  // mantlet
+  m.cylinder(0, 2.1, -1.8, 0.14, 0.12, -4.0, 12, 8, 'z');   // the gun
+  m.cylinder(0, 2.1, -3.2, 0.2, 0.2, -0.6, 12, 8, 'z');     // evacuator
+  m.cylinder(0, 2.1, -5.7, 0.17, 0.17, -0.2, 12, 8, 'z');   // muzzle
+  m.cylinder(0.6, 2.6, 0.5, 0.03, 0.03, -0.7, 6, 8, 'z');   // the roof gun
   return m;
 }
 
 /**
- * A helicopter: a bulbous cab, a tail boom, and two rotor discs. Parts:
- * 0 hull, 24 glass, 3 the blurred rotor, 8 the skids and the gun.
+ * A gunship: a narrow body with two seats one behind the other, stub wings
+ * with rocket pods, a long tail and four blades. Nose towards -z, and the
+ * origin is under the mast at the bottom of the skids, so the rotor turns
+ * about the origin and the aircraft stands on the road with nothing under
+ * it. Parts: 36 the green it is painted, 24 glass, 2 dark metal, 8 the gun
+ * and the pods, 37 the main blades, 38 the tail rotor.
  */
 export function buildHeliMesh() {
   const m = new MeshBuild();
-  m.box(0, 1.60, -0.40, 2.00, 1.70, 3.60, 0);         // cab
-  m.box(0, 1.85, -2.10, 1.50, 1.20, 1.10, 24);        // canopy
-  m.box(0, 1.90, 1.90, 0.80, 0.70, 3.40, 0);          // tail boom
-  m.box(0, 2.35, 3.45, 0.22, 1.30, 0.80, 0);          // fin
-  m.box(0, 1.95, 3.30, 1.40, 0.16, 0.60, 0);          // tailplane
-  // Main rotor: a mast and a wide thin disc.
-  m.cylinder(0, 2.45, -0.40, 0.14, 0.12, 0.60, 8, 8, 'y');
-  m.ring(0, 3.10, -0.40, 0.25, 5.40, 18, 3);
-  // Tail rotor, standing on its side.
-  for (let i = 0; i < 14; i++) {
-    const a0 = (i / 14) * Math.PI * 2, a1 = ((i + 1) / 14) * Math.PI * 2;
-    const at = (a, r) => [0.42, 2.30 + Math.sin(a) * r, 3.45 + Math.cos(a) * r];
-    m.quad([at(a0, 0.2), at(a1, 0.2), at(a1, 1.1), at(a0, 1.1)], [1, 0, 0], 3);
-    m.quad([at(a0, 1.1), at(a1, 1.1), at(a1, 0.2), at(a0, 0.2)], [-1, 0, 0], 3);
-  }
+  const P = 36;
+  m.box(0, 1.5, -0.1, 1.15, 1.25, 4.0, P);                  // body
+  m.box(0, 1.35, -2.5, 0.95, 0.95, 1.0, P);                 // nose
+  m.cylinder(0, 1.3, -3.0, 0.45, 0.14, -0.7, 12, P, 'z');
+  // Two seats in a line, the gunner low and in front, the pilot behind and
+  // above him: the stepped canopy is what makes it read as a gunship.
+  m.box(0, 2.22, -1.75, 0.86, 0.55, 1.2, 24);
+  m.box(0, 2.42, -0.7, 0.86, 0.65, 1.0, 24);
   for (const side of [-1, 1]) {
-    m.box(side * 1.05, 0.12, -0.30, 0.14, 0.14, 3.20, 8);   // skid
-    m.box(side * 0.70, 0.65, -0.90, 0.10, 1.05, 0.10, 8);
-    m.box(side * 0.70, 0.65, 0.70, 0.10, 1.05, 0.10, 8);
+    m.box(side * 0.62, 2.35, 0.5, 0.48, 0.55, 1.9, P);      // engines
+    m.box(side * 0.62, 2.35, 1.5, 0.36, 0.36, 0.12, 2);     // exhausts
+    m.box(side * 1.2, 1.5, 0.0, 1.3, 0.1, 0.85, P);         // stub wing
+    m.cylinder(side * 1.55, 1.18, -0.6, 0.22, 0.22, 1.2, 10, 8, 'z');   // pod
+    m.box(side * 0.82, 0.06, -0.3, 0.1, 0.1, 3.2, 2);       // skid
+    m.box(side * 0.68, 0.45, -1.1, 0.08, 0.8, 0.08, 2);
+    m.box(side * 0.68, 0.45, 0.6, 0.08, 0.8, 0.08, 2);
   }
-  m.box(0, 0.95, -2.30, 0.40, 0.34, 0.90, 8);         // chin gun
+  // The tail, tapering, with a fin and a tailplane at the end of it.
+  m.cylinder(0, 1.75, 1.9, 0.4, 0.2, 4.4, 10, P, 'z');
+  m.box(0, 2.55, 6.25, 0.14, 1.5, 0.9, P);
+  m.box(0, 1.85, 5.6, 1.7, 0.08, 0.5, P);
+  // Tail rotor, on the left of the fin, turning about its own hub.
+  m.box(0.16, 2.75, 6.3, 0.04, 1.5, 0.16, 38);
+  m.box(0.16, 2.75, 6.3, 0.04, 0.16, 1.5, 38);
+  // Mast, hub and four blades.
+  m.cylinder(0, 2.6, 0, 0.13, 0.11, 0.55, 10, 2, 'y');
+  m.box(0, 3.18, 0, 0.6, 0.12, 0.6, 2);
+  for (let k = 0; k < 4; k++) {
+    const a = k * Math.PI / 2;
+    m.box(Math.cos(a) * 2.75, 3.18, Math.sin(a) * 2.75, 5.2, 0.05, 0.34, 37, a);
+  }
+  // The gun under the chin.
+  m.cylinder(0, 0.88, -2.3, 0.22, 0.22, 0.28, 10, 8, 'y');
+  m.cylinder(0, 0.88, -2.35, 0.05, 0.05, -1.0, 8, 8, 'z');
   return m;
 }
 
@@ -706,45 +860,18 @@ export const MECH_HIP = 4.2;
  * yours. That is the whole difference between a thing hunting you and the
  * thing you are standing in: one number per instance.
  */
-export function buildMechMesh() {
+/**
+ * One chassis, as a mesh: the builder in `mechmeshes.js` for it, handed the
+ * row out of the chassis table so that its guns are where the shots leave.
+ */
+export function buildChassisMesh(c) {
   const m = new MeshBuild();
-  for (const side of [-1, 1]) {
-    const x = side * 1.25;
-    m.box(x, 0.35, -0.25, 1.45, 0.70, 3.00, 12);        // foot
-    m.box(x, 1.05, 0.10, 0.95, 0.80, 1.10, 2);          // ankle
-    m.box(x, 2.10, 0.00, 1.15, 1.70, 1.25, 0);          // shin
-    m.box(x, 3.00, -0.05, 1.00, 0.55, 1.05, 2);         // knee
-    m.box(x, 3.75, 0.05, 1.35, 1.25, 1.45, 0);          // thigh
-  }
-  // Hips and the waist the torso turns on.
-  m.box(0, 4.35, 0, 3.10, 0.95, 1.95, 0);
-  m.box(0, 4.85, 0, 1.60, 0.55, 1.30, 2);
-
-  // Torso.
-  m.box(0, 5.75, 0.05, 3.00, 1.60, 2.10, 0);
-  m.box(0, 6.45, 0.35, 2.30, 0.70, 1.60, 0);            // engine deck
-  m.box(0, 5.70, -1.12, 2.00, 1.00, 0.22, 24);          // canopy
-  m.box(0, 6.25, -0.95, 0.70, 0.26, 0.26, 1);           // the eye
-  m.box(0, 5.05, 0.95, 1.10, 0.90, 0.50, 1);            // reactor, at the back
-
-  // Shoulders, and what is hung off them.
-  for (const side of [-1, 1]) m.box(side * 1.85, 6.05, 0.05, 0.95, 1.10, 1.60, 2);
-  // The chaingun on the right arm: a block and four barrels.
-  m.box(2.05, 5.60, -0.70, 0.90, 0.95, 2.20, 7);
-  for (const dx of [-0.22, 0.22]) {
-    for (const dy of [-0.2, 0.2]) {
-      m.box(2.05 + dx, 5.60 + dy, -2.35, 0.16, 0.16, 1.40, 7);
-    }
-  }
-  // The rocket pod on the left: six tubes in a block.
-  m.box(-2.05, 6.30, -0.35, 1.30, 1.10, 1.80, 7);
-  for (const dx of [-0.38, 0, 0.38]) {
-    for (const dy of [-0.26, 0.26]) {
-      m.box(-2.05 + dx, 6.30 + dy, -1.30, 0.26, 0.26, 0.30, 8);
-    }
-  }
+  MECH_BUILDERS[c.id](m, c);
   return m;
 }
+
+/** The Warden, which is what the game called a mech before there were ten. */
+export function buildMechMesh() { return buildChassisMesh(CHASSIS[0]); }
 
 /**
  * Where a mech's guns are, in its own coordinates, for the game layer. These
@@ -792,7 +919,10 @@ export class Actors {
     // Three vec4s: where it is and which way its legs point, then the stride,
     // the torso and the hit flash, then whether it is yours and how far over
     // it has gone.
-    this.mech = this._uploadMesh(buildMechMesh(), MAX_MECHS, 3);
+    // A mesh per chassis, each with room for every mech there can be, since
+    // nothing stops all eight on the street being the same one.
+    this.mechMeshes = CHASSIS.map((c) => ({ chassis: c, mesh: this._uploadMesh(buildChassisMesh(c), MAX_MECHS, 3) }));
+    this.mech = this.mechMeshes[0].mesh;
     // What you can get into. The fighter you can fly is the same mesh as the
     // ones that come after you, because it is the same aircraft.
     this.vehicles = {
@@ -817,6 +947,7 @@ export class Actors {
       plasma: this._uploadMesh(buildPlasmaMesh(), 0, 0),
       flak: this._uploadMesh(buildFlakMesh(), 0, 0),
       splinter: this._uploadMesh(buildSplinterMesh(), 0, 0),
+      void: this._uploadMesh(buildVoidMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
 
@@ -839,6 +970,7 @@ export class Actors {
       splinter: this._uploadMesh(buildProjectileMesh('splinter'), MAX_PROPS, 2),
       banana: this._uploadMesh(buildProjectileMesh('banana'), MAX_PROPS, 2),
       nuke: this._uploadMesh(buildProjectileMesh('nuke'), 8, 2),
+      void: this._uploadMesh(buildProjectileMesh('void'), 8, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -946,11 +1078,11 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0 };
+      splinter: 0, nuke: 0, void: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
-      if (counts[b.kind] >= (b.kind === 'nuke' ? 8 : MAX_PROPS)) continue;
+      if (counts[b.kind] >= (b.kind === 'nuke' || b.kind === 'void' ? 8 : MAX_PROPS)) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
@@ -1133,7 +1265,11 @@ export class Actors {
       const o = counts[v.type] * 8;
       const d = mesh.instData;
       d[o] = v.x; d[o + 1] = v.y; d[o + 2] = v.z; d[o + 3] = v.yaw;
-      d[o + 4] = v.pitch; d[o + 5] = v.roll; d[o + 6] = v.hitFlash; d[o + 7] = v.rotor;
+      d[o + 4] = v.pitch; d[o + 5] = v.roll; d[o + 6] = v.hitFlash;
+      // A fighter has no rotor: the channel says whether its wheels are down,
+      // as two or nought, the same way an enemy jet sends its afterburner in
+      // nought to one, which leaves the gear of those always up.
+      d[o + 7] = v.type === 'jet' ? (v.gearDown === false ? 0 : 2) : v.rotor;
       counts[v.type]++;
     }
     for (const type in this.vehicles) {
@@ -1150,52 +1286,76 @@ export class Actors {
   /** @param {Array} list live mechs */
   updateMechs(list) {
     const gl = this.gl;
-    const data = this.mech.instData;
-    let n = 0;
-    for (const m of list) {
-      if (!m.alive || n >= MAX_MECHS) continue;
-      const o = n * 12;
-      data[o] = m.x; data[o + 1] = m.y; data[o + 2] = m.z; data[o + 3] = m.yaw;
-      // The torso angle is relative to the legs, because that is what the
-      // shader turns it by.
-      data[o + 4] = m.walk;
-      data[o + 5] = m.torso - m.yaw;
-      data[o + 6] = m.hitFlash;
-      data[o + 7] = m.pitch;
-      data[o + 8] = m.mine ? 1 : 0;
-      data[o + 9] = m.health > 0 ? 0 : Math.min(1, (m.dying || 0) / 1.6);
-      data[o + 10] = m.dashLeft > 0 ? 1 : 0;
-      data[o + 11] = 0;
-      n++;
+    for (const { chassis, mesh } of this.mechMeshes) {
+      const data = mesh.instData;
+      let n = 0;
+      for (const m of list) {
+        if (!m.alive || n >= MAX_MECHS) continue;
+        if ((m.spec.chassis || 'warden') !== chassis.id) continue;
+        const o = n * 12;
+        data[o] = m.x; data[o + 1] = m.y; data[o + 2] = m.z; data[o + 3] = m.yaw;
+        // The torso angle is relative to the legs, because that is what the
+        // shader turns it by.
+        data[o + 4] = m.walk;
+        data[o + 5] = m.torso - m.yaw;
+        data[o + 6] = m.hitFlash;
+        data[o + 7] = m.pitch;
+        data[o + 8] = m.mine ? 1 : 0;
+        data[o + 9] = m.health > 0 ? 0 : Math.min(1, (m.dying || 0) / 1.6);
+        data[o + 10] = m.dashLeft > 0 ? 1 : 0;
+        data[o + 11] = 0;
+        n++;
+      }
+      mesh.instanceCount = n;
+      if (n > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 12);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
     }
-    this.mech.instanceCount = n;
-    if (n > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.mech.instVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 12);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+
+  /** How many mechs are drawn this frame, and how many triangles that is. */
+  get mechStats() {
+    let count = 0, tris = 0;
+    for (const { mesh } of this.mechMeshes) {
+      count += mesh.instanceCount;
+      tris += mesh.instanceCount * (mesh.count / 3);
     }
+    return { count, tris };
   }
 
   drawMechs() {
-    if (!this.mech.instanceCount) return 0;
     const gl = this.gl;
-    this.progMech.use();
-    gl.bindVertexArray(this.mech.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.mech.count, this.mech.indexType, 0,
-      this.mech.instanceCount);
+    let draws = 0;
+    for (const { chassis, mesh } of this.mechMeshes) {
+      if (!mesh.instanceCount) continue;
+      // Where its legs stop, and whether it walks on two or four, are the
+      // chassis' own: the shader splits the mesh there.
+      this.progMech.use()
+        .float('uHip', chassis.hip)
+        .float('uGait', chassis.gait === 'quad' ? 1 : 0)
+        .float('uHipZ', chassis.hipZ || 0);
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawMechShadows(lightViewProj) {
-    if (!this.mech.instanceCount) return 0;
     const gl = this.gl;
-    this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
-    gl.bindVertexArray(this.mech.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.mech.count, this.mech.indexType, 0,
-      this.mech.instanceCount);
+    let draws = 0;
+    for (const { mesh } of this.mechMeshes) {
+      if (!mesh.instanceCount) continue;
+      this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawVehicles() {
@@ -1352,7 +1512,8 @@ export class Actors {
 
   dispose() {
     const gl = this.gl;
-    for (const mesh of [this.drone, this.soldier, this.jet, this.gib, this.mech,
+    for (const mesh of [this.drone, this.soldier, this.jet, this.gib,
+      ...this.mechMeshes.map((e) => e.mesh),
       ...Object.values(this.weapons),
       ...Object.values(this.props), ...Object.values(this.pickups),
       ...Object.values(this.vehicles)]) {

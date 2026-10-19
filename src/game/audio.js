@@ -247,6 +247,10 @@ export class Audio {
     // rather than gunpowder.
     plasma: { crackHz: 1800, sweepHz: 2600, crackGain: 0.14, tail: 0.18,
       bodyHz: 520, bodyEnd: 900, bodyGain: 0.22, bodyTail: 0.14, hp: 700 },
+    // The void cannon: hardly any crack, a long low rising body, which is
+    // the sound of something heavy leaving rather than of a charge going off.
+    void: { crackHz: 600, sweepHz: 1800, crackGain: 0.2, tail: 1.2,
+      bodyHz: 60, bodyEnd: 220, bodyGain: 0.55, bodyTail: 1.0, hp: 120 },
     // Forty tonnes firing. Everything here is lower and longer than the hand
     // weapons, because that is the whole difference a listener hears between
     // a rifle and a gun bolted to eight metres of armour: not loudness, which
@@ -751,6 +755,55 @@ export class Audio {
     crack.connect(bp).connect(g).connect(this.master);
     crack.start(t, Math.random() * 3, 0.6);
     crack.stop(t + 0.6);
+  }
+
+  /**
+   * The overkill sting. A wet low splat, which is the body, and under it two
+   * detuned saws falling an octave over most of a second, which is the hit a
+   * fighting game puts behind the word on the screen. The second voice is a
+   * fifth up and quieter, so it reads as a chord and not as a buzz.
+   *
+   * @param {number} streak kills in a row; each one starts the fall higher
+   */
+  overkill(streak = 1) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+
+    const splat = ctx.createBufferSource();
+    splat.buffer = this._noiseBuffer;
+    splat.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900, t);
+    lp.frequency.exponentialRampToValueAtTime(160, t + 0.3);
+    lp.Q.value = 4;
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(0.55, t + 0.01);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    splat.connect(lp).connect(sg).connect(this.master);
+    splat.start(t, Math.random() * 3, 0.45);
+    splat.stop(t + 0.45);
+
+    const base = 92 * Math.pow(1.12, Math.min(6, streak - 1));
+    for (const [mul, level] of [[1, 0.2], [1.5, 0.11]]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.detune.value = (Math.random() - 0.5) * 18;
+      o.frequency.setValueAtTime(base * mul, t + 0.04);
+      o.frequency.exponentialRampToValueAtTime(base * mul * 0.5, t + 0.95);
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 1400;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + 0.04);
+      g.gain.exponentialRampToValueAtTime(level, t + 0.07);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+      o.connect(f).connect(g).connect(this.master);
+      o.start(t + 0.04);
+      o.stop(t + 1.15);
+    }
   }
 
   /** A tree going over: a long tearing creak and then a soft heavy landing. */

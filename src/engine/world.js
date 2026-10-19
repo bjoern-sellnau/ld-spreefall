@@ -1,6 +1,7 @@
 // The world data: manifest, binary bundle, ground height field, surface map and
 // the collision segment lookup. Everything the simulation needs, none of the GPU.
 
+import { craterProfile, CRATER_RIM_OUT } from '../shared/crater.js';
 import { TILE_SIZE, COLLISION_GRID, GROUND_SCALE, SURFACE } from '../shared/constants.js';
 
 /**
@@ -70,6 +71,13 @@ export class World {
     this.missing = new Set();          // ids the index promised and the server has not
     this.collisionCache = new Map();
     this.heightCache = new Map();
+    // Craters, by the tiles they reach. The ground under a crater is the
+    // bowl itself rather than the height field: the field is a sample every
+    // 3.1 m in the middle of town and every 25 m out past the ring, which
+    // cannot hold a hole a few metres across, and it was the reason every
+    // crater in the game was kept shallow enough to be a dent.
+    this.craters = new Map();
+    this.craterKeys = new Map();
     // Trees that have burnt down, by tile index and ordinal within the tile.
     // Kept on the world rather than in the bundle bytes, because the bundle
     // is what a reload reads and a reload is meant to bring the city back.
@@ -337,6 +345,10 @@ export class World {
       this.tiles[t] = null;
       this.collisionCache.delete(t);
       this.heightCache.delete(t);
+      // The holes go with the ground they were in. They are put back from
+      // the scars when the district lands again, the same as the ruins.
+      const holes = this.craters.get(t);
+      if (holes) for (const c of [...holes]) this.removeCrater(c);
     }
     this._mergeManifest(district, -1);
     this.districts.delete(id);
@@ -580,7 +592,65 @@ export class World {
     const index = this.tileIndex(cx, cz);
     if (index < 0) return 0;
     if (!this.heightField(index)) return this._edgeHeight(index, cx, cz);
-    return this._sampleGround(index, cx, cz);
+    return this._sampleGround(index, cx, cz) + this.craterOffset(index, cx, cz);
+  }
+
+  /** What the craters over a tile do to the ground at a point in it. */
+  craterOffset(index, x, z) {
+    const list = this.craters.get(index);
+    if (!list) return 0;
+    let d = 0;
+    for (const c of list) d += craterProfile(x, z, c, c.level);
+    return d;
+  }
+
+  /**
+   * Put a crater into the ground, or change how far it has been dug. A
+   * crater is known by where it is and how wide, so the same hole replayed
+   * when its district comes back replaces itself rather than doubling.
+   *
+   * @param {{x,z,craterRadius,depth,level}} c the crater; kept, not copied
+   * @returns {number} how many tiles it reaches
+   */
+  setCrater(c) {
+    const key = `${c.x.toFixed(2)},${c.z.toFixed(2)}`;
+    const had = this.craterKeys.get(key);
+    if (had && had !== c) this.removeCrater(had);
+    if (!(c.level > 0) || !(c.depth > 0)) { this.removeCrater(c); return 0; }
+    this.craterKeys.set(key, c);
+    const r = c.craterRadius * CRATER_RIM_OUT;
+    const tx0 = Math.max(0, Math.floor((c.x - r - this.minX) / this.tileSize));
+    const tx1 = Math.min(this.nx - 1, Math.floor((c.x + r - this.minX) / this.tileSize));
+    const tz0 = Math.max(0, Math.floor((c.z - r - this.minZ) / this.tileSize));
+    const tz1 = Math.min(this.nz - 1, Math.floor((c.z + r - this.minZ) / this.tileSize));
+    let n = 0;
+    for (let tz = tz0; tz <= tz1; tz++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const index = tz * this.nx + tx;
+        let list = this.craters.get(index);
+        if (!list) { list = []; this.craters.set(index, list); }
+        if (!list.includes(c)) list.push(c);
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /** Take a crater out of the ground again. */
+  removeCrater(c) {
+    for (const [index, list] of this.craters) {
+      const at = list.indexOf(c);
+      if (at < 0) continue;
+      list.splice(at, 1);
+      if (!list.length) this.craters.delete(index);
+    }
+    for (const [key, v] of this.craterKeys) if (v === c) this.craterKeys.delete(key);
+  }
+
+  /** Every crater gone, for a reset. */
+  clearCraters() {
+    this.craters.clear();
+    this.craterKeys.clear();
   }
 
   /**

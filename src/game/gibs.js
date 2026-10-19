@@ -11,7 +11,13 @@
 // sliding into, and the invisible difference is about half a millisecond a
 // frame.
 
-const MAX = 96;
+// Room for the overkill setting, which puts two bursts and a skeleton into
+// the air for one kill. Two hundred and fifty six chunks is one instanced
+// draw and a few kilobytes, and the walls are only asked about while a chunk
+// is moving fast, which it is for a fraction of its life.
+const MAX = 256;
+// The highest gore multiplier anything here listens to: the overkill setting.
+const TOP = 12;
 
 /** How much of each kind a body is made of, by the part id the shader reads. */
 const PARTS = [
@@ -69,6 +75,8 @@ export class Gibs {
    * @param {object} dir the direction the hit came from, as a unit vector; the
    *   pieces go with it, which is what makes a shot from behind look like one
    * @param {number} scale the gore multiplier: how many pieces, how far
+   * @param {number} lift extra metres a second straight up, for a burst meant
+   *   to rain down rather than skid along the street
    * @returns {number} how many chunks it actually made
    */
   /**
@@ -195,7 +203,7 @@ export class Gibs {
    * @returns {number} how many pieces went up
    */
   bones(x, y, z, dir, scale = 1) {
-    const n = Math.min(MAX, Math.round(11 * Math.min(7.5, scale)));
+    const n = Math.min(MAX, Math.round(11 * Math.min(TOP, scale)));
     const push = 1 + 0.3 * Math.min(7.5, scale);
     for (let i = 0; i < n; i++) {
       const g = this._free();
@@ -231,11 +239,12 @@ export class Gibs {
     return n;
   }
 
-  burst(x, y, z, dir, scale = 1) {
-    // Past the top gore switch there is nothing left to give: sixteen pieces
-    // a point of scale runs the pool dry at six, and the throw keeps going a
-    // little further than that.
-    const n = Math.min(MAX, Math.round(16 * Math.min(7.5, scale)));
+  burst(x, y, z, dir, scale = 1, lift = 0) {
+    // Sixteen pieces a point of scale. The throw stops growing at the top of
+    // the ordinary switches, because past that a piece leaves the district;
+    // what the overkill setting adds is the count and the lift, which sends
+    // them up so they come back down on you.
+    const n = Math.min(MAX, Math.round(16 * Math.min(TOP, scale)));
     const push = 1 + 0.35 * Math.min(7.5, scale);
     for (let i = 0; i < n; i++) {
       const g = this._free();
@@ -250,7 +259,7 @@ export class Gibs {
       const b = Math.acos(2 * Math.random() - 1);
       const speed = (2.5 + Math.random() * 6.5) * push;
       g.vx = Math.sin(b) * Math.cos(a) * speed + (dir ? dir.x : 0) * 4 * push;
-      g.vy = Math.cos(b) * speed * 0.7 + 3.5 + Math.random() * 3;
+      g.vy = Math.cos(b) * speed * 0.7 + 3.5 + Math.random() * 3 + lift * (0.6 + Math.random() * 0.8);
       g.vz = Math.sin(b) * Math.sin(a) * speed + (dir ? dir.z : 0) * 4 * push;
       g.yaw = Math.random() * 6.28;
       g.pitch = Math.random() * 6.28;

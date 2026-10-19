@@ -24,6 +24,16 @@ import { VERTEX_STRIDE, POS_SCALE, FACADE_FLAG, GROUND_SCALE } from '../shared/c
 import { tileMesh } from '../engine/world.js';
 
 const COLLAPSE_WAVE = 0.7;
+// The furthest a falling vertex is thrown sideways, in metres of fall. What
+// lands spreads by how far it fell, and for a block of flats that is right:
+// a top storey sixteen metres up lands a couple of metres out. But the spread
+// is per vertex and uncorrelated, so it also pulls every triangle apart by
+// the difference between its corners, and for the Reichstag's dome, 47 m up,
+// that was ten to twenty metres: a collapse that smeared the building into
+// sheets the size of the building instead of putting it on the ground.
+// Past this a thing has fallen far enough to be rubble, and more height does
+// not throw it further. Mirrored in src/shaders/world.js.
+const SCATTER_FALL = 10.0;
 const CRATER_RIM = 0.18;
 const CRATER_RIM_OUT = 1.75;
 
@@ -101,16 +111,28 @@ export function settle(p, isGround, height, site) {
   const landed = Math.min(above, cut + heap);
   const fell = above - landed;
   p.y -= fell;
+  const spread = Math.min(fell, SCATTER_FALL);
   const ax = p.x - site.x, az = p.z - site.z;
   const l = Math.max(0.001, Math.hypot(ax, az));
-  p.x += (ax / l) * fell * (0.09 + jitter * 0.13);
-  p.z += (az / l) * fell * (0.09 + jitter * 0.13);
-  p.x += (jitter - 0.5) * fell * 0.30;
-  p.z += (collapseHash(p.z, p.y, p.x) - 0.5) * fell * 0.30;
+  p.x += (ax / l) * spread * (0.09 + jitter * 0.13);
+  p.z += (az / l) * spread * (0.09 + jitter * 0.13);
+  p.x += (jitter - 0.5) * spread * 0.30;
+  p.z += (collapseHash(p.z, p.y, p.x) - 0.5) * spread * 0.30;
   return Math.min(1, Math.max(0, fell / Math.max(1, above)));
 }
 
 const clampI16 = (v) => (v < -32768 ? -32768 : v > 32767 ? 32767 : v);
+
+/**
+ * How burnt the ground is at a point round a finished crater: all of it in
+ * the bowl, fading out across the lip, a little past where the ground was
+ * thrown up. Soot goes further than the hole does.
+ */
+export function craterBurn(x, z, site) {
+  const reach = site.craterRadius * 1.6;
+  const r = Math.hypot(x - site.x, z - site.z);
+  return 1 - smoothstep(site.craterRadius * 0.45, reach, r);
+}
 
 /**
  * Crushes whatever small thing stands at a point: a parked car that has gone
@@ -219,7 +241,17 @@ export function bakeSite(world, site) {
         const isGround = (flags & FACADE_FLAG.GROUND) !== 0;
         const height = view.getUint16(o + 18, true) / 16;
         const startY = p.y;
+        // The ground round a crater is burnt, and stays burnt: the storeys
+        // byte of a ground vertex is free, and the shader reads it as soot.
+        let burntNow = false;
+        if (isGround && site.craterRadius > 0) {
+          const burn = craterBurn(p.x, p.z, site);
+          const was = view.getUint8(o + 16);
+          const now = Math.round(burn * 255);
+          if (now > was) { view.setUint8(o + 16, now); burntNow = true; }
+        }
         const fall = settle(p, isGround, height, site);
+        if (burntNow) touched++;
         if (fall <= 0 && p.y === startY) continue;
         view.setInt16(o, clampI16(Math.round((p.x - ox) * POS_SCALE)), true);
         view.setInt16(o + 2, clampI16(Math.round(p.y * POS_SCALE)), true);

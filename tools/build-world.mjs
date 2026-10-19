@@ -974,8 +974,20 @@ function buildDistrict(district, overflight = false) {
   });
   let buildingCount = 0;
   let blankWalls = 0;
+  let podiums = 0;
+  let replaced = 0;
   const landmarkIndex = [];
   const palette = new Palette(BERLIN_PALETTE, { frozen: true });
+  // The ones a landmark builder draws by hand, found before anything is
+  // built so that what OpenStreetMap maps of the same building can be left
+  // out of it.
+  const marks = [];
+  for (const b of buildings) {
+    const kind = b.tags['spreefall:kind'];
+    if (!kind || !LANDMARK_BUILDERS[kind] || b.outer.length < 3) continue;
+    const [mx, mz] = ringCentroid(b.outer);
+    marks.push({ b, outer: b.outer, cx: mx, cz: mz, area: ringArea(b.outer) });
+  }
   for (const b of buildings) {
     const ring = b.outer;
     if (ring.length < 3) continue;
@@ -983,21 +995,31 @@ function buildDistrict(district, overflight = false) {
     if (area < tier.minArea) continue;
     const [cx, cz] = ringCentroid(ring);
     if (cx < world.minX - 60 || cx > world.maxX + 60 || cz < world.minZ - 60 || cz > world.maxZ + 60) continue;
+    const isMark = marks.some((m) => m.b === b);
+    // Drawn by hand already: the pieces and the envelope of a landmark.
+    if (!isMark && replacedByLandmark(b, marks)) { replaced++; continue; }
     // Its pieces are drawn instead, and they carry their own collision, so
     // the envelope is left out of both. A piece that is missing leaves a gap
     // you can walk into, which is rarer and kinder than a tower inside a box.
-    if (b.hasParts) continue;
+    // A landmark is never left out for its pieces: it was, before, and the
+    // Reichstag on the live site was OpenStreetMap's dozen pieces rather
+    // than the building drawn from the Bundestag's own figures. And an
+    // outline whose pieces start up in the air is built as the podium under
+    // them, so that they are not hanging there.
+    const podium = !isMark && b.hasParts ? podiumHeight(b) : 0;
+    if (b.hasParts && !isMark && !podium) continue;
+    if (podium) podiums++;
     const base = yAt(cx, cz);
     const tags = b.tags;
-    const height = buildingHeight(tags);
+    const height = podium ? Math.min(buildingHeight(tags), podium) : buildingHeight(tags);
     const levels = buildingLevels(tags, height);
     // Where the volume starts, for a piece that hangs over a passage or a
     // tower that begins at the tenth floor. Metres win over levels, which is
     // the order the tagging scheme puts them in.
-    const minLevels = parseFloat(tags['building:min_level']);
-    const minMetres = parseLength(tags.min_height);
-    const minH = Number.isFinite(minMetres) ? minMetres
-      : (Number.isFinite(minLevels) && minLevels > 0 ? minLevels * LEVEL_HEIGHT : NaN);
+    // A podium is the outline's own ground floors, whatever the outline says
+    // about where it starts.
+    const floor = podium ? 0 : volumeFloor(tags);
+    const minH = floor > 0 ? floor : NaN;
     const seed = hashInt(Math.round(cx * 4), Math.round(cz * 4)) & 255;
 
     const lmKey = tags['spreefall:landmark'];
@@ -1085,6 +1107,9 @@ function buildDistrict(district, overflight = false) {
       levels,
       landmark: false,
       noWindows: blank,
+      // A volume that starts above the street has no shop windows at its
+      // foot: what is down there is somebody else's roof.
+      noGroundFloor: Number.isFinite(minH) && minH > 1.5,
     });
     // A volume that starts above the street is collided against from where it
     // starts, so you can walk under the arch you can see under.
@@ -1094,6 +1119,10 @@ function buildDistrict(district, overflight = false) {
     buildingCount++;
   }
 
+  if (podiums || replaced) {
+    console.log(`buildings: ${podiums} outlines built as the podium under pieces that start in the air, `
+      + `${replaced} pieces and envelopes left to the landmark drawn in their place`);
+  }
   since('buildings');
   // --- the stelae field ---------------------------------------------------
   // The memorial floor is the one place where the terrain has detail finer than
@@ -1898,6 +1927,81 @@ function ringInside(inner, outer) {
  *   One that will not may not claim an outline, or the building disappears.
  * @returns {number} how many outlines were taken over by their pieces
  */
+/**
+ * Where a volume starts above the ground, in metres: min_height wins over
+ * building:min_level, which is the order the tagging scheme puts them in.
+ * Nought for anything that stands on the street.
+ */
+export function volumeFloor(tags) {
+  const minLevels = parseFloat(tags['building:min_level']);
+  const minMetres = parseLength(tags.min_height);
+  if (Number.isFinite(minMetres)) return Math.max(0, minMetres);
+  if (Number.isFinite(minLevels) && minLevels > 0) return minLevels * LEVEL_HEIGHT;
+  return 0;
+}
+
+/**
+ * How tall a podium an outline needs under its own pieces, or 0 for none.
+ *
+ * Simple 3D Buildings says an outline with pieces in it is not drawn, and
+ * that is right when the pieces stand on the street. Mappers do not always
+ * map the bottom of a building as a piece, though: a block whose upper
+ * storeys are mapped as pieces starting at fifteen metres, and nothing
+ * under them, was built here as a whole building hanging in the air,
+ * windows, shop band and all. So when the pieces that stand on the ground
+ * cover less than three fifths of the outline and some of them start up in
+ * the air, the outline is built as well, up to where the lowest of those
+ * starts. An outline whose pieces all stand on the ground is left out
+ * exactly as before, which is what keeps a tower out of the box round it.
+ *
+ * @param {{outer:Array, tags:Object, parts?:Array}} outline
+ */
+export function podiumHeight(outline) {
+  const parts = outline.parts || [];
+  if (!parts.length) return 0;
+  const area = ringArea(outline.outer);
+  if (!(area > 0)) return 0;
+  let grounded = 0;
+  let lowestUp = Infinity;
+  for (const p of parts) {
+    const floor = volumeFloor(p.tags);
+    if (floor <= 1.5) grounded += ringArea(p.outer);
+    else lowestUp = Math.min(lowestUp, floor);
+  }
+  if (!Number.isFinite(lowestUp) || grounded >= area * 0.6) return 0;
+  return lowestUp;
+}
+
+/**
+ * Whether a building is part of something a landmark builder replaces.
+ *
+ * The Reichstag, the Gate and the rest are drawn by hand from the sources,
+ * and OpenStreetMap maps several of them as an outline with a dozen pieces.
+ * Every one of those pieces, and the outline round the one the landmark was
+ * hung on, is the same building drawn a second time, so all of it goes: a
+ * piece whose middle is inside a landmark, and an outline that has a
+ * landmark's middle inside it and is not much bigger than the landmark.
+ *
+ * @param {object} b a building or piece
+ * @param {Array<{b:object, outer:Array, cx:number, cz:number, area:number}>} marks
+ */
+export function replacedByLandmark(b, marks) {
+  if (!marks.length) return false;
+  const [cx, cz] = ringCentroid(b.outer);
+  const area = ringArea(b.outer);
+  for (const m of marks) {
+    if (m.b === b) return false;
+  }
+  for (const m of marks) {
+    // A piece is smaller than what it is a piece of, and an envelope is not
+    // much bigger: a whole block that happens to have a landmark in the
+    // middle of it is neither, and stays.
+    if (area < m.area * 1.5 && pointInRing(cx, cz, m.outer)) return true;
+    if (area < m.area * 4 && pointInRing(m.cx, m.cz, b.outer)) return true;
+  }
+  return false;
+}
+
 /** A point a given distance along a polyline, or null past the end. */
 function pointAt(pts, dist) {
   let left = dist;
@@ -1954,6 +2058,8 @@ export function markBuildingParts(list, buildable = () => true) {
       if (px < bb.minX || px > bb.maxX || pz < bb.minZ || pz > bb.maxZ) continue;
       if (!pointInRing(px, pz, b.outer)) continue;
       if (!b.hasParts) { b.hasParts = true; taken++; }
+      p.parent = b;
+      (b.parts || (b.parts = [])).push(p);
       break;
     }
   }

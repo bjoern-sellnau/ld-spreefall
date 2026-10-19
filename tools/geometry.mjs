@@ -73,7 +73,7 @@ export function orientedBox(ring) {
  * @param {Mesh} mesh
  * @param {{outer:[number,number][], holes:[number,number][][]}} foot
  * @param {object} o base, height, roofShape, roofHeight, minHeight, wallMat,
- *                   roofMat, seed, levels, landmark, uOffset
+ *                   roofMat, seed, levels, landmark, uOffset, noGroundFloor
  */
 export function extrudeBuilding(mesh, foot, o) {
   const base = o.base;
@@ -104,8 +104,9 @@ export function extrudeBuilding(mesh, foot, o) {
       const nx = dz / len, nz = -dx / len;
       const u0 = run, u1 = run + len;
       const flags = landmarkFlag | noWin;
-      const v0 = mesh.vertex(a[0], bottom, a[1], nx, 0, nz, u0, 0, wallMat, seed, levels, flags | FACADE_FLAG.GROUND_FLOOR, hgt, 150);
-      const v1 = mesh.vertex(b[0], bottom, b[1], nx, 0, nz, u1, 0, wallMat, seed, levels, flags | FACADE_FLAG.GROUND_FLOOR, hgt, 150);
+      const foot = o.noGroundFloor ? flags : flags | FACADE_FLAG.GROUND_FLOOR;
+      const v0 = mesh.vertex(a[0], bottom, a[1], nx, 0, nz, u0, 0, wallMat, seed, levels, foot, hgt, 150);
+      const v1 = mesh.vertex(b[0], bottom, b[1], nx, 0, nz, u1, 0, wallMat, seed, levels, foot, hgt, 150);
       const v2 = mesh.vertex(b[0], wallTop, b[1], nx, 0, nz, u1, o.height + (o.skirt !== undefined ? o.skirt : 1.2), wallMat, seed, levels, flags, hgt, 255);
       const v3 = mesh.vertex(a[0], wallTop, a[1], nx, 0, nz, u0, o.height + (o.skirt !== undefined ? o.skirt : 1.2), wallMat, seed, levels, flags, hgt, 255);
       // Viewed from above, +z runs south, so a ring that is counter clockwise in
@@ -845,6 +846,36 @@ export function spire(mesh, cx, cy, cz, w, h, mat, opts = {}) {
     const a = corners[i], b = corners[(i + 1) % 4];
     emitFace(mesh, [a, b, apex], [[0, 0], [w, 0], [w / 2, h]], mat, seed, flags, ref);
   }
+}
+
+/**
+ * A triangular pediment: a prism whose two triangular ends face along `rot`.
+ * The front and back faces are the triangles, the two sloped faces are the
+ * roof, and the base is open because it sits on an entablature. This is what
+ * a classical portico carries, and it is a gable rather than a pyramid: a
+ * four sided spire on a portico reads as a roof from every side.
+ *
+ * @param {number} w across the facade
+ * @param {number} d front to back
+ * @param {number} rise from the eaves to the apex
+ * @param {number} rot the direction the front faces, radians in the xz plane
+ */
+export function pediment(mesh, cx, cy, cz, w, d, rise, mat, opts = {}) {
+  const seed = opts.seed || 0;
+  const flags = opts.flags || 0;
+  const rot = opts.rot || 0;
+  const c = Math.cos(rot), s = Math.sin(rot);
+  // u runs front to back along the facing, v across the facade.
+  const P = (u, v, h) => [cx + u * c - v * s, cy + h, cz + u * s + v * c];
+  const hd = d / 2, hw = w / 2;
+  const fl = P(-hd, -hw, 0), fr = P(-hd, hw, 0), ft = P(-hd, 0, rise);
+  const bl = P(hd, -hw, 0), br = P(hd, hw, 0), bt = P(hd, 0, rise);
+  const ref = [cx, cy - 1, cz];
+  const slope = Math.hypot(hw, rise);
+  emitFace(mesh, [fl, fr, ft], [[0, 0], [w, 0], [hw, rise]], mat, seed, flags, ref);
+  emitFace(mesh, [br, bl, bt], [[0, 0], [w, 0], [hw, rise]], mat, seed, flags, ref);
+  emitFace(mesh, [fr, br, bt, ft], [[0, 0], [d, 0], [d, slope], [0, slope]], mat, seed, flags, ref);
+  emitFace(mesh, [bl, fl, ft, bt], [[0, 0], [d, 0], [d, slope], [0, slope]], mat, seed, flags, ref);
 }
 
 /** A row of columns along a line, used for the Gate and the porticos. */

@@ -8,9 +8,10 @@ import { SURFACE_CLEARANCE } from '../shared/constants.js';
 // and fifty of them, and starving the rest of the game of tracers while one
 // goes off would be a poor trade. The top gore switch asks for three sprays
 // of a hundred and thirty at once, hence the room above that.
-const MAX = 768;
+// The overkill setting asks for a fountain on top of that, hence 2048.
+const MAX = 2048;
 // How many stains the street may carry at once. Past this the oldest goes.
-const MAX_POOLS = 64;
+const MAX_POOLS = 128;
 
 class Spark {
   constructor() { this.alive = false; }
@@ -538,8 +539,8 @@ export class Effects {
   blood(x, y, z, nx, ny, nz, amount = 1) {
     // The ceiling is where the top gore switch lands. Everything under it
     // asks for less and gets exactly what it asked for.
-    const k = Math.min(7.5, amount);
-    const n = Math.min(130, Math.round(18 * k));
+    const k = Math.min(12, amount);
+    const n = Math.min(220, Math.round(18 * k));
     for (let i = 0; i < n; i++) {
       const s = this._get();
       s.alive = true;
@@ -562,7 +563,7 @@ export class Effects {
       s.bx = 0; s.by = 0; s.bz = 0;
     }
     // The mist, which is what reads at twenty metres when the drops do not.
-    const mist = Math.min(26, Math.round(6 * k));
+    const mist = Math.min(40, Math.round(6 * k));
     for (let i = 0; i < mist; i++) {
       const s = this._get();
       s.alive = true;

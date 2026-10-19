@@ -45,6 +45,12 @@ export const PROJECTILE = {
     radius: 0.09, gravity: 1.5, drag: 0, bounce: 0, armTime: 0.05, maxAge: 3.5,
     detonateOnContact: true, trail: 'spark', light: true, spin: 26,
   },
+  void: {
+    // Big and slow on purpose: you see it go, and so does everybody it is
+    // going past. It goes off on the first thing it touches.
+    radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 9,
+    detonateOnContact: true, trail: 'void', light: true, spin: 3,
+  },
   nuke: {
     // Dropped rather than fired, so it comes in fast and nothing stops it on
     // the way down. The radius is the warhead's own body, not its blast.

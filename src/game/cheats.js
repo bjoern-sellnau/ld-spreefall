@@ -10,12 +10,21 @@
 // because it is your game, but the interface says plainly that it was not a
 // clean run and the end screen says so too.
 
+import { CHASSIS, chassisById, mechKey } from './chassis.js';
+
 const KEY = 'spreefall.cheats';
+
+/**
+ * The gore multiplier at the overkill setting. The pools it draws on were
+ * made larger for it, so this is what they now hold rather than a number
+ * that runs into a ceiling and stops meaning anything.
+ */
+export const OVERKILL_SCALE = 12;
 
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
-  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore'];
+  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -43,6 +52,11 @@ export const GORE = [
   { id: 'blood', label: 'Blood', note: 'hits spray, and it lands on the street' },
   { id: 'ultraGore', label: 'Ultra gore', note: 'all of the above, considerably more of it' },
   { id: 'maxGore', label: 'Ultra gore, and then some', note: 'as much blood as the pools can hold and a shot that throws a body across the street; add the tearing switch and every piece the game owns comes with it' },
+  // Past the top, and on purpose out of proportion: the fighting games that
+  // put a word across the screen when somebody is finished. Every kill comes
+  // apart, the skeleton leaves the body, pieces go up and rain down for a
+  // second or two, and a fountain stands where they were.
+  { id: 'overkill', label: 'Overkill', note: 'every kill an execution: the skeleton leaves the body, pieces rain down, a fountain stands where they were and a word goes across the screen' },
 ];
 
 /**
@@ -70,6 +84,8 @@ export const SPAWNS = [
   { id: 'drones', label: 'Drones', note: 'four, overhead', count: 4 },
   { id: 'jets', label: 'Jets', note: 'two, running in from half a kilometre', count: 2 },
   { id: 'reapers', label: 'Enemy mechs', note: 'two, eight metres of walking gun', count: 2 },
+  { id: 'machines', label: 'Machines', note: 'six of them, steel under the skin and a beam rifle each', count: 6 },
+  { id: 'civilians', label: 'Passers by', note: 'eight people on their way somewhere, who run from a shot', count: 8 },
 ];
 
 /**
@@ -126,6 +142,10 @@ export class Cheats {
     // The numeric settings, by id, starting at what the game ships with.
     this.values = {};
     for (const s of SETTINGS) this.values[s.id] = s.def;
+    // Which mech you are sent, and which of theirs come for you. A choice
+    // rather than a cheat: it does not mark the run, and all off leaves it
+    // where you put it.
+    this.mechs = { mine: CHASSIS[0].id, foe: CHASSIS[0].id };
     // Set the first time anything is switched on, and never cleared, so that
     // turning a cheat off again does not launder the run.
     this.used = false;
@@ -146,6 +166,7 @@ export class Cheats {
    * run out: past this there is nothing left to spend.
    */
   get goreScale() {
+    if (this.overkill) return OVERKILL_SCALE;
     if (this.maxGore) return 7.5;
     return this.ultraGore ? 4.2 : 1;
   }
@@ -155,9 +176,11 @@ export class Cheats {
   // there is no body left to throw, so a switch whose whole point is the
   // throw cannot also be the one that takes the body away. Turn on the
   // tearing switch as well and you get both, with every piece the pool has.
-  get gibbing() { return this.gib || this.ultraGore; }
-  get bleeding() { return this.blood || this.ultraGore || this.maxGore; }
-  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore; }
+  // Overkill takes all three: it is the one switch where nobody is left
+  // lying in the street in one piece.
+  get gibbing() { return this.gib || this.ultraGore || this.overkill; }
+  get bleeding() { return this.blood || this.ultraGore || this.maxGore || this.overkill; }
+  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore || this.overkill; }
 
   set(id, on) {
     if (!(id in this) || typeof this[id] !== 'boolean') return false;
@@ -200,6 +223,34 @@ export class Cheats {
     return SETTINGS.some((s) => this.value(s.id) !== s.def);
   }
 
+  /**
+   * Pick a chassis for one side. Theirs may also be 'random', which is a
+   * new throw of the dice for every one that arrives.
+   *
+   * @param {'mine'|'foe'} side
+   * @returns {boolean} whether it was one there is
+   */
+  chooseMech(side, id) {
+    if (side !== 'mine' && side !== 'foe') return false;
+    const ok = CHASSIS.some((c) => c.id === id) || (side === 'foe' && id === 'random');
+    if (!ok) return false;
+    this.mechs[side] = id;
+    this.save();
+    if (this.onChange) this.onChange(`mech:${side}`, id);
+    return true;
+  }
+
+  /** The mech table key for the next one of yours to come down. */
+  myMech() { return mechKey(this.mechs.mine, true); }
+
+  /** And for the next one of theirs, thrown again each time when random. */
+  foeMech(rand = Math.random) {
+    const id = this.mechs.foe === 'random'
+      ? CHASSIS[Math.floor(rand() * CHASSIS.length) % CHASSIS.length].id
+      : chassisById(this.mechs.foe).id;
+    return mechKey(id, false);
+  }
+
   /** Everything off. Does not clear the mark on the run. */
   reset() {
     for (const id of KEYS) this[id] = DEFAULTS[id];
@@ -210,7 +261,7 @@ export class Cheats {
 
   save() {
     try {
-      const out = { values: this.values };
+      const out = { values: this.values, mechs: this.mechs };
       for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
@@ -228,6 +279,12 @@ export class Cheats {
         for (const s of SETTINGS) {
           const v = saved.values[s.id];
           if (Number.isFinite(v)) this.values[s.id] = Math.min(s.max, Math.max(s.min, v));
+        }
+      }
+      if (saved.mechs) {
+        if (CHASSIS.some((c) => c.id === saved.mechs.mine)) this.mechs.mine = saved.mechs.mine;
+        if (saved.mechs.foe === 'random' || CHASSIS.some((c) => c.id === saved.mechs.foe)) {
+          this.mechs.foe = saved.mechs.foe;
         }
       }
       if (this.any) this.used = true;
