@@ -5095,6 +5095,11 @@ async function main() {
      *
      * @returns {number|null} metres, or null where nothing is drawn
      */
+    /** The mesh a tile is drawn from, own buffer or district bytes. */
+    tileMeshForTest(index) {
+      const rec = world.tiles[index];
+      return rec ? tileMesh(rec) : null;
+    },
     drawnGround(x, z) {
       const index = world.tileIndex(x, z);
       if (index < 0) return null;

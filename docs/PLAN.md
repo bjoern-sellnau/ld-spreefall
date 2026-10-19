@@ -2647,3 +2647,56 @@ caps residency at 520.
   goes to 2.9 km so that no tile comes up without a district behind it. The
   same shot after that is the Grosser Stern with its avenues going out of it
   and the streets of the next district beyond.
+
+## 59. The Reichstag, Pariser Platz, and a collapse that smeared
+
+- 2026-10-19: a screenshot from the live site, in front of the Reichstag
+  after six rockets: two enormous crumpled sheets where the building had
+  been, one of them the glass of the dome. Measured on a full collapse of the
+  Reichstag, 1,409 vertices moved and 821 of them fell more than thirty
+  metres. The sideways throw was a median 5.2 m, 15.4 m at its worst, and
+  350 vertices went more than eight metres. A falling vertex is thrown out by
+  a share of how far it fell, with its own hash, so for a house the corners
+  of one triangle land a couple of metres apart and it reads as rubble, and
+  for a dome 47 m up they land fifteen apart and the triangle is a sail. The
+  throw now stops growing past ten metres of fall, in `src/game/bake.js` and
+  in the shader together: median 1.7 m, worst 4.1, none over eight. A house
+  that falls less than ten metres is thrown exactly as far as before. The
+  city suite compares the two number for number and passes.
+
+- 2026-10-19: the Reichstag itself was wrong, measured against the
+  Bundestag's own figures and Structurae: the roof terrace is 24 m up and the
+  top of the dome is 47 m, the dome being 23.5 m tall and about 38 across.
+  The model was a 30 m block with the dome on top of that, so the glass
+  stood at 54.5 m. The corner towers carried pyramid spires, which they lost
+  in Baumgarten's rebuild of the sixties. The pediment over the portico was a
+  26 m square pyramid standing ten metres out past the columns; it is a gable
+  now, through a new `pediment` primitive. The mirrored cone inside the dome
+  was drawn the wrong way up.
+
+- 2026-10-19: Pariser Platz. The Akademie der Kuenste stood on the north side
+  of the square, opposite the DZ Bank; it is on the south side, beside it.
+  The square's own list, Baedeker's 1928 guide and Baunetz all say so, and
+  the bank's neighbour note says its east wall is the Akademie's west wall,
+  which is where it now stands. What could not be checked from here: the
+  square's own extent, which starts 28 m east of the Gate's face; the Adlon,
+  whose centre lies north of the square's south edge; and the north side,
+  which has no French embassy, Eugen-Gutmann-Haus, Palais am Pariser Platz
+  or Haus Liebermann in the facts at all. Those need a map, and Overpass and
+  Wikipedia are both closed to this container.
+
+- 2026-10-19: none of the Pariser Platz part reaches the live site. The
+  deployed city is built from the Overpass extract, and `annotate.mjs` leaves
+  any fact whose kind is `block` or `courtyard` alone, so the Adlon, the DZ
+  Bank, the Akademie and the US embassy there are OpenStreetMap's own
+  footprints. The facts table shapes the offline city. The Reichstag and the
+  Gate are different: those are bespoke models and are drawn on the live
+  site, so the Reichstag change is the one you will see.
+
+- 2026-10-19: the same screenshot had a whole building, windows and shop
+  band and all, hanging in the air behind the ruin. It has not been
+  reproduced. Across the full collapse above not one vertex went up, so it
+  is not the collapse lifting anything, and a rocket's hole in a wall is
+  capped at three metres, so it is not the hole either. The view was looking
+  south east from the Reichstag's west front; a link from the game with the
+  building in the middle of the frame is what this needs next.

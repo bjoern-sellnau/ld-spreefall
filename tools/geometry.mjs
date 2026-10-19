@@ -847,6 +847,36 @@ export function spire(mesh, cx, cy, cz, w, h, mat, opts = {}) {
   }
 }
 
+/**
+ * A triangular pediment: a prism whose two triangular ends face along `rot`.
+ * The front and back faces are the triangles, the two sloped faces are the
+ * roof, and the base is open because it sits on an entablature. This is what
+ * a classical portico carries, and it is a gable rather than a pyramid: a
+ * four sided spire on a portico reads as a roof from every side.
+ *
+ * @param {number} w across the facade
+ * @param {number} d front to back
+ * @param {number} rise from the eaves to the apex
+ * @param {number} rot the direction the front faces, radians in the xz plane
+ */
+export function pediment(mesh, cx, cy, cz, w, d, rise, mat, opts = {}) {
+  const seed = opts.seed || 0;
+  const flags = opts.flags || 0;
+  const rot = opts.rot || 0;
+  const c = Math.cos(rot), s = Math.sin(rot);
+  // u runs front to back along the facing, v across the facade.
+  const P = (u, v, h) => [cx + u * c - v * s, cy + h, cz + u * s + v * c];
+  const hd = d / 2, hw = w / 2;
+  const fl = P(-hd, -hw, 0), fr = P(-hd, hw, 0), ft = P(-hd, 0, rise);
+  const bl = P(hd, -hw, 0), br = P(hd, hw, 0), bt = P(hd, 0, rise);
+  const ref = [cx, cy - 1, cz];
+  const slope = Math.hypot(hw, rise);
+  emitFace(mesh, [fl, fr, ft], [[0, 0], [w, 0], [hw, rise]], mat, seed, flags, ref);
+  emitFace(mesh, [br, bl, bt], [[0, 0], [w, 0], [hw, rise]], mat, seed, flags, ref);
+  emitFace(mesh, [fr, br, bt, ft], [[0, 0], [d, 0], [d, slope], [0, slope]], mat, seed, flags, ref);
+  emitFace(mesh, [bl, fl, ft, bt], [[0, 0], [d, 0], [d, slope], [0, slope]], mat, seed, flags, ref);
+}
+
 /** A row of columns along a line, used for the Gate and the porticos. */
 export function colonnade(mesh, baseY, x0, z0, x1, z1, count, radius, height, mat, seed) {
   for (let i = 0; i < count; i++) {

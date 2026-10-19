@@ -267,7 +267,18 @@ export const BUILDINGS = [
     w: 88, d: 58, h: 26, kind: 'block', material: 'plaster', colour: '#e6dcc4', clear: 14 },
   { key: 'dz_bank', name: 'DZ Bank', lat: 52.51572, lon: 13.37876,
     w: 58, d: 42, h: 23, kind: 'block', material: 'stone', colour: '#dcd6c8', clear: 14 },
-  { key: 'akademie', name: 'Akademie der Kuenste', lat: 52.51660, lon: 13.37905,
+  // Pariser Platz 4, and it is on the SOUTH side, not the north. It stood on
+  // the north here for a long time, across the square from the DZ Bank, and
+  // three sources say otherwise: the square's own list runs anticlockwise
+  // from the Gate as Haus Sommer, US embassy, DZ Bank, Akademie, Adlon, so
+  // all four are the south side; Baedeker 1928 puts the Akademie at Nr. 4 on
+  // the Suedseite with the French embassy at Nr. 5 opposite; and Baunetz
+  // describes the new facade as being in the southeast corner of the square
+  // with the archive closing the plot off towards Behrenstrasse, which runs
+  // behind the south side. The DZ Bank's own neighbour note settles where
+  // along that side: its east facade adjoins the Akademie. So this sits with
+  // its west wall on the bank's east wall and its front on the same line.
+  { key: 'akademie', name: 'Akademie der Kuenste', lat: 52.51575, lon: 13.37948,
     w: 40, d: 36, h: 22, kind: 'block', material: 'glass', colour: '#b8c6cc', clear: 14 },
   // Pariser Platz 2. Wikipedia gives 52 30 55 N, 13 22 42 E and Structurae
   // 52 30 55.12 N, 13 22 42.07 E, which is where this now stands; it was 34 m
