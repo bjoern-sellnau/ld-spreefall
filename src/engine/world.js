@@ -884,6 +884,9 @@ export class World {
           if (nx * dx + nz * dz > 0) { nx = -nx; nz = -nz; }
           hit.nx = nx; hit.ny = 0; hit.nz = nz;
           hit.kind = 'wall';
+          // Which segment, so a test can say what stopped it.
+          hit.tile = tz * this.nx + tx;
+          hit.seg = o;
         }
       }
       // Advance to the next tile.

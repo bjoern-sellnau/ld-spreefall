@@ -1396,23 +1396,36 @@ async function run() {
       // top over the street, how long it is and how square to the railway,
       // which tells a pier (six and a half metres, a metre and a half long,
       // along the line) from a building or a wall somebody else put there.
+      // The ray hands back the segment it stopped on, which is the one to
+      // describe: the nearest segment to the hit point was a lintel four
+      // metres up three times running, which cannot stop a ray at 0.9 m.
       let what = null;
       if (hit) try {
         const hx = fx + c.dx * hit.t, hz = fz + c.dz * hit.t;
-        const index = s.world.tileIndex(hx, hz);
-        const segs = index >= 0 ? s.world.segments(index) : [];
-        let near = Infinity;
-        for (let i = 0; i + 5 < segs.length; i += 6) {
-          const [x1, z1, x2, z2, base, top] = segs.slice(i, i + 6);
-          const ex = x2 - x1, ez = z2 - z1, l2 = ex * ex + ez * ez || 1;
-          const u = Math.max(0, Math.min(1, ((hx - x1) * ex + (hz - z1) * ez) / l2));
-          const d = Math.hypot(x1 + ex * u - hx, z1 + ez * u - hz);
-          if (d >= near) continue;
-          near = d;
-          const g = s.world.groundHeight(hx, hz);
-          const len = Math.sqrt(l2);
+        const g = s.world.groundHeight(hx, hz);
+        const g0 = s.world.groundHeight(fx, fz);
+        if (hit.kind !== 'wall') {
+          what = `the ground: ${(g - g0).toFixed(1)} m higher than where it started`;
+        } else {
+          const segs = s.world.segments(hit.tile);
+          const [x1, z1, x2, z2, base, top] = segs.slice(hit.seg, hit.seg + 6);
+          const ex = x2 - x1, ez = z2 - z1, len = Math.hypot(ex, ez) || 1;
+          // And everything else standing within a metre of it that reaches
+          // down to head height, by length, which tells a pier from a house.
+          const others = [];
+          for (let i = 0; i + 5 < segs.length; i += 6) {
+            if (i === hit.seg) continue;
+            const [a1, b1, a2, b2, lo, hi] = segs.slice(i, i + 6);
+            const fx2 = a2 - a1, fz2 = b2 - b1, l2 = fx2 * fx2 + fz2 * fz2 || 1;
+            const u = Math.max(0, Math.min(1, ((hx - a1) * fx2 + (hz - b1) * fz2) / l2));
+            if (Math.hypot(a1 + fx2 * u - hx, b1 + fz2 * u - hz) > 1) continue;
+            if (lo - g > 2) continue;
+            others.push(`${Math.sqrt(l2).toFixed(1)} m ${(lo - g).toFixed(1)}..${(hi - g).toFixed(1)}`);
+          }
           what = `${(base - g).toFixed(1)} to ${(top - g).toFixed(1)} m up, ${len.toFixed(1)} m long, `
-            + `${Math.round(Math.abs(ex * c.dx + ez * c.dz) / len * 100)}% along the street`;
+            + `${Math.round(Math.abs(ex * c.dx + ez * c.dz) / len * 100)}% along the street, `
+            + `ground ${(g - g0).toFixed(1)} m from the start`
+            + (others.length ? `; also ${others.slice(0, 4).join(', ')}` : '');
         }
       } catch (e) { what = `could not tell: ${e.message}`; }
       results.push({ name: c.name, at: [Math.round(c.x), Math.round(c.z)], through: !hit,

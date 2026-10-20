@@ -938,7 +938,7 @@ function buildDistrict(district, overflight = false) {
               brick(qa[0], ya + foot, qa[1], nx, nz, 0, foot),
             );
             collision.push({ x1: qa[0], z1: qa[1], x2: qb[0], z2: qb[1],
-              base: open ? ya + foot : -2, top: DECK, surface: SURFACE.STONE });
+              base: open ? ya + foot : -2, top: Math.max(ya, yb) + DECK, surface: SURFACE.STONE });
           }
           // The wall over the arch, drawn in columns from the curve up to the
           // deck, so that everything above the opening is brick and the
@@ -967,7 +967,8 @@ function buildDistrict(district, overflight = false) {
             // takes the lower of the two, which is the safe way round: what
             // you can walk under you can shoot under.
             collision.push({ x1: p1[0], z1: p1[1], x2: p2[0], z2: p2[1],
-              base: yAt(p1[0], p1[1]) + SPRING, top: DECK, surface: SURFACE.STONE });
+              base: Math.min(yAt(p1[0], p1[1]), yAt(p2[0], p2[1])) + SPRING,
+              top: Math.max(yAt(p1[0], p1[1]), yAt(p2[0], p2[1])) + DECK, surface: SURFACE.STONE });
           }
         }
       }
