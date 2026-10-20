@@ -3177,3 +3177,11 @@ caps residency at 520.
   fifty over a built district with nothing drawn under it. Not reproduced
   in the next two; most likely a district adopted a frame before its tiles
   were uploaded. Kept as a finding rather than explained away.
+
+  With the district walk green on the live city, the run went on into the
+  machines for the first time in a while and was cancelled by the job's 45
+  minute limit, every check so far passing (the last was a mech killer of
+  theirs, 3011 off the hull). Twelve minutes of fetch and build come before
+  the first test and the suites have grown since the limit was set; it is
+  75 minutes now. Locally the machines are 62 of 62 and the interface 35
+  of 35.
