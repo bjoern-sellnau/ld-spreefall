@@ -3151,3 +3151,18 @@ caps residency at 520.
   built districts. The game says no as well: beginTravel refuses a district
   nobody has built, as the map already did, and the landing only holds for
   a district that can arrive.
+
+  With the flight landing, the live run was down to three. Two were the
+  test measuring the wrong thing on a city of three districts side by
+  side. The ruin check read the tallest wall against the ground at the
+  blast, which is the bottom of an eleven metre crater afterwards, so every
+  wall left standing read eleven metres taller (23 m before, 29 m after,
+  when the walls had in fact come down to 18 m). tallestNear takes the
+  ground to measure from, and the check gives it the ground from before
+  the blast. And there is nowhere on that deploy far enough away for the
+  streamer to drop the middle, so the check lets it go by hand when the
+  streamer did not, and says which it was. The corridor check asked for an
+  overflight district on a flight between two districts that share an edge,
+  with nothing built in reach between them; it now works out what is built
+  within the flight streamer's reach of the line and only asks when
+  something is.

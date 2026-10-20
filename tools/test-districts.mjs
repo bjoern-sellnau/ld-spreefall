@@ -497,6 +497,22 @@ async function run() {
       const far = s.world.entryFor(other.id);
       const tx = (far.bounds.minX + far.bounds.maxX) / 2;
       const tz = (far.bounds.minZ + far.bounds.maxZ) / 2;
+      // The built districts the flight passes within reach of, other than
+      // where it starts and where it lands: those two are held at the fine
+      // tier, so these are all the overflight build can be asked for. On a
+      // deploy with three districts side by side there are none.
+      const reach = s.flightPlan.reach;
+      const sx = s.player.x, sz = s.player.z;
+      const boxAway = (px, pz, b) => Math.hypot(
+        Math.max(b.minX - px, 0, px - b.maxX), Math.max(b.minZ - pz, 0, pz - b.maxZ));
+      const corridor = s.world.catalogue.filter((d) => {
+        if (d.id === home.id || d.id === far.id || !s.world.isBuilt(d)) return false;
+        for (let k = 0; k <= 20; k++) {
+          const t = k / 20;
+          if (boxAway(sx + (tx - sx) * t, sz + (tz - sz) * t, d.bounds) <= reach) return true;
+        }
+        return false;
+      }).map((d) => d.id);
       const started = s.beginTravel(tx, tz);
       const loadedAtStart = s.world.loadedIds.slice();
       // What the flight passes over, sampled every frame: a card would be a
@@ -523,6 +539,7 @@ async function run() {
       return {
         started,
         loadedAtStart,
+        corridor,
         card, overBuilt, overNothing, sawCoarse,
         peakMB: Math.round(peakMB * 10) / 10,
         coarseAfter: s.world.loadedIds.filter((id) => s.world.isOverflight(id)),
@@ -582,7 +599,7 @@ async function run() {
     const opened = s.demolition.blast(x, before, z, 170, 4000).length;
     for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
     const dug = s.world.groundHeight(x, z);
-    const tallAfter = s.world.tallestNear(x, z, 60);
+    const tallAfter = s.world.tallestNear(x, z, 60, before);
     // Out to the far side of the city and back, which is far enough for the
     // streamer to let go of this district: a neighbour no longer counts,
     // because the one you came from stays in memory behind you now.
@@ -601,6 +618,16 @@ async function run() {
     // It is let go on the streamer's next pass rather than the instant you
     // arrive, so give it a few.
     for (let i = 0; i < 120; i++) await new Promise((r) => requestAnimationFrame(r));
+    // A deploy with three districts built has nothing beyond the drop
+    // distance: every built district is next door to the middle, and the one
+    // you came from is held behind you, as it should be. What this is about is
+    // the ruin outliving the district, so there it is let go by hand.
+    let letGo = 'by the streamer';
+    if (s.world.loaded(home)) {
+      s.world.unloadDistrict(home);
+      letGo = `by hand from ${next.id}`;
+      for (let i = 0; i < 10; i++) await new Promise((r) => requestAnimationFrame(r));
+    }
     const gone = !s.world.loaded(home);
     await s.crossInto(x, z);
     s.teleport(x, z);
@@ -613,9 +640,10 @@ async function run() {
       back: Number(s.world.groundHeight(x, z).toFixed(2)),
       tallBefore: Math.round(tallBefore),
       tallAfter: Math.round(tallAfter),
-      tallBack: Math.round(s.world.tallestNear(x, z, 60)),
+      tallBack: Math.round(s.world.tallestNear(x, z, 60, before)),
       here: s.world.idAt(s.player.x, s.player.z),
-      why: `mode ${modeAtStart} then ${modeAtBlast}, ${opened} sites opened at `
+      why: `${home} ${gone ? 'let go' : 'still held'} ${letGo}, `
+        + `mode ${modeAtStart} then ${modeAtBlast}, ${opened} sites opened at `
         + `${Math.round(x)}, ${Math.round(z)} in ${home}, buildings ${s.demolition.buildings}, `
         + `ground ${s.demolition.ground}, enabled ${s.demolition.enabled}`,
     };
@@ -677,7 +705,10 @@ async function run() {
       flight.overNothing === 0,
       `${flight.overBuilt - flight.overNothing} of ${flight.overBuilt} frames over drawn ground`);
     check('the corridor comes down as the overflight build',
-      flight.sawCoarse > 0, `coarse districts held on ${flight.sawCoarse} frames`);
+      flight.sawCoarse > 0 || flight.corridor.length === 0,
+      flight.corridor.length
+        ? `coarse districts held on ${flight.sawCoarse} frames, ${flight.corridor.join(', ')} in reach`
+        : 'nothing built in reach between the take off and the landing');
     check('and is let go the moment the flight ends',
       flight.coarseAfter.length === 0 && flight.landedOnCity,
       flight.coarseAfter.length ? `still coarse: ${flight.coarseAfter.join(', ')}`

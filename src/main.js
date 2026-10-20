@@ -5635,6 +5635,7 @@ async function main() {
     endCinema() { endCinema(); },
     travel,
     beginTravel(x, z) { return beginTravel(x, z); },
+    get flightPlan() { return FLIGHT; },
     armNuke(x, z) { return armNuke(x, z); },
     releaseNuke() { return releaseNuke(); },
     closeTargeting() { closeTargeting(true); },

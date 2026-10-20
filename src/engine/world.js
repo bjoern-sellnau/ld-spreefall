@@ -816,11 +816,13 @@ export class World {
   /**
    * The tallest thing standing in a circle, in metres above the ground there.
    * Used to decide where a collapse breaks, which wants an answer in one pass
-   * over the segments rather than a raycast.
+   * over the segments rather than a raycast. The ground can be given: after
+   * a crater the ground at the middle is ten metres down, and a wall that
+   * did not move would read ten metres taller against it.
    */
-  tallestNear(x, z, radius) {
+  tallestNear(x, z, radius, ground = this.groundHeight(x, z)) {
     let best = 0;
-    const g = this.groundHeight(x, z);
+    const g = ground;
     this.forEachSegmentTile(x - radius, z - radius, x + radius, z + radius, (segs, count) => {
       for (let i = 0; i < count; i++) {
         const o = i * 6;
