@@ -5,6 +5,8 @@
 //   node tools/fetch-osm.mjs --all               every district, in order
 //   node tools/fetch-osm.mjs --force             always refetch
 //   node tools/fetch-osm.mjs --offline           skip the network, synthesise
+//   node tools/fetch-osm.mjs --all --profile=full   every district with the
+//                                                full set of tags tier 0 needs
 //
 // Each district is one query over its own box plus a margin, because one query
 // for all of Berlin is a few hundred megabytes that no mirror wants to serve
@@ -18,7 +20,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { BBOX } from './geo.mjs';
-import { DISTRICTS, CORE_ID, districtById, fetchBbox, extent } from './districts.mjs';
+import {
+  DISTRICTS, CORE_ID, districtById, fetchBbox, extent, profileFrom, buildPlan, wantsFullQuery,
+} from './districts.mjs';
 import { parseOsmXml, counts } from './osm-xml.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -54,7 +58,7 @@ const MIRRORS = [
  */
 export function overpassQuery(bbox = BBOX, tier = 0) {
   const b = `${bbox.south},${bbox.west},${bbox.north},${bbox.east}`;
-  if (tier >= 2) {
+  if (!wantsFullQuery(tier)) {
     return `[out:xml][timeout:180][bbox:${b}];
 (
   way["building"];
@@ -166,6 +170,71 @@ export async function fetchOverpass(query, { attempts = 4, deadlineMs = 600000 }
   throw lastErr || new Error('overpass unreachable');
 }
 
+/**
+ * A box cut into pieces no bigger than `most` metres a side. The full query
+ * over one of the eight kilometre districts is seventy square kilometres of
+ * every tag the middle of town is built from, and a mirror gives up on that
+ * long before it is done; nine pieces of it each come back.
+ */
+export function piecesOf(bbox, most = 3000) {
+  const e = extent(bbox);
+  const nx = Math.max(1, Math.ceil(e.width / most));
+  const nz = Math.max(1, Math.ceil(e.depth / most));
+  const out = [];
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      out.push({
+        west: bbox.west + ((bbox.east - bbox.west) * i) / nx,
+        east: bbox.west + ((bbox.east - bbox.west) * (i + 1)) / nx,
+        south: bbox.south + ((bbox.north - bbox.south) * j) / nz,
+        north: bbox.south + ((bbox.north - bbox.south) * (j + 1)) / nz,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Several Overpass answers as one. Pieces of one box overlap wherever a way
+ * crosses a cut, because each piece brings every way that touches it and
+ * every node of those ways, so an element is kept once, by its type and id.
+ * Overpass writes nodes, then ways, then relations; so does this, each in id
+ * order, which is what a single query over the whole box would have given.
+ */
+export function mergeOsmXml(texts) {
+  const kept = { node: new Map(), way: new Map(), relation: new Map() };
+  let head = null;
+  for (const text of texts) {
+    const first = text.search(/<(node|way|relation)\s/);
+    if (head === null) head = first < 0 ? text.replace(/<\/osm>\s*$/, '') : text.slice(0, first);
+    if (first < 0) continue;
+    const re = /<(node|way|relation)\s[^>]*?(\/?)>/g;
+    re.lastIndex = first;
+    let m;
+    while ((m = re.exec(text))) {
+      const type = m[1];
+      let end = re.lastIndex;
+      // An element with children runs to its own closing tag. None of the
+      // three is ever nested inside another of the same type.
+      if (!m[2]) {
+        const close = text.indexOf(`</${type}>`, end);
+        if (close < 0) break;
+        end = close + type.length + 3;
+      }
+      const id = /\sid="(-?\d+)"/.exec(m[0]);
+      if (id && !kept[type].has(id[1])) kept[type].set(id[1], text.slice(m.index, end));
+      re.lastIndex = end;
+    }
+  }
+  const lines = [head ? head.trimEnd() : '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6">'];
+  for (const type of ['node', 'way', 'relation']) {
+    const ids = [...kept[type].keys()].sort((a, b) => Number(a) - Number(b));
+    for (const id of ids) lines.push(`  ${kept[type].get(id)}`);
+  }
+  lines.push('</osm>', '');
+  return lines.join('\n');
+}
+
 async function main() {
   const force = process.argv.includes('--force');
   const offline = process.argv.includes('--offline');
@@ -186,8 +255,13 @@ async function main() {
     wanted = [d];
   } else wanted = [districtById(CORE_ID)];
 
+  // The tier a district is fetched for is the tier it is going to be built
+  // at, which the profile decides: a full build wants every district with
+  // the tags of the middle of town.
+  const profile = profileFrom(process.argv);
   let missed = 0;
-  for (const district of wanted) {
+  for (const row of wanted) {
+    const district = { ...row, tier: buildPlan(row, profile, process.argv).tier };
     if (!await fetchDistrict(district, { force, offline, liveOnly })) missed++;
   }
   if (missed) console.log(`\n${missed} district${missed === 1 ? '' : 's'} left for next time`);
@@ -200,21 +274,38 @@ async function fetchDistrict(district, { force, offline, liveOnly = false }) {
   const e = extent(district.bbox);
   const label = `${district.id} (tier ${district.tier}, ${e.area.toFixed(1)} km2)`;
 
+  const full = wantsFullQuery(district.tier);
   if (!force && fs.existsSync(file)) {
     const m = fs.existsSync(meta) ? JSON.parse(fs.readFileSync(meta, 'utf8')) : {};
-    console.log(`cache hit: ${label} ${(fs.statSync(file).size / 1e6).toFixed(2)} MB, source ${m.source || 'unknown'}`);
-    report(file);
-    return true;
+    // An extract fetched with the short list of tags cannot be built at a
+    // tier that wants the long one: the shop fronts, the amenities and the
+    // barriers are not in it. Older extracts did not say which they were,
+    // and their tier does. A synthetic one is the same whatever is asked.
+    const had = m.query || (m.tier !== undefined && !wantsFullQuery(m.tier) ? 'reduced' : 'full');
+    const stale = full && had === 'reduced' && m.source !== 'synthetic' && !offline;
+    if (!stale) {
+      console.log(`cache hit: ${label} ${(fs.statSync(file).size / 1e6).toFixed(2)} MB, source ${m.source || 'unknown'}`);
+      report(file);
+      return true;
+    }
+    console.log(`refetching ${label}: the extract has the short list of tags and this build wants the full one`);
   }
 
   let text = null;
   let source = 'synthetic';
   if (!offline) {
-    console.log(`fetching ${label} from Overpass`);
+    const pieces = full ? piecesOf(fetchBbox(district)) : [fetchBbox(district)];
+    console.log(`fetching ${label} from Overpass`
+      + `${pieces.length > 1 ? ` in ${pieces.length} pieces` : ''}`);
     try {
-      const got = await fetchOverpass(overpassQuery(fetchBbox(district), district.tier));
-      text = got.text;
-      source = got.source;
+      const texts = [];
+      for (const [i, box] of pieces.entries()) {
+        if (pieces.length > 1) console.log(`  piece ${i + 1} of ${pieces.length}`);
+        const got = await fetchOverpass(overpassQuery(box, district.tier));
+        texts.push(got.text);
+        source = got.source;
+      }
+      text = texts.length === 1 ? texts[0] : mergeOsmXml(texts);
     } catch (err) {
       console.error(`\nOverpass is unreachable: ${err.message}`);
     }
@@ -234,6 +325,7 @@ async function fetchDistrict(district, { force, offline, liveOnly = false }) {
   fs.writeFileSync(file, text);
   fs.writeFileSync(meta, JSON.stringify({
     source, district: district.id, tier: district.tier, bbox: district.bbox,
+    query: full ? 'full' : 'reduced',
     fetchedAt: new Date().toISOString(), bytes: text.length,
   }, null, 2));
   console.log(`wrote ${file}, ${(text.length / 1e6).toFixed(2)} MB, source ${source}`);
