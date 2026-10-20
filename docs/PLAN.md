@@ -3166,3 +3166,14 @@ caps residency at 520.
   with nothing built in reach between them; it now works out what is built
   within the flight streamer's reach of the line and only asks when
   something is.
+
+  The run after that was 32 of 34, and both were the test again. Letting
+  the middle go by hand and then waiting ten frames gave the streamer time
+  to fetch it straight back, since from next door it is in reach; the
+  check reads it at once now. And the corridor was worked out from the
+  take off, where the flight streamer never centres: it centres one lead
+  (1400 m) ahead of the camera and never past the landing, so the test
+  sweeps that line instead. Open: one local run of three saw one frame of
+  fifty over a built district with nothing drawn under it. Not reproduced
+  in the next two; most likely a district adopted a frame before its tiles
+  were uploaded. Kept as a finding rather than explained away.

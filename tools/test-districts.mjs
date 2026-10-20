@@ -505,10 +505,15 @@ async function run() {
       const sx = s.player.x, sz = s.player.z;
       const boxAway = (px, pz, b) => Math.hypot(
         Math.max(b.minX - px, 0, px - b.maxX), Math.max(b.minZ - pz, 0, pz - b.maxZ));
+      // The streamer centres its circle on a point the lead ahead of the
+      // camera, never past the landing, so that is the line it sweeps: from
+      // one lead out to the far end, not from the take off.
+      const length = Math.hypot(tx - sx, tz - sz);
+      const from = Math.min(s.flightPlan.lead, length) / Math.max(length, 1);
       const corridor = s.world.catalogue.filter((d) => {
         if (d.id === home.id || d.id === far.id || !s.world.isBuilt(d)) return false;
         for (let k = 0; k <= 20; k++) {
-          const t = k / 20;
+          const t = from + (1 - from) * k / 20;
           if (boxAway(sx + (tx - sx) * t, sz + (tz - sz) * t, d.bounds) <= reach) return true;
         }
         return false;
@@ -622,13 +627,15 @@ async function run() {
     // distance: every built district is next door to the middle, and the one
     // you came from is held behind you, as it should be. What this is about is
     // the ruin outliving the district, so there it is let go by hand.
+    // Read at once: the middle is in the streamer's reach from next door,
+    // and on the live run it was fetched back inside the ten frames this
+    // used to wait, which is the streamer doing its job.
     let letGo = 'by the streamer';
-    if (s.world.loaded(home)) {
-      s.world.unloadDistrict(home);
+    let gone = !s.world.loaded(home);
+    if (!gone) {
+      gone = s.world.unloadDistrict(home) && !s.world.loaded(home);
       letGo = `by hand from ${next.id}`;
-      for (let i = 0; i < 10; i++) await new Promise((r) => requestAnimationFrame(r));
     }
-    const gone = !s.world.loaded(home);
     await s.crossInto(x, z);
     s.teleport(x, z);
     for (let i = 0; i < 30; i++) await new Promise((r) => requestAnimationFrame(r));
