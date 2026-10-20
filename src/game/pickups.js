@@ -7,6 +7,9 @@
 // could actually stand. That keeps them out of walls and off the river without
 // anyone having to author a list of coordinates.
 
+/** How far above the ground a pad hangs, in metres. */
+const HOVER = 0.9;
+
 export const KIND = {
   AMMO: 'ammo',
   HEALTH: 'health',
@@ -87,7 +90,7 @@ export class Pickups {
         }
         if (tooClose) continue;
         this.pads.push({
-          kind, x, y: g + 0.9, z,
+          kind, x, y: g + HOVER, z,
           ready: true, timer: 0, bob: Math.random() * 6.28, spin: Math.random() * 6.28,
         });
         placed++;
@@ -115,6 +118,10 @@ export class Pickups {
   update(dt, player) {
     let taken = null;
     for (const p of this.pads) {
+      // The ground under a pad does not stay put: a blast digs it out and a
+      // district arriving next door replaces it. A pad that kept the height
+      // it was put down at hung in the air over the crater.
+      p.y = this.world.groundHeight(p.x, p.z) + HOVER;
       p.bob += dt * 1.8;
       p.spin += dt * 1.1;
       if (!p.ready) {

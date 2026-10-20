@@ -3254,3 +3254,23 @@ So there are two cities now, and a profile picks which:
   street in Ring 1-2 at both tiers is in tier-01-standard.png and
   tier-02-full.png: tier 0 brings the cornices, the lamps, the parked cars,
   the kerbs and three times the trees.
+- 2026-10-20: the checks for 71d went red on one line, and it was not 71d:
+  "and all of them stand on the ground" in the arsenal, with no detail. The
+  pads took their height once, when they were put down, and the checks before
+  that one dig craters and stream districts in. A pad over a hole that came
+  later hung in the air above it, which is a real if small fault and why the
+  line had passed on the same data an hour before: which pad a blast lands
+  near is not fixed. A pad now sits on whatever ground is under it each step,
+  and the check says how far off the worst one is.
+- 2026-10-20: the first deploy with it, on the live city (Pages run 141).
+  The site was already 932.39 MB before anything moved, 813 MB of districts
+  and 120.71 MB of overflight bundles, which left 18 MB under the 950 MB
+  line. Mitte took its tier 2 overflight (+2.74 MB) and Hansaviertel (c2r1)
+  went up to tier 0 (+6.82 MB), to 941.95 MB. Kreuzberg (c3r2) would have
+  been 964.51 and Gesundbrunnen (c3r0) 974.04, so both were built back, and
+  Tiergarten (c2r2) could not get the full tags out of Overpass. The step
+  took 10 min 50 s on an eight minute clock, because one Overpass query can
+  hang for ten: fetch-osm takes `--deadline=` now and fit-pages gives it
+  what is left, two minutes at most. The honest reading: on Pages the gain is
+  two districts, because the standard city already fills the site. Room for
+  more would have to come out of the overflight bundles or the outer tiers.

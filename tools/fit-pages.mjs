@@ -103,7 +103,12 @@ function main() {
     // bigger, will not either.
     if (misses >= 3) break;
     if (!hasFullTags(row.id)) {
-      run(['tools/fetch-osm.mjs', `--district=${row.id}`, `--tier=${up.tier}`, '--live-only']);
+      // Never longer than what is left, and never more than two minutes for
+      // one district: a mirror can hold a query open for ten, and the first
+      // deploy that used this spent eleven minutes on an eight minute clock.
+      const left = Math.max(10, Math.min(120, Math.round((until - Date.now()) / 1000)));
+      run(['tools/fetch-osm.mjs', `--district=${row.id}`, `--tier=${up.tier}`, '--live-only',
+        `--deadline=${left}`]);
       if (!hasFullTags(row.id)) {
         console.log(`${row.id.padEnd(6)} skipped, Overpass would not give up the full tags`);
         continue;

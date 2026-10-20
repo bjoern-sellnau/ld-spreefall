@@ -243,6 +243,9 @@ async function main() {
   // repository builds and plays with no network at all; it is a stand in for
   // development, and a stand in has no business being deployed as Berlin.
   const liveOnly = process.argv.includes('--live-only');
+  // How long Overpass gets, in seconds, for a caller with a clock of its own.
+  const limit = process.argv.find((a) => a.startsWith('--deadline='));
+  const deadlineMs = limit ? Number(limit.slice('--deadline='.length)) * 1000 : 600000;
   const all = process.argv.includes('--all');
   const named = process.argv.find((a) => a.startsWith('--district='));
   fs.mkdirSync(RAW_DIR, { recursive: true });
@@ -262,13 +265,13 @@ async function main() {
   let missed = 0;
   for (const row of wanted) {
     const district = { ...row, tier: buildPlan(row, profile, process.argv).tier };
-    if (!await fetchDistrict(district, { force, offline, liveOnly })) missed++;
+    if (!await fetchDistrict(district, { force, offline, liveOnly, deadlineMs })) missed++;
   }
   if (missed) console.log(`\n${missed} district${missed === 1 ? '' : 's'} left for next time`);
 }
 
 /** @returns {Promise<boolean>} whether there is an extract for it now */
-async function fetchDistrict(district, { force, offline, liveOnly = false }) {
+async function fetchDistrict(district, { force, offline, liveOnly = false, deadlineMs = 600000 }) {
   const file = rawFile(district.id);
   const meta = metaFile(district.id);
   const e = extent(district.bbox);
@@ -297,11 +300,13 @@ async function fetchDistrict(district, { force, offline, liveOnly = false }) {
     const pieces = full ? piecesOf(fetchBbox(district)) : [fetchBbox(district)];
     console.log(`fetching ${label} from Overpass`
       + `${pieces.length > 1 ? ` in ${pieces.length} pieces` : ''}`);
+    const until = Date.now() + deadlineMs;
     try {
       const texts = [];
       for (const [i, box] of pieces.entries()) {
         if (pieces.length > 1) console.log(`  piece ${i + 1} of ${pieces.length}`);
-        const got = await fetchOverpass(overpassQuery(box, district.tier));
+        const got = await fetchOverpass(overpassQuery(box, district.tier),
+          { deadlineMs: Math.max(5000, until - Date.now()) });
         texts.push(got.text);
         source = got.source;
       }
