@@ -48,7 +48,7 @@ test('one outline is claimed once however many pieces are in it', () => {
 });
 
 // --- pieces that start in the air ------------------------------------------
-import { podiumHeight, replacedByLandmark, volumeFloor } from '../build-world.mjs';
+import { podiumHeight, replacedByLandmark, volumeFloor, unwalled, roofFloor } from '../build-world.mjs';
 
 test('where a volume starts: metres first, then levels, else the street', () => {
   assert.equal(volumeFloor({ min_height: '15' }), 15);
@@ -114,4 +114,14 @@ test('railway ways that meet end to end are one line, and a fork goes the straig
   assert.deepEqual(main.line[0], [0, 0]);
   assert.deepEqual(main.line[main.line.length - 1], [300, 5]);
   assert.equal(out.length, 3, 'the line, the spur on its own, and the tram which is not a railway');
+});
+
+test('a roof with open sides has no walls under it', () => {
+  assert.equal(unwalled({ building: 'roof' }), true);
+  assert.equal(unwalled({ building: 'carport' }), true);
+  assert.equal(unwalled({ 'building:part': 'roof' }), true);
+  assert.equal(unwalled({ building: 'yes' }), false);
+  // A slab under its own top, unless the tags say where it starts.
+  assert.equal(roofFloor({ building: 'roof' }, 4), 3.4);
+  assert.equal(roofFloor({ building: 'roof', min_height: '7' }, 12), 7);
 });

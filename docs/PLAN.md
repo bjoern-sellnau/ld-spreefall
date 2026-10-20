@@ -3088,3 +3088,25 @@ caps residency at 520.
   back one shared result object and the deck ray, cast second, overwrote
   the head height one. Each ray has its own result now.
 
+## 70. What really stopped the three streets
+
+- 2026-10-20: with each ray given its own result the live run named the
+  blockers for the first time. Reinhardtstrasse and Unterbaumstrasse: a box
+  4.3 m long and 1.5 m high, twelve to fourteen metres past the railway,
+  which is a parked car; the probe was at 0.9 m. Friedrichstrasse: a wall
+  from the street to exactly 4.0 m, 33 m long, two metres past the railway.
+  4 m is this builder's default height for `building=roof`, which it
+  extruded as a solid block from the street up.
+- Source checked: OSM2World, the open 3D renderer for OpenStreetMap, gives
+  `roof` and `carport` `hasWalls = false` in BuildingDefaults.java and
+  builds a `building:part=roof` as a RoofBuildingPart, "a roof without
+  walls" (github.com/tordanik/OSM2World, core/.../building/). The OSM wiki
+  itself is not reachable from this container.
+- So a roof with open sides (`unwalled`) starts where its tags say, or else
+  as a slab 0.6 m under its own top (`roofFloor`), without windows, and is
+  collided against only from there: you walk under the canopy.
+- The viaduct probe runs at 1.9 m, a head, rather than 0.9 m, a knee, so a
+  parked car under the arches no longer counts as the viaduct blocking the
+  street; a pier still does, from the ground to the deck.
+- Unit tests 72 of 72; `test-city` 81 of 81 on the synthetic city.
+

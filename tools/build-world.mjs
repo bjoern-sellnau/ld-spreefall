@@ -1047,7 +1047,8 @@ function buildDistrict(district, overflight = false) {
     // the order the tagging scheme puts them in.
     // A podium is the outline's own ground floors, whatever the outline says
     // about where it starts.
-    const floor = podium ? 0 : volumeFloor(tags);
+    const open = !podium && unwalled(tags);
+    const floor = podium ? 0 : (open ? roofFloor(tags, height) : volumeFloor(tags));
     const minH = floor > 0 ? floor : NaN;
     const seed = hashInt(Math.round(cx * 4), Math.round(cz * 4)) & 255;
 
@@ -1106,7 +1107,7 @@ function buildDistrict(district, overflight = false) {
     // pattern itself costs nothing to carry, so the only reason to refuse it
     // is that the wall is not a frontage: raw concrete has no windows cut
     // into it wherever it stands.
-    const blank = wallMat === MAT.CONCRETE || !tier.windows;
+    const blank = wallMat === MAT.CONCRETE || !tier.windows || open;
     if (blank) blankWalls++;
     extrudeBuilding(mesh, { outer: ring, holes: b.holes }, {
       base: from,
@@ -1976,6 +1977,30 @@ export function volumeFloor(tags) {
   if (Number.isFinite(minMetres)) return Math.max(0, minMetres);
   if (Number.isFinite(minLevels) && minLevels > 0) return minLevels * LEVEL_HEIGHT;
   return 0;
+}
+
+/**
+ * A roof with open sides: `building=roof`, a carport, or a piece that is
+ * only the roof. OSM2World, which renders these tags into 3D, builds them
+ * with no walls (`hasWalls = false` for both in its BuildingDefaults, and a
+ * RoofBuildingPart for the piece). Here they were extruded from the street
+ * up, four metres of solid block, and the canopy over Friedrichstrasse at
+ * the station was a wall across the road.
+ */
+export function unwalled(tags) {
+  return tags.building === 'roof' || tags.building === 'carport'
+    || tags['building:part'] === 'roof';
+}
+
+/**
+ * Where a roof with open sides starts: whatever the tags say, or else a
+ * slab just under its own top, so what is drawn is the roof and a lip of
+ * fascia, and you walk under it.
+ */
+export function roofFloor(tags, height) {
+  const tagged = volumeFloor(tags);
+  if (tagged > 0) return tagged;
+  return Math.max(0, height - 0.6);
 }
 
 /**

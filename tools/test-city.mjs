@@ -1413,9 +1413,11 @@ async function run() {
       s.teleport(c.x - c.dx * 30, c.z - c.dz * 30);
       for (let i = 0; i < 4; i++) s.fixedForTest(1 / 60);
       // Along the street from sixteen metres one side to sixteen the other,
-      // at the height of somebody walking it.
+      // at the height of somebody's head. It was at 0.9 m, and on the real
+      // city two of the three streets it reported blocked were stopped by
+      // a parked car, 4.3 m long and 1.5 m high, which you walk round.
       const fx = c.x - c.dx * 16, fz = c.z - c.dz * 16;
-      const y = s.world.groundHeight(fx, fz) + 0.9;
+      const y = s.world.groundHeight(fx, fz) + 1.9;
       // Each ray with a result of its own: the world hands back one shared
       // object unless it is given another, so the second ray used to write
       // over the first and every report described the arch at deck height
