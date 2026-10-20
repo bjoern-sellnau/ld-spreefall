@@ -22,7 +22,7 @@
 // which is why a flattened block still has a street running past it.
 
 import { COLLISION_GRID, GROUND_SCALE } from '../shared/constants.js';
-import { bakeSite } from './bake.js';
+import { bakeSite, columnHash, columnShare } from './bake.js';
 import { segmentDistance } from '../engine/world.js';
 
 export const DEMO = {
@@ -46,14 +46,17 @@ export const DEMO = {
   bigBlast: 60,
   // How long a stage takes to play out. A bigger site takes longer, because a
   // district folding in is not a wall falling over.
-  fallTime: 1.3,
+  // A five storey block in free fall is on the ground in about two seconds.
+  fallTime: 1.8,
   fallPerMetre: 0.011,
   // The collision opens up partway through the fall rather than at the end,
   // so you are not stopped by a wall that is visibly no longer there.
   openAt: 0.45,
   // The heap left where something fell, as a share of the site radius.
   rubble: 0.11,
-  maxRubble: 4.5,
+  // With up to a metre of stacked floors on top, under the five metres a
+  // man cannot see over.
+  maxRubble: 3.5,
 
   // Craters.
   //
@@ -160,6 +163,7 @@ export class Demolition {
     // edit, and it has to survive the tile being cut into pieces too.
     this.original = new Map();
     this.onStage = null;         // fn(site, level, previousLevel)
+    this.onRefine = null;        // fn(site), before a site starts to move
     // fn(site) the first time a site gains a crater, so the ground under it
     // can be cut finer before anything is displaced.
     this.onCrater = null;
@@ -379,6 +383,9 @@ export class Demolition {
     }
     site.fall = DEMO.fallTime + site.radius * DEMO.fallPerMetre;
     site.t = 0;
+    // Quiet or not, whatever is about to fall is given something to fall
+    // along. The crater's own site is opened quietly, and it is the biggest.
+    if (this.onRefine) this.onRefine(site);
     // A hole in the road has no storey coming away and no dust at roof
     // height, so it does not announce itself as a collapse.
     if (this.onStage && !opts.quiet) this.onStage(site, level, was);
@@ -391,7 +398,11 @@ export class Demolition {
       if (site.shown < site.level) {
         site.t += dt;
         const k = Math.min(1, site.t / site.fall);
-        site.shown = site.from + (site.level - site.from) * (k * k * (3 - 2 * k));
+        // Under gravity: slow to start, faster all the way, and stopped by the
+        // ground rather than easing in to land. It was a smoothstep, which is
+        // slow at both ends, and a building that settles gently onto its own
+        // rubble is a building on a hydraulic ram.
+        site.shown = site.from + (site.level - site.from) * (k * k);
         // The hole goes into the collision field as it goes into the picture,
         // a little each step, rather than all at once when the dust settles.
         // Before this, the drawn ground sank for a second while the ground
@@ -509,8 +520,14 @@ export class Demolition {
         // The same cut the shader makes, out of the same original height,
         // and the heap the rubble leaves on top of it.
         const full = Math.max(0, tops[i] - base);
-        const local = Math.min(1, site.level * k);
-        const cut = full * (1 - local) + (local > 0 ? site.rubble * k : 0);
+        // Column by column, the way the shader breaks it: a column that goes
+        // leaves its heap and its stack of floors, one that stays loses its
+        // broken top.
+        const h = columnHash(mx, mz);
+        const share = columnShare(k, h);
+        const local = Math.min(1, site.level * Math.max(share, k * 0.45 * (0.6 + 0.8 * h)));
+        const left = full * (1 - local);
+        const cut = left + (local > 0 ? site.rubble * k + Math.min((full - left) * 0.08, 1.0) : 0);
         const top = base + Math.min(full, cut);
         if (top < segs[o + 5]) { segs[o + 5] = top; touched++; }
       }

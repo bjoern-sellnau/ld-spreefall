@@ -759,6 +759,60 @@ export class Effects {
     this.shake = Math.min(1, this.shake + 0.22);
   }
 
+  /**
+   * The cloud out of a building coming down. Drawn over the frame rather than
+   * added to it, in the pool the blood uses, because dust is darker than the
+   * sky and added to it is nothing at all: grey added to a bright afternoon
+   * comes out as a brighter afternoon. It rolls out low along the ground,
+   * fast at first and then hanging, and a column goes up out of the middle.
+   *
+   * @param {number} height how tall what came down was
+   */
+  collapseDust(x, y, z, radius, height) {
+    const surge = Math.min(70, 18 + Math.round(radius * 1.1));
+    for (let i = 0; i < surge; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 3;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * radius * 0.7;
+      s.ax = x + Math.cos(a) * r;
+      s.ay = y + 1.5 + Math.random() * 3;
+      s.az = z + Math.sin(a) * r;
+      // Against a drag of 2.2 a second this carries about a radius out.
+      const speed = radius * (1.4 + Math.random() * 1.8);
+      s.vx = Math.cos(a) * speed;
+      s.vy = 0.4 + Math.random() * 1.6;
+      s.vz = Math.sin(a) * speed;
+      s.gravity = -0.12;
+      s.maxLife = 8 + Math.random() * 7;
+      s.life = s.maxLife;
+      const g = 0.5 + Math.random() * 0.12;
+      s.r = g * 1.05; s.g = g; s.b = g * 0.9;
+      s.size = 3 + radius * (0.16 + Math.random() * 0.18);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    const column = Math.min(30, 8 + Math.round(radius * 0.5));
+    for (let i = 0; i < column; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 3;
+      s.ax = x + (Math.random() - 0.5) * radius * 0.8;
+      s.ay = y + Math.random() * height;
+      s.az = z + (Math.random() - 0.5) * radius * 0.8;
+      s.vx = (Math.random() - 0.5) * 2;
+      s.vy = 1.5 + Math.random() * 3.5;
+      s.vz = (Math.random() - 0.5) * 2;
+      s.gravity = -0.2;
+      s.maxLife = 7 + Math.random() * 6;
+      s.life = s.maxLife;
+      const g = 0.55 + Math.random() * 0.1;
+      s.r = g * 1.04; s.g = g; s.b = g * 0.9;
+      s.size = 4 + radius * (0.2 + Math.random() * 0.2);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+  }
+
   update(dt) {
     this.shake = Math.max(0, this.shake - dt * 2.6);
     for (const s of this.pool) {

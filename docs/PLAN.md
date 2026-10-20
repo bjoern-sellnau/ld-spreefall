@@ -3031,3 +3031,60 @@ caps residency at 520.
   paler than the wall, not darker.
 - `tools/test-city.mjs` 81 of 81 and `tools/test-cheats.mjs` 112 of 112.
 
+## 69. A building falls like a building
+
+- 2026-10-20: "how does the destruction behave? a house does not fall down
+  realistically". Frames of a 30 m blast against a six storey block from
+  across the street showed why: the frontage became a ramp, the roof slid
+  down into a slope and the windows smeared along it, and the whole thing
+  eased in and out like a hydraulic ram.
+- Cause: a wall in the bundle is one quad from the pavement to the eaves,
+  with the windows drawn by the shader, so there was nothing in it to break.
+  The collapse could only pull its top corners down, by a share that fell
+  off smoothly with distance from the middle of the site, and a frontage
+  pulled down by its corners by a smooth share is a ramp.
+- What it does now:
+  - Before a site starts to move (`demolition.onRefine`), every building in
+    it is cut into pieces about a storey across (`fineWalls` in
+    `src/game/remesh.js`) and then along the four metre column lines the
+    shader breaks by, each column with corners of its own (`columnCut`).
+    Corners shared across a column line would stretch a sheet from the top
+    of a standing column to the heap of a fallen one, which the first
+    attempt did: slanted shards the height of the building. Sites over 70 m
+    are not cut; everything in them comes down to the ground anyway.
+  - Column by column (`columnHash`, `columnShare` in the shader and in
+    `src/game/bake.js`), a column comes down or stays up, as a sharp step
+    with a ragged edge, and one that stays loses a broken top, more of it
+    near the middle. The hash is whole numbers small enough to be exact in a
+    float, so the shader, the baker and the collision agree.
+  - What falls lands as a stack: each storey on the one under it as a thin
+    slab, up to a metre of stack on top of the heap, and the heap is lower
+    (3.5 m at most) so that a flattened block is under the five metres a man
+    cannot see over.
+  - The fall runs under gravity, `k * k` over the fall time, slow to start
+    and stopped by the ground, instead of a smoothstep. 1.8 s plus a little
+    per metre of site.
+  - A cloud: `effects.collapseDust` rolls out low along the street from the
+    foot of the site and a column goes up out of the middle, drawn over the
+    frame in the blood's alpha blended pool, because grey added to a bright
+    sky is nothing at all. It lasts eight to fifteen seconds and hides most
+    of the fall, which is what a real one does.
+  - Rubble is only coloured as rubble where it properly came down (the
+    shader's share interpolates across a piece, and the baker marks a vertex
+    as rubble past 0.3 of its height fallen rather than 0.02), so a frontage
+    still standing keeps its windows; and the back of a piece in a heap is
+    lit like the rest of the heap instead of being the near black inside of
+    the world.
+- Checks: `test-machines` measured damage by the tallest wall near a hit,
+  which with a ragged edge is the one column that stayed up; it measures
+  the mean height of the walls within reach now, a metre of wall at a time
+  (22 m on average standing, 8.4 m after five rockets, 13 of 13 places came
+  down). The inside out check allows 3 % of the pixels it touches to be
+  lighter, the backs of rubble in the sun. `test-city`'s fighter takes off
+  down whichever way from where it stands is clear furthest, since the
+  checks before it leave ruins about.
+- The viaduct check on the live city: the new diagnostic still described
+  the arch at deck height for the blocked streets, because `raycast` hands
+  back one shared result object and the deck ray, cast second, overwrote
+  the head height one. Each ray has its own result now.
+

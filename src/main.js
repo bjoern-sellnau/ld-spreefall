@@ -31,7 +31,7 @@ import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
 import { bakeCrush } from './game/bake.js';
-import { fineGround, holeInWall } from './game/remesh.js';
+import { fineGround, fineWalls, holeInWall } from './game/remesh.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
@@ -288,6 +288,9 @@ async function main() {
     if (!list.length) return 0;
     const touched = new Set();
     for (const scar of list) {
+      // Cut the same way it was the first time, so the ruin replayed is
+      // the ruin that was left.
+      refineSite({ ...scar });
       for (const i of demolition.replay(scar)) touched.add(i);
       scarTiles(scar.x, scar.z, scar.radius);
     }
@@ -1974,6 +1977,23 @@ async function main() {
     return out;
   }
 
+  /**
+   * Cuts the buildings in a site into pieces before it starts to fall, once
+   * per site, so it has columns and storeys to break along. Past seventy
+   * metres everything in it comes down to the ground anyway, and cutting a
+   * district that size into storeys is a second's work for nothing.
+   */
+  function refineSite(site) {
+    if (site.fined || site.walls === false) return;
+    site.fined = true;
+    if (site.radius > 70) return;
+    const edge = Math.max(2.5, Math.min(4.5, site.radius / 7));
+    const changed = fineWalls(world, site.x, site.z, site.radius * 1.05, edge);
+    if (changed.length) tiles.refresh(changed);
+  }
+
+  demolition.onRefine = refineSite;
+
   demolition.onStage = (site, level, was) => {
     scarTiles(site.x, site.z, site.radius);
     const share = level - was;
@@ -2016,6 +2036,11 @@ async function main() {
       dustAt = at;
     }
     effects.dust(site.x, dustAt, site.z, site.radius * (0.5 + share * 0.6));
+    // And the cloud a building makes coming down, which is most of what you
+    // see of it: it rolls out along the street at the height of a man and
+    // hangs there, grey and thick enough to hide the street behind it.
+    effects.collapseDust(site.x, site.y, site.z, site.radius * (0.4 + share * 0.8),
+      Math.max(6, dustAt - site.y));
     const away = Math.round(Math.hypot(player.x - site.x, player.z - site.z));
     audio.collapse(away, site.radius * (0.4 + share));
     feed(level >= 1

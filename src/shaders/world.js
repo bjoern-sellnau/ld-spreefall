@@ -38,6 +38,24 @@ float collapseHash(vec3 p) {
   return fract(sin(dot(floor(p * 2.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
 }
 
+// Which four metre column of a frontage a point stands in, as a number from
+// nought to one. Whole numbers on purpose, small enough to be exact in a
+// float, so the JavaScript in src/game/bake.js gets the same answer.
+float columnHash(vec2 xz) {
+  vec2 c = floor(xz / 4.0);
+  return fract(mod(c.x * 73.0 + c.y * 151.0, 257.0) * 0.618034 + 0.1);
+}
+
+// Whether a column comes down or stays up, as a sharp step with a ragged edge.
+// It was the distance from the middle of the site, smoothly, and a frontage
+// cut back by a smooth share of its height became a ramp: the roof slid down
+// into a slope, the windows smeared along it, and a block of flats looked
+// like a tent. A building does not fail by degrees across its width. A
+// column of it goes or it does not.
+float columnShare(float bite, float h) {
+  return smoothstep(0.3, 0.55, bite * (0.6 + 0.8 * h));
+}
+
 // How far into a site a point is: one at the middle, zero at the rim.
 float collapseBite(vec3 p, vec4 site) {
   float d = length(p.xz - site.xz);
@@ -88,14 +106,19 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
     if (site.w <= 0.0) continue;
     float bite = collapseBite(p, site);
     if (bite <= 0.0) continue;
-    float level = collapseLocal(uCollapseInfo[i].x, bite);
-    if (level <= 0.0) continue;
+    if (uCollapseInfo[i].x <= 0.0) continue;
 
     if (isGround) {
       p.y += craterAt(p.xz, site, uCollapseInfo[i].y, uCollapseInfo[i].z,
                       min(1.0, uCollapseInfo[i].x));
       continue;
     }
+    // A column that goes comes all the way down; one that stays loses its
+    // broken top, more of it near the middle.
+    float colH = columnHash(p.xz);
+    float share = columnShare(bite, colH);
+    float level = collapseLocal(uCollapseInfo[i].x, max(share, bite * 0.45 * (0.6 + 0.8 * colH)));
+    if (level <= 0.0) continue;
 
     // A negative heap means this site digs its crater and leaves every wall
     // in it standing: the buildings switch in the cheat menu was off when it
@@ -113,7 +136,11 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
 
     float jitter = collapseHash(p);
     float heap = uCollapseInfo[i].w * (0.3 + jitter * 0.8) * bite;
-    float landed = min(above, cut + heap);
+    // Each storey lands on the one under it as a thin slab, so what came
+    // down is a stack of floors and not one long sheet. Up to a metre of
+    // stack: past that a tower is rubble like anything else, and a heap you
+    // cannot climb over is a wall.
+    float landed = min(above, cut + heap + min((above - cut) * 0.08, 1.0));
     float fell = above - landed;
     p.y -= fell;
     // What fell spreads out as it lands, by how far it fell rather than by
@@ -937,10 +964,15 @@ void main() {
     // Dust grey: what comes down is coated in the powder of itself, which
     // is paler than the wall it was, not darker.
     vec3 rubble = vec3(0.235, 0.222, 0.204) * (0.6 + grit * 0.8);
-    s.albedo = mix(s.albedo, rubble, clamp(vFall * 1.25, 0.0, 1.0));
+    // Only what has properly come down. The share is interpolated across a
+    // piece of wall, so a piece with one corner fallen and three standing
+    // turned grey all over, and a frontage standing with its windows in it
+    // read as a sheet of rubble standing on end.
+    float down = smoothstep(0.2, 0.55, vFall);
+    s.albedo = mix(s.albedo, rubble, down);
     s.roughness = mix(s.roughness, 0.97, vFall);
     s.metallic = mix(s.metallic, 0.0, vFall);
-    s.emissive *= 1.0 - clamp(vFall * 2.0, 0.0, 1.0);
+    s.emissive *= 1.0 - down;
   }
 
   // --- what the explosions did ---------------------------------------------
@@ -1003,6 +1035,9 @@ void main() {
     float rag = vnoise(vWorld.xz * 0.9) * 0.45 + vnoise(vWorld.xz * 3.1) * 0.2;
     scorch = max(scorch, smoothstep(0.05, 0.7, vBurnt + rag - 0.3) * 0.85);
   }
+  // What has come all the way down is under its own dust, which covers the
+  // soot: a heap of rubble is pale, whatever the wall it was had on it.
+  scorch *= 1.0 - smoothstep(0.45, 0.9, vFall) * 0.75;
   if (scorch > 0.001) {
     // Soot: darker, rougher, and it kills the specular on whatever it is on.
     // Not black: burnt render is a dark warm grey with some of the wall
@@ -1033,7 +1068,9 @@ void main() {
   // a little of the surface left so the shape is still readable, and the fog
   // still on top so a hole three streets away is not a black hole punched in
   // the picture.
-  colour = mix(colour * 0.09, colour, inside);
+  // Except in a heap of rubble, where the pieces lie every way up and the
+  // back of one is as much in the light as the front of the next.
+  colour = mix(colour * 0.09, colour, max(inside, smoothstep(0.3, 0.8, vFall)));
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
                     uSkyHorizon.rgb, uSkyZenith.rgb, uFog, uSkyZenith.w);
   fragColour = vec4(colour, 1.0);

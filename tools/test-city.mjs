@@ -689,10 +689,16 @@ async function run() {
   const drive = await page.evaluate(async () => {
     const s = window.spreefall;
     const jeep = s.vehicles.active.find((v) => v.type === 'jeep');
+    // F takes the nearest thing you can get into, a mech first, so nothing
+    // else is left within reach of the jeep while this gets into it.
+    s.mechs.reset();
+    const others = s.vehicles.active.filter((v) => v !== jeep).map((v) => ({ v, x: v.x, z: v.z }));
+    for (const o of others) o.v.x += 200;
     s.teleport(jeep.x + 2, jeep.z);
     const tooFar = s.vehicles.nearest(jeep.x + 300, jeep.z, 7);
     s.toggleVehicle();
     const inIt = s.state.inVehicle === jeep;
+    const got = s.state.inVehicle ? s.state.inVehicle.type : (s.state.inMech ? 'a mech' : 'nothing');
     const was = { x: jeep.x, z: jeep.z };
     // Through the real fixed step with the real throttle, so this is the
     // path a player's key press takes and not a shortcut past it.
@@ -704,7 +710,8 @@ async function run() {
     s.toggleVehicle();
     const out = s.state.inVehicle === null;
     const dropped = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
-    return { inIt, tooFar: tooFar === null, moved: Math.round(moved),
+    for (const o of others) { o.v.x = o.x; o.v.z = o.z; }
+    return { inIt, got, tooFar: tooFar === null, moved: Math.round(moved),
       rode: Math.round(rode), out, dropped: Math.round(dropped) };
   });
   // --- can you tell they are there? ----------------------------------------
@@ -730,7 +737,7 @@ async function run() {
     findable.marked >= 3, `${findable.marked} marked`);
 
   check('you can only get into one you are standing next to', drive.tooFar);
-  check('and then it drives', drive.inIt && drive.moved > 15, `${drive.moved} m`);
+  check('and then it drives', drive.inIt && drive.moved > 15, `${drive.moved} m, in ${drive.got}`);
   check('with you in it', drive.rode === 0);
   check('and getting out puts you beside it', drive.out && drive.dropped <= 4,
     `${drive.dropped} m away`);
@@ -746,6 +753,12 @@ async function run() {
     const heli = live('heli');
     const jet = live('jet');
     if (!heli || !jet) return { climbed: -1, stalled: -1, stall: 0 };
+    // The jet out of the way while you get in: F takes the nearest, and a
+    // fighter is fifteen metres of wing parked beside the helicopter, so
+    // now and then it was the nearest and this measured a jet that does not
+    // climb on Space. That was the intermittent nought.
+    const jetAt = { x: jet.x, z: jet.z };
+    jet.x += 90;
     s.teleport(heli.x + 2, heli.z);
     s.toggleVehicle();
     // What it got you into, and whether it could, for when it climbs nowhere.
@@ -759,6 +772,7 @@ async function run() {
     s.input.jumpHeld = false;
     const climbed = heli.y - y0;
     s.toggleVehicle();
+    jet.x = jetAt.x; jet.z = jetAt.z;
 
     // A fighter that is not going fast enough does not fly.
     jet.y = s.world.groundHeight(jet.x, jet.z) + 200;
@@ -902,7 +916,19 @@ async function run() {
     s.setCheat('godmode', true);
     s.vehicles.reset();
     // Off the ground, down a street, the way a player would have to do it.
-    const j = s.vehicles.spawn('jet', s.player.x, s.player.z, -Math.PI / 2, 0);
+    // Down whichever way from here is clear the furthest: the checks before
+    // this one leave ruins about, and a ruin is a thing that stands now
+    // rather than a ramp you could roll up, so west was not always open.
+    let bestYaw = -Math.PI / 2, bestRun = 0;
+    for (let i = 0; i < 32; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      const dx = Math.cos(a), dz = Math.sin(a);
+      const g0 = s.world.groundHeight(s.player.x, s.player.z);
+      const hit = s.world.raycast(s.player.x, g0 + 3, s.player.z, dx, 0, dz, 400);
+      const run = hit ? hit.t : 400;
+      if (run > bestRun) { bestRun = run; bestYaw = Math.atan2(-dx, -dz); }
+    }
+    const j = s.vehicles.spawn('jet', s.player.x, s.player.z, bestYaw, 0);
     s.teleport(j.x + 2, j.z);
     s.toggleVehicle();
     const aboard = s.state.inVehicle === j;
@@ -911,7 +937,7 @@ async function run() {
     let rolled = 0;
     for (let i = 0; i < 60 * 6; i++) {
       // Nose level until it is fast enough, then pull back.
-      s.look(-90, j.speed > s.vehicleSpec.jet.stall + 4 ? 18 : 0);
+      s.look(bestYaw * 180 / Math.PI, j.speed > s.vehicleSpec.jet.stall + 4 ? 18 : 0);
       s.fixedForTest(1 / 60);
       // Wheels down is the spawn height, not zero: an aircraft sits on its
       // undercarriage.
@@ -1390,8 +1416,12 @@ async function run() {
       // at the height of somebody walking it.
       const fx = c.x - c.dx * 16, fz = c.z - c.dz * 16;
       const y = s.world.groundHeight(fx, fz) + 0.9;
-      const hit = s.world.raycast(fx, y, fz, c.dx, 0, c.dz, 32);
-      const up = s.world.raycast(fx, s.world.groundHeight(fx, fz) + 5.9, fz, c.dx, 0, c.dz, 32);
+      // Each ray with a result of its own: the world hands back one shared
+      // object unless it is given another, so the second ray used to write
+      // over the first and every report described the arch at deck height
+      // instead of whatever had stopped the street.
+      const hit = s.world.raycast(fx, y, fz, c.dx, 0, c.dz, 32, {});
+      const up = s.world.raycast(fx, s.world.groundHeight(fx, fz) + 5.9, fz, c.dx, 0, c.dz, 32, {});
       // What it ran into, when it ran into something: the wall's foot and
       // top over the street, how long it is and how square to the railway,
       // which tells a pier (six and a half metres, a metre and a half long,

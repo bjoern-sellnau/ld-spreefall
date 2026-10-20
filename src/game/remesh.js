@@ -79,6 +79,133 @@ export function holeInWall(world, x, y, z, radius) {
   }));
 }
 
+/**
+ * Cuts the buildings in a collapse site into pieces a storey or so across.
+ *
+ * A wall in the bundle is one quad from the pavement to the eaves, and the
+ * windows on it are drawn by the shader, so there is nothing in it to break:
+ * the collapse could only pull its top corners down, and a frontage pulled
+ * down by its corners is a ramp. Cut into pieces first, each column of it can
+ * come down or stay up and each storey can land on the one below.
+ *
+ * @returns {number[]} the tiles that changed
+ */
+export function fineWalls(world, x, z, radius, edge = 3.5) {
+  return overTiles(world, x, z, radius, (index) => reworkTile(world, index, {
+    cx: x, cy: 0, cz: z, radius, edge, ground: false, drop: false, tall: true,
+  }));
+}
+
+/** The width of a column, which src/shaders/world.js breaks a building by. */
+export const COLUMN = 4;
+
+/** A vertex part way from one to another, with everything carried over. */
+function lerpVertex(verts, pos, a, b, t) {
+  const va = verts[a], vb = verts[b];
+  const v = new Uint8Array(VERTEX_STRIDE);
+  const dv = new DataView(v.buffer);
+  const da = new DataView(va.buffer, va.byteOffset, VERTEX_STRIDE);
+  const db = new DataView(vb.buffer, vb.byteOffset, VERTEX_STRIDE);
+  const mix = (x, y) => x + (y - x) * t;
+  for (let k = 0; k < 3; k++) {
+    dv.setInt16(k * 2, Math.round(mix(da.getInt16(k * 2, true), db.getInt16(k * 2, true))), true);
+  }
+  for (let k = 0; k < 4; k++) dv.setInt8(6 + k, Math.round(mix(da.getInt8(6 + k), db.getInt8(6 + k))));
+  for (let k = 0; k < 2; k++) {
+    dv.setUint16(10 + k * 2, Math.round(mix(da.getUint16(10 + k * 2, true), db.getUint16(10 + k * 2, true))), true);
+  }
+  v[14] = va[14]; v[15] = va[15]; v[16] = va[16]; v[17] = va[17];
+  dv.setUint16(18, Math.round(mix(da.getUint16(18, true), db.getUint16(18, true))), true);
+  verts.push(v);
+  pos.push([mix(pos[a][0], pos[b][0]), mix(pos[a][1], pos[b][1]), mix(pos[a][2], pos[b][2])]);
+  return verts.length - 1;
+}
+
+/** A copy of a vertex, moved a little in x and z, for a column of its own. */
+function copyVertex(verts, pos, a, dx, dz) {
+  const v = verts[a].slice();
+  const dv = new DataView(v.buffer);
+  const qx = Math.round(dx * POS_SCALE), qz = Math.round(dz * POS_SCALE);
+  dv.setInt16(0, dv.getInt16(0, true) + qx, true);
+  dv.setInt16(4, dv.getInt16(4, true) + qz, true);
+  verts.push(v);
+  pos.push([pos[a][0] + qx / POS_SCALE, pos[a][1], pos[a][2] + qz / POS_SCALE]);
+  return verts.length - 1;
+}
+
+/**
+ * Cuts every piece of building inside the worked circle along the column
+ * lines and gives each column its own corners. Works on `kept` in place.
+ *
+ * @returns {number} how many pieces were cut
+ */
+function columnCut(o, kept, pos, verts, isGround) {
+  const { cx, cz, radius } = o;
+  const out = [];
+  let n = 0;
+  // Two quanta of the position grid, so a corner on the line is read by the
+  // shader as being in the column it belongs to and not the next one.
+  const NUDGE = 2 / POS_SCALE;
+  for (let i = 0; i < kept.length; i += 3) {
+    const a = kept[i], b = kept[i + 1], c = kept[i + 2];
+    const tri = [a, b, c];
+    const mx = (pos[a][0] + pos[b][0] + pos[c][0]) / 3;
+    const mz = (pos[a][2] + pos[b][2] + pos[c][2]) / 3;
+    if (isGround(a) || isGround(b) || isGround(c)
+      || Math.hypot(mx - cx, mz - cz) > radius) {
+      out.push(a, b, c);
+      continue;
+    }
+    const xs = tri.map((t) => pos[t][0]), zs = tri.map((t) => pos[t][2]);
+    const kx0 = Math.floor(Math.min(...xs) / COLUMN), kx1 = Math.floor(Math.max(...xs) / COLUMN);
+    const kz0 = Math.floor(Math.min(...zs) / COLUMN), kz1 = Math.floor(Math.max(...zs) / COLUMN);
+    n++;
+    for (let kx = kx0; kx <= kx1; kx++) {
+      for (let kz = kz0; kz <= kz1; kz++) {
+        // Sutherland and Hodgman against the four sides of the cell.
+        let poly = tri.slice();
+        const sides = [
+          [0, kx * COLUMN, 1], [0, (kx + 1) * COLUMN, -1],
+          [2, kz * COLUMN, 1], [2, (kz + 1) * COLUMN, -1],
+        ];
+        for (const [axis, at, sign] of sides) {
+          if (poly.length < 3) break;
+          const next = [];
+          for (let j = 0; j < poly.length; j++) {
+            const p = poly[j], q = poly[(j + 1) % poly.length];
+            const dp = (pos[p][axis] - at) * sign, dq = (pos[q][axis] - at) * sign;
+            if (dp >= 0) next.push(p);
+            if ((dp >= 0) !== (dq >= 0)) {
+              const t = dp / (dp - dq);
+              next.push(lerpVertex(verts, pos, p, q, t));
+            }
+          }
+          poly = next;
+        }
+        if (poly.length < 3) continue;
+        // Corners of its own, each moved a hair into the middle of the cell.
+        const mcx = (kx + 0.5) * COLUMN, mcz = (kz + 0.5) * COLUMN;
+        const own = poly.map((p) => {
+          const dx = Math.sign(mcx - pos[p][0]) * NUDGE, dz = Math.sign(mcz - pos[p][2]) * NUDGE;
+          return copyVertex(verts, pos, p, dx, dz);
+        });
+        for (let j = 1; j + 1 < own.length; j++) {
+          // Drop the slivers clipping leaves along a line.
+          const p0 = pos[own[0]], p1 = pos[own[j]], p2 = pos[own[j + 1]];
+          const ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
+          const vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+          const area = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+          if (area < 1e-5) continue;
+          out.push(own[0], own[j], own[j + 1]);
+        }
+      }
+    }
+  }
+  kept.length = 0;
+  for (const v of out) kept.push(v);
+  return n;
+}
+
 /** Every tile a circle touches, and what changed in them. */
 function overTiles(world, x, z, radius, fn) {
   const out = [];
@@ -142,7 +269,7 @@ function reworkTile(world, index, o) {
     const az = pos[a][2], bz = pos[b][2], czz = pos[c][2];
     if (Math.min(az, bz, czz) > cz + radius) return false;
     if (Math.max(az, bz, czz) < cz - radius) return false;
-    if (!o.ground) {
+    if (!o.ground && !o.tall) {
       const ay = pos[a][1], by = pos[b][1], cyy = pos[c][1];
       if (Math.min(ay, by, cyy) > cy + radius) return false;
       if (Math.max(ay, by, cyy) < cy - radius) return false;
@@ -234,6 +361,16 @@ function reworkTile(world, index, o) {
     }
     split(a, b, c, 0);
   }
+
+  // A building about to come down is cut along the four metre columns the
+  // shader breaks it by, and each column gets corners of its own. Cut finer
+  // but not along those lines, a piece of wall straddled two columns, and
+  // where one came down and the next stood it was pulled into a sheet from
+  // the top of the one to the heap of the other: a slanted shard the height
+  // of the building. Corners shared across the line would do the same
+  // thing a piece over. With its own corners each column breaks away clean
+  // and leaves the edge of the next one standing.
+  if (o.tall) cut += columnCut(o, kept, pos, verts, isGround);
 
   // And then the hole itself: every piece whose middle is inside it goes.
   // Only pieces of what this pass works on, though, and only frontages. It
