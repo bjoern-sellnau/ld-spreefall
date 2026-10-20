@@ -87,19 +87,19 @@ test('what OpenStreetMap maps of a landmark goes, and the landmark stays', () =>
 });
 
 // --- railways: where streets go under, and which ways are one line -----------
-import { crossingsAlong, joinLines } from '../build-world.mjs';
+import { roadIndex, joinLines } from '../build-world.mjs';
 
-test('a street across a viaduct face is found where it crosses, with room either side', () => {
-  const face = [[0, 0], [100, 0]];
-  const street = { line: [[40, -30], [40, 30]], tags: { highway: 'primary', width: '12' } };
-  const slant = { line: [[60, -10], [80, 10]], tags: { highway: 'residential', width: '8' } };
-  const away = { line: [[200, -30], [200, 30]], tags: { highway: 'primary' } };
-  const found = crossingsAlong(face, [street, slant, away]);
-  assert.equal(found.length, 2);
-  assert.ok(Math.abs(found[0].d - 40) < 1e-6);
-  assert.ok(Math.abs(found[0].half - 8.5) < 1e-6, 'half the street, the pavement and a metre over');
-  assert.ok(Math.abs(found[1].d - 70) < 1e-6);
-  assert.ok(found[1].half > 6.5 + 1, 'a street at a slant takes more of the viaduct');
+test('a pier knows when it would stand in a street, whichever way the railway was cut', () => {
+  const inStreet = roadIndex([
+    { line: [[40, -60], [40, 60]], tags: { highway: 'primary', width: '12' } },
+    { line: [[0, 200], [100, 200]], tags: { highway: 'residential' } },
+  ]);
+  assert.equal(inStreet(40, 0), true, 'the middle of the street');
+  assert.equal(inStreet(40 + 7.5, 10), true, 'on its pavement');
+  assert.equal(inStreet(40 + 8.5, 10), false, 'clear of it');
+  assert.equal(inStreet(40 + 8.5, 10, 1.0), true, 'unless the pier itself is a metre wide');
+  assert.equal(inStreet(50, 203), true, 'a street without a width tag has its class width');
+  assert.equal(inStreet(500, 500), false, 'nowhere near either');
 });
 
 test('railway ways that meet end to end are one line, and a fork goes the straight way', () => {

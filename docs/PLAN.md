@@ -2888,3 +2888,16 @@ caps residency at 520.
   at head height and shot at deck height, and a failure names the street
   and how far in it was stopped. The train is run up to a crossing on the
   line that passes it.
+
+- 2026-10-20: the first run on the real city after that: the train check
+  passed (24 carriages on 12 lines, the longest 3.9 km), the deck check
+  passed at all twelve crossings, and nine of twelve streets went under.
+  The three that did not, Friedrichstrasse, Reinhardtstrasse and
+  Unterbaumstrasse, were stopped eleven to thirteen metres short of the
+  railway they were checked against, by viaduct brick 1.5 to 7.7 m long:
+  the pier of the next track along. The piers were cleared by where each
+  street crossed each face, and that misses a face whose railway way ends
+  or bends at the street, which OpenStreetMap does at every bridge. A pier
+  now asks the streets themselves, through an index of every street
+  segment with half its width and its pavement, whether it would stand in
+  one, so how the railway was cut no longer matters.

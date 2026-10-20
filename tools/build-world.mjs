@@ -863,6 +863,9 @@ function buildDistrict(district, overflight = false) {
 
   since('roads');
   // --- rails --------------------------------------------------------------
+  // Every street, indexed, so that a pier can ask whether it would stand in
+  // one. Built once for all the railways rather than per viaduct face.
+  const streetAt = roadIndex(roads);
   for (const r of rails) {
     const elevated = r.tags.bridge === 'yes' || r.tags.railway === 'rail';
     if (elevated) {
@@ -893,12 +896,19 @@ function buildDistrict(district, overflight = false) {
         const bays = Math.max(1, Math.round(total / BAY));
         const step = total / bays;
         const at = (d) => pointAt(off, Math.max(0, Math.min(total, d)));
-        // Where streets go under this face, as stretches of it that no pier
-        // may stand in. The piers were every nine metres whatever was under
-        // them, so whether a street got through was luck: on the synthetic
-        // city Friedrichstrasse did, and on the real one it ran into a pier.
-        const clear = crossingsAlong(off, roads);
-        const blocked = (a, b) => clear.some((c) => b > c.d - c.half && a < c.d + c.half);
+        // Whether a pier here would stand in a street. The piers were every
+        // nine metres whatever was under them, so whether a street got
+        // through was luck: on the synthetic city Friedrichstrasse did, and
+        // on the real one it ran into a pier. The first answer to that asked
+        // where each street crossed each face, which missed every face whose
+        // railway way ends or bends at the street, and OpenStreetMap splits
+        // a railway at every bridge: three streets on the real city were
+        // still stopped by the pier of the next track along. So a pier asks
+        // the streets instead, by where it stands.
+        const blocked = (a, b) => {
+          const m = at((a + b) / 2);
+          return !!m && streetAt(m[0], m[1], (b - a) / 2 + 1.0);
+        };
         for (let i = 0; i < bays; i++) {
           const d0 = i * step;
           const marks = [d0, d0 + PIER * 0.5, d0 + step - PIER * 0.5, d0 + step];
@@ -2030,46 +2040,50 @@ export function replacedByLandmark(b, marks) {
 }
 
 /**
- * Where streets cross a polyline, as distances along it and how much room
- * each wants either side: half the street, its pavement, and a metre over.
+ * Every street as segments in a grid, for asking whether a point stands in
+ * one: inside half its width, its pavement and a margin.
  *
- * @param {Array<[number,number]>} line
  * @param {Array<{line:Array, tags:Object}>} roads
- * @returns {Array<{d:number, half:number}>}
+ * @returns {(x:number, z:number, margin?:number)=>boolean}
  */
-export function crossingsAlong(line, roads) {
-  const out = [];
-  let run = 0;
-  const lens = [];
-  for (let i = 1; i < line.length; i++) {
-    lens.push(Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]));
-  }
-  for (let i = 1; i < line.length; i++) {
-    const a = line[i - 1], b = line[i];
-    const minX = Math.min(a[0], b[0]), maxX = Math.max(a[0], b[0]);
-    const minZ = Math.min(a[1], b[1]), maxZ = Math.max(a[1], b[1]);
-    for (const r of roads) {
-      const pts = r.line;
-      for (let j = 1; j < pts.length; j++) {
-        const c = pts[j - 1], d = pts[j];
-        if (Math.max(c[0], d[0]) < minX || Math.min(c[0], d[0]) > maxX
-          || Math.max(c[1], d[1]) < minZ || Math.min(c[1], d[1]) > maxZ) continue;
-        const ex = b[0] - a[0], ez = b[1] - a[1], fx = d[0] - c[0], fz = d[1] - c[1];
-        const den = ex * fz - ez * fx;
-        if (Math.abs(den) < 1e-9) continue;
-        const t = ((c[0] - a[0]) * fz - (c[1] - a[1]) * fx) / den;
-        const u = ((c[0] - a[0]) * ez - (c[1] - a[1]) * ex) / den;
-        if (t < 0 || t > 1 || u < 0 || u > 1) continue;
-        const width = parseLength(r.tags.width);
-        const w = Number.isFinite(width) && width > 1 ? width : (ROAD_WIDTH[r.tags.highway] || 6);
-        // A street that crosses at a slant is wider along the viaduct.
-        const sin = Math.abs(den) / ((Math.hypot(ex, ez) * Math.hypot(fx, fz)) || 1);
-        out.push({ d: run + t * lens[i - 1], half: (w / 2 + 2.5) / Math.max(0.35, sin) });
+export function roadIndex(roads, cell = 40) {
+  const grid = new Map();
+  const key = (i, j) => `${i},${j}`;
+  for (const r of roads) {
+    const width = parseLength(r.tags.width);
+    const w = Number.isFinite(width) && width > 1 ? width : (ROAD_WIDTH[r.tags.highway] || 6);
+    // Half the street and its pavement, which is as far as a pier must keep.
+    const half = w / 2 + 1.7;
+    const pts = r.line;
+    for (let j = 1; j < pts.length; j++) {
+      const a = pts[j - 1], b = pts[j];
+      const seg = { ax: a[0], az: a[1], bx: b[0], bz: b[1], half };
+      const i0 = Math.floor((Math.min(a[0], b[0]) - half) / cell);
+      const i1 = Math.floor((Math.max(a[0], b[0]) + half) / cell);
+      const k0 = Math.floor((Math.min(a[1], b[1]) - half) / cell);
+      const k1 = Math.floor((Math.max(a[1], b[1]) + half) / cell);
+      for (let k = k0; k <= k1; k++) {
+        for (let i = i0; i <= i1; i++) {
+          const id = key(i, k);
+          let list = grid.get(id);
+          if (!list) { list = []; grid.set(id, list); }
+          list.push(seg);
+        }
       }
     }
-    run += lens[i - 1];
   }
-  return out;
+  return (x, z, margin = 0) => {
+    const list = grid.get(key(Math.floor(x / cell), Math.floor(z / cell)));
+    if (!list) return false;
+    for (const s of list) {
+      const ex = s.bx - s.ax, ez = s.bz - s.az;
+      const l2 = ex * ex + ez * ez || 1;
+      const t = Math.max(0, Math.min(1, ((x - s.ax) * ex + (z - s.az) * ez) / l2));
+      const d = Math.hypot(s.ax + ex * t - x, s.az + ez * t - z);
+      if (d < s.half + margin) return true;
+    }
+    return false;
+  };
 }
 
 /**
