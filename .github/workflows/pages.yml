@@ -80,10 +80,22 @@ jobs:
         run: |
           timeout 420 node --max-old-space-size=6144 tools/fetch-osm.mjs --all --live-only || true
           ls data/raw/*.osm 2>/dev/null | wc -l
+      - name: Build every district that has an extract
+        run: node --max-old-space-size=6144 tools/build-world.mjs --all
+      - name: Move as much of it up to tier 0 as Pages will publish
+        # Pages will not publish a site over a gigabyte, and the whole city
+        # at tier 0 is five times that. This rebuilds districts at tier 0 from
+        # the middle outward, weighs the site after each, and builds back the
+        # one that takes it over. A district fetched with the short list of
+        # tags is fetched again with the long one first, which is why the
+        # cache is saved after this rather than before.
+        run: node tools/fit-pages.mjs --ceiling=950 --minutes=8
       - name: Keep what was fetched for the next deploy
         # The restore above is shared with the weekly city job; this is the
-        # other half of it. The first deploy of the day writes back whatever
-        # it managed to add, later ones find the key taken and carry on, and
+        # other half of it, and it comes after the move to tier 0 so the
+        # extracts that fetched again with the long list of tags are kept.
+        # The first deploy of the day writes back whatever it managed to
+        # add, later ones find the key taken and carry on, and
         # the set of extracts grows towards the whole city over a few runs
         # instead of each deploy fetching the same gaps and throwing them
         # away.
@@ -92,8 +104,6 @@ jobs:
         with:
           path: data/raw
           key: osm-city-${{ env.OSM_DAY }}
-      - name: Build every district that has an extract
-        run: node --max-old-space-size=6144 tools/build-world.mjs --all
       - name: Weigh the city
         run: node tools/weigh-city.mjs
       - name: Report what a player waits for
