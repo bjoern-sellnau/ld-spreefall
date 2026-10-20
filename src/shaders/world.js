@@ -131,7 +131,13 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
   }
   // Rubble has no walls left in it: the normals go flat as the fall completes,
   // or a collapsed facade lights like a facade lying down.
-  if (worst > 0.0 && !isGround) n = normalize(mix(n, vec3(0.0, 1.0, 0.0), worst * 0.8));
+  // An underside turned towards up passes through nothing on the way, and
+  // normalising nothing is not a number: that drew the crumpled top of a
+  // building caving in as a black seam down its corner.
+  if (worst > 0.0 && !isGround) {
+    vec3 m = mix(n, vec3(0.0, 1.0, 0.0), worst * 0.8);
+    n = dot(m, m) > 1e-6 ? normalize(m) : vec3(0.0, 1.0, 0.0);
+  }
   return worst;
 }
 `;
@@ -888,7 +894,8 @@ void main() {
     return;
   }
 
-  vec3 n = normalize(s.normal);
+  // Safe for a normal interpolated across a face folded back on itself.
+  vec3 n = dot(s.normal, s.normal) > 1e-8 ? normalize(s.normal) : vec3(0.0, 1.0, 0.0);
   // The inside of a surface. Every wall and every street in this city is one
   // sided, so this is what you are looking at through a hole a blast has
   // made: the back of the ground, the back of a wall, the inside of a ruin.
@@ -927,7 +934,9 @@ void main() {
   if (vFall > 0.001) {
     float grit = vnoise(vWorld.xz * 2.6 + vWorld.y * 1.4) * 0.5
                + vnoise(vWorld.xz * 11.0) * 0.25;
-    vec3 rubble = vec3(0.185, 0.172, 0.158) * (0.55 + grit * 0.9);
+    // Dust grey: what comes down is coated in the powder of itself, which
+    // is paler than the wall it was, not darker.
+    vec3 rubble = vec3(0.235, 0.222, 0.204) * (0.6 + grit * 0.8);
     s.albedo = mix(s.albedo, rubble, clamp(vFall * 1.25, 0.0, 1.0));
     s.roughness = mix(s.roughness, 0.97, vFall);
     s.metallic = mix(s.metallic, 0.0, vFall);
@@ -961,7 +970,24 @@ void main() {
     float sev = uScarInfo[i].x;
     // A ragged edge rather than a circle, from the same noise the facades use.
     float edge = vnoise(vWorld.xz * 1.7 + vWorld.y * 0.9 + float(i) * 17.0) * 0.35;
-    float mark = smoothstep(0.0, 0.45, t + edge - 0.25) * sev;
+    // Soot. It was a threshold on that same fine noise, which over a
+    // forty metre blast came out as a leopard print on every frontage. Smoke
+    // rises, so on a wall it reaches further above the blast than below it
+    // and runs in streaks up the face; on the ground it is a smooth stain
+    // with a broad, slow variation in it, heaviest in the middle.
+    float mark;
+    if (punchable) {
+      float up = clamp(d.y / r, -1.0, 1.0);
+      float along = dot(vWorld.xz, normalize(vec2(vNormal.z, -vNormal.x) + 1e-4));
+      float streak = vnoise(vec2(along * 1.1, vWorld.y * 0.12) + float(i) * 17.0);
+      float body = vnoise(vec2(along * 0.25, vWorld.y * 0.25) + float(i) * 5.0);
+      float reach = t + up * 0.22 * step(0.0, up) - max(-up, 0.0) * 0.25;
+      mark = smoothstep(0.02, 0.75, reach * (0.55 + 0.6 * streak) + (body - 0.5) * 0.2);
+    } else {
+      float body = vnoise(vWorld.xz * 0.22 + float(i) * 5.0);
+      mark = smoothstep(0.0, 0.85, t * (0.75 + 0.5 * body) + edge * 0.25 - 0.08);
+    }
+    mark *= sev;
     scorch = max(scorch, mark);
     shatter = max(shatter, smoothstep(0.1, 0.75, t) * sev);
     // And the hole itself. The ragged edge is the same noise, so the rim of
@@ -975,11 +1001,15 @@ void main() {
   // than painted on with a compass.
   if (vBurnt > 0.002) {
     float rag = vnoise(vWorld.xz * 0.9) * 0.45 + vnoise(vWorld.xz * 3.1) * 0.2;
-    scorch = max(scorch, smoothstep(0.05, 0.6, vBurnt + rag - 0.3) * 0.97);
+    scorch = max(scorch, smoothstep(0.05, 0.7, vBurnt + rag - 0.3) * 0.85);
   }
   if (scorch > 0.001) {
     // Soot: darker, rougher, and it kills the specular on whatever it is on.
-    s.albedo = mix(s.albedo, s.albedo * 0.16 + vec3(0.012, 0.010, 0.009), scorch * 0.9);
+    // Not black: burnt render is a dark warm grey with some of the wall
+    // still in it, and only the heart of a blast goes nearly to black.
+    vec3 soot = s.albedo * 0.22 + vec3(0.03, 0.027, 0.024);
+    soot = mix(soot, vec3(0.018, 0.016, 0.015), smoothstep(0.75, 1.0, scorch));
+    s.albedo = mix(s.albedo, soot, scorch * 0.88);
     s.roughness = mix(s.roughness, 0.98, scorch * 0.8);
     s.metallic = mix(s.metallic, 0.0, scorch);
     // Glass near a blast is gone: the lit window becomes a hole.

@@ -3005,3 +3005,29 @@ caps residency at 520.
   the Warden the whole table for their length, since what they measure is
   the arm and not the chassis.
 
+## 66. Destruction that looks less wrong, first pass
+
+- 2026-10-20: "the destruction looks better but still not realistic".
+  Screenshots of a 30 m blast against a frontage on Unter den Linden showed
+  four things that read as fake.
+- A black seam, a pixel or two wide, down the corner of every building that
+  was caving in. Drawn by the inside out pass, so the first guesses were
+  about that pass; colouring each category of fragment in turn showed it was
+  the falling top of the building itself. `applyCollapse` turns a falling
+  vertex's normal towards up with `normalize(mix(n, up, worst * 0.8))`, and
+  for an underside at worst 0.625 that is the zero vector, whose normal is
+  not a number, and a pixel lit by not a number is black. Both the vertex
+  and the fragment side now fall back to up for a normal of no length.
+- Soot as a leopard print: a threshold on fine noise over the whole radius.
+  On a wall soot now rises, reaching further above the blast than below it,
+  in streaks up the face; on the ground it is a smooth stain with a broad
+  variation; and burnt render is a dark warm grey with some of the wall in
+  it, nearly black only in the heart of the blast. Crater ground is 0.85 of
+  that rather than 0.97.
+- Rubble as crates: the gib mesh is three boxes. Rubble now has its own
+  mesh, two faceted, flattened, lopsided lumps and a broken slab, drawn
+  through the same program, and its sizes run mostly small with a few large
+  pieces rather than evenly. Rubble on a wall that came down is dust grey,
+  paler than the wall, not darker.
+- `tools/test-city.mjs` 81 of 81 and `tools/test-cheats.mjs` 112 of 112.
+

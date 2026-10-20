@@ -178,7 +178,9 @@ export class Gibs {
       g.spinY = (Math.random() - 0.5) * 7;
       g.spinX = (Math.random() - 0.5) * 7;
       g.spinZ = (Math.random() - 0.5) * 7;
-      g.scale = 1.1 + Math.random() * 2.6;
+      // Mostly small, a few large: a heap is gravel and fist sized lumps with
+      // the odd piece of floor in it, not thirty stones the same size.
+      g.scale = 0.8 + Math.pow(Math.random(), 2.2) * 5.2;
       g.part = Math.random() < 0.72 ? 21 : 22;
       g.maxLife = 26 + Math.random() * 20;
       g.life = g.maxLife;

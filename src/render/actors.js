@@ -524,6 +524,62 @@ export function buildGibMesh() {
 }
 
 /**
+ * A lump of a building, about the size of a gib before it is scaled: a
+ * flattened, lopsided stone with flat facets, and a broken slab of floor
+ * leaning against it. The gib mesh is three boxes, which tumbling through
+ * the air reads as a piece of somebody; lying in a heap two metres across it
+ * read as a pile of crates. Masonry breaks along planes, and a facet that
+ * catches the sun on one side and not the other is what reads as stone.
+ */
+export function buildRubbleMesh() {
+  const m = new MeshBuild();
+  // A seeded jitter, so the mesh is the same every load.
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const lump = (cx, cy, cz, rx, ry, rz) => {
+    const SEG = 6, RINGS = 4;
+    const pts = [];
+    for (let r = 0; r <= RINGS; r++) {
+      const v = r / RINGS;
+      const phi = v * Math.PI;
+      const row = [];
+      for (let s = 0; s < SEG; s++) {
+        const th = (s / SEG) * Math.PI * 2 + (r % 2) * 0.5;
+        const k = r === 0 || r === RINGS ? 1 : 0.72 + rnd() * 0.5;
+        row.push([cx + Math.sin(phi) * Math.cos(th) * rx * k,
+          cy + Math.cos(phi) * ry * (0.8 + rnd() * 0.3),
+          cz + Math.sin(phi) * Math.sin(th) * rz * k]);
+      }
+      pts.push(row);
+    }
+    const face = (a, b, c) => {
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      // Outward, away from the middle of the lump.
+      const mx = (a[0] + b[0] + c[0]) / 3 - cx, my = (a[1] + b[1] + c[1]) / 3 - cy;
+      const mz = (a[2] + b[2] + c[2]) / 3 - cz;
+      if (nx * mx + ny * my + nz * mz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      const l = Math.hypot(nx, ny, nz) || 1;
+      m.tri([a, b, c], [nx / l, ny / l, nz / l], 0);
+    };
+    for (let r = 0; r < RINGS; r++) {
+      for (let s = 0; s < SEG; s++) {
+        const a = pts[r][s], b = pts[r][(s + 1) % SEG];
+        const c = pts[r + 1][s], d = pts[r + 1][(s + 1) % SEG];
+        if (r > 0) face(a, b, c);
+        if (r < RINGS - 1) face(b, d, c);
+      }
+    }
+  };
+  lump(0, 0, 0, 0.17, 0.09, 0.13);
+  lump(0.08, 0.03, -0.05, 0.08, 0.06, 0.07);
+  // The slab: a piece of floor, thin and broad, at an angle.
+  m.box(-0.07, -0.01, 0.06, 0.2, 0.035, 0.12, 0, 0.6);
+  return m;
+}
+
+/**
  * A fighter, about fifteen metres long, nose towards -z like everything else
  * here. The origin is the middle of the fuselage, which sits 1.9 m over the
  * road on its wheels. Parts: 33 the grey it is painted, 2 dark metal, 24 the
@@ -961,6 +1017,8 @@ export class Actors {
     this.weapon = this.weapons.m16;
 
     this.gib = this._uploadMesh(buildGibMesh(), MAX_GIBS, 2);
+    // Rubble draws through the same program out of its own mesh.
+    this.rubble = this._uploadMesh(buildRubbleMesh(), MAX_GIBS, 2);
 
     // The pads. One instanced mesh per kind, drawn only for what is near you.
     this.pickups = {};
@@ -1240,32 +1298,41 @@ export class Actors {
 
   updateGibs(list) {
     const gl = this.gl;
-    const data = this.gib.instData;
-    let n = 0;
+    const flesh = this.gib.instData, stone = this.rubble.instData;
+    let n = 0, k = 0;
     for (const g of list) {
-      if (!g.alive || n >= MAX_GIBS) continue;
-      const o = n * 8;
+      if (!g.alive) continue;
+      // Broken render and brick are parts 21 and 22, and go to the rubble.
+      const isStone = g.part > 20.5 && g.part < 22.5;
+      if (isStone ? k >= MAX_GIBS : n >= MAX_GIBS) continue;
+      const data = isStone ? stone : flesh;
+      const o = (isStone ? k++ : n++) * 8;
       data[o] = g.x; data[o + 1] = g.y; data[o + 2] = g.z; data[o + 3] = g.yaw;
       data[o + 4] = g.pitch; data[o + 5] = g.roll; data[o + 6] = g.scale; data[o + 7] = g.part;
-      n++;
     }
-    this.gib.instanceCount = n;
-    if (n > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.gib.instVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    for (const [mesh, count] of [[this.gib, n], [this.rubble, k]]) {
+      mesh.instanceCount = count;
+      if (count > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.instData, 0, count * 8);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
     }
   }
 
   drawGibs() {
-    if (!this.gib.instanceCount) return 0;
+    if (!this.gib.instanceCount && !this.rubble.instanceCount) return 0;
     const gl = this.gl;
     this.progGib.use();
-    gl.bindVertexArray(this.gib.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.gib.count, this.gib.indexType, 0,
-      this.gib.instanceCount);
+    let calls = 0;
+    for (const mesh of [this.gib, this.rubble]) {
+      if (!mesh.instanceCount) continue;
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      calls++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return calls;
   }
 
   updateVehicles(list) {
@@ -1524,7 +1591,7 @@ export class Actors {
 
   dispose() {
     const gl = this.gl;
-    for (const mesh of [this.drone, this.soldier, this.jet, this.gib,
+    for (const mesh of [this.drone, this.soldier, this.jet, this.gib, this.rubble,
       ...this.mechMeshes.map((e) => e.mesh),
       ...Object.values(this.weapons),
       ...Object.values(this.props), ...Object.values(this.pickups),

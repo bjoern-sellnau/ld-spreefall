@@ -694,7 +694,8 @@ export class Renderer {
         tris += mesh.instanceCount * (mesh.count / 3);
       }
       draws += this.actors.drawGibs();
-      tris += this.actors.gib.instanceCount * (this.actors.gib.count / 3);
+      tris += this.actors.gib.instanceCount * (this.actors.gib.count / 3)
+        + this.actors.rubble.instanceCount * (this.actors.rubble.count / 3);
       draws += this.actors.drawPickups();
       for (const kind in this.actors.pickups) {
         const mesh = this.actors.pickups[kind];
