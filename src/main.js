@@ -1230,8 +1230,106 @@ async function main() {
   // mech layer knows about this game: it decides when a gun goes off and
   // where the muzzle is, and this decides what that does to the city.
 
+  /**
+   * What theirs fires, by the kind its chassis gives it. The Reaper's
+   * chaingun is the `auto` at the bottom; the rest are the chassis' own: a
+   * shotgun, a rail, shells, a swarm of small rockets, thermite and a beam.
+   */
+  const FOE_FIRE = {
+    shotgun(m, from, dir, gun) {
+      audio.gunshot('mechgun');
+      for (let i = 0; i < gun.pellets; i++) foeRound(m, from, dir, gun, 0.55);
+      effects.flash(from.x, from.y, from.z, 2.6, 1.0, 0.7, 0.35, 0.08);
+    },
+    rail(m, from, dir, gun) {
+      // One bolt with a long wait between: it is the shot you hear coming
+      // for three seconds and then have to have moved out of.
+      audio.gunshot('rail');
+      const hit = world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, gun.range);
+      const reach = hit ? hit.t : gun.range;
+      const end = { x: from.x + dir.x * reach, y: from.y + dir.y * reach, z: from.z + dir.z * reach };
+      effects.lance(from.x, from.y, from.z, end.x, end.y, end.z, 1.0, 0.25, 0.2);
+      effects.flash(from.x, from.y, from.z, 3.4, 1.0, 0.3, 0.25, 0.12);
+      const near = pointToRay(player.x, player.y + PLAYER.eye * 0.6, player.z, from, dir, reach);
+      if (near < 1.3 && combat.health > 0) combat.hurt(gun.damage, m.x, m.z, player.x, player.z);
+      if (hit) {
+        effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+        demolition.blast(end.x, end.y, end.z, 3, gun.damage * 2);
+      }
+    },
+    shell(m, from, dir, gun) {
+      audio.gunshot('mechcannon');
+      const d = spreadDir(dir, gun.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * gun.speed, vy: d.y * gun.speed, vz: d.z * gun.speed,
+        splash: gun.splash, weapon: 'reaper',
+      });
+      effects.flash(from.x, from.y, from.z, 2.8, 1.0, 0.6, 0.3, 0.08);
+    },
+    swarm(m, from, dir, gun) {
+      // Little rockets, a handful at a time, that wander on the way.
+      audio.gunshot('rpg');
+      const d = spreadDir(dir, gun.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * gun.speed, vy: d.y * gun.speed + 4, vz: d.z * gun.speed,
+        splash: gun.splash, weapon: 'reaper',
+      });
+    },
+    thermite(m, from, dir, gun) {
+      audio.gunshot('rpg');
+      const d = spreadDir(dir, gun.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * gun.speed, vy: d.y * gun.speed + 6, vz: d.z * gun.speed,
+        splash: gun.splash, weapon: 'reaper', thermite: gun.fire,
+      });
+    },
+    laser(m, from, dir, gun) {
+      // A beam held on you for a second and a half, a little at a time.
+      const hit = world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, gun.range);
+      const reach = hit ? hit.t : gun.range;
+      const end = { x: from.x + dir.x * reach, y: from.y + dir.y * reach, z: from.z + dir.z * reach };
+      effects.lance(from.x, from.y, from.z, end.x, end.y, end.z, 0.75, 0.2, 1.0);
+      if (Math.random() < 0.2) audio.laser(Math.hypot(player.x - m.x, player.z - m.z));
+      const near = pointToRay(player.x, player.y + PLAYER.eye * 0.6, player.z, from, dir, reach);
+      if (near < 1.0 && combat.health > 0) combat.hurt(gun.damage, m.x, m.z, player.x, player.z);
+      if (hit && Math.random() < 0.3) {
+        effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+      }
+    },
+  };
+
+  /** A direction knocked off true by up to this much. */
+  function spreadDir(dir, amount) {
+    const d = {
+      x: dir.x + (Math.random() - 0.5) * amount,
+      y: dir.y + (Math.random() - 0.5) * amount,
+      z: dir.z + (Math.random() - 0.5) * amount,
+    };
+    const l = Math.hypot(d.x, d.y, d.z) || 1;
+    return { x: d.x / l, y: d.y / l, z: d.z / l };
+  }
+
+  /** One round of theirs, which hurts you if it goes through you. */
+  function foeRound(m, from, dir, gun, wide = 0.9) {
+    const d = spreadDir(dir, gun.spread);
+    const hit = world.raycast(from.x, from.y, from.z, d.x, d.y, d.z, gun.range);
+    const reach = hit ? hit.t : gun.range;
+    const end = { x: from.x + d.x * reach, y: from.y + d.y * reach, z: from.z + d.z * reach };
+    effects.tracer(from.x, from.y, from.z, end.x, end.y, end.z, false);
+    if (hit) effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+    const near = pointToRay(player.x, player.y + PLAYER.eye * 0.6, player.z, from, d, reach);
+    if (near < wide && combat.health > 0) combat.hurt(gun.damage, m.x, m.z, player.x, player.z);
+  }
+
   /** A chaingun round, from a mech, at whatever is in front of it. */
   mechs.onChaingun = (m, from, dir, gun) => {
+    if (!m.mine && gun.kind && FOE_FIRE[gun.kind]) {
+      FOE_FIRE[gun.kind](m, from, dir, gun);
+      return;
+    }
     const spread = gun.spread;
     const d = {
       x: dir.x + (Math.random() - 0.5) * spread,
@@ -2289,19 +2387,28 @@ async function main() {
   // their numbers changed, because five rows rebuilt sixty times a second is
   // five rows of garbage a second for no gain.
 
-  /** The rows down the right, one per weapon, built from ARMS. */
+  /**
+   * The rows down the right, one per weapon the mech you are in carries.
+   * Built again only when you climb into a chassis with a different set.
+   */
   const armRows = [];
+  let armRowsFor = null;
   function buildArmRows() {
-    if (armRows.length) return;
-    for (let i = 0; i < ARMS.length; i++) {
+    const m = state.inMech;
+    const loadout = m ? m.loadout : [];
+    if (armRowsFor === loadout) return;
+    armRowsFor = loadout;
+    armRows.length = 0;
+    el.mechArms.textContent = '';
+    for (let i = 0; i < loadout.length; i++) {
       const row = document.createElement('div');
       row.className = 'marm';
       const key = document.createElement('u');
       key.textContent = String((i + 1) % 10);
       const name = document.createElement('span');
-      name.textContent = ARMS[i].name;
+      name.textContent = loadout[i].name;
       const ammo = document.createElement('b');
-      ammo.textContent = String(ARMS[i].magazine);
+      ammo.textContent = String(loadout[i].magazine);
       row.append(key, name, ammo);
       el.mechArms.append(row);
       armRows.push({ row, ammo });
@@ -2393,7 +2500,7 @@ async function main() {
     el.vehicleName.textContent = m.spec.name;
     el.vehicleKeys.textContent =
       'W A S D walks, mouse aims, left mouse fires, right mouse empties the pod, '
-      + '1 to 5 or the wheel changes weapon, Shift dashes, Y changes the view, '
+      + `1 to ${m.loadout.length} or the wheel changes weapon, Shift dashes, Y changes the view, `
       + 'E is the reflex, V is the travel map';
     camera.yaw = m.torso;
     if (m.spec.arms) {
@@ -3055,11 +3162,18 @@ async function main() {
       const say = document.createElement('div');
       say.className = 'mechsay';
       const chips = [];
+      // What it carries, said the way the menu talks: yours by its arms,
+      // theirs by its gun.
+      const FOE_GUN = { auto: 'a chaingun in bursts', shotgun: 'a shotgun', rail: 'a railgun',
+        shell: 'a cannon', swarm: 'a swarm of small rockets', thermite: 'thermite', laser: 'a beam' };
+      const armsLine = (row, which) => (which === 'mine'
+        ? `Carries ${row.loadout.map((id) => (ARMS.find((a) => a.id === id) || { name: id }).name).join(', ')}.`
+        : `Fires ${FOE_GUN[(row.gun && row.gun.kind) || 'auto']} and rockets.`);
       const show = () => {
         const id = cheats.mechs[side];
         for (const c of chips) c.el.classList.toggle('on', c.id === id);
         const row = CHASSIS.find((c) => c.id === id);
-        say.textContent = row ? `${row.name}: ${row.role}` : 'a different one every time';
+        say.textContent = row ? `${row.name}: ${row.role}. ${armsLine(row, side)}` : 'a different one every time';
       };
       const options = [...CHASSIS.map((c) => ({ id: c.id, label: c.name, note: c.role })),
         ...(side === 'foe' ? [{ id: 'random', label: 'Random', note: 'a different one every time' }] : [])];
@@ -4579,11 +4693,12 @@ async function main() {
         // Nought is the tenth, the way a number row runs out.
         const raw = Number(code.slice(5));
         const n = raw === 0 ? 10 : raw;
-        if (n >= 1 && n <= ARMS.length) { mechs.selectArm(state.inMech, n - 1); return; }
+        const carried = state.inMech.loadout.length;
+        if (n >= 1 && n <= carried) { mechs.selectArm(state.inMech, n - 1); return; }
         // A number past the end of the mech's loadout is not the pilot's
         // rifle. Six used to fall through to what the man inside is carrying
         // and put a banana on the screen of something eight metres tall.
-        toast(`the mech carries ${ARMS.length}`);
+        toast(`the ${state.inMech.spec.name} carries ${carried}`);
         return;
       }
       // And neither is any of the keys that reach over his shoulder.
@@ -5470,6 +5585,8 @@ async function main() {
     reactors, fusionSpec: FUSION,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
+    /** The arms the mech you are in carries, in the order the keys pick them. */
+    get mechLoadout() { return state.inMech ? state.inMech.loadout : []; },
     selectArm(i) { return state.inMech ? mechs.selectArm(state.inMech, i) : -1; },
     cycleArm(step) { return state.inMech ? mechs.cycleArm(state.inMech, step) : -1; },
     toggleCockpit() { toggleCockpit(); return state.cockpit; },

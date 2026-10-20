@@ -632,6 +632,23 @@ a new throw for each one that arrives.
 | Ram | chicken walker: no arms, a head full of guns and a charge like a train |
 | Wraith | faceted and dark: fast, a beam on the arm, a shield that comes back quickly |
 
+Each carries its own weapons, and no two the same. Yours switches between
+its arms with the number keys or the wheel; theirs fires its own gun and a
+rocket pod:
+
+| Chassis | yours carries | theirs fires |
+|---|---|---|
+| Warden | chaingun, 40 mm cannon, EMP bomb | a chaingun in bursts |
+| Bruin | Leadwall, thermite launcher, car bomb | a shotgun |
+| Heron | plasma railgun, power laser | a railgun, one bolt every three seconds |
+| Lynx | chaingun, car bomb, Stinger | a fast chaingun, long bursts |
+| Bastion | 40 mm cannon, 88 mm flak, EMP bomb | a cannon |
+| Hornet | Stinger, 88 mm flak | a swarm of small rockets |
+| Colossus | 88 mm flak, 40 mm cannon, thermite launcher | flak shells, four at a time |
+| Mantis | thermite launcher, power laser, car bomb | thermite canisters |
+| Ram | 40 mm cannon, Leadwall | twin shells |
+| Wraith | power laser, plasma railgun, EMP bomb | a beam held on you |
+
 Each one is a row of numbers in `src/game/chassis.js` (size, where its hips
 are, speed, turn, armour, shield, jump, dash, the landing, where its guns
 are and which arm weapon it arrives holding) and a shape in

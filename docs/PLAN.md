@@ -2980,3 +2980,28 @@ caps residency at 520.
   flash is tinted green, not white, and the neighbour loses over 900.
   Screenshots: `mech-fusion-01-breach.png`, `mech-fusion-02-column.png`.
 
+## 68. Every chassis its own weapons
+
+- 2026-10-20: asked whether all the mechs have the same weapons, and why,
+  since they should all be different. They did: each chassis arrived holding
+  a different arm weapon, but yours carried the whole table of ten whatever
+  the body, and all ten of theirs fired the Reaper's chaingun and rocket pod
+  with a few numbers changed on two of them.
+- A chassis row now has a `loadout`, two or three arms with its signature
+  one first, and no two rows carry the same set; the mech's `m.arm` is an
+  index into its own loadout, the magazines are per loadout slot, and the
+  cockpit rows, the number keys and the key hint are built from it.
+- A chassis row also has a `gun`, laid over the Reaper's chaingun for
+  theirs, whose `kind` decides how it leaves the barrel: auto, shotgun,
+  rail, shell, swarm, thermite or laser, seven kinds across the ten. The
+  game layer's `FOE_FIRE` turns each into rounds, a lance, shells, small
+  rockets or canisters, through the same raycasts and blasts as yours.
+- The cheat menu says what each one carries, yours and theirs.
+- `tools/test-machines.mjs`: the Warden carries chaingun, cannon and EMP
+  bomb; 2 picks the cannon, the wheel goes on to the EMP bomb; every arm of
+  every chassis fires (27 of 27) and the ten sets are all different; theirs
+  fire seven kinds of gun between them and every one of the ten hurt the
+  player from 34 m in twelve seconds. The railgun and thermite checks give
+  the Warden the whole table for their length, since what they measure is
+  the arm and not the chassis.
+

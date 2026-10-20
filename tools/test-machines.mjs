@@ -1029,7 +1029,8 @@ async function run() {
     await new Promise((r) => requestAnimationFrame(r));
     return {
       skip: false,
-      arms: s.mechArms.length,
+      arms: s.mechLoadout.length,
+      ids: s.mechLoadout.map((a) => a.id).join(', '),
       rows: document.querySelectorAll('#mecharms .marm').length,
       hud: !document.getElementById('mechhud').classList.contains('hidden'),
       cockpit: s.state.cockpit,
@@ -1037,15 +1038,16 @@ async function run() {
       named: document.querySelector('#mecharms .marm.on span').textContent,
     };
   });
-  // Ten of them now, and the readout has a row for each: five it started
-  // with, plus the flak, the laser, the car bomb, the stinger and the EMP.
-  check('a mech of your own carries a loadout rather than one gun',
-    !got.skip && got.arms === 10 && got.rows === got.arms && got.hud,
-    got.skip ? got.why : `${got.arms} weapons, holding the ${got.named}`);
+  // The Warden's own three, and the readout has a row for each. Every
+  // chassis used to carry all ten, which made ten bodies and one mech.
+  check('a mech of your own carries its chassis\' loadout',
+    !got.skip && got.arms === 3 && got.rows === got.arms && got.hud
+      && got.ids === 'chaingun, cannon, empbomb',
+    got.skip ? got.why : `${got.ids}, holding the ${got.named}`);
 
   // The number row and the wheel, through the real keyboard and the real
   // wheel rather than by calling the function underneath them.
-  await page.keyboard.press('Digit4');
+  await page.keyboard.press('Digit2');
   const picked = await page.evaluate(async () => {
     const s = window.spreefall;
     const m = s.state.inMech;
@@ -1053,25 +1055,25 @@ async function run() {
     await new Promise((r) => requestAnimationFrame(r));
     return {
       arm: m ? m.arm : -1,
-      id: m ? s.mechArms[m.arm].id : '',
+      id: m ? s.mechLoadout[m.arm].id : '',
       lit: document.querySelectorAll('#mecharms .marm.on').length,
       litIndex: [...document.querySelectorAll('#mecharms .marm')]
         .findIndex((r) => r.classList.contains('on')),
     };
   });
   check('the number row chooses out of the mech loadout',
-    picked.arm === 3 && picked.id === 'railgun' && picked.lit === 1
-      && picked.litIndex === 3,
-    `4 picked the ${picked.id}`);
+    picked.arm === 1 && picked.id === 'cannon' && picked.lit === 1
+      && picked.litIndex === 1,
+    `2 picked the ${picked.id}`);
   await page.mouse.wheel(0, 120);
   const wheeled = await page.evaluate(async () => {
     const s = window.spreefall;
     const m = s.state.inMech;
     await new Promise((r) => requestAnimationFrame(r));
-    return { id: m ? s.mechArms[m.arm].id : '' };
+    return { id: m ? s.mechLoadout[m.arm].id : '' };
   });
   check('and the wheel moves one along, not two',
-    wheeled.id === 'leadwall', `the wheel reached the ${wheeled.id}`);
+    wheeled.id === 'empbomb', `the wheel reached the ${wheeled.id}`);
 
   // Underfoot. Eight metres of walking armour does not step over a man, and
   // the man is not shot: he is where the foot came down.
@@ -1224,6 +1226,12 @@ async function run() {
     const flat = Math.hypot(theirs.x - mine.x, theirs.z - mine.z);
     const rise = (theirs.y + 5.2) - (mine.y + s.mechSpec.titan.eye);
     s.look(yaw * 180 / Math.PI, Math.atan2(rise, flat) * 180 / Math.PI);
+    // What these two checks measure is the arm, not the chassis, and the
+    // Warden does not carry a railgun or thermite: for them the mech holds
+    // the whole table, in its order, and gets its own three back after.
+    mine.ownLoadout = mine.loadout;
+    mine.loadout = s.mechArms;
+    mine.mags = s.mechArms.map((a) => a.magazine);
     s.selectArm(3);
     // Held to the top of the charge, then let go. Nothing is counted until
     // the trigger comes up, which is the point of the weapon.
@@ -1290,6 +1298,11 @@ async function run() {
     s.fixedForTest(1 / 60);
     s.input.fire = false;
     for (let i = 0; i < 120; i++) s.fixedForTest(1 / 60);
+    if (mine.ownLoadout) {
+      mine.loadout = mine.ownLoadout;
+      mine.mags = mine.loadout.map((a) => a.magazine);
+      s.selectArm(0);
+    }
     return { skip: false, pools: s.burningGround.length - before };
   });
   check('the thermite launcher leaves the street on fire',
@@ -1837,49 +1850,60 @@ async function run() {
   check('and the pilot inside the armour is fine', !stomp.skip && !stomp.pilotHurt);
 
   // --- the whole loadout ----------------------------------------------------
-  // Every arm fires, takes a round out of its own magazine and leaves nothing
-  // on the console. The two anti aircraft arms get something to shoot at.
+  // Every arm of every chassis fires, takes a round out of its own magazine
+  // and leaves nothing on the console. The two anti aircraft arms get
+  // something to shoot at.
   const loadout = await page.evaluate(async () => {
     const s = window.spreefall;
-    s.mechs.reset(); s.projectiles.clear(); s.jets.reset();
-    s.teleport(700, -55);
-    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
-    const m = s.spawnMech('titan', 12);
-    if (!m) return { skip: true, why: 'no room for one' };
-    s.teleport(m.x + 3, m.z);
-    s.toggleVehicle();
-    if (s.state.inMech !== m) return { skip: true, why: 'could not get in' };
     const rows = [];
+    const sets = [];
     let slow = 0;
-    for (let i = 0; i < s.mechArms.length; i++) {
-      const arm = s.mechArms[i];
-      s.mechs.selectArm(m, i);
-      const air = arm.id === 'stinger' || arm.id === 'flak';
-      if (air) {
-        const j = s.spawnJet(0, 200, 80);
-        j.x = m.x; j.z = m.z - 200; j.y = m.y + 80;
-        s.look(0, 21);
-      } else {
-        s.look(0, 2);
+    for (const key of ['titan', 'bruin', 'heron', 'lynx', 'bastion', 'hornet', 'colossus', 'mantis', 'ram', 'wraith']) {
+      s.mechs.reset(); s.projectiles.clear(); s.jets.reset();
+      s.teleport(700, -55);
+      for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+      const m = s.spawnMech(key, 14);
+      if (!m) return { skip: true, why: `no room for a ${key}` };
+      s.teleport(m.x + 4, m.z);
+      s.toggleVehicle();
+      if (s.state.inMech !== m) return { skip: true, why: `could not get into a ${key}` };
+      sets.push(m.loadout.map((a) => a.id).sort().join('+'));
+      for (let i = 0; i < m.loadout.length; i++) {
+        const arm = m.loadout[i];
+        s.mechs.selectArm(m, i);
+        const air = arm.id === 'stinger' || arm.id === 'flak';
+        if (air) {
+          const j = s.spawnJet(0, 200, 80);
+          j.x = m.x; j.z = m.z - 200; j.y = m.y + 80;
+          s.look(0, 21);
+        } else {
+          s.look(0, 2);
+        }
+        s.camera.update(16 / 9);
+        // The guns point where the torso points, not where the camera does, so
+        // it is given time to come round before the trigger goes down.
+        for (let k = 0; k < 90; k++) s.fixedForTest(1 / 60);
+        for (let k = 0; k < 60; k++) {
+          s.holdFire(true);
+          s.fixedForTest(1 / 60);
+          slow = Math.max(slow, arm.id === 'stinger' ? s.state.airSlow : 0);
+        }
+        s.holdFire(false);
+        for (let k = 0; k < 120; k++) s.fixedForTest(1 / 60);
+        rows.push({ id: `${key} ${arm.id}`, fired: m.mags[i] < arm.magazine });
+        s.projectiles.clear(); s.jets.reset();
       }
-      s.camera.update(16 / 9);
-      // The guns point where the torso points, not where the camera does, so
-      // it is given time to come round before the trigger goes down.
-      for (let k = 0; k < 90; k++) s.fixedForTest(1 / 60);
-      for (let k = 0; k < 60; k++) {
-        s.holdFire(true);
-        s.fixedForTest(1 / 60);
-        slow = Math.max(slow, arm.id === 'stinger' ? s.state.airSlow : 0);
-      }
-      s.holdFire(false);
-      for (let k = 0; k < 120; k++) s.fixedForTest(1 / 60);
-      rows.push({ id: arm.id, fired: m.mags[i] < arm.magazine });
-      s.projectiles.clear(); s.jets.reset();
+      s.toggleVehicle();
     }
-    s.toggleVehicle();
     s.mechs.reset();
-    return { skip: false, rows, slow: Math.round(slow * 100) / 100 };
+    return { skip: false, rows, slow: Math.round(slow * 100) / 100,
+      sets: sets.length, distinct: new Set(sets).size,
+      kinds: new Set(rows.map((r) => r.id.split(' ')[1])).size };
   });
+  check('no two chassis carry the same weapons',
+    loadout.skip || (loadout.sets === 10 && loadout.distinct === 10),
+    loadout.skip ? loadout.why : `${loadout.distinct} different sets out of ${loadout.sets}, `
+      + `${loadout.kinds} different arms between them`);
   check('every arm in the loadout fires',
     loadout.skip || loadout.rows.every((r) => r.fired),
     loadout.skip ? loadout.why
@@ -1888,6 +1912,39 @@ async function run() {
   check('and a stinger on a lock slows the world down while it runs it down',
     loadout.skip || loadout.slow > 0,
     loadout.skip ? loadout.why : `${loadout.slow} s of it`);
+
+  // And theirs: each chassis fires its own gun rather than the Reaper's
+  // chaingun in ten bodies, and every one of those guns can reach you.
+  const foes = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const out = [];
+    const hurt = s.combat.hurt;
+    const modeWas = s.machines.active;
+    s.machines.active = false;
+    for (const key of ['reaper', 'bruin-foe', 'heron-foe', 'lynx-foe', 'bastion-foe', 'hornet-foe',
+      'colossus-foe', 'mantis-foe', 'ram-foe', 'wraith-foe']) {
+      s.mechs.reset(); s.projectiles.clear(); s.soldiers.reset();
+      s.burningGround.length = 0;
+      s.teleport(700, -55);
+      for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+      let taken = 0;
+      s.combat.hurt = (d) => { taken += d; return false; };
+      const m = s.spawnMech(key, 34);
+      if (!m) { s.combat.hurt = hurt; out.push({ key, skip: true }); continue; }
+      for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
+      s.combat.hurt = hurt;
+      out.push({ key, kind: m.spec.chaingun.kind || 'auto', taken: Math.round(taken) });
+    }
+    s.mechs.reset(); s.projectiles.clear(); s.burningGround.length = 0;
+    s.machines.active = modeWas;
+    return out;
+  });
+  const foeKinds = new Set(foes.filter((f) => !f.skip).map((f) => f.kind));
+  check('theirs fire seven different kinds of gun', foeKinds.size >= 7,
+    [...foeKinds].join(', '));
+  check('and every one of them can hurt you',
+    foes.every((f) => f.skip || f.taken > 0),
+    foes.map((f) => `${f.key} ${f.kind} ${f.skip ? 'no room' : f.taken}`).join('; '));
 
   await page.evaluate(async () => {
     const s = window.spreefall;
