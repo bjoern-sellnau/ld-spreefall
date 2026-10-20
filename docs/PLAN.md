@@ -3141,3 +3141,13 @@ caps residency at 520.
   kept anyway: the landing district is pinned, so no distance or ceiling can
   let it go while you are coming down to it.
 
+
+  The next live run said what the flight was waiting for: c3r2, which is
+  not built on CI at all (the live build there has core, c2r1 and c4r1).
+  The test picked its neighbour as the nearest district sharing an edge
+  and never asked whether it was built, so the walking check measured the
+  ground of a district with no bundle, and the flight went to a place with
+  nothing to land on and held over it for good. The test now picks only
+  built districts. The game says no as well: beginTravel refuses a district
+  nobody has built, as the map already did, and the landing only holds for
+  a district that can arrive.

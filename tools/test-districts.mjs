@@ -235,6 +235,9 @@ async function run() {
     let best = null, bestAway = Infinity;
     for (const d of s.world.catalogue) {
       if (d.id === home.id) continue;
+      // A district nobody has built is in the catalogue but has nothing to
+      // load: on CI the nearest one was, and the flight to it hovered for good.
+      if (!s.world.isBuilt(d)) continue;
       // Sharing an edge, not merely being close: a district diagonally off the
       // corner is nearer by centre distance than one above, and you cannot
       // walk across a corner.

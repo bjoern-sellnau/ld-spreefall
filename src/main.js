@@ -3816,6 +3816,10 @@ async function main() {
   function beginTravel(x, z) {
     const tx = Math.min(world.maxX - 10, Math.max(world.minX + 10, x));
     const tz = Math.min(world.maxZ - 10, Math.max(world.minZ + 10, z));
+    // The map says no to a district nobody has built, and so does the flight:
+    // there is nothing there to land on, and the landing would hold for good.
+    const target = world.entryAt(tx, tz);
+    if (target && !world.isBuilt(target)) return false;
     travel.start({
       x: player.x, y: player.y + PLAYER.eye, z: player.z,
       yaw: camera.yaw, pitch: camera.pitch,
@@ -3832,7 +3836,7 @@ async function main() {
     // and the flight is seven seconds of warning that you are coming. Start
     // fetching it now and bring the tiles in along the way, so the city is
     // there when you arrive rather than appearing around you afterwards.
-    const far = world.entryAt(tx, tz);
+    const far = target;
     if (far && (!world.loaded(far.id) || world.isOverflight(far.id))) {
       // The flight is the loading screen: it takes seven seconds and the
       // district lands inside that, so there is nothing to wait for at the
@@ -5167,6 +5171,7 @@ async function main() {
       // and on the live city a flight to the middle of the Hansaviertel held
       // over a tile like that for good, a few hundred metres up.
       if (p.finished && state.travelTo && landing
+        && world.isBuilt(world.entryFor(landing))
         && (!world.loaded(landing) || world.isOverflight(landing))) {
         el.district.textContent = `landing in ${world.nameAt(state.travelTo.x, state.travelTo.z) || 'Berlin'}`;
         el.district.classList.add('loading');
