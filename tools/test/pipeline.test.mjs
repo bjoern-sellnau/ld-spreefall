@@ -310,3 +310,16 @@ test('every generator winds its faces to match the normals it declares', () => {
     assert.equal(bad, 0, `${name}: ${bad} of ${checked} triangles are wound against their normal`);
   }
 });
+
+test('a box held up in the air is closed underneath', () => {
+  // The Gate's entablature, attic and column heads are boxes in the air, and
+  // without an underside they read from the street below as loose sheets.
+  const mesh = new Mesh();
+  box(mesh, 0, 15, 0, 60, 2.4, 11, MAT.SANDSTONE, { rot: 0.3 });
+  let down = 0;
+  for (let i = 0; i < mesh.idx.length; i += 3) {
+    const a = mesh.idx[i];
+    if (mesh.ny[a] < -0.99 && Math.abs(mesh.py[a] - 15) < 1e-6) down++;
+  }
+  assert.equal(down, 2, 'two triangles face the street');
+});

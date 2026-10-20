@@ -2901,3 +2901,16 @@ caps residency at 520.
   now asks the streets themselves, through an index of every street
   segment with half its width and its pavement, whether it would stand in
   one, so how the railway was cut no longer matters.
+
+## 64. The Brandenburg Gate was open underneath
+
+- 2026-10-20: a screenshot from under the Gate on the live site: the
+  entablature and the plates on the column heads hanging as bent sheets in
+  the sky. `box` in `tools/geometry.mjs` built five faces, never the
+  bottom one, which nothing on the ground shows and everything in the air
+  shows from below: the Gate's entablature, its attic, the abacus on every
+  column, the quadriga's plinth, the lamp arms. From the carriageway what
+  was left was the near side of each with its far side culled. A box has an
+  underside now; the stelae and the parked cars, which stand on the ground
+  and are most of the boxes in the city, ask not to have one, so the middle
+  district went from 280,404 triangles to 284,296 rather than to 297,854.

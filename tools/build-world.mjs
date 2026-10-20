@@ -2386,7 +2386,7 @@ function buildStelae(mesh, collision, memorial, terrain) {
     const h = Math.max(0.25, top - ground);
     box(mesh, x, ground, z, sw, h, sd, MAT.STELE, {
       seed: hashInt(Math.round(x * 4), Math.round(z * 4)) & 255,
-      flags: FACADE_FLAG.NO_WINDOWS,
+      flags: FACADE_FLAG.NO_WINDOWS, under: false,
     });
     const hw = sw / 2, hd = sd / 2;
     const corners = [[x - hw, z - hd], [x + hw, z - hd], [x + hw, z + hd], [x - hw, z + hd]];
