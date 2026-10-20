@@ -3274,3 +3274,8 @@ So there are two cities now, and a profile picks which:
   what is left, two minutes at most. The honest reading: on Pages the gain is
   two districts, because the standard city already fills the site. Room for
   more would have to come out of the overflight bundles or the outer tiers.
+- 2026-10-20: the next deploy (Pages run 142) with the Overpass deadline: the
+  step took 1 min 58 s instead of 10 min 50 s. Tiergarten (c2r2) got its full
+  tags this time and would have been 961.20 MB, so it was built back too. The
+  live site is Mitte and Hansaviertel at tier 0, 941.71 MB of 1000. The checks
+  on the same commit are green end to end (run 120).
