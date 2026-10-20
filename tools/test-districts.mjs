@@ -539,9 +539,17 @@ async function run() {
     // districts built is open country nobody has built: the blast went off
     // over nothing, nothing came down, and the trip home from there held
     // the page for eight minutes and took the next three checks with it.
+    const modeAtStart = s.state.mode;
     await s.crossInto(81, 0);
     s.teleport(81, 0);
     for (let i = 0; i < 30; i++) await new Promise((r) => requestAnimationFrame(r));
+    // The simulation only steps on foot. On the live city the blast here did
+    // nothing three runs running, nor did anything after it that needs the
+    // walk mode, so wait for it, and say what it was if it never comes.
+    for (let i = 0; i < 600 && s.state.mode !== 'walk'; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    const modeAtBlast = s.state.mode;
     s.demolition.reset();
     const home = s.world.idAt(s.player.x, s.player.z);
     // And somewhere the blast is allowed to reach: on the live city the
@@ -565,7 +573,7 @@ async function run() {
     }
     const before = s.world.groundHeight(x, z);
     const tallBefore = s.world.tallestNear(x, z, 60);
-    s.demolition.blast(x, before, z, 170, 4000);
+    const opened = s.demolition.blast(x, before, z, 170, 4000).length;
     for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
     const dug = s.world.groundHeight(x, z);
     const tallAfter = s.world.tallestNear(x, z, 60);
@@ -601,12 +609,15 @@ async function run() {
       tallAfter: Math.round(tallAfter),
       tallBack: Math.round(s.world.tallestNear(x, z, 60)),
       here: s.world.idAt(s.player.x, s.player.z),
+      why: `mode ${modeAtStart} then ${modeAtBlast}, ${opened} sites opened at `
+        + `${Math.round(x)}, ${Math.round(z)} in ${home}, buildings ${s.demolition.buildings}, `
+        + `ground ${s.demolition.ground}, enabled ${s.demolition.enabled}`,
     };
   });
   check('a district you flattened is still flat when you come back to it',
     kept.gone && kept.dug < kept.before - 3
       && Math.abs(kept.back - kept.dug) < 0.6,
-    `${kept.before} m became ${kept.dug} m, and ${kept.back} m after a round trip`);
+    `${kept.before} m became ${kept.dug} m, and ${kept.back} m after a round trip; ${kept.why}`);
   check('and the buildings that came down are still down',
     kept.tallAfter < kept.tallBefore - 2 && kept.tallBack <= kept.tallAfter + 1,
     `${kept.tallBefore} m standing, ${kept.tallAfter} m after, ${kept.tallBack} m on the way back`);
