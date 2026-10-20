@@ -85,3 +85,33 @@ test('what OpenStreetMap maps of a landmark goes, and the landmark stays', () =>
   assert.equal(replacedByLandmark(neighbour, marks), false);
   assert.equal(replacedByLandmark(block, marks), false, 'something much bigger round it is not the landmark');
 });
+
+// --- railways: where streets go under, and which ways are one line -----------
+import { roadIndex, joinLines } from '../build-world.mjs';
+
+test('a pier knows when it would stand in a street, whichever way the railway was cut', () => {
+  const inStreet = roadIndex([
+    { line: [[40, -60], [40, 60]], tags: { highway: 'primary', width: '12' } },
+    { line: [[0, 200], [100, 200]], tags: { highway: 'residential' } },
+  ]);
+  assert.equal(inStreet(40, 0), true, 'the middle of the street');
+  assert.equal(inStreet(40 + 7.5, 10), true, 'on its pavement');
+  assert.equal(inStreet(40 + 8.5, 10), false, 'clear of it');
+  assert.equal(inStreet(40 + 8.5, 10, 1.0), true, 'unless the pier itself is a metre wide');
+  assert.equal(inStreet(50, 203), true, 'a street without a width tag has its class width');
+  assert.equal(inStreet(500, 500), false, 'nowhere near either');
+});
+
+test('railway ways that meet end to end are one line, and a fork goes the straight way', () => {
+  const a = { kind: 'rail', up: true, line: [[0, 0], [100, 0]] };
+  const b = { kind: 'rail', up: true, line: [[200, 0], [100.5, 0.2]] };   // reversed, a hair apart
+  const spur = { kind: 'rail', up: true, line: [[200, 0], [260, 80]] };   // turns off sharply
+  const on = { kind: 'rail', up: true, line: [[200, 0], [300, 5]] };
+  const tram = { kind: 'tram', up: false, line: [[300, 5], [400, 5]] };
+  const out = joinLines([a, b, spur, on, tram]);
+  const main = out.find((r) => r.kind === 'rail' && r.line.length >= 4);
+  assert.ok(main, 'the three straight ways are one line');
+  assert.deepEqual(main.line[0], [0, 0]);
+  assert.deepEqual(main.line[main.line.length - 1], [300, 5]);
+  assert.equal(out.length, 3, 'the line, the spur on its own, and the tram which is not a railway');
+});

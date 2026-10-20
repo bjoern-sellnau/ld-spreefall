@@ -365,7 +365,11 @@ function buildDistrict(district, overflight = false) {
       continue;
     }
     if (t.railway === 'rail' || t.railway === 'tram' || t.railway === 'light_rail' || t.railway === 'subway') {
-      if (t.railway !== 'subway') rails.push({ line: ring, tags: t });
+      // Underground is underground: a tunnel was built as a six metre
+      // viaduct standing in the street over it, the same as the Stadtbahn.
+      const below = t.tunnel === 'yes' || t.tunnel === 'building_passage' || t.covered === 'yes'
+        || (Number.isFinite(parseFloat(t.layer)) && parseFloat(t.layer) < 0);
+      if (t.railway !== 'subway' && !below) rails.push({ line: ring, tags: t });
       continue;
     }
     if (t.highway) {
@@ -859,6 +863,9 @@ function buildDistrict(district, overflight = false) {
 
   since('roads');
   // --- rails --------------------------------------------------------------
+  // Every street, indexed, so that a pier can ask whether it would stand in
+  // one. Built once for all the railways rather than per viaduct face.
+  const streetAt = roadIndex(roads);
   for (const r of rails) {
     const elevated = r.tags.bridge === 'yes' || r.tags.railway === 'rail';
     if (elevated) {
@@ -889,6 +896,19 @@ function buildDistrict(district, overflight = false) {
         const bays = Math.max(1, Math.round(total / BAY));
         const step = total / bays;
         const at = (d) => pointAt(off, Math.max(0, Math.min(total, d)));
+        // Whether a pier here would stand in a street. The piers were every
+        // nine metres whatever was under them, so whether a street got
+        // through was luck: on the synthetic city Friedrichstrasse did, and
+        // on the real one it ran into a pier. The first answer to that asked
+        // where each street crossed each face, which missed every face whose
+        // railway way ends or bends at the street, and OpenStreetMap splits
+        // a railway at every bridge: three streets on the real city were
+        // still stopped by the pier of the next track along. So a pier asks
+        // the streets instead, by where it stands.
+        const blocked = (a, b) => {
+          const m = at((a + b) / 2);
+          return !!m && streetAt(m[0], m[1], (b - a) / 2 + 1.0);
+        };
         for (let i = 0; i < bays; i++) {
           const d0 = i * step;
           const marks = [d0, d0 + PIER * 0.5, d0 + step - PIER * 0.5, d0 + step];
@@ -899,18 +919,26 @@ function buildDistrict(district, overflight = false) {
             const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
             return [(b[1] - a[1]) / len * side, -(b[0] - a[0]) / len * side, len];
           };
-          // The pier, floor to deck.
-          {
-            const [nx, nz, len] = faceDir(p0, p1);
-            const ya = yAt(p0[0], p0[1]), yb = yAt(p1[0], p1[1]);
+          // The pier, floor to deck; or, where a street goes under, only the
+          // lintel over it, from the crown of the arches up. Each bay draws
+          // both halves of a pier, the one it starts on and the one it ends
+          // on: it used to draw only the first, which left a slot a metre
+          // and a half wide from the pavement to the deck at the end of
+          // every bay.
+          for (const [qa, qb, da, db] of [[p0, p1, d0, d0 + PIER * 0.5],
+            [p2, p3, d0 + step - PIER * 0.5, d0 + step]]) {
+            const [nx, nz, len] = faceDir(qa, qb);
+            const ya = yAt(qa[0], qa[1]), yb = yAt(qb[0], qb[1]);
+            const open = blocked(da, db);
+            const foot = open ? SPRING + RISE : 0;
             mesh.quad(
-              brick(p0[0], ya + DECK, p0[1], nx, nz, 0, DECK),
-              brick(p1[0], yb + DECK, p1[1], nx, nz, len, DECK),
-              brick(p1[0], yb, p1[1], nx, nz, len, 0),
-              brick(p0[0], ya, p0[1], nx, nz, 0, 0),
+              brick(qa[0], ya + DECK, qa[1], nx, nz, 0, DECK),
+              brick(qb[0], yb + DECK, qb[1], nx, nz, len, DECK),
+              brick(qb[0], yb + foot, qb[1], nx, nz, len, foot),
+              brick(qa[0], ya + foot, qa[1], nx, nz, 0, foot),
             );
-            collision.push({ x1: p0[0], z1: p0[1], x2: p1[0], z2: p1[1],
-              base: -2, top: DECK, surface: SURFACE.STONE });
+            collision.push({ x1: qa[0], z1: qa[1], x2: qb[0], z2: qb[1],
+              base: open ? ya + foot : -2, top: DECK, surface: SURFACE.STONE });
           }
           // The wall over the arch, drawn in columns from the curve up to the
           // deck, so that everything above the opening is brick and the
@@ -1256,9 +1284,18 @@ function buildDistrict(district, overflight = false) {
     roadLines,
     // Where the railways run, and which of them are up on a viaduct. A train
     // needs a line to run along and the game has no other way to know one.
-    railLines: rails.map((r) => ({
+    // OpenStreetMap maps a railway as many short ways, a new one at every
+    // bridge, switch and platform end, and each of them was a line with a
+    // train of its own: the real Stadtbahn came out as seventy six lines and
+    // eleven trains shuttling up and down a hundred and fifty metres each.
+    // Ways that meet end to end, going on in roughly the same direction, are
+    // one line here.
+    railLines: joinLines(rails.map((r) => ({
       kind: r.tags.railway,
       up: r.tags.bridge === 'yes' || r.tags.railway === 'rail',
+      line: r.line,
+    }))).map((r) => ({
+      kind: r.kind, up: r.up,
       pts: simplify(r.line, 2).flatMap((p) => [round2(p[0]), round2(p[1])]),
     })).filter((r) => r.pts.length >= 4),
     streets: streetNames,
@@ -2000,6 +2037,103 @@ export function replacedByLandmark(b, marks) {
     if (area < m.area * 4 && pointInRing(m.cx, m.cz, b.outer)) return true;
   }
   return false;
+}
+
+/**
+ * Every street as segments in a grid, for asking whether a point stands in
+ * one: inside half its width, its pavement and a margin.
+ *
+ * @param {Array<{line:Array, tags:Object}>} roads
+ * @returns {(x:number, z:number, margin?:number)=>boolean}
+ */
+export function roadIndex(roads, cell = 40) {
+  const grid = new Map();
+  const key = (i, j) => `${i},${j}`;
+  for (const r of roads) {
+    const width = parseLength(r.tags.width);
+    const w = Number.isFinite(width) && width > 1 ? width : (ROAD_WIDTH[r.tags.highway] || 6);
+    // Half the street and its pavement, which is as far as a pier must keep.
+    const half = w / 2 + 1.7;
+    const pts = r.line;
+    for (let j = 1; j < pts.length; j++) {
+      const a = pts[j - 1], b = pts[j];
+      const seg = { ax: a[0], az: a[1], bx: b[0], bz: b[1], half };
+      const i0 = Math.floor((Math.min(a[0], b[0]) - half) / cell);
+      const i1 = Math.floor((Math.max(a[0], b[0]) + half) / cell);
+      const k0 = Math.floor((Math.min(a[1], b[1]) - half) / cell);
+      const k1 = Math.floor((Math.max(a[1], b[1]) + half) / cell);
+      for (let k = k0; k <= k1; k++) {
+        for (let i = i0; i <= i1; i++) {
+          const id = key(i, k);
+          let list = grid.get(id);
+          if (!list) { list = []; grid.set(id, list); }
+          list.push(seg);
+        }
+      }
+    }
+  }
+  return (x, z, margin = 0) => {
+    const list = grid.get(key(Math.floor(x / cell), Math.floor(z / cell)));
+    if (!list) return false;
+    for (const s of list) {
+      const ex = s.bx - s.ax, ez = s.bz - s.az;
+      const l2 = ex * ex + ez * ez || 1;
+      const t = Math.max(0, Math.min(1, ((x - s.ax) * ex + (z - s.az) * ez) / l2));
+      const d = Math.hypot(s.ax + ex * t - x, s.az + ez * t - z);
+      if (d < s.half + margin) return true;
+    }
+    return false;
+  };
+}
+
+/**
+ * Lines that meet end to end, joined into one where the second goes on in
+ * about the same direction as the first. Only lines of the same kind and
+ * the same up or down are joined, and at a fork the straighter way wins.
+ *
+ * @param {Array<{kind:string, up:boolean, line:Array}>} list
+ * @param {number} tol how close two ends have to be, in metres
+ * @returns {Array<{kind:string, up:boolean, line:Array}>}
+ */
+export function joinLines(list, tol = 1.5) {
+  const items = list.filter((r) => r.line && r.line.length >= 2)
+    .map((r) => ({ ...r, line: r.line.map((p) => [p[0], p[1]]), used: false }));
+  const dirAt = (line, end) => {
+    const n = line.length;
+    const [a, b] = end ? [line[n - 2], line[n - 1]] : [line[1], line[0]];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    return [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+  };
+  const out = [];
+  for (const start of items) {
+    if (start.used) continue;
+    start.used = true;
+    let line = start.line;
+    for (const forward of [true, false]) {
+      for (;;) {
+        const tip = forward ? line[line.length - 1] : line[0];
+        const heading = dirAt(line, forward);
+        let best = null, bestDot = Math.cos(35 * Math.PI / 180);
+        for (const o of items) {
+          if (o.used || o.kind !== start.kind || o.up !== start.up) continue;
+          for (const flip of [false, true]) {
+            const pts = flip ? [...o.line].reverse() : o.line;
+            const first = pts[0];
+            if (Math.hypot(first[0] - tip[0], first[1] - tip[1]) > tol) continue;
+            const on = dirAt(pts, false).map((v) => -v);
+            const dot = heading[0] * on[0] + heading[1] * on[1];
+            if (dot > bestDot) { bestDot = dot; best = { o, pts }; }
+          }
+        }
+        if (!best) break;
+        best.o.used = true;
+        line = forward ? [...line, ...best.pts.slice(1)]
+          : [...[...best.pts].reverse().slice(0, -1), ...line];
+      }
+    }
+    out.push({ kind: start.kind, up: start.up, line });
+  }
+  return out;
 }
 
 /** A point a given distance along a polyline, or null past the end. */
