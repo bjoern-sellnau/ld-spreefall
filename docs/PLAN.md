@@ -3118,4 +3118,12 @@ caps residency at 520.
   the blast went off over nothing and the trip home held the page for
   eight minutes, which is what the next three failures look like. It now
   crosses back into Mitte first. Locally 34 of 34.
+- The next live run, with the ruin check starting in Mitte: still nothing
+  came down. Sixty metres east of the Gate is inside 170 m of the memorial,
+  and nothing within reach of a weapons free zone is demolished, so the
+  blast was refused whole. The check now picks the nearest point in the
+  district with buildings on it that is clear of every zone by 200 m. And
+  the check that a neighbour's ground arrives read one point 25 m over the
+  edge, which on the live city is a tile with nothing in it and so no tile
+  at all; it reads nine points along the edge now.
 

@@ -283,19 +283,32 @@ async function run() {
       const z = axis === 'x' ? along : insideAt;
       const zBeyond = axis === 'x' ? along : beyondAt;
       s.teleport(inside, z);
+      // Whether the far side is there, at nine points along the edge rather
+      // than one: a tile with nothing in it is not in the bundle at all, and
+      // on the live city the one point this read was a tile of nothing.
+      const span = axis === 'x'
+        ? [Math.max(home.bounds.minZ, other.bounds.minZ), Math.min(home.bounds.maxZ, other.bounds.maxZ)]
+        : [Math.max(home.bounds.minX, other.bounds.minX), Math.min(home.bounds.maxX, other.bounds.maxX)];
+      const anyBeyond = () => {
+        for (let k = 1; k <= 9; k++) {
+          const t = span[0] + (span[1] - span[0]) * k / 10;
+          if (axis === 'x' ? s.world.isLoaded(beyondAt, t) : s.world.isLoaded(t, beyondAt)) return true;
+        }
+        return false;
+      };
       // Put the neighbour back on the wire first, so what is being measured
       // is the arrival of a district rather than one that is already here.
       s.world.unloadDistrict(other.id);
       const before = {
         loaded: s.world.loadedIds.slice(),
-        isLoadedBeyond: s.world.isLoaded(beyond, zBeyond),
+        isLoadedBeyond: anyBeyond(),
       };
       const t0 = performance.now();
       await s.world.loadDistrict(other.id);
       const after = {
         ms: Math.round(performance.now() - t0),
         loaded: s.world.loadedIds.slice(),
-        isLoadedBeyond: s.world.isLoaded(beyond, zBeyond),
+        isLoadedBeyond: anyBeyond(),
         groundInside: Math.round(s.world.groundHeight(inside, z) * 100) / 100,
         groundBeyond: Math.round(s.world.groundHeight(beyond, zBeyond) * 100) / 100,
         nameBeyond: s.world.nameAt(beyond, zBeyond),
@@ -531,7 +544,25 @@ async function run() {
     for (let i = 0; i < 30; i++) await new Promise((r) => requestAnimationFrame(r));
     s.demolition.reset();
     const home = s.world.idAt(s.player.x, s.player.z);
-    const x = s.player.x + 60, z = s.player.z;
+    // And somewhere the blast is allowed to reach: on the live city the
+    // memorial is two hundred metres from the Gate, inside 170 m of a point
+    // sixty metres east of here, and nothing within reach of it comes down,
+    // so the blast did nothing at all. The nearest point with buildings on it
+    // that is clear of every weapons free zone.
+    let x = s.player.x + 60, z = s.player.z;
+    const clear = (px, pz) => s.combat.sanctuaries.every((q) => Math.hypot(px - q.x, pz - q.z) > q.radius + 200);
+    if (!clear(x, z)) {
+      let found = null;
+      for (let d = 100; d <= 900 && !found; d += 50) {
+        for (let i = 0; i < 24; i++) {
+          const a = (i / 24) * Math.PI * 2;
+          const px = s.player.x + Math.cos(a) * d, pz = s.player.z + Math.sin(a) * d;
+          if (s.world.idAt(px, pz) !== home || !clear(px, pz)) continue;
+          if (s.world.tallestNear(px, pz, 40) > 12) { found = { x: px, z: pz }; break; }
+        }
+      }
+      if (found) { x = found.x; z = found.z; }
+    }
     const before = s.world.groundHeight(x, z);
     const tallBefore = s.world.tallestNear(x, z, 60);
     s.demolition.blast(x, before, z, 170, 4000);
