@@ -1392,8 +1392,31 @@ async function run() {
       const y = s.world.groundHeight(fx, fz) + 0.9;
       const hit = s.world.raycast(fx, y, fz, c.dx, 0, c.dz, 32);
       const up = s.world.raycast(fx, s.world.groundHeight(fx, fz) + 5.9, fz, c.dx, 0, c.dz, 32);
+      // What it ran into, when it ran into something: the wall's foot and
+      // top over the street, how long it is and how square to the railway,
+      // which tells a pier (six and a half metres, a metre and a half long,
+      // along the line) from a building or a wall somebody else put there.
+      let what = null;
+      if (hit) try {
+        const hx = fx + c.dx * hit.t, hz = fz + c.dz * hit.t;
+        const index = s.world.tileIndex(hx, hz);
+        const segs = index >= 0 ? s.world.segments(index) : [];
+        let near = Infinity;
+        for (let i = 0; i + 5 < segs.length; i += 6) {
+          const [x1, z1, x2, z2, base, top] = segs.slice(i, i + 6);
+          const ex = x2 - x1, ez = z2 - z1, l2 = ex * ex + ez * ez || 1;
+          const u = Math.max(0, Math.min(1, ((hx - x1) * ex + (hz - z1) * ez) / l2));
+          const d = Math.hypot(x1 + ex * u - hx, z1 + ez * u - hz);
+          if (d >= near) continue;
+          near = d;
+          const g = s.world.groundHeight(hx, hz);
+          const len = Math.sqrt(l2);
+          what = `${(base - g).toFixed(1)} to ${(top - g).toFixed(1)} m up, ${len.toFixed(1)} m long, `
+            + `${Math.round(Math.abs(ex * c.dx + ez * c.dz) / len * 100)}% along the street`;
+        }
+      } catch (e) { what = `could not tell: ${e.message}`; }
       results.push({ name: c.name, at: [Math.round(c.x), Math.round(c.z)], through: !hit,
-        hit: hit ? Math.round(hit.t) : null, deck: !!up,
+        hit: hit ? Math.round(hit.t) : null, what, deck: !!up,
         standing: Number(s.world.tallestNear(c.x, c.z, 8).toFixed(1)) });
     }
     const first = shown[0] || { x: 637, z: -422 };
@@ -1432,7 +1455,7 @@ async function run() {
   });
   const through = viaduct.results.filter((r) => r.through);
   const blockedAt = viaduct.results.filter((r) => !r.through)
-    .map((r) => `${r.name} at ${r.at.join(', ')} after ${r.hit} m`);
+    .map((r) => `${r.name} at ${r.at.join(', ')} after ${r.hit} m (${r.what || 'no wall found'})`);
   check('a street runs under the viaduct instead of into it',
     viaduct.results.length > 0 && through.length === viaduct.results.length
       && viaduct.results.every((r) => r.standing > 5),
