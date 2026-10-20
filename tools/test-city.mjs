@@ -323,7 +323,30 @@ async function run() {
     const y = s.world.groundHeight(at.x, at.z);
     // The same reach the search used, or the point it found may have
     // nothing inside a tighter circle and every reading comes back zero.
-    const here = () => Math.round(s.world.tallestNear(at.x, at.z, 6) * 10) / 10;
+    // The mean height of the walls within reach, a metre of wall at a time.
+    // The tallest was the measure once, but a building comes down column by
+    // column now with a ragged edge, and the tallest piece near the hit is
+    // the one column at the edge that stayed up while the rest came down.
+    const meanNear = (px, pz, r) => {
+      let sum = 0, n = 0;
+      s.world.forEachSegmentTile(px - r, pz - r, px + r, pz + r, (segs) => {
+        for (let i = 0; i + 5 < segs.length; i += 6) {
+          const len = Math.hypot(segs[i + 2] - segs[i], segs[i + 3] - segs[i + 1]);
+          const steps = Math.max(1, Math.ceil(len));
+          const tall = Math.max(0, segs[i + 5] - Math.max(0, segs[i + 4]));
+          for (let k = 0; k < steps; k++) {
+            const t = (k + 0.5) / steps;
+            const qx = segs[i] + (segs[i + 2] - segs[i]) * t;
+            const qz = segs[i + 1] + (segs[i + 3] - segs[i + 1]) * t;
+            if (Math.hypot(qx - px, qz - pz) > r) continue;
+            sum += tall * (len / steps);
+            n += len / steps;
+          }
+        }
+      });
+      return n ? sum / n : 0;
+    };
+    const here = () => Math.round(meanNear(at.x, at.z, 8) * 10) / 10;
     // A rocket touches up to four cells of the damage grid, so a site can
     // reach the far side of the frontage it hit. What it must not do is take
     // the neighbours with it, which is what these two read.
