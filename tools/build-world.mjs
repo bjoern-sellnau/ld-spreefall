@@ -5,6 +5,9 @@
 //   node tools/build-world.mjs                   the middle district
 //   node tools/build-world.mjs --district=c2r1   one named district
 //   node tools/build-world.mjs --all             every district with an extract
+//   node tools/build-world.mjs --all --profile=full   all of it at tier 0
+//   node tools/build-world.mjs --district=c2r1 --tier=0 --over=2
+//                                                one district at a tier asked for
 //
 // Districts are cut on the lines of one city wide tile grid, so a tile index
 // means the same thing in every one of them, and each district only builds
@@ -18,7 +21,7 @@ import zlib from 'node:zlib';
 import { parseOsmXml, counts } from './osm-xml.mjs';
 import { annotate } from './annotate.mjs';
 import { project, BBOX, CITY, worldBounds, cityGrid, ORIGIN } from './geo.mjs';
-import { DISTRICTS, TIERS, CORE_ID, OVERFLIGHT_TIER, OVERFLIGHT_UNTIL, districtById } from './districts.mjs';
+import { DISTRICTS, TIERS, CORE_ID, districtById, profileFrom, buildPlan } from './districts.mjs';
 import { Mesh } from './mesh.mjs';
 import { Terrain } from './terrain.mjs';
 import { fbm2, hashInt } from './noise.mjs';
@@ -221,24 +224,33 @@ function main() {
   } else {
     wanted = [districtById(CORE_ID)];
   }
-  // Every district is built twice: once at its own tier, and once at the
-  // sketch tier for the fast travel flight to pass over. A district that is
+  // Every district is built twice: once at its own tier, and once at a
+  // coarser one for the fast travel flight to pass over. A district that is
   // already that coarse is its own overflight bundle and is not built again.
+  // Which tiers those are is the profile's business, see tools/districts.mjs.
   const fineOnly = process.argv.includes('--fine-only');
-  for (const district of wanted) {
+  const profile = profileFrom(process.argv);
+  if (profile !== 'standard') console.log(`profile ${profile}`);
+  for (const row of wanted) {
+    const plan = buildPlan(row, profile, process.argv);
+    const district = { ...row, tier: plan.tier };
     buildDistrict(district);
-    if (!fineOnly && district.tier <= OVERFLIGHT_UNTIL) buildDistrict(district, true);
+    if (fineOnly) continue;
+    if (plan.over !== null) buildDistrict(district, plan.over);
+    else dropVariant(district);
   }
   writeIndexSummary();
 }
 
 /**
- * @param {object} district one row of the district table
- * @param {boolean} overflight build the sketch tier bundle rather than its own
+ * @param {object} district one row of the district table, at the tier it is built at
+ * @param {number|false} overflight the tier of the overflight bundle to build
+ *   instead of its own, or false for its own
  */
 function buildDistrict(district, overflight = false) {
   const t0 = Date.now();
-  const tierIndex = overflight ? OVERFLIGHT_TIER : district.tier;
+  const tierIndex = overflight === false ? district.tier : overflight;
+  overflight = overflight !== false;
   const tier = TIERS[tierIndex];
   const suffix = overflight ? '.lo' : '';
   const RAW_FILE = rawFile(district.id);
@@ -428,7 +440,7 @@ function buildDistrict(district, overflight = false) {
   // --- what this tier leaves out ------------------------------------------
   if (tier.minArea > 6) {
     const kept = buildings.filter((b) => ringArea(b.outer) >= tier.minArea);
-    console.log(`tier ${district.tier}: ${buildings.length - kept.length} buildings under ${tier.minArea} m2 dropped`);
+    console.log(`tier ${tierIndex}: ${buildings.length - kept.length} buildings under ${tier.minArea} m2 dropped`);
     buildings = kept;
   }
   if (tier.simplify > 0) {
@@ -470,7 +482,7 @@ function buildDistrict(district, overflight = false) {
       ]);
       boxed++;
     }
-    console.log(`tier ${district.tier}: ${boxed} small buildings reduced to the box that fits them`);
+    console.log(`tier ${tierIndex}: ${boxed} small buildings reduced to the box that fits them`);
   }
   if (tier.trees < 1) {
     trees = trees.filter((t) => {
@@ -1487,6 +1499,17 @@ function readIndex() {
  * The index is written after every district, so a build that is interrupted
  * leaves behind a city of the districts that finished rather than nothing.
  */
+/**
+ * A district rebuilt without an overflight bundle loses the one it had: its
+ * files would otherwise be deployed, and counted, for nothing.
+ */
+function dropVariant(district) {
+  for (const ext of ['bin', 'json']) {
+    const file = path.join(OUT_DIR, `world-${district.id}.lo.${ext}`);
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  }
+}
+
 /**
  * Record a district's overflight bundle against the entry it already has.
  *

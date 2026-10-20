@@ -9,6 +9,7 @@
     "world": "node tools/build-world.mjs",
     "world:all": "node tools/fetch-osm.mjs --all && node tools/build-world.mjs --all",
     "world:offline": "node tools/fetch-osm.mjs --all --offline && node tools/build-world.mjs --all",
+    "world:full": "node --max-old-space-size=12000 tools/fetch-osm.mjs --all --profile=full && node --max-old-space-size=12000 tools/build-world.mjs --all --profile=full",
     "test": "node --test tools/test/*.test.mjs",
     "build": "node tools/build-dist.mjs",
     "serve": "node tools/serve.mjs",

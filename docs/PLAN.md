@@ -3196,3 +3196,41 @@ caps residency at 520.
   rise in the ground is not a frontage), and only a wall that still answers
   from the eye where the mech will stand; if none does, it says how many
   fell out at each step.
+
+## 71. Tier 0 everywhere, on a machine that can hold it
+
+Asked for: every district at tier 0, flown over at tier 2. Measured before
+anything was changed, because the last time this was asked the answer was a
+wall rather than a cost:
+
+- Published GitHub Pages sites may be no larger than 1 GB, and a deployment
+  that takes over ten minutes is stopped. Checked in the source of the docs
+  page, github/docs, content/pages/getting-started-with-github-pages/
+  github-pages-limits.md.
+- The live site is 813 MB of fine bundles today (Pages run 140).
+- Each district built at its own tier, at tier 0 and at tier 2, from the same
+  extract: tier 1 grows 3.9 times at tier 0, tier 2 5.4 times, tier 3 5.9
+  times. An eight kilometre district (o16, synthetic) went from 14 MB to 287
+  MB, 274,080 triangles to 4,996,985, 4.6 s to 42 s and 0.6 to 3.5 GB of
+  memory to build.
+- Applied to the live sizes, every district at tier 0 with a tier 2 overflight
+  is about 5.2 GB; only the ring at tier 0 is about 1.7 GB.
+
+So there are two cities now, and a profile picks which:
+
+- `full`, for a machine of your own: every district at tier 0 and the block
+  tier for the flight. `npm run world:full`.
+- `pages`, for the deploy: the standard city, then as many districts outward
+  from the middle moved up to tier 0 as fit under the ceiling, decided by
+  building them and measuring.
+
+- 2026-10-20: 71a, the profiles. tools/districts.mjs says what each profile
+  builds, and `--tier=` and `--over=` on the command line beat it for one
+  district. The overflight bundle is built only when it is coarser than the
+  district's own build, and a rebuild without one deletes the one it had.
+- 2026-10-20: 71b, the fetch. Tier 0 wants the long list of tags, so an
+  extract fetched with the short one is fetched again; older extracts did not
+  say which they were and their tier does. A district bigger than three
+  kilometres a side is asked for in pieces and put back together with each
+  element kept once, because the full query over seventy square kilometres
+  is not something a mirror finishes.
