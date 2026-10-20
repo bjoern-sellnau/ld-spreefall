@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { DISTRICTS, OVERFLIGHT_UNTIL } from './districts.mjs';
+import { DISTRICTS } from './districts.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PUB = path.join(ROOT, 'public');
@@ -60,13 +60,13 @@ function main() {
       ? ((def.bounds.maxX - def.bounds.minX) * (def.bounds.maxZ - def.bounds.minZ)) / 1e6 : 0;
     raw += d.bytes; download += d.gzip; area += km2; buildings += d.buildings;
     // The second bundle, the one a fast travel flight passes over. A district
-    // already at the sketch tier has none and flies over itself.
+    // that is already as coarse as its profile's overflight tier has none and
+    // flies over itself.
     if (d.lo) { loRaw += d.lo.bytes; loGz += d.lo.gzip; loCount++; }
     console.log(`${d.id.padEnd(9)} ${String(d.tier).padEnd(5)} ${String(d.name).slice(0, 24).padEnd(24)}`
       + `${(d.bytes / 1e6).toFixed(2).padStart(8)} MB${(d.gzip / 1e6).toFixed(2).padStart(9)} MB`
       + `${km2.toFixed(1).padStart(7)}${String(d.buildings).padStart(11)}`
-      + `${d.lo ? `${(d.lo.gzip / 1e6).toFixed(2).padStart(10)} MB`
-        : (d.tier > OVERFLIGHT_UNTIL ? '           its own' : '        not built')}`);
+      + `${d.lo ? `${(d.lo.gzip / 1e6).toFixed(2).padStart(10)} MB` : '           its own'}`);
   }
 
   const indexGz = gz(INDEX);

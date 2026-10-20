@@ -63,7 +63,7 @@ export const MECH = {
     health: 3600,
     walk: 11.5, turn: 2.6, torsoTurn: 5.0, climb: 1.6, gravity: 22,
     jump: 11.5,
-    // Yours carries the five arm weapons and a shield that comes back.
+    // Yours carries its chassis' arm weapons and a shield that comes back.
     arms: true,
     shield: { max: 1500, rate: 300, wait: 5.0 },
     dash: { speed: 27, seconds: 0.85, cooldown: 3.6 },
@@ -112,13 +112,16 @@ for (const c of CHASSIS) {
   mine.chaingun = { ...mine.chaingun, muzzle: c.muzzle.chaingun };
   mine.rockets = { ...mine.rockets, muzzle: c.muzzle.rockets };
   mine.arm = c.arm;
+  mine.loadout = c.loadout;
   const foe = overlay(overlay(MECH.reaper, shape), c.foe);
-  foe.chaingun = { ...foe.chaingun, muzzle: c.muzzle.chaingun };
+  // Theirs fires its own gun, laid over the Reaper's chaingun.
+  foe.chaingun = { ...foe.chaingun, ...(c.gun || {}), muzzle: c.muzzle.chaingun };
   foe.rockets = { ...foe.rockets, muzzle: c.muzzle.rockets };
   if (c === CHASSIS[0]) {
     // The first chassis is the Titan and the Reaper, under the names the
     // game has always used for them.
-    Object.assign(MECH.titan, { arm: c.arm });
+    Object.assign(MECH.titan, { arm: c.arm, loadout: c.loadout });
+    MECH.reaper.chaingun = foe.chaingun;
     continue;
   }
   mine.name = c.name;
@@ -281,6 +284,9 @@ export class Mechs {
     this.onStep = null;        // fn(mech, hard)
     this.onStomp = null;       // fn(mech, spec)
     this.onDestroyed = null;   // fn(mech)
+    // Reactors of dead machines still running away, filled by the game
+    // layer; here so that clearing the street clears them too.
+    this.reactors = [];
     this.onEject = null;       // fn(mech) when the layer takes one out from under its pilot
   }
 
@@ -293,6 +299,7 @@ export class Mechs {
     const was = this.piloted;
     for (const m of this.pool) { m.alive = false; m.occupied = false; }
     this.active.length = 0;
+    this.reactors.length = 0;
     this.piloted = null;
     if (was && this.onEject) this.onEject(was);
   }
@@ -342,12 +349,17 @@ export class Mechs {
     // The loadout, for the ones that have one. A magazine per arm, so
     // switching away from an empty railgun and back does not refill it.
     // Each chassis arrives holding the weapon it was built round.
-    m.arm = Math.max(0, ARMS.findIndex((a) => a.id === spec.arm));
+    // Which arms is the chassis' own: m.arm is an index into that, not into
+    // the whole table.
+    m.loadout = spec.arms
+      ? (spec.loadout || ARMS.map((a) => a.id)).map((id) => armById(id)).filter(Boolean)
+      : [];
+    m.arm = Math.max(0, m.loadout.findIndex((a) => a.id === spec.arm));
     m.armTimer = 0;
     m.reloadLeft = 0;
     m.charge = 0;
     m.wasFiring = false;
-    m.mags = ARMS.map((a) => a.magazine);
+    m.mags = m.loadout.map((a) => a.magazine);
     // A shield over the hull that comes back when nothing has hit it for a
     // few seconds. It is what lets a mech walk into a street, take the first
     // volley and walk out again.
@@ -684,20 +696,20 @@ export class Mechs {
 
   /** Puts a different weapon in the hands, by index or by step. */
   selectArm(m, index) {
-    if (!m.spec.arms) return m.arm;
-    const n = ARMS.length;
+    if (!m.spec.arms || !m.loadout.length) return m.arm;
+    const n = m.loadout.length;
     m.arm = ((index % n) + n) % n;
     m.charge = 0;
     m.reloadLeft = 0;
     m.armTimer = Math.max(m.armTimer, 0.25);
-    if (this.onArmChange) this.onArmChange(m, ARMS[m.arm]);
+    if (this.onArmChange) this.onArmChange(m, m.loadout[m.arm]);
     return m.arm;
   }
 
   cycleArm(m, step) { return this.selectArm(m, m.arm + (step > 0 ? 1 : -1)); }
 
   /** What is in its hands, and how much of it is left. */
-  arm(m) { return m.spec.arms ? ARMS[m.arm] : null; }
+  arm(m) { return m.spec.arms ? m.loadout[m.arm] || null : null; }
 
   /**
    * The arm weapons, for a mech that carries them.
@@ -709,7 +721,8 @@ export class Mechs {
    * from and how much of it.
    */
   _armFire(m, dt, want) {
-    const arm = ARMS[m.arm];
+    const arm = m.loadout[m.arm];
+    if (!arm) return;
     if (m.armTimer > 0) m.armTimer -= dt;
     if (m.reloadLeft > 0) {
       m.reloadLeft -= dt;

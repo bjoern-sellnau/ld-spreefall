@@ -177,6 +177,67 @@ export const OVERFLIGHT_TIER = 5;
  */
 export const OVERFLIGHT_UNTIL = 2;
 
+/**
+ * Which city a build makes. The tiers above are the city that fits on GitHub
+ * Pages, which will not publish a site over a gigabyte; the others are asked
+ * for by name.
+ *
+ *   standard  every district at its own tier, the overflight row for the
+ *             flight over the ones that are worth building twice
+ *   full      every district at tier 0 and the block tier for the flight. For
+ *             a machine of your own: measured from the live build, it is five
+ *             gigabytes or more, five times what Pages will publish
+ *   pages     standard, then as many districts outward from the middle moved
+ *             up to tier 0 as fit under the Pages ceiling. The build decides
+ *             which by measuring, in tools/fit-pages.mjs
+ *
+ * A profile only says what to build. What was built is in the index, district
+ * by district, which is what the game reads.
+ */
+export const PROFILES = {
+  standard: { tier: null, over: null },
+  full: { tier: 0, over: 2 },
+  // The districts fit-pages moves up are built like full ones.
+  pages: { tier: null, over: null, promoted: { tier: 0, over: 2 } },
+};
+
+/** The profile named on a command line, `--profile=full`, or standard. */
+export function profileFrom(argv = process.argv) {
+  const arg = argv.find((a) => a.startsWith('--profile='));
+  const name = arg ? arg.slice('--profile='.length) : 'standard';
+  if (!PROFILES[name]) throw new Error(`no such profile: ${name}, try ${Object.keys(PROFILES).join(', ')}`);
+  return name;
+}
+
+/**
+ * The tier a district is built at and the tier of its overflight bundle, or
+ * null for the second when it flies over its own. `--tier=` and `--over=` on
+ * the command line beat the profile, which is how fit-pages moves one
+ * district up without touching the rest.
+ *
+ * The overflight bundle exists only when it is coarser than the district's
+ * own build: at the same tier it would be the same bytes twice.
+ */
+export function buildPlan(district, profile = 'standard', argv = []) {
+  const p = PROFILES[profile] || PROFILES.standard;
+  const num = (key) => {
+    const a = argv.find((s) => s.startsWith(`--${key}=`));
+    return a ? Number(a.slice(key.length + 3)) : null;
+  };
+  const tier = num('tier') ?? p.tier ?? district.tier;
+  const asked = num('over') ?? p.over;
+  if (asked !== null) return { tier, over: asked > tier ? asked : null };
+  return { tier, over: tier <= OVERFLIGHT_UNTIL ? OVERFLIGHT_TIER : null };
+}
+
+/**
+ * Whether a district wants the full Overpass query, which carries the tags
+ * the middle of town is built from. The block tier and coarser ask for less.
+ */
+export function wantsFullQuery(tier) {
+  return tier < 2;
+}
+
 /** Degrees of margin a fetch takes around a district, for walls on the cut. */
 export const FETCH_MARGIN = 0.0025;   // about 170 m north to south
 

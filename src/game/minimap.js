@@ -337,6 +337,29 @@ export class Minimap {
       ctx.moveTo(this.aim.x - t, this.aim.z); ctx.lineTo(this.aim.x + t, this.aim.z);
       ctx.moveTo(this.aim.x, this.aim.z - t); ctx.lineTo(this.aim.x, this.aim.z + t);
       ctx.stroke();
+      // Ultra plasma's way in: an arrow from the side it comes from, its
+      // shaft the longer the flatter it comes in, its point on the circle.
+      if (this.aim.bearing !== undefined) {
+        const b = this.aim.bearing * Math.PI / 180;
+        const sx = Math.sin(b), sz = -Math.cos(b);
+        const flat = Math.min(75, this.aim.tilt || 0) / 75;
+        const tip = this.aim.radius + 6 / scale * this.dpr;
+        const len = (24 + 90 * flat) / scale * this.dpr;
+        const x0 = this.aim.x + sx * (tip + len), z0 = this.aim.z + sz * (tip + len);
+        const x1 = this.aim.x + sx * tip, z1 = this.aim.z + sz * tip;
+        const head = 10 / scale * this.dpr;
+        ctx.lineWidth = 3 / scale * this.dpr;
+        ctx.beginPath();
+        ctx.moveTo(x0, z0); ctx.lineTo(x1 + sx * head * 0.5, z1 + sz * head * 0.5);
+        ctx.stroke();
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.moveTo(x1, z1);
+        ctx.lineTo(x1 + sx * head - sz * head * 0.6, z1 + sz * head + sx * head * 0.6);
+        ctx.lineTo(x1 + sx * head + sz * head * 0.6, z1 + sz * head - sx * head * 0.6);
+        ctx.closePath();
+        ctx.fill();
+      }
       ctx.restore();
     }
 

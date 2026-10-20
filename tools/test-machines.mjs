@@ -152,26 +152,42 @@ async function run() {
     s.toggleVehicle();
     if (s.state.inMech !== m) return { skip: true, why: 'could not get in' };
     const was = { x: m.x, y: m.y + m.spec.eye, z: m.z };
-    let rays = 0, tooNear = 0, steep = 0;
+    let rays = 0, tooNear = 0, steep = 0, notWall = 0, gone = 0;
     // The nearest thing anywhere round it that is still standing at the
     // height of its own head, found by sweeping the horizon a long way out:
     // by this point in the suite the streets here are rubble, and a ruin two
     // metres high is not a wall you can put your head into. The ray is at
     // eye height, so whatever answers is tall enough by construction.
-    let near = null;
+    const found = [];
     for (let i = 0; i < 144; i++) {
       const yaw = (i / 144) * Math.PI * 2;
       const d = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
-      const hit = s.world.raycast(was.x, was.y, was.z, d.x, d.y, d.z, 300);
+      const hit = s.world.raycast(was.x, was.y, was.z, d.x, d.y, d.z, 300, {});
       if (hit) rays++;
       if (!hit) continue;
       if (hit.t < 4) { tooNear++; continue; }
+      // A rise in the ground at eye height is not a frontage.
+      if (hit.kind !== 'wall') { notWall++; continue; }
       // On ground near its own level, or the walk up to it is a climb and
       // the wall is somewhere else by the time it arrives.
       const px = was.x + d.x * (hit.t - 1.2);
       const pz = was.z + d.z * (hit.t - 1.2);
       if (Math.abs(s.world.groundHeight(px, pz) - m.y) > 3) { steep++; continue; }
-      if (!near || hit.t < near.t) near = { t: hit.t, d, yaw };
+      found.push({ t: hit.t, d, yaw });
+    }
+    // And still there from where it will stand. The sweep looks from the
+    // eye where the mech is now; stood a metre off the wall the ground can
+    // be a metre or two higher or lower, and on the live city the nearest
+    // one was a wall the head then looked straight over.
+    found.sort((a, b) => a.t - b.t);
+    let near = null;
+    for (const c of found) {
+      const sx = was.x + c.d.x * (c.t - 1.2);
+      const sz = was.z + c.d.z * (c.t - 1.2);
+      const ey = s.world.groundHeight(sx, sz) + m.spec.eye;
+      const hit = s.world.raycast(sx, ey, sz, c.d.x, 0, c.d.z, 8, {});
+      if (hit && hit.kind === 'wall') { near = c; break; }
+      gone++;
     }
     // When nothing answers, say what the city looked like from in there:
     // the first version of this check ran at the end of the suite, by which
@@ -180,7 +196,8 @@ async function run() {
     if (!near) {
       return {
         skip: true,
-        why: `${rays} rays hit, ${tooNear} too near, ${steep} off the level, `
+        why: `${rays} rays hit, ${tooNear} too near, ${notWall} not a wall, `
+          + `${steep} off the level, ${gone} not there from where it would stand, `
           + `tallest within 80 m is ${s.world.tallestNear(m.x, m.z, 80).toFixed(1)} m`,
       };
     }
@@ -199,7 +216,7 @@ async function run() {
       s.camera.position[1] - eye.y, s.camera.position[2] - eye.z);
     // Where the wall is now that the torso has turned onto it.
     const a = s.mechs.aim(m);
-    const wall = s.world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, 8);
+    const wall = s.world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, 8, {});
     const got = {
       skip: false,
       wall: wall ? Number(wall.t.toFixed(2)) : null,
@@ -233,22 +250,47 @@ async function run() {
       }
     }
     if (!at) return { skip: true };
+    // The mean height of the walls round a point rather than the tallest:
+    // a building comes down column by column now, with a ragged edge, and
+    // the tallest piece within a few metres of a hit is the one column at
+    // the edge that stayed up, which says nothing about how much came down.
+    const meanNear = (x, z, r) => {
+      let sum = 0, n = 0;
+      s.world.forEachSegmentTile(x - r, z - r, x + r, z + r, (segs) => {
+        // A metre of wall at a time, so a long wall that has not been cut
+        // into pieces yet counts for the part of it that is in reach.
+        for (let i = 0; i + 5 < segs.length; i += 6) {
+          const len = Math.hypot(segs[i + 2] - segs[i], segs[i + 3] - segs[i + 1]);
+          const steps = Math.max(1, Math.ceil(len));
+          const tall = Math.max(0, segs[i + 5] - Math.max(0, segs[i + 4]));
+          for (let k = 0; k < steps; k++) {
+            const t = (k + 0.5) / steps;
+            const px = segs[i] + (segs[i + 2] - segs[i]) * t;
+            const pz = segs[i + 1] + (segs[i + 3] - segs[i + 1]) * t;
+            if (Math.hypot(px - x, pz - z) > r) continue;
+            sum += tall * (len / steps);
+            n += len / steps;
+          }
+        }
+      });
+      return n ? sum / n : 0;
+    };
     const y = s.world.groundHeight(at.x, at.z);
-    const before = Math.round(s.world.tallestNear(at.x, at.z, 8) * 10) / 10;
+    const before = Math.round(meanNear(at.x, at.z, 8) * 10) / 10;
     for (let i = 0; i < 5; i++) {
       s.demolition.blast(at.x, y + 6, at.z, 10, 400);
       // Just long enough for the fall to finish, and not long enough for the
       // settle timer to write it into the city.
       for (let k = 0; k < 85; k++) s.demolition.update(1 / 60);
     }
-    const whileLive = Math.round(s.world.tallestNear(at.x, at.z, 8) * 10) / 10;
+    const whileLive = Math.round(meanNear(at.x, at.z, 8) * 10) / 10;
     const sitesLive = s.demolition.sites.length;
     // Now past the settle time: the sites are written into the city and give
     // their slots back.
     for (let k = 0; k < 60 * 6; k++) s.demolition.update(1 / 60);
     return {
       at, before, whileLive,
-      after: Math.round(s.world.tallestNear(at.x, at.z, 8) * 10) / 10,
+      after: Math.round(meanNear(at.x, at.z, 8) * 10) / 10,
       sitesLive, sitesNow: s.demolition.sites.length, bakedCount: s.demolition.baked,
     };
   });
@@ -257,19 +299,44 @@ async function run() {
     baked.skip ? 'no building found' : `${baked.sitesLive} sites while falling, ${baked.sitesNow} after, ${baked.bakedCount} baked`);
   check('and it stays down once the slot has gone',
     !baked.skip && baked.after <= baked.whileLive + 0.4 && baked.after < baked.before - 1,
-    baked.skip ? '' : `${baked.before} m standing, ${baked.whileLive} m while falling, ${baked.after} m once baked`);
+    baked.skip ? '' : `walls ${baked.before} m on average standing, ${baked.whileLive} m while falling, ${baked.after} m once baked`);
 
   // Sixteen slots, twenty places: with baking, the last four are real damage
   // in their own place rather than the nearest site growing to swallow them.
   const everywhere = await page.evaluate(async () => {
     const s = window.spreefall;
     s.demolition.reset(); s.renderer.clearCollapses();
+    // The mean height of the walls round a point rather than the tallest:
+    // a building comes down column by column now, with a ragged edge, and
+    // the tallest piece within a few metres of a hit is the one column at
+    // the edge that stayed up, which says nothing about how much came down.
+    const meanNear = (x, z, r) => {
+      let sum = 0, n = 0;
+      s.world.forEachSegmentTile(x - r, z - r, x + r, z + r, (segs) => {
+        // A metre of wall at a time, so a long wall that has not been cut
+        // into pieces yet counts for the part of it that is in reach.
+        for (let i = 0; i + 5 < segs.length; i += 6) {
+          const len = Math.hypot(segs[i + 2] - segs[i], segs[i + 3] - segs[i + 1]);
+          const steps = Math.max(1, Math.ceil(len));
+          const tall = Math.max(0, segs[i + 5] - Math.max(0, segs[i + 4]));
+          for (let k = 0; k < steps; k++) {
+            const t = (k + 0.5) / steps;
+            const px = segs[i] + (segs[i + 2] - segs[i]) * t;
+            const pz = segs[i + 1] + (segs[i + 3] - segs[i + 1]) * t;
+            if (Math.hypot(px - x, pz - z) > r) continue;
+            sum += tall * (len / steps);
+            n += len / steps;
+          }
+        }
+      });
+      return n ? sum / n : 0;
+    };
     const spots = [];
     for (let i = 0; i < 20; i++) {
       const a = (i / 20) * Math.PI * 2;
       const r = 110 + (i % 5) * 60;
       const x = s.player.x + Math.cos(a) * r, z = s.player.z + Math.sin(a) * r;
-      spots.push({ x, z, before: s.world.tallestNear(x, z, 14) });
+      spots.push({ x, z, before: s.world.tallestNear(x, z, 14), mean: meanNear(x, z, 14) });
     }
     for (const spot of spots) {
       const y = s.world.groundHeight(spot.x, spot.z);
@@ -281,9 +348,9 @@ async function run() {
     }
     for (let k = 0; k < 60 * 4; k++) s.demolition.update(1 / 60);
     const hit = spots.filter((v) => v.before > 10);
-    const down = hit.filter((v) => s.world.tallestNear(v.x, v.z, 14) < v.before - 1.5);
+    const down = hit.filter((v) => meanNear(v.x, v.z, 14) < v.mean - 1.5);
     const last = spots.slice(-6).filter((v) => v.before > 10);
-    const lastDown = last.filter((v) => s.world.tallestNear(v.x, v.z, 14) < v.before - 1.5);
+    const lastDown = last.filter((v) => meanNear(v.x, v.z, 14) < v.mean - 1.5);
     return { places: hit.length, down: down.length, last: last.length, lastDown: lastDown.length };
   });
   // The claim is not that every blast flattens something, it is that the ones
@@ -809,8 +876,12 @@ async function run() {
     return { armed, changed, darker };
   });
   check('a bite out of the city is dark inside rather than see through',
+    // All of them, near enough: the backs of the pieces in a heap of rubble
+    // lie every way up and are lit like the rest of the heap, which can be
+    // brighter than the shadow behind it. A hole showing sky is a
+    // different thing and would be thousands of pixels.
     seeThrough.armed > 0 && seeThrough.changed > 80
-      && seeThrough.darker === seeThrough.changed,
+      && seeThrough.darker >= seeThrough.changed * 0.97,
     `${seeThrough.changed} pixels filled, all ${seeThrough.darker} of them darker`);
 
   // --- mechs ---------------------------------------------------------------
@@ -1029,7 +1100,8 @@ async function run() {
     await new Promise((r) => requestAnimationFrame(r));
     return {
       skip: false,
-      arms: s.mechArms.length,
+      arms: s.mechLoadout.length,
+      ids: s.mechLoadout.map((a) => a.id).join(', '),
       rows: document.querySelectorAll('#mecharms .marm').length,
       hud: !document.getElementById('mechhud').classList.contains('hidden'),
       cockpit: s.state.cockpit,
@@ -1037,15 +1109,16 @@ async function run() {
       named: document.querySelector('#mecharms .marm.on span').textContent,
     };
   });
-  // Ten of them now, and the readout has a row for each: five it started
-  // with, plus the flak, the laser, the car bomb, the stinger and the EMP.
-  check('a mech of your own carries a loadout rather than one gun',
-    !got.skip && got.arms === 10 && got.rows === got.arms && got.hud,
-    got.skip ? got.why : `${got.arms} weapons, holding the ${got.named}`);
+  // The Warden's own three, and the readout has a row for each. Every
+  // chassis used to carry all ten, which made ten bodies and one mech.
+  check('a mech of your own carries its chassis\' loadout',
+    !got.skip && got.arms === 3 && got.rows === got.arms && got.hud
+      && got.ids === 'chaingun, cannon, empbomb',
+    got.skip ? got.why : `${got.ids}, holding the ${got.named}`);
 
   // The number row and the wheel, through the real keyboard and the real
   // wheel rather than by calling the function underneath them.
-  await page.keyboard.press('Digit4');
+  await page.keyboard.press('Digit2');
   const picked = await page.evaluate(async () => {
     const s = window.spreefall;
     const m = s.state.inMech;
@@ -1053,25 +1126,25 @@ async function run() {
     await new Promise((r) => requestAnimationFrame(r));
     return {
       arm: m ? m.arm : -1,
-      id: m ? s.mechArms[m.arm].id : '',
+      id: m ? s.mechLoadout[m.arm].id : '',
       lit: document.querySelectorAll('#mecharms .marm.on').length,
       litIndex: [...document.querySelectorAll('#mecharms .marm')]
         .findIndex((r) => r.classList.contains('on')),
     };
   });
   check('the number row chooses out of the mech loadout',
-    picked.arm === 3 && picked.id === 'railgun' && picked.lit === 1
-      && picked.litIndex === 3,
-    `4 picked the ${picked.id}`);
+    picked.arm === 1 && picked.id === 'cannon' && picked.lit === 1
+      && picked.litIndex === 1,
+    `2 picked the ${picked.id}`);
   await page.mouse.wheel(0, 120);
   const wheeled = await page.evaluate(async () => {
     const s = window.spreefall;
     const m = s.state.inMech;
     await new Promise((r) => requestAnimationFrame(r));
-    return { id: m ? s.mechArms[m.arm].id : '' };
+    return { id: m ? s.mechLoadout[m.arm].id : '' };
   });
   check('and the wheel moves one along, not two',
-    wheeled.id === 'leadwall', `the wheel reached the ${wheeled.id}`);
+    wheeled.id === 'empbomb', `the wheel reached the ${wheeled.id}`);
 
   // Underfoot. Eight metres of walking armour does not step over a man, and
   // the man is not shot: he is where the foot came down.
@@ -1224,6 +1297,12 @@ async function run() {
     const flat = Math.hypot(theirs.x - mine.x, theirs.z - mine.z);
     const rise = (theirs.y + 5.2) - (mine.y + s.mechSpec.titan.eye);
     s.look(yaw * 180 / Math.PI, Math.atan2(rise, flat) * 180 / Math.PI);
+    // What these two checks measure is the arm, not the chassis, and the
+    // Warden does not carry a railgun or thermite: for them the mech holds
+    // the whole table, in its order, and gets its own three back after.
+    mine.ownLoadout = mine.loadout;
+    mine.loadout = s.mechArms;
+    mine.mags = s.mechArms.map((a) => a.magazine);
     s.selectArm(3);
     // Held to the top of the charge, then let go. Nothing is counted until
     // the trigger comes up, which is the point of the weapon.
@@ -1290,6 +1369,11 @@ async function run() {
     s.fixedForTest(1 / 60);
     s.input.fire = false;
     for (let i = 0; i < 120; i++) s.fixedForTest(1 / 60);
+    if (mine.ownLoadout) {
+      mine.loadout = mine.ownLoadout;
+      mine.mags = mine.loadout.map((a) => a.magazine);
+      s.selectArm(0);
+    }
     return { skip: false, pools: s.burningGround.length - before };
   });
   check('the thermite launcher leaves the street on fire',
@@ -1349,6 +1433,58 @@ async function run() {
   check('a blast beside a mech takes a piece out of it',
     !splash.skip && splash.took > 100 && splash.out,
     splash.skip ? '' : `${splash.took} off the hull`);
+
+  // --- a mech's reactor ----------------------------------------------------
+  // A dead mech is not done: its fusion reactor runs away for a few seconds,
+  // which you can see, and then goes up as a small blast in blue and neon
+  // green that takes the street and the next machine with it.
+  const fusion = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const modeWas = s.machines.active;
+    s.machines.active = false;
+    s.mechs.reset();
+    s.soldiers.reset();
+    s.projectiles.clear();
+    s.burningGround.length = 0;
+    s.reactors.length = 0;
+    s.setCheat('godmode', true);
+    const theirs = s.spawnMech('reaper', 90);
+    const near = s.spawnMech('reaper', 112);
+    if (!theirs || !near) { s.machines.active = modeWas; return { skip: true }; }
+    // Twenty metres apart whatever spots it found, on the ground there.
+    near.x = theirs.x + 20; near.z = theirs.z;
+    near.y = s.world.groundHeight(near.x, near.z);
+    const gap = Math.round(Math.hypot(near.x - theirs.x, near.z - theirs.z));
+    near.health = near.maxHealth;
+    if (near.shield !== undefined) near.shield = 0;
+    s.mechs.damage(theirs, 1e6);
+    const pending = s.reactors.length;
+    // Half the fuse: still pending, nothing next to it touched.
+    for (let i = 0; i < Math.round(60 * s.fusionSpec.fuse * 0.5); i++) s.fixedForTest(1 / 60);
+    const early = { left: s.reactors.length, near: near.health === near.maxHealth };
+    let tint = null, flash = 0;
+    for (let i = 0; i < 60 * 2.5; i++) {
+      s.fixedForTest(1 / 60);
+      if (s.state.flashTint && !tint) { tint = [...s.state.flashTint]; flash = s.state.flash; }
+    }
+    const hurt = Math.round(near.maxHealth - Math.max(0, near.health));
+    const chained = near.health <= 0;
+    // Let any chain finish before the next check.
+    for (let i = 0; i < 60 * 8 && s.reactors.length; i++) s.fixedForTest(1 / 60);
+    s.mechs.reset();
+    s.burningGround.length = 0;
+    s.setCheat('godmode', false);
+    s.machines.active = modeWas;
+    return { skip: false, pending, early, tint, flash: Number(flash.toFixed(2)), hurt, chained, gap };
+  });
+  check('a dead mech\'s reactor goes critical rather than going off at once',
+    !fusion.skip && fusion.pending === 1 && fusion.early.left === 1 && fusion.early.near,
+    fusion.skip ? '' : `${fusion.pending} pending`);
+  check('and then goes up in blue and green, not in white',
+    !fusion.skip && fusion.tint && fusion.tint[1] > fusion.tint[0] + 0.3 && fusion.flash > 0.1,
+    fusion.skip ? '' : `tint ${fusion.tint}, flash ${fusion.flash}`);
+  check('taking the next machine with it', !fusion.skip && fusion.hurt > 900,
+    fusion.skip ? '' : `${fusion.hurt} off a Reaper ${fusion.gap} m away${fusion.chained ? ', which went too' : ''}`);
 
   // --- the mech killer -----------------------------------------------------
   // An EMP warhead with a charge behind it. What it is for is the thing you
@@ -1785,49 +1921,60 @@ async function run() {
   check('and the pilot inside the armour is fine', !stomp.skip && !stomp.pilotHurt);
 
   // --- the whole loadout ----------------------------------------------------
-  // Every arm fires, takes a round out of its own magazine and leaves nothing
-  // on the console. The two anti aircraft arms get something to shoot at.
+  // Every arm of every chassis fires, takes a round out of its own magazine
+  // and leaves nothing on the console. The two anti aircraft arms get
+  // something to shoot at.
   const loadout = await page.evaluate(async () => {
     const s = window.spreefall;
-    s.mechs.reset(); s.projectiles.clear(); s.jets.reset();
-    s.teleport(700, -55);
-    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
-    const m = s.spawnMech('titan', 12);
-    if (!m) return { skip: true, why: 'no room for one' };
-    s.teleport(m.x + 3, m.z);
-    s.toggleVehicle();
-    if (s.state.inMech !== m) return { skip: true, why: 'could not get in' };
     const rows = [];
+    const sets = [];
     let slow = 0;
-    for (let i = 0; i < s.mechArms.length; i++) {
-      const arm = s.mechArms[i];
-      s.mechs.selectArm(m, i);
-      const air = arm.id === 'stinger' || arm.id === 'flak';
-      if (air) {
-        const j = s.spawnJet(0, 200, 80);
-        j.x = m.x; j.z = m.z - 200; j.y = m.y + 80;
-        s.look(0, 21);
-      } else {
-        s.look(0, 2);
+    for (const key of ['titan', 'bruin', 'heron', 'lynx', 'bastion', 'hornet', 'colossus', 'mantis', 'ram', 'wraith']) {
+      s.mechs.reset(); s.projectiles.clear(); s.jets.reset();
+      s.teleport(700, -55);
+      for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+      const m = s.spawnMech(key, 14);
+      if (!m) return { skip: true, why: `no room for a ${key}` };
+      s.teleport(m.x + 4, m.z);
+      s.toggleVehicle();
+      if (s.state.inMech !== m) return { skip: true, why: `could not get into a ${key}` };
+      sets.push(m.loadout.map((a) => a.id).sort().join('+'));
+      for (let i = 0; i < m.loadout.length; i++) {
+        const arm = m.loadout[i];
+        s.mechs.selectArm(m, i);
+        const air = arm.id === 'stinger' || arm.id === 'flak';
+        if (air) {
+          const j = s.spawnJet(0, 200, 80);
+          j.x = m.x; j.z = m.z - 200; j.y = m.y + 80;
+          s.look(0, 21);
+        } else {
+          s.look(0, 2);
+        }
+        s.camera.update(16 / 9);
+        // The guns point where the torso points, not where the camera does, so
+        // it is given time to come round before the trigger goes down.
+        for (let k = 0; k < 90; k++) s.fixedForTest(1 / 60);
+        for (let k = 0; k < 60; k++) {
+          s.holdFire(true);
+          s.fixedForTest(1 / 60);
+          slow = Math.max(slow, arm.id === 'stinger' ? s.state.airSlow : 0);
+        }
+        s.holdFire(false);
+        for (let k = 0; k < 120; k++) s.fixedForTest(1 / 60);
+        rows.push({ id: `${key} ${arm.id}`, fired: m.mags[i] < arm.magazine });
+        s.projectiles.clear(); s.jets.reset();
       }
-      s.camera.update(16 / 9);
-      // The guns point where the torso points, not where the camera does, so
-      // it is given time to come round before the trigger goes down.
-      for (let k = 0; k < 90; k++) s.fixedForTest(1 / 60);
-      for (let k = 0; k < 60; k++) {
-        s.holdFire(true);
-        s.fixedForTest(1 / 60);
-        slow = Math.max(slow, arm.id === 'stinger' ? s.state.airSlow : 0);
-      }
-      s.holdFire(false);
-      for (let k = 0; k < 120; k++) s.fixedForTest(1 / 60);
-      rows.push({ id: arm.id, fired: m.mags[i] < arm.magazine });
-      s.projectiles.clear(); s.jets.reset();
+      s.toggleVehicle();
     }
-    s.toggleVehicle();
     s.mechs.reset();
-    return { skip: false, rows, slow: Math.round(slow * 100) / 100 };
+    return { skip: false, rows, slow: Math.round(slow * 100) / 100,
+      sets: sets.length, distinct: new Set(sets).size,
+      kinds: new Set(rows.map((r) => r.id.split(' ')[1])).size };
   });
+  check('no two chassis carry the same weapons',
+    loadout.skip || (loadout.sets === 10 && loadout.distinct === 10),
+    loadout.skip ? loadout.why : `${loadout.distinct} different sets out of ${loadout.sets}, `
+      + `${loadout.kinds} different arms between them`);
   check('every arm in the loadout fires',
     loadout.skip || loadout.rows.every((r) => r.fired),
     loadout.skip ? loadout.why
@@ -1836,6 +1983,39 @@ async function run() {
   check('and a stinger on a lock slows the world down while it runs it down',
     loadout.skip || loadout.slow > 0,
     loadout.skip ? loadout.why : `${loadout.slow} s of it`);
+
+  // And theirs: each chassis fires its own gun rather than the Reaper's
+  // chaingun in ten bodies, and every one of those guns can reach you.
+  const foes = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const out = [];
+    const hurt = s.combat.hurt;
+    const modeWas = s.machines.active;
+    s.machines.active = false;
+    for (const key of ['reaper', 'bruin-foe', 'heron-foe', 'lynx-foe', 'bastion-foe', 'hornet-foe',
+      'colossus-foe', 'mantis-foe', 'ram-foe', 'wraith-foe']) {
+      s.mechs.reset(); s.projectiles.clear(); s.soldiers.reset();
+      s.burningGround.length = 0;
+      s.teleport(700, -55);
+      for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+      let taken = 0;
+      s.combat.hurt = (d) => { taken += d; return false; };
+      const m = s.spawnMech(key, 34);
+      if (!m) { s.combat.hurt = hurt; out.push({ key, skip: true }); continue; }
+      for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
+      s.combat.hurt = hurt;
+      out.push({ key, kind: m.spec.chaingun.kind || 'auto', taken: Math.round(taken) });
+    }
+    s.mechs.reset(); s.projectiles.clear(); s.burningGround.length = 0;
+    s.machines.active = modeWas;
+    return out;
+  });
+  const foeKinds = new Set(foes.filter((f) => !f.skip).map((f) => f.kind));
+  check('theirs fire seven different kinds of gun', foeKinds.size >= 7,
+    [...foeKinds].join(', '));
+  check('and every one of them can hurt you',
+    foes.every((f) => f.skip || f.taken > 0),
+    foes.map((f) => `${f.key} ${f.kind} ${f.skip ? 'no room' : f.taken}`).join('; '));
 
   await page.evaluate(async () => {
     const s = window.spreefall;

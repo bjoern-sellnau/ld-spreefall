@@ -149,7 +149,7 @@ void main() {
     // reads at a hundred metres against a grey street.
     albedo = vec3(0.02);
     float pulse = 0.75 + 0.25 * sin(uCamPos.w * 22.0 + vWorld.x * 3.0);
-    emissive = vec3(0.35, 0.85, 1.0) * 7.0 * pulse;
+    emissive = vec3(0.25, 0.8, 1.0) * 3.2 * pulse;
     rough = 0.1;
     metal = 0.0;
   } else if (vPart < 12.5) {

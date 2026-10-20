@@ -50,6 +50,19 @@ function smoothstep(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
+/** The shader's `columnHash`: which four metre column, nought to one. */
+export function columnHash(x, z) {
+  const cx = Math.floor(x / 4), cz = Math.floor(z / 4);
+  const n = (((cx * 73 + cz * 151) % 257) + 257) % 257;
+  const v = n * 0.618034 + 0.1;
+  return v - Math.floor(v);
+}
+
+/** The shader's `columnShare`: a column comes down, or it stays up. */
+export function columnShare(bite, h) {
+  return smoothstep(0.3, 0.55, bite * (0.6 + 0.8 * h));
+}
+
 /** One at the middle of a site, zero at its rim. */
 export function collapseBite(x, z, site) {
   const d = Math.hypot(x - site.x, z - site.z);
@@ -88,17 +101,20 @@ export function craterShape(x, z, site, level) {
 export function settle(p, isGround, height, site) {
   const bite = collapseBite(p.x, p.z, site);
   if (bite <= 0) return 0;
-  const level = collapseLocal(site.level, bite);
-  if (level <= 0) return 0;
+  if (!(site.level > 0)) return 0;
   // A site made while the buildings switch was off carries the crater and
   // nothing else: the hole is written into the street and every wall around
   // it is left exactly as it was.
   if (!isGround && site.walls === false) return 0;
 
   if (isGround) {
-    p.y += craterShape(p.x, p.z, site, level);
+    p.y += craterShape(p.x, p.z, site, Math.min(1, site.level));
     return 0;
   }
+  const colH = columnHash(p.x, p.z);
+  const share = columnShare(bite, colH);
+  const level = collapseLocal(site.level, Math.max(share, bite * 0.45 * (0.6 + 0.8 * colH)));
+  if (level <= 0) return 0;
 
   const above = p.y - site.y;
   if (above <= 0.001) return 0;
@@ -108,7 +124,7 @@ export function settle(p, isGround, height, site) {
 
   const jitter = collapseHash(p.x, p.y, p.z);
   const heap = site.rubble * (0.3 + jitter * 0.8) * bite;
-  const landed = Math.min(above, cut + heap);
+  const landed = Math.min(above, cut + heap + Math.min((above - cut) * 0.08, 1.0));
   const fell = above - landed;
   p.y -= fell;
   const spread = Math.min(fell, SCATTER_FALL);
@@ -256,7 +272,10 @@ export function bakeSite(world, site) {
         view.setInt16(o, clampI16(Math.round((p.x - ox) * POS_SCALE)), true);
         view.setInt16(o + 2, clampI16(Math.round(p.y * POS_SCALE)), true);
         view.setInt16(o + 4, clampI16(Math.round((p.z - oz) * POS_SCALE)), true);
-        if (fall > 0.02) {
+        // Rubble, if it properly came down. The broken top of a column that
+        // is still standing moves a little and stays a facade, windows and
+        // all, the same threshold the shader turns a falling wall grey at.
+        if (fall > 0.3) {
           // Rubble, permanently. The fragment shader reads this bit and does
           // to it exactly what it does to a wall that is falling right now.
           view.setUint8(o + 17, flags | FACADE_FLAG.RUBBLE);

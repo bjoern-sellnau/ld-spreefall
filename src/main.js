@@ -26,11 +26,12 @@ import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
 import { CHASSIS } from './game/chassis.js';
+import { Ultra, ULTRA, ULTRA_STATE } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
 import { bakeCrush } from './game/bake.js';
-import { fineGround, holeInWall } from './game/remesh.js';
+import { fineGround, fineWalls, holeInWall } from './game/remesh.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
@@ -101,6 +102,7 @@ const el = {
   targetConfirm: $('targetconfirm'), confirmWhere: $('confirmwhere'),
   confirmSelf: $('confirmself'), confirmFire: $('confirmfire'),
   confirmCancel: $('confirmcancel'),
+  ultraPanel: $('ultrapanel'),
   down: $('down'), downText: $('downtext'), downBtn: $('downbtn'),
   touchui: $('touchui'), stick: $('stick'), knob: $('stickknob'),
   btnJump: $('btnjump'), btnRun: $('btnrun'), source: $('datasource'),
@@ -108,6 +110,18 @@ const el = {
 };
 
 const DEG = Math.PI / 180;
+// The colour a warhead washes the frame to, and the one a mech's reactor does.
+const WHITE_FLASH = [1.0, 0.985, 0.94];
+const FUSION_FLASH = [0.55, 1.0, 0.92];
+// A mech carries a fusion reactor, and when the machine round it is killed the
+// containment goes after it: a few seconds of the reactor running away, which
+// you can see and hear, then a small fusion blast. Small for a weapon, which
+// is a fiftieth of a warhead's radius cubed; very large for a street. Your
+// own goes longer, so that being blown clear of it means something.
+const FUSION = {
+  fuse: 2.6, fuseOwn: 5.0,
+  splash: { radius: 46, damage: 1100, burst: 7, fusion: true },
+};
 
 // Where the weapon sits relative to the eye, in metres and radians. Hip fire
 // holds it down and to the right, far enough forward that the receiver is not
@@ -274,6 +288,9 @@ async function main() {
     if (!list.length) return 0;
     const touched = new Set();
     for (const scar of list) {
+      // Cut the same way it was the first time, so the ruin replayed is
+      // the ruin that was left.
+      refineSite({ ...scar });
       for (const i of demolition.replay(scar)) touched.add(i);
       scarTiles(scar.x, scar.z, scar.radius);
     }
@@ -291,6 +308,7 @@ async function main() {
   const fireWalls = new FireWalls(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const machines = new Machines();
   const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const ultra = new Ultra(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const mechs = new Mechs(world, (x, y, z) => combat.isSanctuary(x, y, z));
   weapon.mechs = mechs;
@@ -453,6 +471,7 @@ async function main() {
     lockWanted: false,
     nukeRainTimer: 4,
     flash: 0,
+    flashTint: null,
     autoQualityDone: false,
     frameSamples: [],
     lastGround: true,
@@ -589,13 +608,27 @@ async function main() {
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
     // Heard a great deal further than a rifle, and run from accordingly.
     soldiers.scare(x, z, Math.max(90, splash.radius * 3));
-    if (splash.nuke) {
+    if (splash.fusion) {
+      // A mech's reactor: the warhead's code path at a fiftieth of the
+      // volume, in blue and neon green, and a flash that washes the frame
+      // to cyan rather than to white.
+      audio.nuke(dist);
+      audio.ultraCharge(0.35);
+      effects.fusion(x, y, z, splash.radius);
+      state.flash = Math.max(state.flash, Math.min(0.95, 0.12 + 1.1 * Math.exp(-dist / 160)));
+      state.flashTint = FUSION_FLASH;
+      if (cheats.slowBlast) state.blastSlow = 1.6;
+      renderer.addScar(x, y, z, splash.radius * 1.1, 1, 0);
+      renderer.addScar(x, y, z, splash.radius * 0.5, 1, 0);
+      debris(x, y, z, splash.radius * 0.4);
+    } else if (splash.nuke) {
       // A warhead is the same code path as a grenade with different numbers,
       // which is the point of having the numbers in one place. What it gets of
       // its own is the look: a white frame, a column of fire, and a mark on
       // the city a quarter of a kilometre across.
       audio.nuke(dist);
       effects.nuke(x, y, z, splash.radius);
+      state.flashTint = null;
       cinema.detonated(x, y, z);
       // A warhead going off in slow motion, if that is switched on. It runs
       // on its own clock rather than out of the reflex meter, because this
@@ -617,7 +650,9 @@ async function main() {
       }
       debris(x, y, z, splash.radius * 0.35);
     } else {
-      audio.explosion();
+      // A hundred of these a second is one roar, not a hundred bangs: the
+      // quiet ones are heard one time in twelve.
+      if (!splash.quiet || Math.random() < 0.08) audio.explosion();
       effects.explode(x, y, z);
       effects.blast(x, y, z, splash.radius);
       // Mark whatever it went off against, and open it. The soot reaches
@@ -659,8 +694,9 @@ async function main() {
       }
       debris(x, y, z, splash.radius);
     }
-    effects.shake = Math.min(splash.nuke ? 2.6 : 1.4, effects.shake
-      + Math.max(0, 1 - dist / (splash.radius * 3)) * (splash.nuke ? 2.2 : 0.9));
+    const big = splash.nuke || splash.fusion;
+    effects.shake = Math.min(big ? 2.6 : 1.4, effects.shake
+      + Math.max(0, 1 - dist / (splash.radius * 3)) * (big ? 2.2 : 0.9));
 
     // An incendiary is a small blast and a large fire: the pools it leaves
     // are what it is for, and they go down here so that anything which can
@@ -770,7 +806,7 @@ async function main() {
     demolition.blast(x, y, z, wreck.radius, wreck.damage, splash.crater !== false);
     // Anything that leaves a mark sets light to the trees in it. The radius
     // is wider than the blast, because fire spreads and a blast does not.
-    fires.ignite(x, y, z, splash.radius * (splash.nuke ? 1.15 : 1.9),
+    fires.ignite(x, y, z, splash.radius * (splash.nuke || splash.fusion ? 1.15 : 1.9),
       Math.min(1, 0.5 + splash.damage / 400));
 
     // Where the damage radiates from, which is not always where the mark is.
@@ -1197,8 +1233,106 @@ async function main() {
   // mech layer knows about this game: it decides when a gun goes off and
   // where the muzzle is, and this decides what that does to the city.
 
+  /**
+   * What theirs fires, by the kind its chassis gives it. The Reaper's
+   * chaingun is the `auto` at the bottom; the rest are the chassis' own: a
+   * shotgun, a rail, shells, a swarm of small rockets, thermite and a beam.
+   */
+  const FOE_FIRE = {
+    shotgun(m, from, dir, gun) {
+      audio.gunshot('mechgun');
+      for (let i = 0; i < gun.pellets; i++) foeRound(m, from, dir, gun, 0.55);
+      effects.flash(from.x, from.y, from.z, 2.6, 1.0, 0.7, 0.35, 0.08);
+    },
+    rail(m, from, dir, gun) {
+      // One bolt with a long wait between: it is the shot you hear coming
+      // for three seconds and then have to have moved out of.
+      audio.gunshot('rail');
+      const hit = world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, gun.range);
+      const reach = hit ? hit.t : gun.range;
+      const end = { x: from.x + dir.x * reach, y: from.y + dir.y * reach, z: from.z + dir.z * reach };
+      effects.lance(from.x, from.y, from.z, end.x, end.y, end.z, 1.0, 0.25, 0.2);
+      effects.flash(from.x, from.y, from.z, 3.4, 1.0, 0.3, 0.25, 0.12);
+      const near = pointToRay(player.x, player.y + PLAYER.eye * 0.6, player.z, from, dir, reach);
+      if (near < 1.3 && combat.health > 0) combat.hurt(gun.damage, m.x, m.z, player.x, player.z);
+      if (hit) {
+        effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+        demolition.blast(end.x, end.y, end.z, 3, gun.damage * 2);
+      }
+    },
+    shell(m, from, dir, gun) {
+      audio.gunshot('mechcannon');
+      const d = spreadDir(dir, gun.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * gun.speed, vy: d.y * gun.speed, vz: d.z * gun.speed,
+        splash: gun.splash, weapon: 'reaper',
+      });
+      effects.flash(from.x, from.y, from.z, 2.8, 1.0, 0.6, 0.3, 0.08);
+    },
+    swarm(m, from, dir, gun) {
+      // Little rockets, a handful at a time, that wander on the way.
+      audio.gunshot('rpg');
+      const d = spreadDir(dir, gun.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * gun.speed, vy: d.y * gun.speed + 4, vz: d.z * gun.speed,
+        splash: gun.splash, weapon: 'reaper',
+      });
+    },
+    thermite(m, from, dir, gun) {
+      audio.gunshot('rpg');
+      const d = spreadDir(dir, gun.spread);
+      projectiles.launch('rocket', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * gun.speed, vy: d.y * gun.speed + 6, vz: d.z * gun.speed,
+        splash: gun.splash, weapon: 'reaper', thermite: gun.fire,
+      });
+    },
+    laser(m, from, dir, gun) {
+      // A beam held on you for a second and a half, a little at a time.
+      const hit = world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, gun.range);
+      const reach = hit ? hit.t : gun.range;
+      const end = { x: from.x + dir.x * reach, y: from.y + dir.y * reach, z: from.z + dir.z * reach };
+      effects.lance(from.x, from.y, from.z, end.x, end.y, end.z, 0.75, 0.2, 1.0);
+      if (Math.random() < 0.2) audio.laser(Math.hypot(player.x - m.x, player.z - m.z));
+      const near = pointToRay(player.x, player.y + PLAYER.eye * 0.6, player.z, from, dir, reach);
+      if (near < 1.0 && combat.health > 0) combat.hurt(gun.damage, m.x, m.z, player.x, player.z);
+      if (hit && Math.random() < 0.3) {
+        effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+      }
+    },
+  };
+
+  /** A direction knocked off true by up to this much. */
+  function spreadDir(dir, amount) {
+    const d = {
+      x: dir.x + (Math.random() - 0.5) * amount,
+      y: dir.y + (Math.random() - 0.5) * amount,
+      z: dir.z + (Math.random() - 0.5) * amount,
+    };
+    const l = Math.hypot(d.x, d.y, d.z) || 1;
+    return { x: d.x / l, y: d.y / l, z: d.z / l };
+  }
+
+  /** One round of theirs, which hurts you if it goes through you. */
+  function foeRound(m, from, dir, gun, wide = 0.9) {
+    const d = spreadDir(dir, gun.spread);
+    const hit = world.raycast(from.x, from.y, from.z, d.x, d.y, d.z, gun.range);
+    const reach = hit ? hit.t : gun.range;
+    const end = { x: from.x + d.x * reach, y: from.y + d.y * reach, z: from.z + d.z * reach };
+    effects.tracer(from.x, from.y, from.z, end.x, end.y, end.z, false);
+    if (hit) effects.impact(end.x, end.y, end.z, hit.nx || 0, hit.ny || 1, hit.nz || 0, 'wall');
+    const near = pointToRay(player.x, player.y + PLAYER.eye * 0.6, player.z, from, d, reach);
+    if (near < wide && combat.health > 0) combat.hurt(gun.damage, m.x, m.z, player.x, player.z);
+  }
+
   /** A chaingun round, from a mech, at whatever is in front of it. */
   mechs.onChaingun = (m, from, dir, gun) => {
+    if (!m.mine && gun.kind && FOE_FIRE[gun.kind]) {
+      FOE_FIRE[gun.kind](m, from, dir, gun);
+      return;
+    }
     const spread = gun.spread;
     const d = {
       x: dir.x + (Math.random() - 0.5) * spread,
@@ -1593,31 +1727,56 @@ async function main() {
 
   mechs.onEject = () => { if (state.inMech) leaveMech(false); };
 
+  // Reactors running away, each until its fuse is out.
+  const reactors = mechs.reactors;
+
   mechs.onDestroyed = (m) => {
-    explode(m.x, m.y + 3.0, m.z, { radius: 26, damage: 420 }, { weapon: 'mech' });
+    // The machine is dead; the reactor in it is not, yet. A small blast and
+    // a shower of parts now, so a kill still reads as a kill, and the real
+    // one when the containment goes.
+    explode(m.x, m.y + 3.0, m.z, { radius: 12, damage: 160, crater: false }, { weapon: 'mech' });
     gibs.rubble(m.x, m.y + 2.0, m.z, 9, 16, 2.4);
-    // Eight metres of reactor and ammunition going up at once. The blast is
-    // what it does to the street; this is what it looks like, and it is the
-    // one thing on fire in this city that is worth standing back from. A
-    // column up the height of the machine, three secondary bursts out of the
-    // wreck, and ground that goes on burning long enough to be a problem for
-    // whoever walks in after it.
-    const g = world.groundHeight(m.x, m.z);
-    effects.flame(m.x, m.y + 2.0, m.z, 11.0, 1);
-    for (let i = 0; i < 3; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 2 + Math.random() * 5;
-      const fx = m.x + Math.cos(a) * r, fz = m.z + Math.sin(a) * r;
-      effects.flame(fx, world.groundHeight(fx, fz) + 0.6, fz, 5.5, 0.9);
-      fires.ignite(fx, world.groundHeight(fx, fz), fz, 9, 1);
+    const own = state.inMech === m;
+    reactors.push({ m, left: own ? FUSION.fuseOwn : FUSION.fuse, spark: 0, chord: false });
+    feed(`<b>${m.spec.name.toLowerCase()} down</b>, reactor critical`);
+    if (own) {
+      leaveMech(true);
+      toast('reactor critical, get clear');
     }
-    fires.ignite(m.x, g, m.z, 12, 1);
-    burning.push({ x: m.x, y: g, z: m.z, radius: 9.5, left: 26, damagePerSecond: 34 });
-    renderer.addScar(m.x, g, m.z, 14, 1, 0);
-    audio.flameWall();
-    feed(`<b>${m.spec.name.toLowerCase()} down</b>`);
-    if (state.inMech === m) leaveMech(true);
   };
+
+  /**
+   * The few seconds between a mech going down and its reactor going up: blue
+   * sparks out of the wreck, faster as it runs, the charge chord rising under
+   * it, and then the fusion blast where the wreck is lying.
+   */
+  function updateReactors(dt) {
+    for (let i = reactors.length - 1; i >= 0; i--) {
+      const r = reactors[i];
+      const m = r.m;
+      r.left -= dt;
+      if (!r.chord && r.left < 2.0) {
+        r.chord = true;
+        audio.ultraCharge(Math.max(0.4, r.left));
+      }
+      // Sparks, more of them the nearer it is.
+      r.spark -= dt;
+      if (r.spark <= 0) {
+        r.spark = Math.max(0.03, Math.min(0.25, r.left * 0.08));
+        const h = (m.spec.height || 8) * (0.3 + Math.random() * 0.5);
+        effects.spark(m.x + (Math.random() - 0.5) * 3, m.y + h,
+          m.z + (Math.random() - 0.5) * 3, 0.35, 0.95, 0.75);
+        effects.flash(m.x, m.y + h, m.z, 2.5 + Math.random() * 2, 0.4, 1.0, 0.8, 0.12);
+      }
+      if (r.left > 0) continue;
+      reactors.splice(i, 1);
+      const g = world.groundHeight(m.x, m.z);
+      explode(m.x, g + 2.0, m.z, FUSION.splash, { weapon: 'mech' });
+      fires.ignite(m.x, g, m.z, 16, 1);
+      burning.push({ x: m.x, y: g, z: m.z, radius: 12, left: 18, damagePerSecond: 40 });
+      feed(`<b>${m.spec.name.toLowerCase()}</b> reactor breach`);
+    }
+  }
 
   /**
    * Every machine on its feet, against the trees it is standing in. Checked a
@@ -1818,6 +1977,23 @@ async function main() {
     return out;
   }
 
+  /**
+   * Cuts the buildings in a site into pieces before it starts to fall, once
+   * per site, so it has columns and storeys to break along. Past seventy
+   * metres everything in it comes down to the ground anyway, and cutting a
+   * district that size into storeys is a second's work for nothing.
+   */
+  function refineSite(site) {
+    if (site.fined || site.walls === false) return;
+    site.fined = true;
+    if (site.radius > 70) return;
+    const edge = Math.max(2.5, Math.min(4.5, site.radius / 7));
+    const changed = fineWalls(world, site.x, site.z, site.radius * 1.05, edge);
+    if (changed.length) tiles.refresh(changed);
+  }
+
+  demolition.onRefine = refineSite;
+
   demolition.onStage = (site, level, was) => {
     scarTiles(site.x, site.z, site.radius);
     const share = level - was;
@@ -1860,6 +2036,11 @@ async function main() {
       dustAt = at;
     }
     effects.dust(site.x, dustAt, site.z, site.radius * (0.5 + share * 0.6));
+    // And the cloud a building makes coming down, which is most of what you
+    // see of it: it rolls out along the street at the height of a man and
+    // hangs there, grey and thick enough to hide the street behind it.
+    effects.collapseDust(site.x, site.y, site.z, site.radius * (0.4 + share * 0.8),
+      Math.max(6, dustAt - site.y));
     const away = Math.round(Math.hypot(player.x - site.x, player.z - site.z));
     audio.collapse(away, site.radius * (0.4 + share));
     feed(level >= 1
@@ -2231,19 +2412,28 @@ async function main() {
   // their numbers changed, because five rows rebuilt sixty times a second is
   // five rows of garbage a second for no gain.
 
-  /** The rows down the right, one per weapon, built from ARMS. */
+  /**
+   * The rows down the right, one per weapon the mech you are in carries.
+   * Built again only when you climb into a chassis with a different set.
+   */
   const armRows = [];
+  let armRowsFor = null;
   function buildArmRows() {
-    if (armRows.length) return;
-    for (let i = 0; i < ARMS.length; i++) {
+    const m = state.inMech;
+    const loadout = m ? m.loadout : [];
+    if (armRowsFor === loadout) return;
+    armRowsFor = loadout;
+    armRows.length = 0;
+    el.mechArms.textContent = '';
+    for (let i = 0; i < loadout.length; i++) {
       const row = document.createElement('div');
       row.className = 'marm';
       const key = document.createElement('u');
       key.textContent = String((i + 1) % 10);
       const name = document.createElement('span');
-      name.textContent = ARMS[i].name;
+      name.textContent = loadout[i].name;
       const ammo = document.createElement('b');
-      ammo.textContent = String(ARMS[i].magazine);
+      ammo.textContent = String(loadout[i].magazine);
       row.append(key, name, ammo);
       el.mechArms.append(row);
       armRows.push({ row, ammo });
@@ -2335,7 +2525,7 @@ async function main() {
     el.vehicleName.textContent = m.spec.name;
     el.vehicleKeys.textContent =
       'W A S D walks, mouse aims, left mouse fires, right mouse empties the pod, '
-      + '1 to 5 or the wheel changes weapon, Shift dashes, Y changes the view, '
+      + `1 to ${m.loadout.length} or the wheel changes weapon, Shift dashes, Y changes the view, `
       + 'E is the reflex, V is the travel map';
     camera.yaw = m.torso;
     if (m.spec.arms) {
@@ -2714,6 +2904,30 @@ async function main() {
     if (Math.random() < dt * 1.4) fires.ignite(x, 0, z, radius * 2.2, 0.8);
   };
 
+  // Ultra plasma: the balls leave orbit through the ordinary projectile
+  // layer, so they bounce off the real streets and go off through the same
+  // blast every other weapon uses.
+  ultra.launch = (from, v) => projectiles.launch('ultra', {
+    x: from.x, y: from.y, z: from.z, vx: v.x, vy: v.y, vz: v.z,
+    splash: ULTRA.splash, weapon: 'ultra',
+  });
+  ultra.onCharge = (seconds) => {
+    audio.ultraCharge(seconds);
+    toast('ultra plasma, charging');
+    feed('<i>ultra plasma</i> charging');
+  };
+  ultra.onRain = () => {
+    audio.explosion();
+    state.flash = Math.max(state.flash, 0.25);
+    feed(`<b>ultra plasma</b> ${ultra.left} inbound`);
+  };
+  ultra.onDone = (sent) => { feed(`<i>ultra plasma</i> ${sent} away`); };
+  const ultraLive = () => {
+    let n = 0;
+    for (const b of projectiles.active) if (b.kind === 'ultra') n++;
+    return n;
+  };
+
   ion.onCharge = () => {
     audio.ionCharge();
     toast('ion cannon, charging');
@@ -2973,11 +3187,18 @@ async function main() {
       const say = document.createElement('div');
       say.className = 'mechsay';
       const chips = [];
+      // What it carries, said the way the menu talks: yours by its arms,
+      // theirs by its gun.
+      const FOE_GUN = { auto: 'a chaingun in bursts', shotgun: 'a shotgun', rail: 'a railgun',
+        shell: 'a cannon', swarm: 'a swarm of small rockets', thermite: 'thermite', laser: 'a beam' };
+      const armsLine = (row, which) => (which === 'mine'
+        ? `Carries ${row.loadout.map((id) => (ARMS.find((a) => a.id === id) || { name: id }).name).join(', ')}.`
+        : `Fires ${FOE_GUN[(row.gun && row.gun.kind) || 'auto']} and rockets.`);
       const show = () => {
         const id = cheats.mechs[side];
         for (const c of chips) c.el.classList.toggle('on', c.id === id);
         const row = CHASSIS.find((c) => c.id === id);
-        say.textContent = row ? `${row.name}: ${row.role}` : 'a different one every time';
+        say.textContent = row ? `${row.name}: ${row.role}. ${armsLine(row, side)}` : 'a different one every time';
       };
       const options = [...CHASSIS.map((c) => ({ id: c.id, label: c.name, note: c.role })),
         ...(side === 'foe' ? [{ id: 'random', label: 'Random', note: 'a different one every time' }] : [])];
@@ -3292,6 +3513,9 @@ async function main() {
     } else if (id === 'ion') {
       openMap('ion');
       return;
+    } else if (id === 'ultra') {
+      openMap('ultra');
+      return;
     }
     applyCheats();
   }
@@ -3357,6 +3581,12 @@ async function main() {
       armed: 'Enter to go, Esc to cancel.',
       button: 'Fly there',
     },
+    ultra: {
+      hint: 'Set how many, how wide, from where and how steep, then click the city. '
+        + 'Wheel zooms, drag moves. Esc to think better of it.',
+      armed: 'Enter to fire, Esc to cancel.',
+      button: 'Fire',
+    },
     ion: {
       hint: 'Click the city to put the ion cannon on it. '
         + 'Wheel zooms, drag moves. Esc to think better of it.',
@@ -3383,8 +3613,10 @@ async function main() {
     targetMap.centre = { x: player.x, z: player.z };
     targetMap.zoom = MAP_ZOOM.near;
     state.mapPull = { from: MAP_ZOOM.near, to: MAP_ZOOM.pick, t: 0, back: false };
-    targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true };
+    targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true, ...aimArrow(mode) };
     el.nukeTarget.classList.toggle('travel', mode === 'travel');
+    el.ultraPanel.classList.toggle('hidden', mode !== 'ultra');
+    if (mode === 'ultra') showUltra();
     el.nukeTarget.classList.remove('hidden');
     el.targetConfirm.classList.add('hidden');
     el.confirmFire.textContent = MAP_MODE[mode].button;
@@ -3410,6 +3642,9 @@ async function main() {
         from: targetMap.zoom, to: MAP_ZOOM.near, t: 0, back: true,
         fromCentre: targetMap.centre ? { ...targetMap.centre } : { x: player.x, z: player.z },
       };
+      // The numbers are spent once it has fired or been cancelled, so they go
+      // at once rather than riding the zoom back down.
+      el.ultraPanel.classList.add('hidden');
       return;
     }
     state.targeting = false;
@@ -3418,6 +3653,7 @@ async function main() {
     targetMap.aim = null;
     el.nukeTarget.classList.add('hidden');
     el.targetConfirm.classList.add('hidden');
+    el.ultraPanel.classList.add('hidden');
     relock();
   }
 
@@ -3504,10 +3740,15 @@ async function main() {
     }
     state.pendingNuke = { x, z };
     const inside = countInside(x, z, radius);
+    const u = cheats.ultra;
     el.confirmWhere.textContent = state.mapMode === 'ion'
       ? `${away} m away. Three beams for ${Math.round(ION.charge)} seconds, `
         + `then ${radius} m of everything. ${inside} target${inside === 1 ? '' : 's'} inside.`
-      : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
+      : state.mapMode === 'ultra'
+        ? `${away} m away. ${u.count} plasma balls over ${radius} m, from the `
+          + `${compassName(u.bearing)} at ${u.tilt}\u00b0, after ${ULTRA.charge.toFixed(0)} seconds of charge. `
+          + `${inside} target${inside === 1 ? '' : 's'} inside.`
+        : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
     const self = away < radius;
     el.confirmSelf.classList.toggle('hidden', !self);
     el.confirmSelf.textContent = combat.godmode
@@ -3533,6 +3774,18 @@ async function main() {
       // than flying back onto a player who is about to leave.
       closeTargeting(true);
       beginTravel(at.x, at.z);
+      return true;
+    }
+    if (state.mapMode === 'ultra') {
+      if (!ultra.fire(at.x, at.z, cheats.ultra)) {
+        el.targetHint.textContent = ultra.active
+          ? 'the last one is still coming down'
+          : 'not there: the memorial is a weapons free zone';
+        return false;
+      }
+      cheats.used = true;
+      applyCheats();
+      closeTargeting();
       return true;
     }
     if (state.mapMode === 'ion') {
@@ -3563,6 +3816,10 @@ async function main() {
   function beginTravel(x, z) {
     const tx = Math.min(world.maxX - 10, Math.max(world.minX + 10, x));
     const tz = Math.min(world.maxZ - 10, Math.max(world.minZ + 10, z));
+    // The map says no to a district nobody has built, and so does the flight:
+    // there is nothing there to land on, and the landing would hold for good.
+    const target = world.entryAt(tx, tz);
+    if (target && !world.isBuilt(target)) return false;
     travel.start({
       x: player.x, y: player.y + PLAYER.eye, z: player.z,
       yaw: camera.yaw, pitch: camera.pitch,
@@ -3579,7 +3836,7 @@ async function main() {
     // and the flight is seven seconds of warning that you are coming. Start
     // fetching it now and bring the tiles in along the way, so the city is
     // there when you arrive rather than appearing around you afterwards.
-    const far = world.entryAt(tx, tz);
+    const far = target;
     if (far && (!world.loaded(far.id) || world.isOverflight(far.id))) {
       // The flight is the loading screen: it takes seven seconds and the
       // district lands inside that, so there is nothing to wait for at the
@@ -3723,6 +3980,13 @@ async function main() {
   // ground rather than a tile that is merely coarse.
   const FLIGHT = { reach: 2900, drop: 4200, most: 10, bytes: 128e6, every: 0.25, lead: 1400 };
   let streamDue = 0;
+  // The ceiling is set for the standard city, where a district is three to
+  // forty megabytes. A city built at tier 0 has districts of a hundred and
+  // more, so the ceiling grows to three of its biggest: the one you are in,
+  // the one you are walking towards and the one behind you. Never past a
+  // gigabyte and a half, which is what a desktop browser will give a tab
+  // without complaint.
+  const holdBytes = (plan) => Math.min(1.5e9, Math.max(plan.bytes, 3 * world.heaviest));
 
   /**
    * The district streamer. Keeps the one you are in, the ones you are near,
@@ -3762,7 +4026,9 @@ async function main() {
     streamDue -= dt;
     if (streamDue <= 0) {
       streamDue = plan.every;
-      world.keepAround(cx, cz, plan.reach, plan.drop, plan.most, plan.bytes, variant);
+      // The landing is held whatever the ceiling says, at the fine tier.
+      const pin = flying && state.travelTo ? world.idAt(state.travelTo.x, state.travelTo.z) : null;
+      world.keepAround(cx, cz, plan.reach, plan.drop, plan.most, holdBytes(plan), variant, pin);
     }
     // And if you are somehow standing on ground that is not in yet, which is
     // a fast travel or a deep link rather than a walk, the card is still
@@ -3834,7 +4100,70 @@ async function main() {
   function aimRadius(mode) {
     if (mode === 'travel') return 14;
     if (mode === 'ion') return ionRadius();
+    if (mode === 'ultra') return cheats.ultra.radius;
     return nukeRadius();
+  }
+
+  /** The way ultra plasma comes in, for the arrow the map draws. */
+  function aimArrow(mode) {
+    return mode === 'ultra' ? { bearing: cheats.ultra.bearing, tilt: cheats.ultra.tilt } : {};
+  }
+
+  // The four numbers, on the map while it is up for ultra plasma. Each one
+  // moves the circle or the arrow as it is dragged, and a point already
+  // picked is asked about again with the new numbers.
+  const ultraRows = {};
+  function showUltra() {
+    const u = cheats.ultra;
+    for (const key of Object.keys(ultraRows)) {
+      const row = ultraRows[key];
+      row.slider.value = String(Math.min(Number(row.slider.max), u[key]));
+      if (row.box) row.box.value = String(u[key]);
+      row.say.textContent = key === 'count' ? `${u.count}`
+        : key === 'radius' ? `${u.radius} m`
+          : key === 'bearing' ? `${u.bearing}\u00b0 ${compassName(u.bearing)}` : `${u.tilt}\u00b0`;
+    }
+  }
+  function compassName(b) {
+    return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8];
+  }
+  function setUltra(key, v) {
+    cheats.setUltra(key, v);
+    showUltra();
+    if (targetMap.aim) {
+      targetMap.aim = { ...targetMap.aim, radius: aimRadius('ultra'), ...aimArrow('ultra') };
+    }
+    if (state.pendingNuke) armNuke(state.pendingNuke.x, state.pendingNuke.z);
+    else drawTargetMap();
+  }
+  for (const [key, label] of [['count', 'Plasma balls'], ['radius', 'Radius'],
+    ['bearing', 'Coming in from'], ['tilt', 'Angle off the vertical']]) {
+    const row = document.createElement('label');
+    row.className = 'urow';
+    row.dataset.ultra = key;
+    const name = document.createElement('b');
+    name.textContent = label;
+    const say = document.createElement('span');
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    const [lo, hi] = ULTRA.limits[key];
+    slider.min = String(lo);
+    slider.max = String(hi);
+    slider.step = '1';
+    slider.addEventListener('input', () => setUltra(key, slider.value));
+    row.append(name, say, slider);
+    let box = null;
+    if (key === 'count') {
+      // The slider stops at its top; the box takes any number at all.
+      box = document.createElement('input');
+      box.type = 'number';
+      box.min = '1';
+      box.step = '1';
+      box.addEventListener('change', () => setUltra(key, box.value));
+      row.append(box);
+    }
+    el.ultraPanel.appendChild(row);
+    ultraRows[key] = { slider, box, say };
   }
 
   function aimAt(x, z) {
@@ -3842,6 +4171,7 @@ async function main() {
     targetMap.aim = {
       x, z, radius: r,
       allowed: state.mapMode === 'travel' || !sanctuaryWithin(x, z, r),
+      ...aimArrow(state.mapMode),
     };
   }
 
@@ -4401,11 +4731,12 @@ async function main() {
         // Nought is the tenth, the way a number row runs out.
         const raw = Number(code.slice(5));
         const n = raw === 0 ? 10 : raw;
-        if (n >= 1 && n <= ARMS.length) { mechs.selectArm(state.inMech, n - 1); return; }
+        const carried = state.inMech.loadout.length;
+        if (n >= 1 && n <= carried) { mechs.selectArm(state.inMech, n - 1); return; }
         // A number past the end of the mech's loadout is not the pilot's
         // rifle. Six used to fall through to what the man inside is carrying
         // and put a banana on the screen of something eight metres tall.
-        toast(`the mech carries ${ARMS.length}`);
+        toast(`the ${state.inMech.spec.name} carries ${carried}`);
         return;
       }
       // And neither is any of the keys that reach over his shoulder.
@@ -4598,9 +4929,11 @@ async function main() {
       fires.update(worldDt, player);
       fireWalls.update(worldDt);
       updateBurning(worldDt);
+      updateReactors(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
+      ultra.update(worldDt, ultraLive());
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
@@ -4780,9 +5113,11 @@ async function main() {
     fires.update(worldDt, player);
     fireWalls.update(worldDt);
     updateBurning(worldDt);
+    updateReactors(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
+    ultra.update(worldDt, ultraLive());
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     // And the ones hunting you keep walking whether or not you are in one.
@@ -4838,8 +5173,13 @@ async function main() {
       // Nobody is put down on ground that has not arrived. The flight holds
       // its last frame, a few hundred metres up, until the district is in.
       const landing = state.travelTo ? world.idAt(state.travelTo.x, state.travelTo.z) : null;
-      if (p.finished && state.travelTo
-        && (!world.isLoaded(state.travelTo.x, state.travelTo.z) || world.isOverflight(landing))) {
+      // Whether the district is in, not whether there is a tile under the
+      // exact spot: a tile with nothing in it is not in the bundle at all,
+      // and on the live city a flight to the middle of the Hansaviertel held
+      // over a tile like that for good, a few hundred metres up.
+      if (p.finished && state.travelTo && landing
+        && world.isBuilt(world.entryFor(landing))
+        && (!world.loaded(landing) || world.isOverflight(landing))) {
         el.district.textContent = `landing in ${world.nameAt(state.travelTo.x, state.travelTo.z) || 'Berlin'}`;
         el.district.classList.add('loading');
         // Held up because what is under the landing is the coarse build.
@@ -5044,6 +5384,9 @@ async function main() {
       state.mechFlash = Math.max(0, state.mechFlash - elapsed * 6);
     }
     renderer.flash = state.flash * state.flash;
+    // A reactor's flash is its own colour until the frame has come back.
+    if (state.flash <= 0.001) state.flashTint = null;
+    renderer.flashTint = state.flashTint || WHITE_FLASH;
     if (effects.shake > 0.001) {
       const k = effects.shake * effects.shake * 0.09;
       const t = state.time * 47;
@@ -5281,8 +5624,12 @@ async function main() {
     openTravel() { openTravel(); },
     cinema, cinemaSpec: CINEMA,
     ion, ionSpec: ION, ionState: ION_STATE,
+    ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
+    reactors, fusionSpec: FUSION,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
+    /** The arms the mech you are in carries, in the order the keys pick them. */
+    get mechLoadout() { return state.inMech ? state.inMech.loadout : []; },
     selectArm(i) { return state.inMech ? mechs.selectArm(state.inMech, i) : -1; },
     cycleArm(step) { return state.inMech ? mechs.cycleArm(state.inMech, step) : -1; },
     toggleCockpit() { toggleCockpit(); return state.cockpit; },
@@ -5295,6 +5642,8 @@ async function main() {
     endCinema() { endCinema(); },
     travel,
     beginTravel(x, z) { return beginTravel(x, z); },
+    get flightPlan() { return FLIGHT; },
+    get streamCeiling() { return holdBytes(STREAM); },
     armNuke(x, z) { return armNuke(x, z); },
     releaseNuke() { return releaseNuke(); },
     closeTargeting() { closeTargeting(true); },

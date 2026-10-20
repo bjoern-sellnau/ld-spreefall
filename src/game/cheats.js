@@ -11,6 +11,7 @@
 // clean run and the end screen says so too.
 
 import { CHASSIS, chassisById, mechKey } from './chassis.js';
+import { ULTRA, clampUltra } from './ultra.js';
 
 const KEY = 'spreefall.cheats';
 
@@ -76,6 +77,7 @@ export const ACTIONS = [
   { id: 'refill', label: 'Reload everything', note: 'top up what you are carrying' },
   { id: 'nuke', label: 'Drop a nuke', note: 'pick the target on the map' },
   { id: 'ion', label: 'Ion cannon', note: 'three beams, then the middle one' },
+  { id: 'ultra', label: 'Ultra plasma', note: 'a rain of plasma from orbit: as many as you like, as wide as you like, from where you like' },
 ];
 
 /** Bringing more of them out. Each button is one squad, flight or section. */
@@ -146,6 +148,9 @@ export class Cheats {
     // rather than a cheat: it does not mark the run, and all off leaves it
     // where you put it.
     this.mechs = { mine: CHASSIS[0].id, foe: CHASSIS[0].id };
+    // Ultra plasma: how many, how wide, from which way and how steep. Kept
+    // with the choices rather than the switches, for the same reason.
+    this.ultra = { ...ULTRA.defaults };
     // Set the first time anything is switched on, and never cleared, so that
     // turning a cheat off again does not launder the run.
     this.used = false;
@@ -240,6 +245,14 @@ export class Cheats {
     return true;
   }
 
+  /** Set one of ultra plasma's four numbers, held to what it may be. */
+  setUltra(key, v) {
+    if (!(key in ULTRA.defaults)) return false;
+    this.ultra[key] = clampUltra(key, v);
+    this.save();
+    return true;
+  }
+
   /** The mech table key for the next one of yours to come down. */
   myMech() { return mechKey(this.mechs.mine, true); }
 
@@ -261,7 +274,7 @@ export class Cheats {
 
   save() {
     try {
-      const out = { values: this.values, mechs: this.mechs };
+      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra };
       for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
@@ -279,6 +292,11 @@ export class Cheats {
         for (const s of SETTINGS) {
           const v = saved.values[s.id];
           if (Number.isFinite(v)) this.values[s.id] = Math.min(s.max, Math.max(s.min, v));
+        }
+      }
+      if (saved.ultra) {
+        for (const k of Object.keys(ULTRA.defaults)) {
+          if (saved.ultra[k] !== undefined) this.ultra[k] = clampUltra(k, saved.ultra[k]);
         }
       }
       if (saved.mechs) {

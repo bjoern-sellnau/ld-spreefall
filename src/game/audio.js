@@ -883,6 +883,64 @@ export class Audio {
     }
   }
 
+  /**
+   * Ultra plasma charging: a chord that climbs for the whole of the charge
+   * with a fast tremolo on it that speeds up as it goes, and a hiss under it
+   * that opens out, so you can hear how far along it is.
+   *
+   * @param {number} seconds how long the charge is
+   */
+  ultraCharge(seconds) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const trem = ctx.createOscillator();
+    trem.frequency.setValueAtTime(4, t);
+    trem.frequency.exponentialRampToValueAtTime(28, t + seconds);
+    // The tremolo works on a stage of its own after the three voices, which
+    // sits at 0.65 and swings 0.35 either side, so it never inverts them.
+    const throb = ctx.createGain();
+    throb.gain.value = 0.65;
+    const depth = ctx.createGain();
+    depth.gain.value = 0.35;
+    trem.connect(depth).connect(throb.gain);
+    throb.connect(this.master);
+    for (const [base, mul] of [[110, 1], [110, 1.5], [110, 2.01]]) {
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(base * mul, t);
+      o.frequency.exponentialRampToValueAtTime(base * mul * 6, t + seconds);
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(400, t);
+      f.frequency.exponentialRampToValueAtTime(5000, t + seconds);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.05, t + 0.6);
+      g.gain.exponentialRampToValueAtTime(0.12, t + seconds);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.35);
+      o.connect(f).connect(g).connect(throb);
+      o.start(t);
+      o.stop(t + seconds + 0.4);
+    }
+    trem.start(t);
+    trem.stop(t + seconds + 0.4);
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = this._noiseBuffer;
+    hiss.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(3000, t);
+    hp.frequency.exponentialRampToValueAtTime(400, t + seconds);
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0.0001, t);
+    hg.gain.exponentialRampToValueAtTime(0.09, t + seconds);
+    hg.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.3);
+    hiss.connect(hp).connect(hg).connect(this.master);
+    hiss.start(t, 0, seconds + 0.4);
+    hiss.stop(t + seconds + 0.4);
+  }
+
   /** And the middle beam: a crack with a very long tail of pressure. */
   ionFire() {
     const ctx = this.ctx;

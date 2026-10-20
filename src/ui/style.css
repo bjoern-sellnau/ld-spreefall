@@ -1269,6 +1269,55 @@ html, body {
   box-shadow: inset 0 0 0 1px var(--edge);
 }
 
+/* Ultra plasma's four numbers, down the left of the map while it is up. */
+#ultrapanel {
+  position: absolute;
+  left: 2vw; top: 50%;
+  transform: translateY(-50%);
+  width: 250px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 14px;
+  background: rgba(14, 16, 20, 0.92);
+  border: 1px solid var(--edge);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+}
+#ultrapanel.hidden { display: none; }
+#ultrapanel .urow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  align-items: center;
+  margin: 0 0 12px;
+  font: 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  color: #cfcabf;
+}
+#ultrapanel .urow:last-child { margin-bottom: 0; }
+#ultrapanel .urow b {
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e2705a;
+}
+#ultrapanel .urow span { text-align: right; font-variant-numeric: tabular-nums; }
+#ultrapanel .urow input[type=range] {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: #e2705a;
+}
+#ultrapanel .urow input[type=number] {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 4px 6px;
+  font: 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+  color: #ece6da;
+  background: rgba(30, 33, 40, 0.95);
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+}
+@media (max-width: 640px) {
+  #ultrapanel { top: auto; bottom: 18vh; transform: none; left: 16px; }
+}
+
 #attribution {
   position: fixed;
   left: 12px; bottom: 8px;

@@ -378,6 +378,103 @@ export class Effects {
   }
 
   /**
+   * A mech's reactor letting go: the warhead's shape, a ring, a stem and a
+   * cap, in the colours of a fusion plasma instead of a fire. Electric blue
+   * at the heart, neon green at the edges, and a shell of sparks thrown out
+   * in every direction at once, which a chemical blast does not do.
+   */
+  fusion(x, y, z, radius) {
+    // Additive, like everything else here: two greens on top of each other
+    // are a paler green, so the colours are kept dark and saturated and let
+    // the overlap do the brightening, or the whole thing goes to mint.
+    this.flash(x, y + 4, z, radius * 1.5, 0.05, 0.75, 0.35, 0.9);
+    this.flash(x, y + 4, z, radius * 0.7, 0.08, 0.45, 1.0, 0.5);
+    this.flash(x, y + 4, z, radius * 0.25, 0.7, 0.9, 1.0, 0.25);
+    // The ground ring, neon green, fast.
+    for (let i = 0; i < 48; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = (i / 48) * Math.PI * 2 + Math.random() * 0.08;
+      const speed = radius * (0.9 + Math.random() * 0.35);
+      s.ax = x; s.ay = y + 1.5; s.az = z;
+      s.vx = Math.cos(a) * speed;
+      s.vy = 2 + Math.random() * 4;
+      s.vz = Math.sin(a) * speed;
+      s.gravity = 1.0;
+      s.maxLife = 1.6 + Math.random() * 1.2;
+      s.life = s.maxLife;
+      s.r = 0.04; s.g = 0.7; s.b = 0.22 + Math.random() * 0.12;
+      s.size = radius * (0.1 + Math.random() * 0.08);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    // The shell: a sphere of sparks, the same speed in every direction.
+    for (let i = 0; i < 70; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2;
+      const h = Math.sqrt(1 - u * u);
+      const speed = radius * (1.2 + Math.random() * 0.3);
+      s.ax = x; s.ay = y + 5; s.az = z;
+      s.vx = Math.cos(a) * h * speed;
+      s.vy = Math.abs(u) * speed * 0.8;
+      s.vz = Math.sin(a) * h * speed;
+      s.gravity = 4;
+      s.maxLife = 0.7 + Math.random() * 0.6;
+      s.life = s.maxLife;
+      s.r = 0.1; s.g = 0.5; s.b = 1.0;
+      s.size = 0.8 + Math.random() * 1.4;
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    // The stem: white blue at the bottom, going green as it climbs.
+    for (let i = 0; i < 34; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.2;
+      const up = i / 34;
+      s.ax = x + Math.cos(a) * r;
+      s.ay = y + 3 + up * radius * 0.8;
+      s.az = z + Math.sin(a) * r;
+      s.vx = Math.cos(a) * 3;
+      s.vy = 20 + Math.random() * 18;
+      s.vz = Math.sin(a) * 3;
+      s.gravity = 1.4;
+      s.maxLife = 3.5 + Math.random() * 2.5;
+      s.life = s.maxLife;
+      // Electric blue at the bottom, neon green by the top.
+      s.r = 0.03;
+      s.g = 0.22 + up * 0.38;
+      s.b = 0.62 - up * 0.42;
+      s.size = radius * (0.14 + Math.random() * 0.1);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    // The cap, thrown outward at the top, the greenest part of it.
+    for (let i = 0; i < 32; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = (i / 32) * Math.PI * 2 + Math.random() * 0.3;
+      const out = radius * (0.35 + Math.random() * 0.5);
+      s.ax = x + Math.cos(a) * radius * 0.08;
+      s.ay = y + radius * 0.6 + Math.random() * radius * 0.3;
+      s.az = z + Math.sin(a) * radius * 0.08;
+      s.vx = Math.cos(a) * out * 0.45;
+      s.vy = 12 + Math.random() * 9;
+      s.vz = Math.sin(a) * out * 0.45;
+      s.gravity = 2.0;
+      s.maxLife = 4.5 + Math.random() * 3.0;
+      s.life = s.maxLife;
+      s.r = 0.03; s.g = 0.5 + Math.random() * 0.15; s.b = 0.16 + Math.random() * 0.12;
+      s.size = radius * (0.16 + Math.random() * 0.12);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    this.shake = Math.min(2.4, this.shake + 1.1);
+  }
+
+  /**
    * One tick of a tree burning: a tongue of flame out of the crown and a
    * thread of smoke off the top of it. Called a few times a second per tree
    * rather than every frame, so the look does not change with the frame rate.
@@ -660,6 +757,60 @@ export class Effects {
       s.bx = 0; s.by = 0; s.bz = 0;
     }
     this.shake = Math.min(1, this.shake + 0.22);
+  }
+
+  /**
+   * The cloud out of a building coming down. Drawn over the frame rather than
+   * added to it, in the pool the blood uses, because dust is darker than the
+   * sky and added to it is nothing at all: grey added to a bright afternoon
+   * comes out as a brighter afternoon. It rolls out low along the ground,
+   * fast at first and then hanging, and a column goes up out of the middle.
+   *
+   * @param {number} height how tall what came down was
+   */
+  collapseDust(x, y, z, radius, height) {
+    const surge = Math.min(70, 18 + Math.round(radius * 1.1));
+    for (let i = 0; i < surge; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 3;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * radius * 0.7;
+      s.ax = x + Math.cos(a) * r;
+      s.ay = y + 1.5 + Math.random() * 3;
+      s.az = z + Math.sin(a) * r;
+      // Against a drag of 2.2 a second this carries about a radius out.
+      const speed = radius * (1.4 + Math.random() * 1.8);
+      s.vx = Math.cos(a) * speed;
+      s.vy = 0.4 + Math.random() * 1.6;
+      s.vz = Math.sin(a) * speed;
+      s.gravity = -0.12;
+      s.maxLife = 8 + Math.random() * 7;
+      s.life = s.maxLife;
+      const g = 0.5 + Math.random() * 0.12;
+      s.r = g * 1.05; s.g = g; s.b = g * 0.9;
+      s.size = 3 + radius * (0.16 + Math.random() * 0.18);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+    const column = Math.min(30, 8 + Math.round(radius * 0.5));
+    for (let i = 0; i < column; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 3;
+      s.ax = x + (Math.random() - 0.5) * radius * 0.8;
+      s.ay = y + Math.random() * height;
+      s.az = z + (Math.random() - 0.5) * radius * 0.8;
+      s.vx = (Math.random() - 0.5) * 2;
+      s.vy = 1.5 + Math.random() * 3.5;
+      s.vz = (Math.random() - 0.5) * 2;
+      s.gravity = -0.2;
+      s.maxLife = 7 + Math.random() * 6;
+      s.life = s.maxLife;
+      const g = 0.55 + Math.random() * 0.1;
+      s.r = g * 1.04; s.g = g; s.b = g * 0.9;
+      s.size = 4 + radius * (0.2 + Math.random() * 0.2);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
   }
 
   update(dt) {

@@ -323,7 +323,30 @@ async function run() {
     const y = s.world.groundHeight(at.x, at.z);
     // The same reach the search used, or the point it found may have
     // nothing inside a tighter circle and every reading comes back zero.
-    const here = () => Math.round(s.world.tallestNear(at.x, at.z, 6) * 10) / 10;
+    // The mean height of the walls within reach, a metre of wall at a time.
+    // The tallest was the measure once, but a building comes down column by
+    // column now with a ragged edge, and the tallest piece near the hit is
+    // the one column at the edge that stayed up while the rest came down.
+    const meanNear = (px, pz, r) => {
+      let sum = 0, n = 0;
+      s.world.forEachSegmentTile(px - r, pz - r, px + r, pz + r, (segs) => {
+        for (let i = 0; i + 5 < segs.length; i += 6) {
+          const len = Math.hypot(segs[i + 2] - segs[i], segs[i + 3] - segs[i + 1]);
+          const steps = Math.max(1, Math.ceil(len));
+          const tall = Math.max(0, segs[i + 5] - Math.max(0, segs[i + 4]));
+          for (let k = 0; k < steps; k++) {
+            const t = (k + 0.5) / steps;
+            const qx = segs[i] + (segs[i + 2] - segs[i]) * t;
+            const qz = segs[i + 1] + (segs[i + 3] - segs[i + 1]) * t;
+            if (Math.hypot(qx - px, qz - pz) > r) continue;
+            sum += tall * (len / steps);
+            n += len / steps;
+          }
+        }
+      });
+      return n ? sum / n : 0;
+    };
+    const here = () => Math.round(meanNear(at.x, at.z, 8) * 10) / 10;
     // A rocket touches up to four cells of the damage grid, so a site can
     // reach the far side of the frontage it hit. What it must not do is take
     // the neighbours with it, which is what these two read.
@@ -689,10 +712,16 @@ async function run() {
   const drive = await page.evaluate(async () => {
     const s = window.spreefall;
     const jeep = s.vehicles.active.find((v) => v.type === 'jeep');
+    // F takes the nearest thing you can get into, a mech first, so nothing
+    // else is left within reach of the jeep while this gets into it.
+    s.mechs.reset();
+    const others = s.vehicles.active.filter((v) => v !== jeep).map((v) => ({ v, x: v.x, z: v.z }));
+    for (const o of others) o.v.x += 200;
     s.teleport(jeep.x + 2, jeep.z);
     const tooFar = s.vehicles.nearest(jeep.x + 300, jeep.z, 7);
     s.toggleVehicle();
     const inIt = s.state.inVehicle === jeep;
+    const got = s.state.inVehicle ? s.state.inVehicle.type : (s.state.inMech ? 'a mech' : 'nothing');
     const was = { x: jeep.x, z: jeep.z };
     // Through the real fixed step with the real throttle, so this is the
     // path a player's key press takes and not a shortcut past it.
@@ -704,7 +733,8 @@ async function run() {
     s.toggleVehicle();
     const out = s.state.inVehicle === null;
     const dropped = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
-    return { inIt, tooFar: tooFar === null, moved: Math.round(moved),
+    for (const o of others) { o.v.x = o.x; o.v.z = o.z; }
+    return { inIt, got, tooFar: tooFar === null, moved: Math.round(moved),
       rode: Math.round(rode), out, dropped: Math.round(dropped) };
   });
   // --- can you tell they are there? ----------------------------------------
@@ -730,7 +760,7 @@ async function run() {
     findable.marked >= 3, `${findable.marked} marked`);
 
   check('you can only get into one you are standing next to', drive.tooFar);
-  check('and then it drives', drive.inIt && drive.moved > 15, `${drive.moved} m`);
+  check('and then it drives', drive.inIt && drive.moved > 15, `${drive.moved} m, in ${drive.got}`);
   check('with you in it', drive.rode === 0);
   check('and getting out puts you beside it', drive.out && drive.dropped <= 4,
     `${drive.dropped} m away`);
@@ -746,6 +776,12 @@ async function run() {
     const heli = live('heli');
     const jet = live('jet');
     if (!heli || !jet) return { climbed: -1, stalled: -1, stall: 0 };
+    // The jet out of the way while you get in: F takes the nearest, and a
+    // fighter is fifteen metres of wing parked beside the helicopter, so
+    // now and then it was the nearest and this measured a jet that does not
+    // climb on Space. That was the intermittent nought.
+    const jetAt = { x: jet.x, z: jet.z };
+    jet.x += 90;
     s.teleport(heli.x + 2, heli.z);
     s.toggleVehicle();
     // What it got you into, and whether it could, for when it climbs nowhere.
@@ -759,6 +795,7 @@ async function run() {
     s.input.jumpHeld = false;
     const climbed = heli.y - y0;
     s.toggleVehicle();
+    jet.x = jetAt.x; jet.z = jetAt.z;
 
     // A fighter that is not going fast enough does not fly.
     jet.y = s.world.groundHeight(jet.x, jet.z) + 200;
@@ -902,7 +939,19 @@ async function run() {
     s.setCheat('godmode', true);
     s.vehicles.reset();
     // Off the ground, down a street, the way a player would have to do it.
-    const j = s.vehicles.spawn('jet', s.player.x, s.player.z, -Math.PI / 2, 0);
+    // Down whichever way from here is clear the furthest: the checks before
+    // this one leave ruins about, and a ruin is a thing that stands now
+    // rather than a ramp you could roll up, so west was not always open.
+    let bestYaw = -Math.PI / 2, bestRun = 0;
+    for (let i = 0; i < 32; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      const dx = Math.cos(a), dz = Math.sin(a);
+      const g0 = s.world.groundHeight(s.player.x, s.player.z);
+      const hit = s.world.raycast(s.player.x, g0 + 3, s.player.z, dx, 0, dz, 400);
+      const run = hit ? hit.t : 400;
+      if (run > bestRun) { bestRun = run; bestYaw = Math.atan2(-dx, -dz); }
+    }
+    const j = s.vehicles.spawn('jet', s.player.x, s.player.z, bestYaw, 0);
     s.teleport(j.x + 2, j.z);
     s.toggleVehicle();
     const aboard = s.state.inVehicle === j;
@@ -911,7 +960,7 @@ async function run() {
     let rolled = 0;
     for (let i = 0; i < 60 * 6; i++) {
       // Nose level until it is fast enough, then pull back.
-      s.look(-90, j.speed > s.vehicleSpec.jet.stall + 4 ? 18 : 0);
+      s.look(bestYaw * 180 / Math.PI, j.speed > s.vehicleSpec.jet.stall + 4 ? 18 : 0);
       s.fixedForTest(1 / 60);
       // Wheels down is the spawn height, not zero: an aircraft sits on its
       // undercarriage.
@@ -1387,32 +1436,51 @@ async function run() {
       s.teleport(c.x - c.dx * 30, c.z - c.dz * 30);
       for (let i = 0; i < 4; i++) s.fixedForTest(1 / 60);
       // Along the street from sixteen metres one side to sixteen the other,
-      // at the height of somebody walking it.
+      // at the height of somebody's head. It was at 0.9 m, and on the real
+      // city two of the three streets it reported blocked were stopped by
+      // a parked car, 4.3 m long and 1.5 m high, which you walk round.
       const fx = c.x - c.dx * 16, fz = c.z - c.dz * 16;
-      const y = s.world.groundHeight(fx, fz) + 0.9;
-      const hit = s.world.raycast(fx, y, fz, c.dx, 0, c.dz, 32);
-      const up = s.world.raycast(fx, s.world.groundHeight(fx, fz) + 5.9, fz, c.dx, 0, c.dz, 32);
+      const y = s.world.groundHeight(fx, fz) + 1.9;
+      // Each ray with a result of its own: the world hands back one shared
+      // object unless it is given another, so the second ray used to write
+      // over the first and every report described the arch at deck height
+      // instead of whatever had stopped the street.
+      const hit = s.world.raycast(fx, y, fz, c.dx, 0, c.dz, 32, {});
+      const up = s.world.raycast(fx, s.world.groundHeight(fx, fz) + 5.9, fz, c.dx, 0, c.dz, 32, {});
       // What it ran into, when it ran into something: the wall's foot and
       // top over the street, how long it is and how square to the railway,
       // which tells a pier (six and a half metres, a metre and a half long,
       // along the line) from a building or a wall somebody else put there.
+      // The ray hands back the segment it stopped on, which is the one to
+      // describe: the nearest segment to the hit point was a lintel four
+      // metres up three times running, which cannot stop a ray at 0.9 m.
       let what = null;
       if (hit) try {
         const hx = fx + c.dx * hit.t, hz = fz + c.dz * hit.t;
-        const index = s.world.tileIndex(hx, hz);
-        const segs = index >= 0 ? s.world.segments(index) : [];
-        let near = Infinity;
-        for (let i = 0; i + 5 < segs.length; i += 6) {
-          const [x1, z1, x2, z2, base, top] = segs.slice(i, i + 6);
-          const ex = x2 - x1, ez = z2 - z1, l2 = ex * ex + ez * ez || 1;
-          const u = Math.max(0, Math.min(1, ((hx - x1) * ex + (hz - z1) * ez) / l2));
-          const d = Math.hypot(x1 + ex * u - hx, z1 + ez * u - hz);
-          if (d >= near) continue;
-          near = d;
-          const g = s.world.groundHeight(hx, hz);
-          const len = Math.sqrt(l2);
+        const g = s.world.groundHeight(hx, hz);
+        const g0 = s.world.groundHeight(fx, fz);
+        if (hit.kind !== 'wall') {
+          what = `the ground: ${(g - g0).toFixed(1)} m higher than where it started`;
+        } else {
+          const segs = s.world.segments(hit.tile);
+          const [x1, z1, x2, z2, base, top] = segs.slice(hit.seg, hit.seg + 6);
+          const ex = x2 - x1, ez = z2 - z1, len = Math.hypot(ex, ez) || 1;
+          // And everything else standing within a metre of it that reaches
+          // down to head height, by length, which tells a pier from a house.
+          const others = [];
+          for (let i = 0; i + 5 < segs.length; i += 6) {
+            if (i === hit.seg) continue;
+            const [a1, b1, a2, b2, lo, hi] = segs.slice(i, i + 6);
+            const fx2 = a2 - a1, fz2 = b2 - b1, l2 = fx2 * fx2 + fz2 * fz2 || 1;
+            const u = Math.max(0, Math.min(1, ((hx - a1) * fx2 + (hz - b1) * fz2) / l2));
+            if (Math.hypot(a1 + fx2 * u - hx, b1 + fz2 * u - hz) > 1) continue;
+            if (lo - g > 2) continue;
+            others.push(`${Math.sqrt(l2).toFixed(1)} m ${(lo - g).toFixed(1)}..${(hi - g).toFixed(1)}`);
+          }
           what = `${(base - g).toFixed(1)} to ${(top - g).toFixed(1)} m up, ${len.toFixed(1)} m long, `
-            + `${Math.round(Math.abs(ex * c.dx + ez * c.dz) / len * 100)}% along the street`;
+            + `${Math.round(Math.abs(ex * c.dx + ez * c.dz) / len * 100)}% along the street, `
+            + `ground ${(g - g0).toFixed(1)} m from the start`
+            + (others.length ? `; also ${others.slice(0, 4).join(', ')}` : '');
         }
       } catch (e) { what = `could not tell: ${e.message}`; }
       results.push({ name: c.name, at: [Math.round(c.x), Math.round(c.z)], through: !hit,

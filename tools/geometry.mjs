@@ -508,7 +508,7 @@ export function parkedCar(mesh, x, y, z, yaw, opts = {}) {
   const len = opts.length || 4.3;
   const wide = opts.width || 1.78;
   const flags = FACADE_FLAG.NO_WINDOWS;
-  const o = { flags, seed: opts.seed || 0, rot: -yaw };
+  const o = { flags, seed: opts.seed || 0, rot: -yaw, under: false };
   // What it is made of stands in for what colour it is, because a car has no
   // palette of its own in this renderer: dark road grey, concrete grey or
   // steel, picked off the seed. A street of bright metal boxes reads as a
@@ -728,7 +728,18 @@ export function box(mesh, cx, cy, cz, w, h, d, mat, opts = {}) {
     { n: [-s, 0, c], p: [P(hw, 0, hd), P(-hw, 0, hd), P(-hw, h, hd), P(hw, h, hd)] },
     { n: [s, 0, -c], p: [P(-hw, 0, -hd), P(hw, 0, -hd), P(hw, h, -hd), P(-hw, h, -hd)] },
     { n: [0, 1, 0], p: [P(-hw, h, -hd), P(hw, h, -hd), P(hw, h, hd), P(-hw, h, hd)] },
+    // And the underside. A box on the ground never shows it, and a box in
+    // the air shows nothing else from below: the Brandenburg Gate's
+    // entablature, its attic and the plates on its column heads were open
+    // underneath, and from the carriageway under them what you saw was the
+    // near sides of each, with the far sides culled, as bent sheets hanging
+    // in the sky.
+    { n: [0, -1, 0], p: [P(-hw, 0, hd), P(hw, 0, hd), P(hw, 0, -hd), P(-hw, 0, -hd)] },
   ];
+  // Something that stands on the ground says so, and keeps the two
+  // triangles: there are two thousand seven hundred stelae and four boxes a
+  // car, and nobody sees the bottom of either.
+  if (opts.under === false) faces.pop();
   for (const f of faces) {
     const ids = f.p.map((p, k) => mesh.vertex(p[0], p[1], p[2], f.n[0], f.n[1], f.n[2],
       k === 1 || k === 2 ? w : 0, k >= 2 ? h : 0, mat, seed, levels, flags, h, 255));

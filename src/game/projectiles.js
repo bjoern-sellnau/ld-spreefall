@@ -6,7 +6,10 @@
 // down the real kerb. Nothing here knows what it is going to hit; it asks the
 // world, like everything else in this project.
 
-const MAX = 64;
+// Room for ultra plasma, which keeps up to 480 balls in the air on top of
+// whatever else is flying. Bodies are plain objects in an array, and a pool
+// this size costs nothing while it is empty.
+const MAX = 640;
 
 export const PROJECTILE = {
   rocket: {
@@ -36,6 +39,13 @@ export const PROJECTILE = {
     maxAge: 3.2,
     detonateOnContact: false, bounces: 2, trail: 'glow', light: true, spin: 0,
     // A bolt that has run out of bounces goes off on the next thing it meets.
+  },
+  ultra: {
+    // A plasma bolt the size of a football, coming down from orbit. It
+    // bounces like the rifle's, twice, and goes off on the third thing it
+    // meets or when it runs out of speed.
+    radius: 0.5, gravity: 2.2, drag: 0, bounce: 0.55, armTime: 0.02, maxAge: 16,
+    detonateOnContact: false, bounces: 2, trail: 'glow', light: true, spin: 0,
   },
   flak: {
     radius: 0.10, gravity: 14, drag: 0.05, bounce: 0.3, armTime: 0.02, maxAge: 2.6,

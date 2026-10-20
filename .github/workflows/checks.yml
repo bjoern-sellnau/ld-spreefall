@@ -32,7 +32,11 @@ concurrency:
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Fetching and building three districts takes twelve minutes before the
+    # first test, and the suites behind it have grown: the run that first got
+    # past the district walk was cancelled at 45 minutes with every check so
+    # far passing, ten checks short of the end of the machines.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -468,10 +468,17 @@ export class World {
     return n;
   }
 
-  keepAround(x, z, reach = 900, drop = 2600, max = 9, maxBytes = Infinity, variant = 'fine') {
+  keepAround(x, z, reach = 900, drop = 2600, max = 9, maxBytes = Infinity, variant = 'fine', pin = null) {
     const want = new Set();
     const here = this.entryAt(x, z);
     if (here) want.add(here.id);
+    // A district that must not be let go whatever the distance or the
+    // ceiling says: the one a flight is landing in. While you are in the air
+    // you are still standing where you took off, so the landing is the
+    // furthest district held and the first the ceiling dropped. On the live
+    // city, where Mitte alone is thirty nine megabytes, the flight fetched
+    // its landing, dropped it, fetched it again, and never came down.
+    if (pin) want.add(pin);
     const sorted = this.catalogue
       .map((d) => ({ d, away: boxDistance(x, z, d.bounds) }))
       .sort((a, b) => a.away - b.away);
@@ -486,7 +493,7 @@ export class World {
       // an unhandled rejection every half second. The index can promise a
       // district a deploy did not finish building.
       if (!this.districts.has(id)) {
-        this.loadDistrict(id, null, variant).catch(() => {
+        this.loadDistrict(id, null, id === pin ? 'fine' : variant).catch(() => {
           if (!this.missing.has(id)) {
             this.missing.add(id);
             console.warn(`spreefall: ${id} is in the index but not on the server`);
@@ -495,7 +502,7 @@ export class World {
       }
     }
     for (const id of this.districts.keys()) {
-      if (want.has(id)) continue;
+      if (want.has(id) || id === pin) continue;
       const entry = this.entryFor(id);
       if (!entry) continue;
       if (boxDistance(x, z, entry.bounds) > drop) this.unloadDistrict(id);
@@ -510,7 +517,7 @@ export class World {
       while (this.residentBytes > maxBytes) {
         let worst = null, worstAway = -1;
         for (const id of this.districts.keys()) {
-          if (id === mine) continue;
+          if (id === mine || id === pin) continue;
           const entry = this.entryFor(id);
           const away = entry ? boxDistance(x, z, entry.bounds) : Infinity;
           if (away > worstAway) { worstAway = away; worst = id; }
@@ -520,6 +527,18 @@ export class World {
       }
     }
     return [...this.pending.keys()];
+  }
+
+  /**
+   * The biggest district this city has, in bytes. A city built at tier 0 has
+   * districts ten times the size of the standard one's, and a memory ceiling
+   * set for the standard one would let go of the district next door the
+   * moment it arrived.
+   */
+  get heaviest() {
+    let most = 0;
+    for (const d of this.catalogue) if (d.built !== false && d.bytes > most) most = d.bytes;
+    return most;
   }
 
   /** How many bytes of city are in memory. */
@@ -809,11 +828,13 @@ export class World {
   /**
    * The tallest thing standing in a circle, in metres above the ground there.
    * Used to decide where a collapse breaks, which wants an answer in one pass
-   * over the segments rather than a raycast.
+   * over the segments rather than a raycast. The ground can be given: after
+   * a crater the ground at the middle is ten metres down, and a wall that
+   * did not move would read ten metres taller against it.
    */
-  tallestNear(x, z, radius) {
+  tallestNear(x, z, radius, ground = this.groundHeight(x, z)) {
     let best = 0;
-    const g = this.groundHeight(x, z);
+    const g = ground;
     this.forEachSegmentTile(x - radius, z - radius, x + radius, z + radius, (segs, count) => {
       for (let i = 0; i < count; i++) {
         const o = i * 6;
@@ -884,6 +905,9 @@ export class World {
           if (nx * dx + nz * dz > 0) { nx = -nx; nz = -nz; }
           hit.nx = nx; hit.ny = 0; hit.nz = nz;
           hit.kind = 'wall';
+          // Which segment, so a test can say what stopped it.
+          hit.tile = tz * this.nx + tx;
+          hit.seg = o;
         }
       }
       // Advance to the next tile.

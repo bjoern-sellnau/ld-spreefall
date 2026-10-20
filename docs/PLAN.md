@@ -2901,3 +2901,381 @@ caps residency at 520.
   now asks the streets themselves, through an index of every street
   segment with half its width and its pavement, whether it would stand in
   one, so how the railway was cut no longer matters.
+
+## 64. The Brandenburg Gate was open underneath
+
+- 2026-10-20: a screenshot from under the Gate on the live site: the
+  entablature and the plates on the column heads hanging as bent sheets in
+  the sky. `box` in `tools/geometry.mjs` built five faces, never the
+  bottom one, which nothing on the ground shows and everything in the air
+  shows from below: the Gate's entablature, its attic, the abacus on every
+  column, the quadriga's plinth, the lamp arms. From the carriageway what
+  was left was the near side of each with its far side culled. A box has an
+  underside now; the stelae and the parked cars, which stand on the ground
+  and are most of the boxes in the city, ask not to have one, so the middle
+  district went from 280,404 triangles to 284,296 rather than to 297,854.
+
+## 65. Ultra plasma
+
+- 2026-10-20: asked for a super weapon that fills the ground with the
+  plasma rifle's balls from space, with the number of balls (no limit,
+  preferably a slider), the angle (shown on the map) and the radius set
+  before firing, and the system heard charging after it fires.
+- `src/game/ultra.js` holds the numbers and the sequence: charge for 4.2 s,
+  then a stream of balls over a uniform disc, launched 420 m above their
+  landing point back along the chosen direction, at 120 m/s. The count has
+  no ceiling because it is a counter, not a list; what is bounded is how
+  many are in the air (480, the size of their own instance buffer), and the
+  rate ramps from 30 to 140 a second over six seconds so the start reads as
+  a rain and not a wall.
+- Each ball is an ordinary projectile of a new kind, `ultra`, built like
+  the rifle's bolt: almost no gravity, two bounces, then it goes off. Its
+  splash does 80, under the 90 at which a blast cuts its hole into the wall
+  it is against, because a hundred re-meshes a second is no frame rate, and
+  only one blast in twelve plays the explosion sound.
+- The map grows a panel with four rows: count (range to 3000 plus a number
+  box that takes anything), radius 20 to 1200 m, bearing 0 to 359, angle
+  off the vertical 0 to 75. The minimap's aim draws an arrow from the side
+  they come from, its length growing with the angle. The confirmation
+  states all four and the charge time.
+- First screenshot from the street: the balls were white dots and read as
+  snow. The bolt's emissive was 7 times a cyan, which clips to white; it is
+  3.2 times now, which stays cyan, and the ultra ball carries a 7 m tapered
+  streak behind it and is drawn pointing along its velocity.
+- The charge sound first fed its tremolo straight into the voices' gain at
+  0.5, which swings far past the voices' own 0.12 and inverts them; the
+  tremolo now works on a stage of its own at 0.65 plus or minus 0.35.
+- `tools/test-cheats.mjs` opens it from the menu, drags the sliders, types
+  4321 into the box, checks the aim and the question, fires 260, and
+  checks: nothing comes down while it charges, it will not fire twice, all
+  260 come down, nine in ten first touch inside the circle (the rest hit a
+  roof on the near side, which at 40 degrees is up to 25 m out), they come
+  from the bearing at the angle set, and never more than 480 fly at once.
+  Screenshots: `cheat-05-ultra-map.png`, `cheat-06-ultra-rain.png`.
+
+## 67. A mech's reactor
+
+- 2026-10-20: asked for mechs to go up like a small atomic bomb, since they
+  carry a fusion reactor, in blue and neon green.
+- A mech killed now gives a small blast and a shower of parts at once, so the
+  kill reads as a kill, and puts its reactor on a fuse: 2.6 s for theirs, 5 s
+  for yours, during which blue sparks come out of the wreck faster and faster
+  and the charge chord from ultra plasma rises over the last two seconds.
+  Then a fusion blast where the wreck lies: radius 46 m, damage 1100, burst
+  7 m up, a crater, fire, and ground that burns for 18 s. It goes through the
+  same blast path as everything else, so the next machine in reach takes it
+  and, if it dies, goes critical in turn.
+- `effects.fusion` is the warhead's ring, stem and cap plus a sphere of
+  sparks thrown out evenly, coloured electric blue at the bottom and neon
+  green at the top and edges. The first colours were bright, and additive
+  billboards that overlap a few times clip to white: on screen it was mint.
+  They are kept dark and saturated now and the overlap does the brightening.
+- The post pass takes the colour a flash washes the frame to as a uniform:
+  white for a warhead, a cyan green for a reactor.
+- Pending reactors live on `mechs.reactors`, so clearing the street clears
+  them: the first run of the machine suite had a reactor from one check go
+  up in the middle of the next and kill a man nine metres from a mech.
+- `tools/test-machines.mjs` kills a Reaper with another 20 m away: the
+  reactor is pending and nothing is touched halfway through the fuse, the
+  flash is tinted green, not white, and the neighbour loses over 900.
+  Screenshots: `mech-fusion-01-breach.png`, `mech-fusion-02-column.png`.
+
+## 68. Every chassis its own weapons
+
+- 2026-10-20: asked whether all the mechs have the same weapons, and why,
+  since they should all be different. They did: each chassis arrived holding
+  a different arm weapon, but yours carried the whole table of ten whatever
+  the body, and all ten of theirs fired the Reaper's chaingun and rocket pod
+  with a few numbers changed on two of them.
+- A chassis row now has a `loadout`, two or three arms with its signature
+  one first, and no two rows carry the same set; the mech's `m.arm` is an
+  index into its own loadout, the magazines are per loadout slot, and the
+  cockpit rows, the number keys and the key hint are built from it.
+- A chassis row also has a `gun`, laid over the Reaper's chaingun for
+  theirs, whose `kind` decides how it leaves the barrel: auto, shotgun,
+  rail, shell, swarm, thermite or laser, seven kinds across the ten. The
+  game layer's `FOE_FIRE` turns each into rounds, a lance, shells, small
+  rockets or canisters, through the same raycasts and blasts as yours.
+- The cheat menu says what each one carries, yours and theirs.
+- `tools/test-machines.mjs`: the Warden carries chaingun, cannon and EMP
+  bomb; 2 picks the cannon, the wheel goes on to the EMP bomb; every arm of
+  every chassis fires (27 of 27) and the ten sets are all different; theirs
+  fire seven kinds of gun between them and every one of the ten hurt the
+  player from 34 m in twelve seconds. The railgun and thermite checks give
+  the Warden the whole table for their length, since what they measure is
+  the arm and not the chassis.
+
+## 66. Destruction that looks less wrong, first pass
+
+- 2026-10-20: "the destruction looks better but still not realistic".
+  Screenshots of a 30 m blast against a frontage on Unter den Linden showed
+  four things that read as fake.
+- A black seam, a pixel or two wide, down the corner of every building that
+  was caving in. Drawn by the inside out pass, so the first guesses were
+  about that pass; colouring each category of fragment in turn showed it was
+  the falling top of the building itself. `applyCollapse` turns a falling
+  vertex's normal towards up with `normalize(mix(n, up, worst * 0.8))`, and
+  for an underside at worst 0.625 that is the zero vector, whose normal is
+  not a number, and a pixel lit by not a number is black. Both the vertex
+  and the fragment side now fall back to up for a normal of no length.
+- Soot as a leopard print: a threshold on fine noise over the whole radius.
+  On a wall soot now rises, reaching further above the blast than below it,
+  in streaks up the face; on the ground it is a smooth stain with a broad
+  variation; and burnt render is a dark warm grey with some of the wall in
+  it, nearly black only in the heart of the blast. Crater ground is 0.85 of
+  that rather than 0.97.
+- Rubble as crates: the gib mesh is three boxes. Rubble now has its own
+  mesh, two faceted, flattened, lopsided lumps and a broken slab, drawn
+  through the same program, and its sizes run mostly small with a few large
+  pieces rather than evenly. Rubble on a wall that came down is dust grey,
+  paler than the wall, not darker.
+- `tools/test-city.mjs` 81 of 81 and `tools/test-cheats.mjs` 112 of 112.
+
+## 69. A building falls like a building
+
+- 2026-10-20: "how does the destruction behave? a house does not fall down
+  realistically". Frames of a 30 m blast against a six storey block from
+  across the street showed why: the frontage became a ramp, the roof slid
+  down into a slope and the windows smeared along it, and the whole thing
+  eased in and out like a hydraulic ram.
+- Cause: a wall in the bundle is one quad from the pavement to the eaves,
+  with the windows drawn by the shader, so there was nothing in it to break.
+  The collapse could only pull its top corners down, by a share that fell
+  off smoothly with distance from the middle of the site, and a frontage
+  pulled down by its corners by a smooth share is a ramp.
+- What it does now:
+  - Before a site starts to move (`demolition.onRefine`), every building in
+    it is cut into pieces about a storey across (`fineWalls` in
+    `src/game/remesh.js`) and then along the four metre column lines the
+    shader breaks by, each column with corners of its own (`columnCut`).
+    Corners shared across a column line would stretch a sheet from the top
+    of a standing column to the heap of a fallen one, which the first
+    attempt did: slanted shards the height of the building. Sites over 70 m
+    are not cut; everything in them comes down to the ground anyway.
+  - Column by column (`columnHash`, `columnShare` in the shader and in
+    `src/game/bake.js`), a column comes down or stays up, as a sharp step
+    with a ragged edge, and one that stays loses a broken top, more of it
+    near the middle. The hash is whole numbers small enough to be exact in a
+    float, so the shader, the baker and the collision agree.
+  - What falls lands as a stack: each storey on the one under it as a thin
+    slab, up to a metre of stack on top of the heap, and the heap is lower
+    (3.5 m at most) so that a flattened block is under the five metres a man
+    cannot see over.
+  - The fall runs under gravity, `k * k` over the fall time, slow to start
+    and stopped by the ground, instead of a smoothstep. 1.8 s plus a little
+    per metre of site.
+  - A cloud: `effects.collapseDust` rolls out low along the street from the
+    foot of the site and a column goes up out of the middle, drawn over the
+    frame in the blood's alpha blended pool, because grey added to a bright
+    sky is nothing at all. It lasts eight to fifteen seconds and hides most
+    of the fall, which is what a real one does.
+  - Rubble is only coloured as rubble where it properly came down (the
+    shader's share interpolates across a piece, and the baker marks a vertex
+    as rubble past 0.3 of its height fallen rather than 0.02), so a frontage
+    still standing keeps its windows; and the back of a piece in a heap is
+    lit like the rest of the heap instead of being the near black inside of
+    the world.
+- Checks: `test-machines` measured damage by the tallest wall near a hit,
+  which with a ragged edge is the one column that stayed up; it measures
+  the mean height of the walls within reach now, a metre of wall at a time
+  (22 m on average standing, 8.4 m after five rockets, 13 of 13 places came
+  down). The inside out check allows 3 % of the pixels it touches to be
+  lighter, the backs of rubble in the sun. `test-city`'s fighter takes off
+  down whichever way from where it stands is clear furthest, since the
+  checks before it leave ruins about.
+- The viaduct check on the live city: the new diagnostic still described
+  the arch at deck height for the blocked streets, because `raycast` hands
+  back one shared result object and the deck ray, cast second, overwrote
+  the head height one. Each ray has its own result now.
+
+## 70. What really stopped the three streets
+
+- 2026-10-20: with each ray given its own result the live run named the
+  blockers for the first time. Reinhardtstrasse and Unterbaumstrasse: a box
+  4.3 m long and 1.5 m high, twelve to fourteen metres past the railway,
+  which is a parked car; the probe was at 0.9 m. Friedrichstrasse: a wall
+  from the street to exactly 4.0 m, 33 m long, two metres past the railway.
+  4 m is this builder's default height for `building=roof`, which it
+  extruded as a solid block from the street up.
+- Source checked: OSM2World, the open 3D renderer for OpenStreetMap, gives
+  `roof` and `carport` `hasWalls = false` in BuildingDefaults.java and
+  builds a `building:part=roof` as a RoofBuildingPart, "a roof without
+  walls" (github.com/tordanik/OSM2World, core/.../building/). The OSM wiki
+  itself is not reachable from this container.
+- So a roof with open sides (`unwalled`) starts where its tags say, or else
+  as a slab 0.6 m under its own top (`roofFloor`), without windows, and is
+  collided against only from there: you walk under the canopy.
+- The viaduct probe runs at 1.9 m, a head, rather than 0.9 m, a knee, so a
+  parked car under the arches no longer counts as the viaduct blocking the
+  street; a pier still does, from the ground to the deck.
+- Unit tests 72 of 72; `test-city` 81 of 81 on the synthetic city.
+- The live run after that: the viaduct check green, 12 of 12 streets under
+  the arches. That let `test-districts` run on the live city for the first
+  time in days (it comes after `test-city` in the workflow), and 7 of its
+  34 failed. The first: the check that a flattened district stays flat
+  started wherever the check before it left you, which on a deploy with
+  three districts built is 28 km south east in country nobody has built;
+  the blast went off over nothing and the trip home held the page for
+  eight minutes, which is what the next three failures look like. It now
+  crosses back into Mitte first. Locally 34 of 34.
+- The next live run, with the ruin check starting in Mitte: still nothing
+  came down. Sixty metres east of the Gate is inside 170 m of the memorial,
+  and nothing within reach of a weapons free zone is demolished, so the
+  blast was refused whole. The check now picks the nearest point in the
+  district with buildings on it that is clear of every zone by 200 m. And
+  the check that a neighbour's ground arrives read one point 25 m over the
+  edge, which on the live city is a tile with nothing in it and so no tile
+  at all; it reads nine points along the edge now.
+- With the game's mode in the report, the live run said why nothing came
+  down: the mode was `travel`. The free travel check just before it had not
+  landed in its 1800 frames, and everything after it ran with the player in
+  the air: the blast was never stepped, the travel map would not open, and
+  the coarse corridor was never let go. A flight holds at the end until the
+  landing is in, and it asked whether there was a tile under the exact spot
+  it was landing on; a tile with nothing in it is not in the bundle at all,
+  which the neighbour check had already met on the live city, so a flight
+  to the middle of such a tile held for good. It asks whether the landing
+  district is in, at the fine tier, instead. The flight check now says what
+  a flight still in the air is waiting for. A streamer change that could
+  not have been the cause (the ceiling is 128 MB and the flight held 47) is
+  kept anyway: the landing district is pinned, so no distance or ceiling can
+  let it go while you are coming down to it.
+
+
+  The next live run said what the flight was waiting for: c3r2, which is
+  not built on CI at all (the live build there has core, c2r1 and c4r1).
+  The test picked its neighbour as the nearest district sharing an edge
+  and never asked whether it was built, so the walking check measured the
+  ground of a district with no bundle, and the flight went to a place with
+  nothing to land on and held over it for good. The test now picks only
+  built districts. The game says no as well: beginTravel refuses a district
+  nobody has built, as the map already did, and the landing only holds for
+  a district that can arrive.
+
+  With the flight landing, the live run was down to three. Two were the
+  test measuring the wrong thing on a city of three districts side by
+  side. The ruin check read the tallest wall against the ground at the
+  blast, which is the bottom of an eleven metre crater afterwards, so every
+  wall left standing read eleven metres taller (23 m before, 29 m after,
+  when the walls had in fact come down to 18 m). tallestNear takes the
+  ground to measure from, and the check gives it the ground from before
+  the blast. And there is nowhere on that deploy far enough away for the
+  streamer to drop the middle, so the check lets it go by hand when the
+  streamer did not, and says which it was. The corridor check asked for an
+  overflight district on a flight between two districts that share an edge,
+  with nothing built in reach between them; it now works out what is built
+  within the flight streamer's reach of the line and only asks when
+  something is.
+
+  The run after that was 32 of 34, and both were the test again. Letting
+  the middle go by hand and then waiting ten frames gave the streamer time
+  to fetch it straight back, since from next door it is in reach; the
+  check reads it at once now. And the corridor was worked out from the
+  take off, where the flight streamer never centres: it centres one lead
+  (1400 m) ahead of the camera and never past the landing, so the test
+  sweeps that line instead. Open: one local run of three saw one frame of
+  fifty over a built district with nothing drawn under it. Not reproduced
+  in the next two; most likely a district adopted a frame before its tiles
+  were uploaded. Kept as a finding rather than explained away.
+
+  With the district walk green on the live city, the run went on into the
+  machines for the first time in a while and was cancelled by the job's 45
+  minute limit, every check so far passing (the last was a mech killer of
+  theirs, 3011 off the hull). Twelve minutes of fetch and build come before
+  the first test and the suites have grown since the limit was set; it is
+  75 minutes now. Locally the machines are 62 of 62 and the interface 35
+  of 35.
+
+  With 75 minutes the run got to the end of the machines: 61 of 62. The
+  one was the wall check in a mech, "camera 1.6 m out, wall at null": the
+  test found the nearest wall from the eye where the mech stood, moved the
+  mech to a metre off it, and looked again from there. On the live city
+  the ground at the new spot put the eye somewhere the same wall did not
+  answer, so there was nothing in front of the head and nothing for the
+  camera to be kept off. The test now takes only hits that are walls (a
+  rise in the ground is not a frontage), and only a wall that still answers
+  from the eye where the mech will stand; if none does, it says how many
+  fell out at each step.
+
+## 71. Tier 0 everywhere, on a machine that can hold it
+
+Asked for: every district at tier 0, flown over at tier 2. Measured before
+anything was changed, because the last time this was asked the answer was a
+wall rather than a cost:
+
+- Published GitHub Pages sites may be no larger than 1 GB, and a deployment
+  that takes over ten minutes is stopped. Checked in the source of the docs
+  page, github/docs, content/pages/getting-started-with-github-pages/
+  github-pages-limits.md.
+- The live site is 813 MB of fine bundles today (Pages run 140).
+- Each district built at its own tier, at tier 0 and at tier 2, from the same
+  extract: tier 1 grows 3.9 times at tier 0, tier 2 5.4 times, tier 3 5.9
+  times. An eight kilometre district (o16, synthetic) went from 14 MB to 287
+  MB, 274,080 triangles to 4,996,985, 4.6 s to 42 s and 0.6 to 3.5 GB of
+  memory to build.
+- Applied to the live sizes, every district at tier 0 with a tier 2 overflight
+  is about 5.2 GB; only the ring at tier 0 is about 1.7 GB.
+
+So there are two cities now, and a profile picks which:
+
+- `full`, for a machine of your own: every district at tier 0 and the block
+  tier for the flight. `npm run world:full`.
+- `pages`, for the deploy: the standard city, then as many districts outward
+  from the middle moved up to tier 0 as fit under the ceiling, decided by
+  building them and measuring.
+
+- 2026-10-20: 71a, the profiles. tools/districts.mjs says what each profile
+  builds, and `--tier=` and `--over=` on the command line beat it for one
+  district. The overflight bundle is built only when it is coarser than the
+  district's own build, and a rebuild without one deletes the one it had.
+- 2026-10-20: 71b, the fetch. Tier 0 wants the long list of tags, so an
+  extract fetched with the short one is fetched again; older extracts did not
+  say which they were and their tier does. A district bigger than three
+  kilometres a side is asked for in pieces and put back together with each
+  element kept once, because the full query over seventy square kilometres
+  is not something a mirror finishes.
+- 2026-10-20: 71c, the pages profile. tools/fit-pages.mjs starts from the
+  standard build and moves districts up from the middle outward: each is
+  rebuilt at tier 0 with a tier 2 overflight, the site is weighed the way
+  build-dist ships it, and one that takes it over 950 MB is built back the way
+  it was. What a district costs at tier 0 is built and weighed, not guessed,
+  because the ratio ran from four to twenty in the measurements above. Three
+  misses in a row ends it, since the districts further out are bigger. On the
+  local city with a ceiling of 110 MB to make it miss: core, c2r1 and c3r2
+  went up, c3r0, c4r1 and c0r1 were built back. The deploy runs it after the
+  build, and saves the extract cache after it so the districts fetched again
+  with the long list of tags are kept.
+- 2026-10-20: 71d, the runtime. The streamer's ceiling was 128 MB, set for
+  districts of three to forty. It is now three of the biggest district in the
+  index, the one you are in, the one ahead and the one behind, never under 128
+  MB and never over 1.5 GB. The local full city (eight districts, synthetic,
+  177 MB, i24 the biggest at 47.9) passed the whole district suite, 34 of 34,
+  with a ceiling of 144 MB; the standard city still reads 128. The same
+  street in Ring 1-2 at both tiers is in tier-01-standard.png and
+  tier-02-full.png: tier 0 brings the cornices, the lamps, the parked cars,
+  the kerbs and three times the trees.
+- 2026-10-20: the checks for 71d went red on one line, and it was not 71d:
+  "and all of them stand on the ground" in the arsenal, with no detail. The
+  pads took their height once, when they were put down, and the checks before
+  that one dig craters and stream districts in. A pad over a hole that came
+  later hung in the air above it, which is a real if small fault and why the
+  line had passed on the same data an hour before: which pad a blast lands
+  near is not fixed. A pad now sits on whatever ground is under it each step,
+  and the check says how far off the worst one is.
+- 2026-10-20: the first deploy with it, on the live city (Pages run 141).
+  The site was already 932.39 MB before anything moved, 813 MB of districts
+  and 120.71 MB of overflight bundles, which left 18 MB under the 950 MB
+  line. Mitte took its tier 2 overflight (+2.74 MB) and Hansaviertel (c2r1)
+  went up to tier 0 (+6.82 MB), to 941.95 MB. Kreuzberg (c3r2) would have
+  been 964.51 and Gesundbrunnen (c3r0) 974.04, so both were built back, and
+  Tiergarten (c2r2) could not get the full tags out of Overpass. The step
+  took 10 min 50 s on an eight minute clock, because one Overpass query can
+  hang for ten: fetch-osm takes `--deadline=` now and fit-pages gives it
+  what is left, two minutes at most. The honest reading: on Pages the gain is
+  two districts, because the standard city already fills the site. Room for
+  more would have to come out of the overflight bundles or the outer tiers.
+- 2026-10-20: the next deploy (Pages run 142) with the Overpass deadline: the
+  step took 1 min 58 s instead of 10 min 50 s. Tiergarten (c2r2) got its full
+  tags this time and would have been 961.20 MB, so it was built back too. The
+  live site is Mitte and Hansaviertel at tier 0, 941.71 MB of 1000. The checks
+  on the same commit are green end to end (run 120).

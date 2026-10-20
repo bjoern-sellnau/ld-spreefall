@@ -43,6 +43,32 @@ test:combat` fights drones in one and checks the damage, the cover and the
 weapons free zone, and `npm run clip` records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
 Cloudflare Pages, or any static host. There is nothing to run on the server.
 
+### All of Berlin at full detail, on your own machine
+
+The deployed city has the detail of Mitte only in the middle, because GitHub
+Pages will not publish a site over a gigabyte. On a machine of your own every
+district can be built at tier 0, with the block tier for the fast travel
+flight to pass over:
+
+```
+npm run world:full   # fetch every district with the full set of tags, then build
+npm run serve
+```
+
+| | |
+|---|---|
+| Fetch | two hours or so, nearly all of it waiting on Overpass; districts bigger than three kilometres a side are asked for in pieces |
+| Build | about half an hour; the biggest district needs about 3.5 GB of memory |
+| Disk | five to eight gigabytes in `public/` |
+| Browser | a desktop with its own graphics card; the game holds three of the biggest district at once, up to 1.5 GB |
+
+The deploy builds the standard city and then moves districts up to tier 0 from
+the middle outward for as long as the site stays under 950 MB
+(`tools/fit-pages.mjs`). `--profile=` on `tools/fetch-osm.mjs` and
+`tools/build-world.mjs` picks the city; `--tier=` and `--over=` set one
+district by hand. A comparison of the same street at either tier is in
+`docs/screenshots/tier-01-standard.png` and `tier-02-full.png`.
+
 ## Controls
 
 | | |
@@ -234,6 +260,7 @@ visits.
 | Reload everything | tops up what you are carrying |
 | Drop a nuke | opens a map of the city; click where you want it, then confirm |
 | Ion cannon | three beams in a ring, then the middle one |
+| Ultra plasma | as many plasma balls from orbit as you like, over a circle, from a side and at an angle you set |
 | Soldiers, Drones, Jets | brings a section, a flight or a pair out around you |
 | God mode | nothing hurts you, though you are still told which way it came from |
 | Infinite ammunition | the magazine never reaches the bottom |
@@ -361,6 +388,27 @@ of everything, which is bigger than a warhead and the largest thing in the
 game. It goes through the same blast path as everything else, so the
 buildings come down, the trees catch and the collision opens up the way they
 would from a grenade.
+
+**A mech's reactor.** Every mech carries a fusion reactor, and killing the
+machine does not kill the reactor: it runs away for a few seconds, blue
+sparks pouring out of the wreck and a chord rising under them, and then goes
+up as a small atomic blast in electric blue and neon green, forty six metres
+of it, which takes the street and any machine standing in it. Your own gives
+you five seconds once you have been blown clear of it.
+
+**Ultra plasma.** Picked on the same map, with four sliders beside it: how
+many balls (the slider goes to three thousand and the box under it takes any
+number), how wide the circle is, which side they come in from and how far
+off the vertical. The circle and an arrow for the way in are drawn on the
+map, the arrow the longer the flatter they come. After you fire the system
+charges for four seconds, a chord climbing six times over with the tremolo
+speeding up, and then the balls come down: the plasma rifle's bolt three
+times across, cyan, with a streak behind it, at a hundred and twenty metres
+a second, bouncing twice like the rifle's and going off on the third thing
+they meet. They come thirty a second at first and a hundred and forty after
+six seconds, and never more than four hundred and eighty in the air at
+once; the rest wait their turn, so a hundred thousand costs nothing until
+they are falling.
 
 The skeleton is real geometry rather than a texture. The soldier mesh carries
 a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
@@ -609,6 +657,23 @@ a new throw for each one that arrives.
 | Mantis | four legged spider: low, wide, climbs what the others cannot |
 | Ram | chicken walker: no arms, a head full of guns and a charge like a train |
 | Wraith | faceted and dark: fast, a beam on the arm, a shield that comes back quickly |
+
+Each carries its own weapons, and no two the same. Yours switches between
+its arms with the number keys or the wheel; theirs fires its own gun and a
+rocket pod:
+
+| Chassis | yours carries | theirs fires |
+|---|---|---|
+| Warden | chaingun, 40 mm cannon, EMP bomb | a chaingun in bursts |
+| Bruin | Leadwall, thermite launcher, car bomb | a shotgun |
+| Heron | plasma railgun, power laser | a railgun, one bolt every three seconds |
+| Lynx | chaingun, car bomb, Stinger | a fast chaingun, long bursts |
+| Bastion | 40 mm cannon, 88 mm flak, EMP bomb | a cannon |
+| Hornet | Stinger, 88 mm flak | a swarm of small rockets |
+| Colossus | 88 mm flak, 40 mm cannon, thermite launcher | flak shells, four at a time |
+| Mantis | thermite launcher, power laser, car bomb | thermite canisters |
+| Ram | 40 mm cannon, Leadwall | twin shells |
+| Wraith | power laser, plasma railgun, EMP bomb | a beam held on you |
 
 Each one is a row of numbers in `src/game/chassis.js` (size, where its hips
 are, speed, turn, armour, shield, jump, dash, the landing, where its guns

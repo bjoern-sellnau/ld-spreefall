@@ -151,6 +151,7 @@ async function run() {
       here: s.world.nameAt(s.player.x, s.player.z),
       onGround: Math.abs(s.player.y - s.world.groundHeight(s.player.x, s.player.z)) < 1,
       mb: Math.round(s.world.residentBytes / 1e5) / 10,
+      ceiling: Math.round(s.streamCeiling / 1e6),
     };
   });
   check('the district you are walking towards comes down before you reach it',
@@ -162,7 +163,8 @@ async function run() {
   check('and the one you came from is still there behind you',
     only.back, `${only.held} districts held, ${only.mb} MB`);
   check('and what is held stays inside the ceiling',
-    only.held <= 6 && only.mb <= 128, `${only.held} districts, ${only.mb} MB`);
+    only.held <= 6 && only.mb <= only.ceiling,
+    `${only.held} districts, ${only.mb} MB of ${only.ceiling}`);
 
   // --- the loading screen names a place in the district --------------------
   // Held open by a slow line rather than by a hook: the screen is only up
@@ -235,6 +237,9 @@ async function run() {
     let best = null, bestAway = Infinity;
     for (const d of s.world.catalogue) {
       if (d.id === home.id) continue;
+      // A district nobody has built is in the catalogue but has nothing to
+      // load: on CI the nearest one was, and the flight to it hovered for good.
+      if (!s.world.isBuilt(d)) continue;
       // Sharing an edge, not merely being close: a district diagonally off the
       // corner is nearer by centre distance than one above, and you cannot
       // walk across a corner.
@@ -283,19 +288,32 @@ async function run() {
       const z = axis === 'x' ? along : insideAt;
       const zBeyond = axis === 'x' ? along : beyondAt;
       s.teleport(inside, z);
+      // Whether the far side is there, at nine points along the edge rather
+      // than one: a tile with nothing in it is not in the bundle at all, and
+      // on the live city the one point this read was a tile of nothing.
+      const span = axis === 'x'
+        ? [Math.max(home.bounds.minZ, other.bounds.minZ), Math.min(home.bounds.maxZ, other.bounds.maxZ)]
+        : [Math.max(home.bounds.minX, other.bounds.minX), Math.min(home.bounds.maxX, other.bounds.maxX)];
+      const anyBeyond = () => {
+        for (let k = 1; k <= 9; k++) {
+          const t = span[0] + (span[1] - span[0]) * k / 10;
+          if (axis === 'x' ? s.world.isLoaded(beyondAt, t) : s.world.isLoaded(t, beyondAt)) return true;
+        }
+        return false;
+      };
       // Put the neighbour back on the wire first, so what is being measured
       // is the arrival of a district rather than one that is already here.
       s.world.unloadDistrict(other.id);
       const before = {
         loaded: s.world.loadedIds.slice(),
-        isLoadedBeyond: s.world.isLoaded(beyond, zBeyond),
+        isLoadedBeyond: anyBeyond(),
       };
       const t0 = performance.now();
       await s.world.loadDistrict(other.id);
       const after = {
         ms: Math.round(performance.now() - t0),
         loaded: s.world.loadedIds.slice(),
-        isLoadedBeyond: s.world.isLoaded(beyond, zBeyond),
+        isLoadedBeyond: anyBeyond(),
         groundInside: Math.round(s.world.groundHeight(inside, z) * 100) / 100,
         groundBeyond: Math.round(s.world.groundHeight(beyond, zBeyond) * 100) / 100,
         nameBeyond: s.world.nameAt(beyond, zBeyond),
@@ -481,6 +499,27 @@ async function run() {
       const far = s.world.entryFor(other.id);
       const tx = (far.bounds.minX + far.bounds.maxX) / 2;
       const tz = (far.bounds.minZ + far.bounds.maxZ) / 2;
+      // The built districts the flight passes within reach of, other than
+      // where it starts and where it lands: those two are held at the fine
+      // tier, so these are all the overflight build can be asked for. On a
+      // deploy with three districts side by side there are none.
+      const reach = s.flightPlan.reach;
+      const sx = s.player.x, sz = s.player.z;
+      const boxAway = (px, pz, b) => Math.hypot(
+        Math.max(b.minX - px, 0, px - b.maxX), Math.max(b.minZ - pz, 0, pz - b.maxZ));
+      // The streamer centres its circle on a point the lead ahead of the
+      // camera, never past the landing, so that is the line it sweeps: from
+      // one lead out to the far end, not from the take off.
+      const length = Math.hypot(tx - sx, tz - sz);
+      const from = Math.min(s.flightPlan.lead, length) / Math.max(length, 1);
+      const corridor = s.world.catalogue.filter((d) => {
+        if (d.id === home.id || d.id === far.id || !s.world.isBuilt(d)) return false;
+        for (let k = 0; k <= 20; k++) {
+          const t = from + (1 - from) * k / 20;
+          if (boxAway(sx + (tx - sx) * t, sz + (tz - sz) * t, d.bounds) <= reach) return true;
+        }
+        return false;
+      }).map((d) => d.id);
       const started = s.beginTravel(tx, tz);
       const loadedAtStart = s.world.loadedIds.slice();
       // What the flight passes over, sampled every frame: a card would be a
@@ -507,29 +546,68 @@ async function run() {
       return {
         started,
         loadedAtStart,
+        corridor,
         card, overBuilt, overNothing, sawCoarse,
         peakMB: Math.round(peakMB * 10) / 10,
+        ceiling: Math.round(s.streamCeiling / 1e6),
         coarseAfter: s.world.loadedIds.filter((id) => s.world.isOverflight(id)),
         landedIn: s.world.nameAt(s.player.x, s.player.z),
         onGround: Math.abs(s.player.y - s.world.groundHeight(s.player.x, s.player.z)) < 1.2,
         landedOnCity: !s.world.isOverflight(s.world.idAt(s.player.x, s.player.z)),
         out: Math.round(Math.hypot(s.player.x - tx, s.player.z - tz)),
         mode: s.state.mode,
+        // What a flight still in the air is waiting for, if it is.
+        landing: `${far.id} ${s.world.loaded(far.id) ? (s.world.isOverflight(far.id) ? 'coarse' : 'fine') : 'not in'}, `
+          + `tile under the spot ${s.world.isLoaded(tx, tz) ? 'there' : 'missing'}`,
       };
     }, neighbour);
     // --- what you knocked down stays down, district or no district ----------
   const kept = await page.evaluate(async () => {
     const s = window.spreefall;
     s.setCheat('godmode', true);
+    // Back into the middle of town first. The check before this one leaves
+    // you twenty eight kilometres south east, which on a deploy with three
+    // districts built is open country nobody has built: the blast went off
+    // over nothing, nothing came down, and the trip home from there held
+    // the page for eight minutes and took the next three checks with it.
+    const modeAtStart = s.state.mode;
+    await s.crossInto(81, 0);
+    s.teleport(81, 0);
+    for (let i = 0; i < 30; i++) await new Promise((r) => requestAnimationFrame(r));
+    // The simulation only steps on foot. On the live city the blast here did
+    // nothing three runs running, nor did anything after it that needs the
+    // walk mode, so wait for it, and say what it was if it never comes.
+    for (let i = 0; i < 600 && s.state.mode !== 'walk'; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    const modeAtBlast = s.state.mode;
     s.demolition.reset();
     const home = s.world.idAt(s.player.x, s.player.z);
-    const x = s.player.x + 60, z = s.player.z;
+    // And somewhere the blast is allowed to reach: on the live city the
+    // memorial is two hundred metres from the Gate, inside 170 m of a point
+    // sixty metres east of here, and nothing within reach of it comes down,
+    // so the blast did nothing at all. The nearest point with buildings on it
+    // that is clear of every weapons free zone.
+    let x = s.player.x + 60, z = s.player.z;
+    const clear = (px, pz) => s.combat.sanctuaries.every((q) => Math.hypot(px - q.x, pz - q.z) > q.radius + 200);
+    if (!clear(x, z)) {
+      let found = null;
+      for (let d = 100; d <= 900 && !found; d += 50) {
+        for (let i = 0; i < 24; i++) {
+          const a = (i / 24) * Math.PI * 2;
+          const px = s.player.x + Math.cos(a) * d, pz = s.player.z + Math.sin(a) * d;
+          if (s.world.idAt(px, pz) !== home || !clear(px, pz)) continue;
+          if (s.world.tallestNear(px, pz, 40) > 12) { found = { x: px, z: pz }; break; }
+        }
+      }
+      if (found) { x = found.x; z = found.z; }
+    }
     const before = s.world.groundHeight(x, z);
     const tallBefore = s.world.tallestNear(x, z, 60);
-    s.demolition.blast(x, before, z, 170, 4000);
+    const opened = s.demolition.blast(x, before, z, 170, 4000).length;
     for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
     const dug = s.world.groundHeight(x, z);
-    const tallAfter = s.world.tallestNear(x, z, 60);
+    const tallAfter = s.world.tallestNear(x, z, 60, before);
     // Out to the far side of the city and back, which is far enough for the
     // streamer to let go of this district: a neighbour no longer counts,
     // because the one you came from stays in memory behind you now.
@@ -548,7 +626,19 @@ async function run() {
     // It is let go on the streamer's next pass rather than the instant you
     // arrive, so give it a few.
     for (let i = 0; i < 120; i++) await new Promise((r) => requestAnimationFrame(r));
-    const gone = !s.world.loaded(home);
+    // A deploy with three districts built has nothing beyond the drop
+    // distance: every built district is next door to the middle, and the one
+    // you came from is held behind you, as it should be. What this is about is
+    // the ruin outliving the district, so there it is let go by hand.
+    // Read at once: the middle is in the streamer's reach from next door,
+    // and on the live run it was fetched back inside the ten frames this
+    // used to wait, which is the streamer doing its job.
+    let letGo = 'by the streamer';
+    let gone = !s.world.loaded(home);
+    if (!gone) {
+      gone = s.world.unloadDistrict(home) && !s.world.loaded(home);
+      letGo = `by hand from ${next.id}`;
+    }
     await s.crossInto(x, z);
     s.teleport(x, z);
     for (let i = 0; i < 30; i++) await new Promise((r) => requestAnimationFrame(r));
@@ -560,14 +650,18 @@ async function run() {
       back: Number(s.world.groundHeight(x, z).toFixed(2)),
       tallBefore: Math.round(tallBefore),
       tallAfter: Math.round(tallAfter),
-      tallBack: Math.round(s.world.tallestNear(x, z, 60)),
+      tallBack: Math.round(s.world.tallestNear(x, z, 60, before)),
       here: s.world.idAt(s.player.x, s.player.z),
+      why: `${home} ${gone ? 'let go' : 'still held'} ${letGo}, `
+        + `mode ${modeAtStart} then ${modeAtBlast}, ${opened} sites opened at `
+        + `${Math.round(x)}, ${Math.round(z)} in ${home}, buildings ${s.demolition.buildings}, `
+        + `ground ${s.demolition.ground}, enabled ${s.demolition.enabled}`,
     };
   });
   check('a district you flattened is still flat when you come back to it',
     kept.gone && kept.dug < kept.before - 3
       && Math.abs(kept.back - kept.dug) < 0.6,
-    `${kept.before} m became ${kept.dug} m, and ${kept.back} m after a round trip`);
+    `${kept.before} m became ${kept.dug} m, and ${kept.back} m after a round trip; ${kept.why}`);
   check('and the buildings that came down are still down',
     kept.tallAfter < kept.tallBefore - 2 && kept.tallBack <= kept.tallAfter + 1,
     `${kept.tallBefore} m standing, ${kept.tallAfter} m after, ${kept.tallBack} m on the way back`);
@@ -610,7 +704,8 @@ async function run() {
 
   check('free travel reaches a district that was not in memory when it started',
       flight.started && flight.mode === 'walk' && flight.out < 6,
-      `${flight.loadedAtStart.join(', ')} at take off, landed ${flight.out} m out in ${flight.landedIn}`);
+      `${flight.loadedAtStart.join(', ')} at take off, landed ${flight.out} m out in ${flight.landedIn}`
+        + (flight.mode === 'walk' ? '' : `; still ${flight.mode}, ${flight.landing}`));
     check('and puts you down on ground rather than in the air',
       flight.onGround);
     // --- the overflight build -----------------------------------------
@@ -620,13 +715,16 @@ async function run() {
       flight.overNothing === 0,
       `${flight.overBuilt - flight.overNothing} of ${flight.overBuilt} frames over drawn ground`);
     check('the corridor comes down as the overflight build',
-      flight.sawCoarse > 0, `coarse districts held on ${flight.sawCoarse} frames`);
+      flight.sawCoarse > 0 || flight.corridor.length === 0,
+      flight.corridor.length
+        ? `coarse districts held on ${flight.sawCoarse} frames, ${flight.corridor.join(', ')} in reach`
+        : 'nothing built in reach between the take off and the landing');
     check('and is let go the moment the flight ends',
       flight.coarseAfter.length === 0 && flight.landedOnCity,
       flight.coarseAfter.length ? `still coarse: ${flight.coarseAfter.join(', ')}`
         : `landed on the ${flight.landedOnCity ? 'city' : 'sketch'}, peak ${flight.peakMB} MB`);
     check('and the whole flight stays inside the memory ceiling',
-      flight.peakMB <= 128, `${flight.peakMB} MB at its worst`);
+      flight.peakMB <= flight.ceiling, `${flight.peakMB} MB at its worst, of ${flight.ceiling}`);
   }
 
   await browser.close();
