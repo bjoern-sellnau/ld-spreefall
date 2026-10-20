@@ -52,6 +52,7 @@ uniform float uFxaa;
 uniform float uRaw;      // 1 while a debug view is up, so nothing is graded
 uniform float uSlow;     // 0 to 1, how far into the slowed world we are
 uniform float uFlash;    // 0 to 1, a detonation washing the frame out
+uniform vec3 uFlashTint; // what it washes to: white for a warhead, cyan for a reactor
 layout(location = 0) out vec4 fragColour;
 
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -111,7 +112,7 @@ void main() {
   // flash you have actually seen rather than a cross fade.
   if (uFlash > 0.001) {
     float fall = 1.0 - dot(d, d) * 0.9;
-    c = mix(c, vec3(1.0, 0.985, 0.94), clamp(uFlash * fall, 0.0, 1.0));
+    c = mix(c, uFlashTint, clamp(uFlash * fall, 0.0, 1.0));
   }
   fragColour = vec4(linearToSrgb(c), 1.0);
 }

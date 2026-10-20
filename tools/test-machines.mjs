@@ -1350,6 +1350,58 @@ async function run() {
     !splash.skip && splash.took > 100 && splash.out,
     splash.skip ? '' : `${splash.took} off the hull`);
 
+  // --- a mech's reactor ----------------------------------------------------
+  // A dead mech is not done: its fusion reactor runs away for a few seconds,
+  // which you can see, and then goes up as a small blast in blue and neon
+  // green that takes the street and the next machine with it.
+  const fusion = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const modeWas = s.machines.active;
+    s.machines.active = false;
+    s.mechs.reset();
+    s.soldiers.reset();
+    s.projectiles.clear();
+    s.burningGround.length = 0;
+    s.reactors.length = 0;
+    s.setCheat('godmode', true);
+    const theirs = s.spawnMech('reaper', 90);
+    const near = s.spawnMech('reaper', 112);
+    if (!theirs || !near) { s.machines.active = modeWas; return { skip: true }; }
+    // Twenty metres apart whatever spots it found, on the ground there.
+    near.x = theirs.x + 20; near.z = theirs.z;
+    near.y = s.world.groundHeight(near.x, near.z);
+    const gap = Math.round(Math.hypot(near.x - theirs.x, near.z - theirs.z));
+    near.health = near.maxHealth;
+    if (near.shield !== undefined) near.shield = 0;
+    s.mechs.damage(theirs, 1e6);
+    const pending = s.reactors.length;
+    // Half the fuse: still pending, nothing next to it touched.
+    for (let i = 0; i < Math.round(60 * s.fusionSpec.fuse * 0.5); i++) s.fixedForTest(1 / 60);
+    const early = { left: s.reactors.length, near: near.health === near.maxHealth };
+    let tint = null, flash = 0;
+    for (let i = 0; i < 60 * 2.5; i++) {
+      s.fixedForTest(1 / 60);
+      if (s.state.flashTint && !tint) { tint = [...s.state.flashTint]; flash = s.state.flash; }
+    }
+    const hurt = Math.round(near.maxHealth - Math.max(0, near.health));
+    const chained = near.health <= 0;
+    // Let any chain finish before the next check.
+    for (let i = 0; i < 60 * 8 && s.reactors.length; i++) s.fixedForTest(1 / 60);
+    s.mechs.reset();
+    s.burningGround.length = 0;
+    s.setCheat('godmode', false);
+    s.machines.active = modeWas;
+    return { skip: false, pending, early, tint, flash: Number(flash.toFixed(2)), hurt, chained, gap };
+  });
+  check('a dead mech\'s reactor goes critical rather than going off at once',
+    !fusion.skip && fusion.pending === 1 && fusion.early.left === 1 && fusion.early.near,
+    fusion.skip ? '' : `${fusion.pending} pending`);
+  check('and then goes up in blue and green, not in white',
+    !fusion.skip && fusion.tint && fusion.tint[1] > fusion.tint[0] + 0.3 && fusion.flash > 0.1,
+    fusion.skip ? '' : `tint ${fusion.tint}, flash ${fusion.flash}`);
+  check('taking the next machine with it', !fusion.skip && fusion.hurt > 900,
+    fusion.skip ? '' : `${fusion.hurt} off a Reaper ${fusion.gap} m away${fusion.chained ? ', which went too' : ''}`);
+
   // --- the mech killer -----------------------------------------------------
   // An EMP warhead with a charge behind it. What it is for is the thing you
   // cannot otherwise deal with on foot: one of these takes a Reaper apart on

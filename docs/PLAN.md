@@ -2952,3 +2952,31 @@ caps residency at 520.
   roof on the near side, which at 40 degrees is up to 25 m out), they come
   from the bearing at the angle set, and never more than 480 fly at once.
   Screenshots: `cheat-05-ultra-map.png`, `cheat-06-ultra-rain.png`.
+
+## 67. A mech's reactor
+
+- 2026-10-20: asked for mechs to go up like a small atomic bomb, since they
+  carry a fusion reactor, in blue and neon green.
+- A mech killed now gives a small blast and a shower of parts at once, so the
+  kill reads as a kill, and puts its reactor on a fuse: 2.6 s for theirs, 5 s
+  for yours, during which blue sparks come out of the wreck faster and faster
+  and the charge chord from ultra plasma rises over the last two seconds.
+  Then a fusion blast where the wreck lies: radius 46 m, damage 1100, burst
+  7 m up, a crater, fire, and ground that burns for 18 s. It goes through the
+  same blast path as everything else, so the next machine in reach takes it
+  and, if it dies, goes critical in turn.
+- `effects.fusion` is the warhead's ring, stem and cap plus a sphere of
+  sparks thrown out evenly, coloured electric blue at the bottom and neon
+  green at the top and edges. The first colours were bright, and additive
+  billboards that overlap a few times clip to white: on screen it was mint.
+  They are kept dark and saturated now and the overlap does the brightening.
+- The post pass takes the colour a flash washes the frame to as a uniform:
+  white for a warhead, a cyan green for a reactor.
+- Pending reactors live on `mechs.reactors`, so clearing the street clears
+  them: the first run of the machine suite had a reactor from one check go
+  up in the middle of the next and kill a man nine metres from a mech.
+- `tools/test-machines.mjs` kills a Reaper with another 20 m away: the
+  reactor is pending and nothing is touched halfway through the fuse, the
+  flash is tinted green, not white, and the neighbour loses over 900.
+  Screenshots: `mech-fusion-01-breach.png`, `mech-fusion-02-column.png`.
+

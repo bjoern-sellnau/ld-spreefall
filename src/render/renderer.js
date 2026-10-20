@@ -93,6 +93,7 @@ export class Renderer {
     this.viewmodel = null;      // set by the game layer each frame, or null
     this.reflex = 0;            // 0 to 1, how far into slowed time we are
     this.flash = 0;             // 0 to 1, a detonation washing the frame out
+    this.flashTint = [1.0, 0.985, 0.94];
 
     // Blast marks on the city. A fixed ring: the sixteen most recent, oldest
     // overwritten, because the alternative is a city that accumulates damage
@@ -771,6 +772,7 @@ export class Renderer {
       .float('uExposure', this.exposure)
       .float('uSlow', this.reflex || 0)
       .float('uFlash', this.flash || 0)
+      .vec3('uFlashTint', this.flashTint[0], this.flashTint[1], this.flashTint[2])
       .float('uBloomAmount', this.q.bloom ? 0.62 : 0)
       .float('uVignette', 0.34)
       .float('uFxaa', this.q.fxaa && !this.debugMode ? 1 : 0)

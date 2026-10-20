@@ -110,6 +110,18 @@ const el = {
 };
 
 const DEG = Math.PI / 180;
+// The colour a warhead washes the frame to, and the one a mech's reactor does.
+const WHITE_FLASH = [1.0, 0.985, 0.94];
+const FUSION_FLASH = [0.55, 1.0, 0.92];
+// A mech carries a fusion reactor, and when the machine round it is killed the
+// containment goes after it: a few seconds of the reactor running away, which
+// you can see and hear, then a small fusion blast. Small for a weapon, which
+// is a fiftieth of a warhead's radius cubed; very large for a street. Your
+// own goes longer, so that being blown clear of it means something.
+const FUSION = {
+  fuse: 2.6, fuseOwn: 5.0,
+  splash: { radius: 46, damage: 1100, burst: 7, fusion: true },
+};
 
 // Where the weapon sits relative to the eye, in metres and radians. Hip fire
 // holds it down and to the right, far enough forward that the receiver is not
@@ -456,6 +468,7 @@ async function main() {
     lockWanted: false,
     nukeRainTimer: 4,
     flash: 0,
+    flashTint: null,
     autoQualityDone: false,
     frameSamples: [],
     lastGround: true,
@@ -592,13 +605,27 @@ async function main() {
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
     // Heard a great deal further than a rifle, and run from accordingly.
     soldiers.scare(x, z, Math.max(90, splash.radius * 3));
-    if (splash.nuke) {
+    if (splash.fusion) {
+      // A mech's reactor: the warhead's code path at a fiftieth of the
+      // volume, in blue and neon green, and a flash that washes the frame
+      // to cyan rather than to white.
+      audio.nuke(dist);
+      audio.ultraCharge(0.35);
+      effects.fusion(x, y, z, splash.radius);
+      state.flash = Math.max(state.flash, Math.min(0.95, 0.12 + 1.1 * Math.exp(-dist / 160)));
+      state.flashTint = FUSION_FLASH;
+      if (cheats.slowBlast) state.blastSlow = 1.6;
+      renderer.addScar(x, y, z, splash.radius * 1.1, 1, 0);
+      renderer.addScar(x, y, z, splash.radius * 0.5, 1, 0);
+      debris(x, y, z, splash.radius * 0.4);
+    } else if (splash.nuke) {
       // A warhead is the same code path as a grenade with different numbers,
       // which is the point of having the numbers in one place. What it gets of
       // its own is the look: a white frame, a column of fire, and a mark on
       // the city a quarter of a kilometre across.
       audio.nuke(dist);
       effects.nuke(x, y, z, splash.radius);
+      state.flashTint = null;
       cinema.detonated(x, y, z);
       // A warhead going off in slow motion, if that is switched on. It runs
       // on its own clock rather than out of the reflex meter, because this
@@ -664,8 +691,9 @@ async function main() {
       }
       debris(x, y, z, splash.radius);
     }
-    effects.shake = Math.min(splash.nuke ? 2.6 : 1.4, effects.shake
-      + Math.max(0, 1 - dist / (splash.radius * 3)) * (splash.nuke ? 2.2 : 0.9));
+    const big = splash.nuke || splash.fusion;
+    effects.shake = Math.min(big ? 2.6 : 1.4, effects.shake
+      + Math.max(0, 1 - dist / (splash.radius * 3)) * (big ? 2.2 : 0.9));
 
     // An incendiary is a small blast and a large fire: the pools it leaves
     // are what it is for, and they go down here so that anything which can
@@ -775,7 +803,7 @@ async function main() {
     demolition.blast(x, y, z, wreck.radius, wreck.damage, splash.crater !== false);
     // Anything that leaves a mark sets light to the trees in it. The radius
     // is wider than the blast, because fire spreads and a blast does not.
-    fires.ignite(x, y, z, splash.radius * (splash.nuke ? 1.15 : 1.9),
+    fires.ignite(x, y, z, splash.radius * (splash.nuke || splash.fusion ? 1.15 : 1.9),
       Math.min(1, 0.5 + splash.damage / 400));
 
     // Where the damage radiates from, which is not always where the mark is.
@@ -1598,31 +1626,56 @@ async function main() {
 
   mechs.onEject = () => { if (state.inMech) leaveMech(false); };
 
+  // Reactors running away, each until its fuse is out.
+  const reactors = mechs.reactors;
+
   mechs.onDestroyed = (m) => {
-    explode(m.x, m.y + 3.0, m.z, { radius: 26, damage: 420 }, { weapon: 'mech' });
+    // The machine is dead; the reactor in it is not, yet. A small blast and
+    // a shower of parts now, so a kill still reads as a kill, and the real
+    // one when the containment goes.
+    explode(m.x, m.y + 3.0, m.z, { radius: 12, damage: 160, crater: false }, { weapon: 'mech' });
     gibs.rubble(m.x, m.y + 2.0, m.z, 9, 16, 2.4);
-    // Eight metres of reactor and ammunition going up at once. The blast is
-    // what it does to the street; this is what it looks like, and it is the
-    // one thing on fire in this city that is worth standing back from. A
-    // column up the height of the machine, three secondary bursts out of the
-    // wreck, and ground that goes on burning long enough to be a problem for
-    // whoever walks in after it.
-    const g = world.groundHeight(m.x, m.z);
-    effects.flame(m.x, m.y + 2.0, m.z, 11.0, 1);
-    for (let i = 0; i < 3; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 2 + Math.random() * 5;
-      const fx = m.x + Math.cos(a) * r, fz = m.z + Math.sin(a) * r;
-      effects.flame(fx, world.groundHeight(fx, fz) + 0.6, fz, 5.5, 0.9);
-      fires.ignite(fx, world.groundHeight(fx, fz), fz, 9, 1);
+    const own = state.inMech === m;
+    reactors.push({ m, left: own ? FUSION.fuseOwn : FUSION.fuse, spark: 0, chord: false });
+    feed(`<b>${m.spec.name.toLowerCase()} down</b>, reactor critical`);
+    if (own) {
+      leaveMech(true);
+      toast('reactor critical, get clear');
     }
-    fires.ignite(m.x, g, m.z, 12, 1);
-    burning.push({ x: m.x, y: g, z: m.z, radius: 9.5, left: 26, damagePerSecond: 34 });
-    renderer.addScar(m.x, g, m.z, 14, 1, 0);
-    audio.flameWall();
-    feed(`<b>${m.spec.name.toLowerCase()} down</b>`);
-    if (state.inMech === m) leaveMech(true);
   };
+
+  /**
+   * The few seconds between a mech going down and its reactor going up: blue
+   * sparks out of the wreck, faster as it runs, the charge chord rising under
+   * it, and then the fusion blast where the wreck is lying.
+   */
+  function updateReactors(dt) {
+    for (let i = reactors.length - 1; i >= 0; i--) {
+      const r = reactors[i];
+      const m = r.m;
+      r.left -= dt;
+      if (!r.chord && r.left < 2.0) {
+        r.chord = true;
+        audio.ultraCharge(Math.max(0.4, r.left));
+      }
+      // Sparks, more of them the nearer it is.
+      r.spark -= dt;
+      if (r.spark <= 0) {
+        r.spark = Math.max(0.03, Math.min(0.25, r.left * 0.08));
+        const h = (m.spec.height || 8) * (0.3 + Math.random() * 0.5);
+        effects.spark(m.x + (Math.random() - 0.5) * 3, m.y + h,
+          m.z + (Math.random() - 0.5) * 3, 0.35, 0.95, 0.75);
+        effects.flash(m.x, m.y + h, m.z, 2.5 + Math.random() * 2, 0.4, 1.0, 0.8, 0.12);
+      }
+      if (r.left > 0) continue;
+      reactors.splice(i, 1);
+      const g = world.groundHeight(m.x, m.z);
+      explode(m.x, g + 2.0, m.z, FUSION.splash, { weapon: 'mech' });
+      fires.ignite(m.x, g, m.z, 16, 1);
+      burning.push({ x: m.x, y: g, z: m.z, radius: 12, left: 18, damagePerSecond: 40 });
+      feed(`<b>${m.spec.name.toLowerCase()}</b> reactor breach`);
+    }
+  }
 
   /**
    * Every machine on its feet, against the trees it is standing in. Checked a
@@ -4723,6 +4776,7 @@ async function main() {
       fires.update(worldDt, player);
       fireWalls.update(worldDt);
       updateBurning(worldDt);
+      updateReactors(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -4906,6 +4960,7 @@ async function main() {
     fires.update(worldDt, player);
     fireWalls.update(worldDt);
     updateBurning(worldDt);
+    updateReactors(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -5171,6 +5226,9 @@ async function main() {
       state.mechFlash = Math.max(0, state.mechFlash - elapsed * 6);
     }
     renderer.flash = state.flash * state.flash;
+    // A reactor's flash is its own colour until the frame has come back.
+    if (state.flash <= 0.001) state.flashTint = null;
+    renderer.flashTint = state.flashTint || WHITE_FLASH;
     if (effects.shake > 0.001) {
       const k = effects.shake * effects.shake * 0.09;
       const t = state.time * 47;
@@ -5409,6 +5467,7 @@ async function main() {
     cinema, cinemaSpec: CINEMA,
     ion, ionSpec: ION, ionState: ION_STATE,
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
+    reactors, fusionSpec: FUSION,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
     selectArm(i) { return state.inMech ? mechs.selectArm(state.inMech, i) : -1; },

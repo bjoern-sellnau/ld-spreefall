@@ -281,6 +281,9 @@ export class Mechs {
     this.onStep = null;        // fn(mech, hard)
     this.onStomp = null;       // fn(mech, spec)
     this.onDestroyed = null;   // fn(mech)
+    // Reactors of dead machines still running away, filled by the game
+    // layer; here so that clearing the street clears them too.
+    this.reactors = [];
     this.onEject = null;       // fn(mech) when the layer takes one out from under its pilot
   }
 
@@ -293,6 +296,7 @@ export class Mechs {
     const was = this.piloted;
     for (const m of this.pool) { m.alive = false; m.occupied = false; }
     this.active.length = 0;
+    this.reactors.length = 0;
     this.piloted = null;
     if (was && this.onEject) this.onEject(was);
   }

@@ -363,6 +363,13 @@ game. It goes through the same blast path as everything else, so the
 buildings come down, the trees catch and the collision opens up the way they
 would from a grenade.
 
+**A mech's reactor.** Every mech carries a fusion reactor, and killing the
+machine does not kill the reactor: it runs away for a few seconds, blue
+sparks pouring out of the wreck and a chord rising under them, and then goes
+up as a small atomic blast in electric blue and neon green, forty six metres
+of it, which takes the street and any machine standing in it. Your own gives
+you five seconds once you have been blown clear of it.
+
 **Ultra plasma.** Picked on the same map, with four sliders beside it: how
 many balls (the slider goes to three thousand and the box under it takes any
 number), how wide the circle is, which side they come in from and how far
