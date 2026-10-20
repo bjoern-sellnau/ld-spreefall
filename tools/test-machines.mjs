@@ -152,26 +152,42 @@ async function run() {
     s.toggleVehicle();
     if (s.state.inMech !== m) return { skip: true, why: 'could not get in' };
     const was = { x: m.x, y: m.y + m.spec.eye, z: m.z };
-    let rays = 0, tooNear = 0, steep = 0;
+    let rays = 0, tooNear = 0, steep = 0, notWall = 0, gone = 0;
     // The nearest thing anywhere round it that is still standing at the
     // height of its own head, found by sweeping the horizon a long way out:
     // by this point in the suite the streets here are rubble, and a ruin two
     // metres high is not a wall you can put your head into. The ray is at
     // eye height, so whatever answers is tall enough by construction.
-    let near = null;
+    const found = [];
     for (let i = 0; i < 144; i++) {
       const yaw = (i / 144) * Math.PI * 2;
       const d = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
-      const hit = s.world.raycast(was.x, was.y, was.z, d.x, d.y, d.z, 300);
+      const hit = s.world.raycast(was.x, was.y, was.z, d.x, d.y, d.z, 300, {});
       if (hit) rays++;
       if (!hit) continue;
       if (hit.t < 4) { tooNear++; continue; }
+      // A rise in the ground at eye height is not a frontage.
+      if (hit.kind !== 'wall') { notWall++; continue; }
       // On ground near its own level, or the walk up to it is a climb and
       // the wall is somewhere else by the time it arrives.
       const px = was.x + d.x * (hit.t - 1.2);
       const pz = was.z + d.z * (hit.t - 1.2);
       if (Math.abs(s.world.groundHeight(px, pz) - m.y) > 3) { steep++; continue; }
-      if (!near || hit.t < near.t) near = { t: hit.t, d, yaw };
+      found.push({ t: hit.t, d, yaw });
+    }
+    // And still there from where it will stand. The sweep looks from the
+    // eye where the mech is now; stood a metre off the wall the ground can
+    // be a metre or two higher or lower, and on the live city the nearest
+    // one was a wall the head then looked straight over.
+    found.sort((a, b) => a.t - b.t);
+    let near = null;
+    for (const c of found) {
+      const sx = was.x + c.d.x * (c.t - 1.2);
+      const sz = was.z + c.d.z * (c.t - 1.2);
+      const ey = s.world.groundHeight(sx, sz) + m.spec.eye;
+      const hit = s.world.raycast(sx, ey, sz, c.d.x, 0, c.d.z, 8, {});
+      if (hit && hit.kind === 'wall') { near = c; break; }
+      gone++;
     }
     // When nothing answers, say what the city looked like from in there:
     // the first version of this check ran at the end of the suite, by which
@@ -180,7 +196,8 @@ async function run() {
     if (!near) {
       return {
         skip: true,
-        why: `${rays} rays hit, ${tooNear} too near, ${steep} off the level, `
+        why: `${rays} rays hit, ${tooNear} too near, ${notWall} not a wall, `
+          + `${steep} off the level, ${gone} not there from where it would stand, `
           + `tallest within 80 m is ${s.world.tallestNear(m.x, m.z, 80).toFixed(1)} m`,
       };
     }
@@ -199,7 +216,7 @@ async function run() {
       s.camera.position[1] - eye.y, s.camera.position[2] - eye.z);
     // Where the wall is now that the torso has turned onto it.
     const a = s.mechs.aim(m);
-    const wall = s.world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, 8);
+    const wall = s.world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, 8, {});
     const got = {
       skip: false,
       wall: wall ? Number(wall.t.toFixed(2)) : null,

@@ -3185,3 +3185,14 @@ caps residency at 520.
   the first test and the suites have grown since the limit was set; it is
   75 minutes now. Locally the machines are 62 of 62 and the interface 35
   of 35.
+
+  With 75 minutes the run got to the end of the machines: 61 of 62. The
+  one was the wall check in a mech, "camera 1.6 m out, wall at null": the
+  test found the nearest wall from the eye where the mech stood, moved the
+  mech to a metre off it, and looked again from there. On the live city
+  the ground at the new spot put the eye somewhere the same wall did not
+  answer, so there was nothing in front of the head and nothing for the
+  camera to be kept off. The test now takes only hits that are walls (a
+  rise in the ground is not a frontage), and only a wall that still answers
+  from the eye where the mech will stand; if none does, it says how many
+  fell out at each step.
