@@ -151,6 +151,7 @@ async function run() {
       here: s.world.nameAt(s.player.x, s.player.z),
       onGround: Math.abs(s.player.y - s.world.groundHeight(s.player.x, s.player.z)) < 1,
       mb: Math.round(s.world.residentBytes / 1e5) / 10,
+      ceiling: Math.round(s.streamCeiling / 1e6),
     };
   });
   check('the district you are walking towards comes down before you reach it',
@@ -162,7 +163,8 @@ async function run() {
   check('and the one you came from is still there behind you',
     only.back, `${only.held} districts held, ${only.mb} MB`);
   check('and what is held stays inside the ceiling',
-    only.held <= 6 && only.mb <= 128, `${only.held} districts, ${only.mb} MB`);
+    only.held <= 6 && only.mb <= only.ceiling,
+    `${only.held} districts, ${only.mb} MB of ${only.ceiling}`);
 
   // --- the loading screen names a place in the district --------------------
   // Held open by a slow line rather than by a hook: the screen is only up
@@ -547,6 +549,7 @@ async function run() {
         corridor,
         card, overBuilt, overNothing, sawCoarse,
         peakMB: Math.round(peakMB * 10) / 10,
+        ceiling: Math.round(s.streamCeiling / 1e6),
         coarseAfter: s.world.loadedIds.filter((id) => s.world.isOverflight(id)),
         landedIn: s.world.nameAt(s.player.x, s.player.z),
         onGround: Math.abs(s.player.y - s.world.groundHeight(s.player.x, s.player.z)) < 1.2,
@@ -721,7 +724,7 @@ async function run() {
       flight.coarseAfter.length ? `still coarse: ${flight.coarseAfter.join(', ')}`
         : `landed on the ${flight.landedOnCity ? 'city' : 'sketch'}, peak ${flight.peakMB} MB`);
     check('and the whole flight stays inside the memory ceiling',
-      flight.peakMB <= 128, `${flight.peakMB} MB at its worst`);
+      flight.peakMB <= flight.ceiling, `${flight.peakMB} MB at its worst, of ${flight.ceiling}`);
   }
 
   await browser.close();

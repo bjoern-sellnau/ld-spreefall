@@ -43,6 +43,32 @@ test:combat` fights drones in one and checks the damage, the cover and the
 weapons free zone, and `npm run clip` records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
 Cloudflare Pages, or any static host. There is nothing to run on the server.
 
+### All of Berlin at full detail, on your own machine
+
+The deployed city has the detail of Mitte only in the middle, because GitHub
+Pages will not publish a site over a gigabyte. On a machine of your own every
+district can be built at tier 0, with the block tier for the fast travel
+flight to pass over:
+
+```
+npm run world:full   # fetch every district with the full set of tags, then build
+npm run serve
+```
+
+| | |
+|---|---|
+| Fetch | two hours or so, nearly all of it waiting on Overpass; districts bigger than three kilometres a side are asked for in pieces |
+| Build | about half an hour; the biggest district needs about 3.5 GB of memory |
+| Disk | five to eight gigabytes in `public/` |
+| Browser | a desktop with its own graphics card; the game holds three of the biggest district at once, up to 1.5 GB |
+
+The deploy builds the standard city and then moves districts up to tier 0 from
+the middle outward for as long as the site stays under 950 MB
+(`tools/fit-pages.mjs`). `--profile=` on `tools/fetch-osm.mjs` and
+`tools/build-world.mjs` picks the city; `--tier=` and `--over=` set one
+district by hand. A comparison of the same street at either tier is in
+`docs/screenshots/tier-01-standard.png` and `tier-02-full.png`.
+
 ## Controls
 
 | | |

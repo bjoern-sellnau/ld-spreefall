@@ -3234,3 +3234,23 @@ So there are two cities now, and a profile picks which:
   kilometres a side is asked for in pieces and put back together with each
   element kept once, because the full query over seventy square kilometres
   is not something a mirror finishes.
+- 2026-10-20: 71c, the pages profile. tools/fit-pages.mjs starts from the
+  standard build and moves districts up from the middle outward: each is
+  rebuilt at tier 0 with a tier 2 overflight, the site is weighed the way
+  build-dist ships it, and one that takes it over 950 MB is built back the way
+  it was. What a district costs at tier 0 is built and weighed, not guessed,
+  because the ratio ran from four to twenty in the measurements above. Three
+  misses in a row ends it, since the districts further out are bigger. On the
+  local city with a ceiling of 110 MB to make it miss: core, c2r1 and c3r2
+  went up, c3r0, c4r1 and c0r1 were built back. The deploy runs it after the
+  build, and saves the extract cache after it so the districts fetched again
+  with the long list of tags are kept.
+- 2026-10-20: 71d, the runtime. The streamer's ceiling was 128 MB, set for
+  districts of three to forty. It is now three of the biggest district in the
+  index, the one you are in, the one ahead and the one behind, never under 128
+  MB and never over 1.5 GB. The local full city (eight districts, synthetic,
+  177 MB, i24 the biggest at 47.9) passed the whole district suite, 34 of 34,
+  with a ceiling of 144 MB; the standard city still reads 128. The same
+  street in Ring 1-2 at both tiers is in tier-01-standard.png and
+  tier-02-full.png: tier 0 brings the cornices, the lamps, the parked cars,
+  the kerbs and three times the trees.

@@ -529,6 +529,18 @@ export class World {
     return [...this.pending.keys()];
   }
 
+  /**
+   * The biggest district this city has, in bytes. A city built at tier 0 has
+   * districts ten times the size of the standard one's, and a memory ceiling
+   * set for the standard one would let go of the district next door the
+   * moment it arrived.
+   */
+  get heaviest() {
+    let most = 0;
+    for (const d of this.catalogue) if (d.built !== false && d.bytes > most) most = d.bytes;
+    return most;
+  }
+
   /** How many bytes of city are in memory. */
   get residentBytes() {
     let total = 0;

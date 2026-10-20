@@ -3980,6 +3980,13 @@ async function main() {
   // ground rather than a tile that is merely coarse.
   const FLIGHT = { reach: 2900, drop: 4200, most: 10, bytes: 128e6, every: 0.25, lead: 1400 };
   let streamDue = 0;
+  // The ceiling is set for the standard city, where a district is three to
+  // forty megabytes. A city built at tier 0 has districts of a hundred and
+  // more, so the ceiling grows to three of its biggest: the one you are in,
+  // the one you are walking towards and the one behind you. Never past a
+  // gigabyte and a half, which is what a desktop browser will give a tab
+  // without complaint.
+  const holdBytes = (plan) => Math.min(1.5e9, Math.max(plan.bytes, 3 * world.heaviest));
 
   /**
    * The district streamer. Keeps the one you are in, the ones you are near,
@@ -4021,7 +4028,7 @@ async function main() {
       streamDue = plan.every;
       // The landing is held whatever the ceiling says, at the fine tier.
       const pin = flying && state.travelTo ? world.idAt(state.travelTo.x, state.travelTo.z) : null;
-      world.keepAround(cx, cz, plan.reach, plan.drop, plan.most, plan.bytes, variant, pin);
+      world.keepAround(cx, cz, plan.reach, plan.drop, plan.most, holdBytes(plan), variant, pin);
     }
     // And if you are somehow standing on ground that is not in yet, which is
     // a fast travel or a deep link rather than a walk, the card is still
@@ -5636,6 +5643,7 @@ async function main() {
     travel,
     beginTravel(x, z) { return beginTravel(x, z); },
     get flightPlan() { return FLIGHT; },
+    get streamCeiling() { return holdBytes(STREAM); },
     armNuke(x, z) { return armNuke(x, z); },
     releaseNuke() { return releaseNuke(); },
     closeTargeting() { closeTargeting(true); },
