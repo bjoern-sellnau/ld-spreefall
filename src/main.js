@@ -4015,7 +4015,9 @@ async function main() {
     streamDue -= dt;
     if (streamDue <= 0) {
       streamDue = plan.every;
-      world.keepAround(cx, cz, plan.reach, plan.drop, plan.most, plan.bytes, variant);
+      // The landing is held whatever the ceiling says, at the fine tier.
+      const pin = flying && state.travelTo ? world.idAt(state.travelTo.x, state.travelTo.z) : null;
+      world.keepAround(cx, cz, plan.reach, plan.drop, plan.most, plan.bytes, variant, pin);
     }
     // And if you are somehow standing on ground that is not in yet, which is
     // a fast travel or a deep link rather than a walk, the card is still
@@ -5160,8 +5162,12 @@ async function main() {
       // Nobody is put down on ground that has not arrived. The flight holds
       // its last frame, a few hundred metres up, until the district is in.
       const landing = state.travelTo ? world.idAt(state.travelTo.x, state.travelTo.z) : null;
-      if (p.finished && state.travelTo
-        && (!world.isLoaded(state.travelTo.x, state.travelTo.z) || world.isOverflight(landing))) {
+      // Whether the district is in, not whether there is a tile under the
+      // exact spot: a tile with nothing in it is not in the bundle at all,
+      // and on the live city a flight to the middle of the Hansaviertel held
+      // over a tile like that for good, a few hundred metres up.
+      if (p.finished && state.travelTo && landing
+        && (!world.loaded(landing) || world.isOverflight(landing))) {
         el.district.textContent = `landing in ${world.nameAt(state.travelTo.x, state.travelTo.z) || 'Berlin'}`;
         el.district.classList.add('loading');
         // Held up because what is under the landing is the coarse build.

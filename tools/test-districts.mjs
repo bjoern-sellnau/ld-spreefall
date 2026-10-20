@@ -528,6 +528,9 @@ async function run() {
         landedOnCity: !s.world.isOverflight(s.world.idAt(s.player.x, s.player.z)),
         out: Math.round(Math.hypot(s.player.x - tx, s.player.z - tz)),
         mode: s.state.mode,
+        // What a flight still in the air is waiting for, if it is.
+        landing: `${far.id} ${s.world.loaded(far.id) ? (s.world.isOverflight(far.id) ? 'coarse' : 'fine') : 'not in'}, `
+          + `tile under the spot ${s.world.isLoaded(tx, tz) ? 'there' : 'missing'}`,
       };
     }, neighbour);
     // --- what you knocked down stays down, district or no district ----------
@@ -660,7 +663,8 @@ async function run() {
 
   check('free travel reaches a district that was not in memory when it started',
       flight.started && flight.mode === 'walk' && flight.out < 6,
-      `${flight.loadedAtStart.join(', ')} at take off, landed ${flight.out} m out in ${flight.landedIn}`);
+      `${flight.loadedAtStart.join(', ')} at take off, landed ${flight.out} m out in ${flight.landedIn}`
+        + (flight.mode === 'walk' ? '' : `; still ${flight.mode}, ${flight.landing}`));
     check('and puts you down on ground rather than in the air',
       flight.onGround);
     // --- the overflight build -----------------------------------------

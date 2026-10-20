@@ -3126,4 +3126,18 @@ caps residency at 520.
   the check that a neighbour's ground arrives read one point 25 m over the
   edge, which on the live city is a tile with nothing in it and so no tile
   at all; it reads nine points along the edge now.
+- With the game's mode in the report, the live run said why nothing came
+  down: the mode was `travel`. The free travel check just before it had not
+  landed in its 1800 frames, and everything after it ran with the player in
+  the air: the blast was never stepped, the travel map would not open, and
+  the coarse corridor was never let go. A flight holds at the end until the
+  landing is in, and it asked whether there was a tile under the exact spot
+  it was landing on; a tile with nothing in it is not in the bundle at all,
+  which the neighbour check had already met on the live city, so a flight
+  to the middle of such a tile held for good. It asks whether the landing
+  district is in, at the fine tier, instead. The flight check now says what
+  a flight still in the air is waiting for. A streamer change that could
+  not have been the cause (the ceiling is 128 MB and the flight held 47) is
+  kept anyway: the landing district is pinned, so no distance or ceiling can
+  let it go while you are coming down to it.
 

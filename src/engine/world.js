@@ -468,10 +468,17 @@ export class World {
     return n;
   }
 
-  keepAround(x, z, reach = 900, drop = 2600, max = 9, maxBytes = Infinity, variant = 'fine') {
+  keepAround(x, z, reach = 900, drop = 2600, max = 9, maxBytes = Infinity, variant = 'fine', pin = null) {
     const want = new Set();
     const here = this.entryAt(x, z);
     if (here) want.add(here.id);
+    // A district that must not be let go whatever the distance or the
+    // ceiling says: the one a flight is landing in. While you are in the air
+    // you are still standing where you took off, so the landing is the
+    // furthest district held and the first the ceiling dropped. On the live
+    // city, where Mitte alone is thirty nine megabytes, the flight fetched
+    // its landing, dropped it, fetched it again, and never came down.
+    if (pin) want.add(pin);
     const sorted = this.catalogue
       .map((d) => ({ d, away: boxDistance(x, z, d.bounds) }))
       .sort((a, b) => a.away - b.away);
@@ -486,7 +493,7 @@ export class World {
       // an unhandled rejection every half second. The index can promise a
       // district a deploy did not finish building.
       if (!this.districts.has(id)) {
-        this.loadDistrict(id, null, variant).catch(() => {
+        this.loadDistrict(id, null, id === pin ? 'fine' : variant).catch(() => {
           if (!this.missing.has(id)) {
             this.missing.add(id);
             console.warn(`spreefall: ${id} is in the index but not on the server`);
@@ -495,7 +502,7 @@ export class World {
       }
     }
     for (const id of this.districts.keys()) {
-      if (want.has(id)) continue;
+      if (want.has(id) || id === pin) continue;
       const entry = this.entryFor(id);
       if (!entry) continue;
       if (boxDistance(x, z, entry.bounds) > drop) this.unloadDistrict(id);
@@ -510,7 +517,7 @@ export class World {
       while (this.residentBytes > maxBytes) {
         let worst = null, worstAway = -1;
         for (const id of this.districts.keys()) {
-          if (id === mine) continue;
+          if (id === mine || id === pin) continue;
           const entry = this.entryFor(id);
           const away = entry ? boxDistance(x, z, entry.bounds) : Infinity;
           if (away > worstAway) { worstAway = away; worst = id; }
