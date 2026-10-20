@@ -234,6 +234,7 @@ visits.
 | Reload everything | tops up what you are carrying |
 | Drop a nuke | opens a map of the city; click where you want it, then confirm |
 | Ion cannon | three beams in a ring, then the middle one |
+| Ultra plasma | as many plasma balls from orbit as you like, over a circle, from a side and at an angle you set |
 | Soldiers, Drones, Jets | brings a section, a flight or a pair out around you |
 | God mode | nothing hurts you, though you are still told which way it came from |
 | Infinite ammunition | the magazine never reaches the bottom |
@@ -361,6 +362,20 @@ of everything, which is bigger than a warhead and the largest thing in the
 game. It goes through the same blast path as everything else, so the
 buildings come down, the trees catch and the collision opens up the way they
 would from a grenade.
+
+**Ultra plasma.** Picked on the same map, with four sliders beside it: how
+many balls (the slider goes to three thousand and the box under it takes any
+number), how wide the circle is, which side they come in from and how far
+off the vertical. The circle and an arrow for the way in are drawn on the
+map, the arrow the longer the flatter they come. After you fire the system
+charges for four seconds, a chord climbing six times over with the tremolo
+speeding up, and then the balls come down: the plasma rifle's bolt three
+times across, cyan, with a streak behind it, at a hundred and twenty metres
+a second, bouncing twice like the rifle's and going off on the third thing
+they meet. They come thirty a second at first and a hundred and forty after
+six seconds, and never more than four hundred and eighty in the air at
+once; the rest wait their turn, so a hundred thousand costs nothing until
+they are falling.
 
 The skeleton is real geometry rather than a texture. The soldier mesh carries
 a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the

@@ -26,6 +26,7 @@ import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
 import { CHASSIS } from './game/chassis.js';
+import { Ultra, ULTRA, ULTRA_STATE } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
@@ -101,6 +102,7 @@ const el = {
   targetConfirm: $('targetconfirm'), confirmWhere: $('confirmwhere'),
   confirmSelf: $('confirmself'), confirmFire: $('confirmfire'),
   confirmCancel: $('confirmcancel'),
+  ultraPanel: $('ultrapanel'),
   down: $('down'), downText: $('downtext'), downBtn: $('downbtn'),
   touchui: $('touchui'), stick: $('stick'), knob: $('stickknob'),
   btnJump: $('btnjump'), btnRun: $('btnrun'), source: $('datasource'),
@@ -291,6 +293,7 @@ async function main() {
   const fireWalls = new FireWalls(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const machines = new Machines();
   const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const ultra = new Ultra(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
   const mechs = new Mechs(world, (x, y, z) => combat.isSanctuary(x, y, z));
   weapon.mechs = mechs;
@@ -617,7 +620,9 @@ async function main() {
       }
       debris(x, y, z, splash.radius * 0.35);
     } else {
-      audio.explosion();
+      // A hundred of these a second is one roar, not a hundred bangs: the
+      // quiet ones are heard one time in twelve.
+      if (!splash.quiet || Math.random() < 0.08) audio.explosion();
       effects.explode(x, y, z);
       effects.blast(x, y, z, splash.radius);
       // Mark whatever it went off against, and open it. The soot reaches
@@ -2714,6 +2719,30 @@ async function main() {
     if (Math.random() < dt * 1.4) fires.ignite(x, 0, z, radius * 2.2, 0.8);
   };
 
+  // Ultra plasma: the balls leave orbit through the ordinary projectile
+  // layer, so they bounce off the real streets and go off through the same
+  // blast every other weapon uses.
+  ultra.launch = (from, v) => projectiles.launch('ultra', {
+    x: from.x, y: from.y, z: from.z, vx: v.x, vy: v.y, vz: v.z,
+    splash: ULTRA.splash, weapon: 'ultra',
+  });
+  ultra.onCharge = (seconds) => {
+    audio.ultraCharge(seconds);
+    toast('ultra plasma, charging');
+    feed('<i>ultra plasma</i> charging');
+  };
+  ultra.onRain = () => {
+    audio.explosion();
+    state.flash = Math.max(state.flash, 0.25);
+    feed(`<b>ultra plasma</b> ${ultra.left} inbound`);
+  };
+  ultra.onDone = (sent) => { feed(`<i>ultra plasma</i> ${sent} away`); };
+  const ultraLive = () => {
+    let n = 0;
+    for (const b of projectiles.active) if (b.kind === 'ultra') n++;
+    return n;
+  };
+
   ion.onCharge = () => {
     audio.ionCharge();
     toast('ion cannon, charging');
@@ -3292,6 +3321,9 @@ async function main() {
     } else if (id === 'ion') {
       openMap('ion');
       return;
+    } else if (id === 'ultra') {
+      openMap('ultra');
+      return;
     }
     applyCheats();
   }
@@ -3357,6 +3389,12 @@ async function main() {
       armed: 'Enter to go, Esc to cancel.',
       button: 'Fly there',
     },
+    ultra: {
+      hint: 'Set how many, how wide, from where and how steep, then click the city. '
+        + 'Wheel zooms, drag moves. Esc to think better of it.',
+      armed: 'Enter to fire, Esc to cancel.',
+      button: 'Fire',
+    },
     ion: {
       hint: 'Click the city to put the ion cannon on it. '
         + 'Wheel zooms, drag moves. Esc to think better of it.',
@@ -3383,8 +3421,10 @@ async function main() {
     targetMap.centre = { x: player.x, z: player.z };
     targetMap.zoom = MAP_ZOOM.near;
     state.mapPull = { from: MAP_ZOOM.near, to: MAP_ZOOM.pick, t: 0, back: false };
-    targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true };
+    targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true, ...aimArrow(mode) };
     el.nukeTarget.classList.toggle('travel', mode === 'travel');
+    el.ultraPanel.classList.toggle('hidden', mode !== 'ultra');
+    if (mode === 'ultra') showUltra();
     el.nukeTarget.classList.remove('hidden');
     el.targetConfirm.classList.add('hidden');
     el.confirmFire.textContent = MAP_MODE[mode].button;
@@ -3410,6 +3450,9 @@ async function main() {
         from: targetMap.zoom, to: MAP_ZOOM.near, t: 0, back: true,
         fromCentre: targetMap.centre ? { ...targetMap.centre } : { x: player.x, z: player.z },
       };
+      // The numbers are spent once it has fired or been cancelled, so they go
+      // at once rather than riding the zoom back down.
+      el.ultraPanel.classList.add('hidden');
       return;
     }
     state.targeting = false;
@@ -3418,6 +3461,7 @@ async function main() {
     targetMap.aim = null;
     el.nukeTarget.classList.add('hidden');
     el.targetConfirm.classList.add('hidden');
+    el.ultraPanel.classList.add('hidden');
     relock();
   }
 
@@ -3504,10 +3548,15 @@ async function main() {
     }
     state.pendingNuke = { x, z };
     const inside = countInside(x, z, radius);
+    const u = cheats.ultra;
     el.confirmWhere.textContent = state.mapMode === 'ion'
       ? `${away} m away. Three beams for ${Math.round(ION.charge)} seconds, `
         + `then ${radius} m of everything. ${inside} target${inside === 1 ? '' : 's'} inside.`
-      : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
+      : state.mapMode === 'ultra'
+        ? `${away} m away. ${u.count} plasma balls over ${radius} m, from the `
+          + `${compassName(u.bearing)} at ${u.tilt}\u00b0, after ${ULTRA.charge.toFixed(0)} seconds of charge. `
+          + `${inside} target${inside === 1 ? '' : 's'} inside.`
+        : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
     const self = away < radius;
     el.confirmSelf.classList.toggle('hidden', !self);
     el.confirmSelf.textContent = combat.godmode
@@ -3533,6 +3582,18 @@ async function main() {
       // than flying back onto a player who is about to leave.
       closeTargeting(true);
       beginTravel(at.x, at.z);
+      return true;
+    }
+    if (state.mapMode === 'ultra') {
+      if (!ultra.fire(at.x, at.z, cheats.ultra)) {
+        el.targetHint.textContent = ultra.active
+          ? 'the last one is still coming down'
+          : 'not there: the memorial is a weapons free zone';
+        return false;
+      }
+      cheats.used = true;
+      applyCheats();
+      closeTargeting();
       return true;
     }
     if (state.mapMode === 'ion') {
@@ -3834,7 +3895,70 @@ async function main() {
   function aimRadius(mode) {
     if (mode === 'travel') return 14;
     if (mode === 'ion') return ionRadius();
+    if (mode === 'ultra') return cheats.ultra.radius;
     return nukeRadius();
+  }
+
+  /** The way ultra plasma comes in, for the arrow the map draws. */
+  function aimArrow(mode) {
+    return mode === 'ultra' ? { bearing: cheats.ultra.bearing, tilt: cheats.ultra.tilt } : {};
+  }
+
+  // The four numbers, on the map while it is up for ultra plasma. Each one
+  // moves the circle or the arrow as it is dragged, and a point already
+  // picked is asked about again with the new numbers.
+  const ultraRows = {};
+  function showUltra() {
+    const u = cheats.ultra;
+    for (const key of Object.keys(ultraRows)) {
+      const row = ultraRows[key];
+      row.slider.value = String(Math.min(Number(row.slider.max), u[key]));
+      if (row.box) row.box.value = String(u[key]);
+      row.say.textContent = key === 'count' ? `${u.count}`
+        : key === 'radius' ? `${u.radius} m`
+          : key === 'bearing' ? `${u.bearing}\u00b0 ${compassName(u.bearing)}` : `${u.tilt}\u00b0`;
+    }
+  }
+  function compassName(b) {
+    return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8];
+  }
+  function setUltra(key, v) {
+    cheats.setUltra(key, v);
+    showUltra();
+    if (targetMap.aim) {
+      targetMap.aim = { ...targetMap.aim, radius: aimRadius('ultra'), ...aimArrow('ultra') };
+    }
+    if (state.pendingNuke) armNuke(state.pendingNuke.x, state.pendingNuke.z);
+    else drawTargetMap();
+  }
+  for (const [key, label] of [['count', 'Plasma balls'], ['radius', 'Radius'],
+    ['bearing', 'Coming in from'], ['tilt', 'Angle off the vertical']]) {
+    const row = document.createElement('label');
+    row.className = 'urow';
+    row.dataset.ultra = key;
+    const name = document.createElement('b');
+    name.textContent = label;
+    const say = document.createElement('span');
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    const [lo, hi] = ULTRA.limits[key];
+    slider.min = String(lo);
+    slider.max = String(hi);
+    slider.step = '1';
+    slider.addEventListener('input', () => setUltra(key, slider.value));
+    row.append(name, say, slider);
+    let box = null;
+    if (key === 'count') {
+      // The slider stops at its top; the box takes any number at all.
+      box = document.createElement('input');
+      box.type = 'number';
+      box.min = '1';
+      box.step = '1';
+      box.addEventListener('change', () => setUltra(key, box.value));
+      row.append(box);
+    }
+    el.ultraPanel.appendChild(row);
+    ultraRows[key] = { slider, box, say };
   }
 
   function aimAt(x, z) {
@@ -3842,6 +3966,7 @@ async function main() {
     targetMap.aim = {
       x, z, radius: r,
       allowed: state.mapMode === 'travel' || !sanctuaryWithin(x, z, r),
+      ...aimArrow(state.mapMode),
     };
   }
 
@@ -4601,6 +4726,7 @@ async function main() {
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
+      ultra.update(worldDt, ultraLive());
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
@@ -4783,6 +4909,7 @@ async function main() {
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
+    ultra.update(worldDt, ultraLive());
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     // And the ones hunting you keep walking whether or not you are in one.
@@ -5281,6 +5408,7 @@ async function main() {
     openTravel() { openTravel(); },
     cinema, cinemaSpec: CINEMA,
     ion, ionSpec: ION, ionState: ION_STATE,
+    ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
     selectArm(i) { return state.inMech ? mechs.selectArm(state.inMech, i) : -1; },

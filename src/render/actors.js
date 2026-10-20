@@ -21,6 +21,8 @@ const MAX_VEHICLES = 8;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 256;
+// Ultra plasma's balls in the air at once, which is its own ceiling.
+const MAX_ULTRA = 480;
 // Past this there is no point drawing a pad: the fog has it anyway.
 const PICKUP_RANGE = 260;
 
@@ -323,6 +325,13 @@ export function buildProjectileMesh(kind) {
   } else if (kind === 'flak') {
     m.box(0, 0, 0, 0.14, 0.10, 0.14, 8);
     m.box(0, 0, 0, 0.08, 0.18, 0.08, 8);
+  } else if (kind === 'ultra') {
+    // The rifle's bolt, three times across, with the streak it burns behind
+    // it on the way down: from a street away a ball the size of a football
+    // is a pixel, and a pixel falling reads as snow. Nose towards -z, so the
+    // tail runs back along +z.
+    m.icosphere(0, 0, 0, 0.5, 10, 6, 11);
+    m.cylinder(0, 0, 0.25, 0.42, 0.03, 7, 8, 11, 'z');
   } else if (kind === 'void') {
     // One green ball the size of a man's chest. The glow round it is sparks,
     // drawn by the game layer while it flies.
@@ -971,6 +980,7 @@ export class Actors {
       banana: this._uploadMesh(buildProjectileMesh('banana'), MAX_PROPS, 2),
       nuke: this._uploadMesh(buildProjectileMesh('nuke'), 8, 2),
       void: this._uploadMesh(buildProjectileMesh('void'), 8, 2),
+      ultra: this._uploadMesh(buildProjectileMesh('ultra'), MAX_ULTRA, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -1078,15 +1088,17 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
-      if (counts[b.kind] >= (b.kind === 'nuke' || b.kind === 'void' ? 8 : MAX_PROPS)) continue;
+      const cap = b.kind === 'nuke' || b.kind === 'void' ? 8 : (b.kind === 'ultra' ? MAX_ULTRA : MAX_PROPS);
+      if (counts[b.kind] >= cap) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
-      const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke';
+      const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke'
+        || b.kind === 'ultra';
       const yaw = flying ? Math.atan2(-b.vx, -b.vz) : b.spin * 0.7;
       const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, b.vy
         / (Math.hypot(b.vx, b.vy, b.vz) || 1)))) : b.spin;

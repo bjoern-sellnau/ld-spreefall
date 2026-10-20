@@ -1265,6 +1265,115 @@ async function run() {
   check('at the right scale all the way across', map.quarterErr <= 6,
     `${map.quarterErr}% off a quarter of the city`);
 
+  // --- ultra plasma ----------------------------------------------------------
+  // The four numbers on the map, the arrow they draw, the charge you hear,
+  // and then the circle filling with the plasma rifle's balls, as many as
+  // were asked for and no more, including more than the slider goes to.
+  const ultra = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.setCheat('godmode', true);
+    s.projectiles.clear();
+    s.cheatAction('ultra');
+    s.settleMap();
+    const panel = document.getElementById('ultrapanel');
+    const shown = !panel.classList.contains('hidden');
+    const rows = [...panel.querySelectorAll('.urow')].map((r) => r.dataset.ultra);
+    const slide = (key, v) => {
+      const input = panel.querySelector(`.urow[data-ultra=${key}] input[type=range]`);
+      input.value = String(v);
+      input.dispatchEvent(new Event('input'));
+    };
+    slide('radius', 90);
+    slide('bearing', 90);
+    slide('tilt', 40);
+    // Past the top of the slider, through the box beside it.
+    const box = panel.querySelector('.urow[data-ultra=count] input[type=number]');
+    box.value = '4321';
+    box.dispatchEvent(new Event('change'));
+    const set = { ...s.cheats.ultra };
+    const aim = { ...s.targetMap.aim };
+    const x = s.player.x + 600, z = s.player.z;
+    const armed = s.armNuke(x, z);
+    const says = document.getElementById('confirmwhere').textContent;
+    // The count goes back down for the rest so the test does not take all day.
+    box.value = '260';
+    box.dispatchEvent(new Event('change'));
+    s.armNuke(x, z);
+    const released = s.releaseNuke();
+    const closed = panel.classList.contains('hidden');
+    const charging = s.ultra.charging;
+    // Charging: nothing leaves yet.
+    for (let i = 0; i < Math.round(60 * (s.ultraSpec.charge - 0.5)); i++) s.fixedForTest(1 / 60);
+    const duringCharge = s.projectiles.active.filter((b) => b.kind === 'ultra').length;
+    const again = s.ultra.fire(x, z, s.cheats.ultra);
+    // Where each one first reaches the ground; after that it bounces like
+    // the rifle's do and may roll out past the edge, which is not the aim.
+    let most = 0, landed = 0, spread = 0, n = 0, out = 0;
+    const dirs = [];
+    const down = new Map();
+    for (let i = 0; i < 60 * 14; i++) {
+      s.fixedForTest(1 / 60);
+      let live = 0;
+      for (const b of s.projectiles.active) {
+        if (b.kind !== 'ultra') continue;
+        live++;
+        if (dirs.length < 40 && b.vy < 0) dirs.push({ vx: b.vx, vy: b.vy, vz: b.vz });
+        // The pool hands the same body out again; a younger one is a new ball.
+        if (down.has(b) && b.age < down.get(b)) down.delete(b);
+        if (down.has(b)) { down.set(b, b.age); continue; }
+        // Its first bounce, off a street or a roof or a wall, is where it
+        // came down; the rifle's balls bounce on from there, and so do these.
+        if (b.bouncesLeft < 2) {
+          down.set(b, b.age);
+          const off = Math.hypot(b.x - x, b.z - z);
+          spread = Math.max(spread, off);
+          if (off > 95) out++;
+          n++;
+        }
+      }
+      most = Math.max(most, live);
+    }
+    landed = n;
+    const sent = 260 - s.ultra.left;
+    const done = !s.ultra.active;
+    // The way they came: from the east (bearing 90) means travelling west.
+    let mx = 0, my = 0, mz = 0;
+    for (const d of dirs) { mx += d.vx; my += d.vy; mz += d.vz; }
+    const tilt = Math.atan2(Math.hypot(mx, mz), -my) * 180 / Math.PI;
+    s.projectiles.clear();
+    s.cheats.reset();
+    return { shown, rows, set, aim, armed, says, released, closed, charging, duringCharge,
+      again, most, landed, out, spread: Math.round(spread), sent, done,
+      west: mx < 0 && Math.abs(mz) < Math.abs(mx) * 0.3, tilt: Math.round(tilt),
+      maxLive: s.ultraSpec.maxLive };
+  });
+  check('ultra plasma opens the map with its four numbers',
+    ultra.shown && ['count', 'radius', 'bearing', 'tilt'].every((k) => ultra.rows.includes(k)),
+    ultra.rows.join(', '));
+  check('and the count takes more than the slider goes to', ultra.set.count === 4321,
+    `${ultra.set.count}`);
+  check('the radius, bearing and angle go onto the map',
+    ultra.aim.radius === 90 && ultra.aim.bearing === 90 && ultra.aim.tilt === 40,
+    JSON.stringify(ultra.aim));
+  check('and into the question before it fires', ultra.armed && /4321 plasma balls over 90 m/.test(ultra.says),
+    ultra.says);
+  check('firing closes the map and starts the charge', ultra.released && ultra.closed && ultra.charging);
+  check('nothing comes down while it charges', ultra.duringCharge === 0);
+  check('and it will not fire a second time on top', ultra.again === false);
+  check('then exactly as many as were asked for come down', ultra.sent === 260 && ultra.done,
+    `${ultra.sent} sent`);
+  // A ball coming in at forty degrees meets a roof before the street: one
+  // aimed at the far side of a thirty metre block lands on its near edge,
+  // twenty five metres short, which is the circle seen from where it comes.
+  check('they first come down inside the circle', ultra.landed > 200
+    && ultra.out <= ultra.landed * 0.1 && ultra.spread <= 90 + 30 * Math.tan(40 * Math.PI / 180) + 5,
+    `${ultra.landed} landed, ${ultra.out} past the edge, ${ultra.spread} m out at most`);
+  check('from the side and at the angle that was set', ultra.west && Math.abs(ultra.tilt - 40) < 4,
+    `${ultra.tilt} degrees`);
+  check('never more in the air than the pool can carry', ultra.most <= ultra.maxLive,
+    `${ultra.most} at once`);
+
   // --- what nothing switched on looks like ---------------------------------
   const clean = await page.evaluate(() => {
     const s = window.spreefall;
@@ -1312,6 +1421,37 @@ async function run() {
   });
   await page.waitForTimeout(2200);
   await page.screenshot({ path: path.join(SHOTS, 'cheat-03-warhead.png') });
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.teleport(81, 0); s.look(90, -3);
+    s.cheats.setUltra('count', 1500);
+    s.cheats.setUltra('radius', 150);
+    s.cheats.setUltra('bearing', 250);
+    s.cheats.setUltra('tilt', 30);
+    s.cheatAction('ultra');
+    s.settleMap();
+    s.armNuke(s.player.x + 330, s.player.z);
+  });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-05-ultra-map.png') });
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setCheat('godmode', true);
+    s.releaseNuke();
+    s.closeTargeting();
+    s.look(268, 14); s.setTime(16.4);
+    s.state.flash = 0;
+    for (let i = 0; i < 60 * (s.ultraSpec.charge + 5.5); i++) s.fixedForTest(1 / 60);
+  });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-06-ultra-rain.png') });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.ultra.reset(); s.projectiles.clear(); s.cheats.reset();
+  });
 
   await page.evaluate(() => {
     const s = window.spreefall;

@@ -2914,3 +2914,41 @@ caps residency at 520.
   underside now; the stelae and the parked cars, which stand on the ground
   and are most of the boxes in the city, ask not to have one, so the middle
   district went from 280,404 triangles to 284,296 rather than to 297,854.
+
+## 65. Ultra plasma
+
+- 2026-10-20: asked for a super weapon that fills the ground with the
+  plasma rifle's balls from space, with the number of balls (no limit,
+  preferably a slider), the angle (shown on the map) and the radius set
+  before firing, and the system heard charging after it fires.
+- `src/game/ultra.js` holds the numbers and the sequence: charge for 4.2 s,
+  then a stream of balls over a uniform disc, launched 420 m above their
+  landing point back along the chosen direction, at 120 m/s. The count has
+  no ceiling because it is a counter, not a list; what is bounded is how
+  many are in the air (480, the size of their own instance buffer), and the
+  rate ramps from 30 to 140 a second over six seconds so the start reads as
+  a rain and not a wall.
+- Each ball is an ordinary projectile of a new kind, `ultra`, built like
+  the rifle's bolt: almost no gravity, two bounces, then it goes off. Its
+  splash does 80, under the 90 at which a blast cuts its hole into the wall
+  it is against, because a hundred re-meshes a second is no frame rate, and
+  only one blast in twelve plays the explosion sound.
+- The map grows a panel with four rows: count (range to 3000 plus a number
+  box that takes anything), radius 20 to 1200 m, bearing 0 to 359, angle
+  off the vertical 0 to 75. The minimap's aim draws an arrow from the side
+  they come from, its length growing with the angle. The confirmation
+  states all four and the charge time.
+- First screenshot from the street: the balls were white dots and read as
+  snow. The bolt's emissive was 7 times a cyan, which clips to white; it is
+  3.2 times now, which stays cyan, and the ultra ball carries a 7 m tapered
+  streak behind it and is drawn pointing along its velocity.
+- The charge sound first fed its tremolo straight into the voices' gain at
+  0.5, which swings far past the voices' own 0.12 and inverts them; the
+  tremolo now works on a stage of its own at 0.65 plus or minus 0.35.
+- `tools/test-cheats.mjs` opens it from the menu, drags the sliders, types
+  4321 into the box, checks the aim and the question, fires 260, and
+  checks: nothing comes down while it charges, it will not fire twice, all
+  260 come down, nine in ten first touch inside the circle (the rest hit a
+  roof on the near side, which at 40 degrees is up to 25 m out), they come
+  from the bearing at the angle set, and never more than 480 fly at once.
+  Screenshots: `cheat-05-ultra-map.png`, `cheat-06-ultra-rain.png`.
