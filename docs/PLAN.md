@@ -3109,4 +3109,13 @@ caps residency at 520.
   parked car under the arches no longer counts as the viaduct blocking the
   street; a pier still does, from the ground to the deck.
 - Unit tests 72 of 72; `test-city` 81 of 81 on the synthetic city.
+- The live run after that: the viaduct check green, 12 of 12 streets under
+  the arches. That let `test-districts` run on the live city for the first
+  time in days (it comes after `test-city` in the workflow), and 7 of its
+  34 failed. The first: the check that a flattened district stays flat
+  started wherever the check before it left you, which on a deploy with
+  three districts built is 28 km south east in country nobody has built;
+  the blast went off over nothing and the trip home held the page for
+  eight minutes, which is what the next three failures look like. It now
+  crosses back into Mitte first. Locally 34 of 34.
 

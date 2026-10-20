@@ -521,6 +521,14 @@ async function run() {
   const kept = await page.evaluate(async () => {
     const s = window.spreefall;
     s.setCheat('godmode', true);
+    // Back into the middle of town first. The check before this one leaves
+    // you twenty eight kilometres south east, which on a deploy with three
+    // districts built is open country nobody has built: the blast went off
+    // over nothing, nothing came down, and the trip home from there held
+    // the page for eight minutes and took the next three checks with it.
+    await s.crossInto(81, 0);
+    s.teleport(81, 0);
+    for (let i = 0; i < 30; i++) await new Promise((r) => requestAnimationFrame(r));
     s.demolition.reset();
     const home = s.world.idAt(s.player.x, s.player.z);
     const x = s.player.x + 60, z = s.player.z;
