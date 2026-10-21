@@ -17,7 +17,12 @@ export const KIND = { GROUND: 'ground', AIR: 'air' };
 export const VEHICLE = {
   jeep: {
     name: 'Jeep', kind: KIND.GROUND,
-    topSpeed: 24, reverse: 8, accel: 14, brake: 22, drag: 0.8,
+    // Drag takes speed times drag off every second, so what it can reach on
+    // the flat is accel over drag. That was fourteen over nought point eight,
+    // seventeen and a half metres a second whatever the top speed said, which
+    // is a jeep that never got past sixty three kilometres an hour. Now it
+    // tops out at its top speed, a hundred and thirty seven, in a few seconds.
+    topSpeed: 38, reverse: 12, accel: 24, brake: 30, drag: 0.42,
     turn: 1.9, turnAtSpeed: 0.55,
     health: 420, mass: 1,
     // Where you sit, and where the camera hangs behind you.
@@ -28,7 +33,8 @@ export const VEHICLE = {
   },
   tank: {
     name: 'Tank', kind: KIND.GROUND,
-    topSpeed: 12, reverse: 5, accel: 6, brake: 10, drag: 1.4,
+    // The same arithmetic held it to four metres a second.
+    topSpeed: 16, reverse: 6, accel: 9, brake: 12, drag: 0.45,
     turn: 0.85, turnAtSpeed: 0.8,
     health: 2600, mass: 4,
     eye: 2.5, chase: 15, chaseUp: 5.5,
@@ -106,6 +112,9 @@ export class Vehicles {
     this.onLaunch = null;       // fn(vehicle, spec) for a rocket or a shell
     this.onDestroyed = null;
     this.onBump = null;         // fn(vehicle, speed) when it hits something
+    // fn(vehicle, speed, hit) when it drives into a wall hard enough to do
+    // something about it; true if the wall gave way and it carries on.
+    this.onSmash = null;
   }
 
   reset() {
@@ -269,7 +278,15 @@ export class Vehicles {
       // decoration.
       const hit = this.world.raycast(v.x, v.y + 1.0, v.z,
         dx * dir, 0, dz * dir, Math.abs(step) + s.length * 0.5);
-      if (hit && hit.kind === 'wall') {
+      // Driven into hard enough, a wall gives: whatever it was goes, and
+      // what drove into it keeps some of its speed.
+      const through = hit && hit.kind === 'wall' && this.onSmash
+        && this.onSmash(v, Math.abs(v.speed), hit);
+      if (through) {
+        v.speed *= s.mass > 2 ? 0.85 : 0.6;
+        v.x += dx * v.speed * dt;
+        v.z += dz * v.speed * dt;
+      } else if (hit && hit.kind === 'wall') {
         if (this.onBump) this.onBump(v, Math.abs(v.speed));
         v.speed *= -0.15;
       } else {
@@ -415,6 +432,8 @@ export class Vehicles {
       Math.sin(v.yaw) * -1, 0, Math.cos(v.yaw) * -1, Math.abs(fwd) * dt + s.radius);
     if (hit && hit.kind === 'wall') {
       if (this.onBump) this.onBump(v, Math.abs(v.speed));
+      // An aircraft into a building takes some of the building with it.
+      if (this.onSmash) this.onSmash(v, Math.abs(v.speed), hit);
       this.damage(v, Math.abs(v.speed) * 9);
       v.speed *= -0.1;
     }

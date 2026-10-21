@@ -3843,3 +3843,27 @@ So there are two cities now, and a profile picks which:
   switch on all twenty two (the bow and the flamethrower among them), and
   with it off the kit again.
 
+## 90. A faster jeep, and every vehicle goes through what it drives into
+
+- The jeep was slow because of its drag, not its top speed: drag takes the
+  speed times the drag off every second, so on the flat it settles where
+  that equals its acceleration. Fourteen over nought point eight is
+  seventeen and a half metres a second, sixty three kilometres an hour,
+  whatever the top speed said; the tank's numbers held it to four metres a
+  second. The jeep now reaches 38 m/s (137 km/h) in a few seconds and the
+  tank 16 m/s.
+- Driven into a wall at seven metres a second or more, a ground vehicle
+  goes through: a hole the size of what hit it is punched in the collision
+  and the picture, the frontage round it takes a blow by speed squared
+  times mass (a tank hits four times as hard as a jeep at the same speed),
+  there is dust, rubble and a crash, and the vehicle carries on with some of
+  its speed (a tank with most of it). A tree it meets goes over, and a
+  parked car goes up. Anything on wheels or tracks going that fast flattens
+  the trees it drives through, the way a mech does. The edge of the river
+  and the memorial, while its field holds, stay where they are.
+- An aircraft flown into a building takes a piece of it with it as well.
+- Checks (city, 87 now): eight seconds of full throttle along Unter den
+  Linden reaches 38 m/s; a jeep and a tank driven at two different
+  frontages from Pariser Platz each go through and come out a long way past
+  where the wall was.
+

@@ -781,6 +781,76 @@ async function run() {
   check('and getting out puts you beside it', drive.out && drive.dropped <= 4,
     `${drive.dropped} m away`);
 
+  // --- faster, and through whatever is in the way -----------------------------
+  const ram = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.soldiers.enabled = false; s.drones.enabled = false;
+    const out = {};
+    // How fast the jeep gets on the flat: along the open length of Unter den
+    // Linden east of the spawn, eight seconds of full throttle.
+    s.teleport(160, 3.3);
+    const j = s.vehicles.spawn('jeep', 162, 3.3, -Math.PI / 2);
+    s.teleport(j.x + 1.5, j.z);
+    s.look(-90, 0);
+    s.toggleVehicle();
+    s.input.keys.add('KeyW');
+    let top = 0;
+    for (let i = 0; i < 60 * 8; i++) { s.fixedForTest(1 / 60); top = Math.max(top, Math.abs(j.speed)); }
+    s.input.keys.delete('KeyW');
+    s.toggleVehicle();
+    out.top = +top.toFixed(1);
+    // A wall: from the square, the nearest frontage taller than a house in
+    // some direction, between twenty five and seventy metres off.
+    const from = { x: 81, z: 0 };
+    const walls = [];
+    for (let k = 0; k < 72 && walls.length < 2; k++) {
+      const a = (k / 72) * Math.PI * 2;
+      const dx = Math.cos(a), dz = Math.sin(a);
+      const g = s.world.groundHeight(from.x, from.z);
+      const hit = s.world.raycast(from.x, g + 1, from.z, dx, 0, dz, 70);
+      if (!hit || hit.kind !== 'wall' || hit.t < 25) continue;
+      const segs = s.world.segments(hit.tile);
+      const o = hit.seg;
+      if (segs[o + 5] - segs[o + 4] < 8) continue;
+      // A second one well round from the first, so the tank meets a wall
+      // the jeep has not already been through.
+      if (walls.length && Math.abs(Math.atan2(dz, dx) - walls[0].a) < 0.9) continue;
+      walls.push({ dx, dz, t: hit.t, a: Math.atan2(dz, dx) });
+    }
+    if (walls.length < 2) return { ...out, walls: walls.length };
+    const drive = (type, wall) => {
+      s.vehicles.reset();
+      s.teleport(from.x, from.z);
+      const yaw = Math.atan2(-wall.dx, -wall.dz);
+      const v = s.vehicles.spawn(type, from.x, from.z, yaw);
+      s.teleport(v.x - wall.dx * 2, v.z - wall.dz * 2);
+      s.look(yaw * 180 / Math.PI, 0);
+      s.toggleVehicle();
+      const smashes = s.state.smashes || 0;
+      s.input.keys.add('KeyW');
+      let past = 0;
+      for (let i = 0; i < 60 * 10; i++) {
+        s.fixedForTest(1 / 60);
+        past = Math.max(past, (v.x - from.x) * wall.dx + (v.z - from.z) * wall.dz);
+      }
+      s.input.keys.delete('KeyW');
+      s.toggleVehicle();
+      return { smashes: (s.state.smashes || 0) - smashes, past: +past.toFixed(1), wallAt: +wall.t.toFixed(1) };
+    };
+    out.jeep = drive('jeep', walls[0]);
+    out.tank = drive('tank', walls[1]);
+    s.soldiers.enabled = true; s.drones.enabled = true;
+    return out;
+  });
+  check('the jeep reaches its top speed, past a hundred and thirty kilometres an hour', ram.top >= 36,
+    `${ram.top} m/s`);
+  check('driven into a frontage the jeep goes through it, and on out the other side',
+    !!ram.jeep && ram.jeep.smashes >= 1 && ram.jeep.past > ram.jeep.wallAt + 8, JSON.stringify(ram.jeep));
+  check('and so does the tank', !!ram.tank && ram.tank.smashes >= 1 && ram.tank.past > ram.tank.wallAt + 8,
+    JSON.stringify(ram.tank));
+  await page.evaluate(() => window.spreefall.parkVehicles && window.spreefall.parkVehicles());
+
   const fly = await page.evaluate(async () => {
     const s = window.spreefall;
     // A live one. The checks above shoot at what is parked here, and a blast

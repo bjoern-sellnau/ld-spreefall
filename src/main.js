@@ -1879,6 +1879,11 @@ async function main() {
       if (!m.alive) continue;
       flattenTrees(m.x, m.z, (m.spec.radius || 2.3) + 1.2);
     }
+    // And anything on wheels or tracks going at a decent lick.
+    for (const v of vehicles.active) {
+      if (!v.alive || v.spec.kind !== 'ground' || Math.abs(v.speed) < SMASH.from) continue;
+      flattenTrees(v.x, v.z, (v.spec.radius || 1.5) + 0.6);
+    }
   }
 
   /**
@@ -2451,6 +2456,51 @@ async function main() {
     gibs.rubble(v.x, v.y + 1, v.z, 6, 12, 2);
     feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
     if (state.inVehicle === v) leaveVehicle(true);
+  };
+
+  // A vehicle driven into something hard enough goes through it: a tree goes
+  // over, a parked car goes up, a wall gets a hole the size of what hit it and
+  // the frontage round it takes the blow, more of it for the tank. The edge
+  // of the river holds, and so does the memorial while its field does.
+  const SMASH = { from: 7, perMass: 1, radiusBase: 1.6, radiusPer: 1 / 11, maxRadius: 7 };
+  vehicles.onSmash = (v, speed, hit) => {
+    if (speed < SMASH.from || !hit) return false;
+    const segs = world.segments(hit.tile);
+    if (!segs || hit.seg === undefined) return false;
+    const o = hit.seg;
+    const base = segs[o + 4], top = segs[o + 5];
+    if (base < world.waterLevel - 1) return false;
+    const len = Math.hypot(segs[o + 2] - segs[o], segs[o + 3] - segs[o + 1]);
+    const hx = hit.x, hy = hit.y, hz = hit.z;
+    const away = Math.hypot(player.x - hx, player.z - hz);
+    // A trunk: four short sides round a box a little over half a metre.
+    if (len < 0.8 && top - base <= 4.5) {
+      const n = flattenTrees(hx, hz, 1.6);
+      if (n) { effects.shake = Math.min(1.2, effects.shake + 0.25); return true; }
+    }
+    // A parked car.
+    if (top - base < 2.5) {
+      const car = cars.at(hx, hz, 4);
+      if (car) {
+        cars.destroy(car);
+        effects.shake = Math.min(1.4, effects.shake + 0.4);
+        return true;
+      }
+    }
+    if (shielded(hx, hy, hz)) return false;
+    const mass = (v.spec.mass || 1) * SMASH.perMass;
+    const energy = speed * speed * mass;
+    const radius = Math.min(SMASH.maxRadius, SMASH.radiusBase + Math.sqrt(energy) * SMASH.radiusPer);
+    const cut = demolition.punch(hx, hy, hz, radius);
+    demolition.blast(hx, hy, hz, radius * 1.5, energy * 0.8, false);
+    effects.impact(hx, hy, hz, hit.nx || 0, 0, hit.nz || 0, 'wall');
+    effects.dust(hx, Math.max(world.groundHeight(hx, hz), hy - 1), hz, radius * 1.4);
+    gibs.rubble(hx, hy, hz, radius * 0.8, Math.round(4 + radius * 2), 1.2);
+    audio.land(0);
+    if (away < 160) audio.explosion();
+    if (v === state.inVehicle) effects.shake = Math.min(1.6, effects.shake + 0.5 + radius * 0.05);
+    state.smashes = (state.smashes || 0) + 1;
+    return cut > 0;
   };
 
   vehicles.onBump = (v, speed) => {
