@@ -278,6 +278,10 @@ export class Audio {
     bow: { crackHz: 900, sweepHz: 420, crackGain: 0.07, tail: 0.18,
       bodyHz: 140, bodyEnd: 95, bodyGain: 0.14, bodyTail: 0.16, hp: 200,
       snap: 0, boom: 0, drive: 1, echo: 0 },
+    // Both barrels: a shotgun's report with more of everything under it.
+    doublebarrel: { crackHz: 1300, sweepHz: 260, crackGain: 0.6, tail: 0.55,
+      bodyHz: 120, bodyEnd: 30, bodyGain: 0.45, bodyTail: 0.32, hp: 300,
+      snap: 1.0, boom: 0.42, drive: 3.0, echo: 0.42 },
     // Forty tonnes firing. Everything here is lower and longer than the hand
     // weapons, because that is the whole difference a listener hears between
     // a rifle and a gun bolted to eight metres of armour: not loudness, which
@@ -490,6 +494,35 @@ export class Audio {
     n.connect(bp).connect(ng).connect(this.master);
     o.start(t); wob.start(t); n.start(t, Math.random() * 3, 1);
     o.stop(t + 1); wob.stop(t + 1); n.stop(t + 1);
+  }
+
+  /** A chainsaw biting: a buzzing two stroke that rises as it cuts. */
+  saw(seconds = 0.7) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(70, t);
+    o.frequency.exponentialRampToValueAtTime(190, t + seconds * 0.4);
+    o.frequency.exponentialRampToValueAtTime(120, t + seconds);
+    const am = ctx.createOscillator();
+    am.frequency.value = 38;
+    const amg = ctx.createGain();
+    amg.gain.value = 0.5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.05);
+    g.gain.setValueAtTime(0.16, t + seconds * 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    am.connect(amg).connect(g.gain);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900;
+    bp.Q.value = 0.7;
+    o.connect(bp).connect(g).connect(this.master);
+    o.start(t); am.start(t);
+    o.stop(t + seconds + 0.05); am.stop(t + seconds + 0.05);
   }
 
   /** Fire leaving a demon's hand, or landing: a short breathy whoomp. */

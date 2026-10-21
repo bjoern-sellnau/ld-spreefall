@@ -3661,3 +3661,41 @@ So there are two cities now, and a profile picks which:
   presence going to nought. A Tactics check that let the other guards see
   the tester on their own was made to check only what it says.
   ops-06-nest.png.
+
+## 85. Slayer's weapons, the finisher, and both modes written up
+
+- A melee kind in the arsenal (KIND.MELEE): no round and no trace, the
+  game layer finds what was in reach (in front, within the reach, not
+  behind a wall) and decides what happened to it.
+- A double barrel (two in it, eighteen pellets at 19, 60 m), a chainsaw, a
+  shield saw and a flail, with names and numbers ours, and a Slayer kit for
+  the number row: double barrel, M16, plasma rifle, rockets, railgun,
+  shield saw, flail, chainsaw, flak, void cannon.
+- The chainsaw runs on three pips of fuel. It takes the nearest thing in
+  front of you, for one pip (a man, a ghoul, a gazer) or two (a brute), and
+  will not take a tyrant; it gives ammunition back all over (half of a
+  reserve for the gun in your hand and a third for the rest) and the fuel
+  comes back by itself, one pip every fifteen seconds when there is none.
+- The flail takes everything in a 3.8 m arc in front of you for 150. A ghoul
+  goes in one.
+- The shield saw is thrown flat and spinning: it cuts through whatever it
+  meets (150 each, each once), turns round after 0.6 s or off a wall, and
+  comes back to the hand whatever is in the way, cutting on the way back.
+  Held up on the second trigger it stops fire coming at you from in front,
+  and raised within 0.35 s of the fire arriving it sends a bolt of blast
+  plasma back along your sight for 160.
+- A demon brought below a fifth of itself (never the tyrant) reels for
+  three seconds and glows from inside. F within 3.2 m of one in front of you
+  is a finisher: it goes, and you get thirty health. The hint by the
+  crosshair says Finish.
+- The kill feed names demons, and in Slayer each one is worth its points in
+  the campaign as well (100 a ghoul, 250 a gazer, 400 a brute, 5000 the
+  tyrant).
+- README: Spree Fall Tactics and Spree Fall Slayer, and F and J in the
+  controls and the help panel.
+- Checks (ops, 50 now): the kit through the real keys, the flail's arc, a
+  reeling ghoul finished for health, the saw's fuel by size and the
+  ammunition it gives back, no saw for the tyrant, fuel coming back, the
+  double barrel at four metres, the shield saw through two in a line and
+  home again, and a fireball blocked and one parried.
+  ops-07-doublebarrel.png.

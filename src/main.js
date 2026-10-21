@@ -1194,7 +1194,13 @@ async function main() {
     // A body that came apart does not also catch fire.
     if (!target.gibbed) effects.explode(target.x, target.y, target.z);
     audio.droneDown();
-    const name = kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
+    const name = target.demon ? (DEMON[target.demon] ? DEMON[target.demon].name : GAZER.name).toLowerCase()
+      : kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
+    // In Slayer every demon is worth its points in the campaign as well.
+    if (target.demon && campaign.mode === 'slayer') {
+      campaign.book.score += DEMON[target.demon] ? DEMON[target.demon].points : GAZER.points;
+      campaign.save();
+    }
     feed(`<b>${name} down</b> ${Math.round(dist)} m${core ? ' <i>core</i>' : ''}`);
     // The last kill, in slow motion. It fires on the kill that emptied the
     // ground around you, and on no other: a flourish on every kill is not a
@@ -4799,6 +4805,12 @@ async function main() {
 
   /** Every step of a run in Tactics or Slayer. */
   function opsStep(dt) {
+    // The shield coming up, for the parry, and the saw's fuel: these are the
+    // Slayer weapons' and work in any mode that hands them out.
+    const blocking = weapon.id === 'shieldsaw' && weapon.aiming;
+    if (blocking && !state.blocking) state.blockAt = state.time;
+    state.blocking = blocking;
+    sawFuel(dt);
     if (!campaign.active) return;
     if (state.mode !== 'walk') return;
     if (state.opsTravel) {
@@ -4876,6 +4888,16 @@ async function main() {
     const fl = Math.hypot(fx, fz) || 1;
     for (const s of soldiers.active) {
       if (!s.alive || s.civilian || s.health <= 0 || s.state === 5 || s.rise > 0) continue;
+      // A demon reeling is a finisher, from further off and whatever it was doing.
+      if (s.demon) {
+        if (!(s.staggered > 0)) continue;
+        const dx = s.x - player.x, dz = s.z - player.z;
+        const d = Math.hypot(dx, dz) - 0.42 * (s.scale || 1);
+        if (d > 3.2 || d > bestD + 0.6) continue;
+        if ((dx * fx + dz * fz) / (fl * (Math.hypot(dx, dz) || 1)) < 0.4) continue;
+        best = s; bestD = d;
+        continue;
+      }
       if (s.state !== 0) continue;
       if (s.post && s.post.alert) continue;
       const dx = s.x - player.x, dz = s.z - player.z;
@@ -4894,6 +4916,19 @@ async function main() {
     if (!s) return false;
     const dx = s.x - player.x, dz = s.z - player.z;
     const d = Math.hypot(dx, dz) || 1;
+    if (s.demon) {
+      // A finisher: the demon goes, in pieces, and gives you health for it.
+      soldiers.damage(s, 1e6, { x: dx / d, y: 0.3, z: dz / d });
+      for (let i = 0; i < 3; i++) effects.blood(s.x, s.y + 1.2 * (s.scale || 1), s.z, dx / d, 0.6, dz / d, cheats.goreScale * 2);
+      const got = Math.round(combat.heal(30));
+      effects.shake = Math.min(1.2, effects.shake + 0.35);
+      audio.roar(1, s.scale || 1);
+      audio.hitMarker(true);
+      feed(`<b>finisher</b> +${got} health`);
+      creditTarget(s, true, 'soldier');
+      state.finishers = (state.finishers || 0) + 1;
+      return true;
+    }
     // Silent: nobody hears it, but anybody who can see the body will find it.
     const killed = soldiers.damage(s, 9999, { x: dx / d, y: 0, z: dz / d });
     effects.blood(s.x, s.y + 1.3, s.z, dx / d, 0.2, dz / d, cheats.goreScale * 0.7);
@@ -4935,6 +4970,31 @@ async function main() {
   }
 
   projectiles.onHostile = (b, x, y, z, direct) => {
+    // The shield saw held up: fire from in front is stopped, and fire that
+    // arrives just as the shield comes up goes back the way it came.
+    if (direct && weapon.id === 'shieldsaw' && weapon.aimBlend > 0.5 && !state.inMech && !state.inVehicle) {
+      const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
+      const f = camera.forward;
+      const facing = (b.vx * f[0] + b.vy * f[1] + b.vz * f[2]) / sp;
+      const block = WEAPONS.shieldsaw.block;
+      if (facing < block.cone) {
+        for (let i = 0; i < 12; i++) effects.spark(x, y, z, 1.0, 0.75, 0.3);
+        audio.hitMarker(true);
+        if (state.time - (state.blockAt ?? -9) < block.parry) {
+          const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+          projectiles.launch('blast', {
+            x: eye.x + f[0] * 0.8, y: eye.y + f[1] * 0.8, z: eye.z + f[2] * 0.8,
+            vx: f[0] * 70, vy: f[1] * 70, vz: f[2] * 70,
+            splash: { radius: 2.4, damage: block.parryDamage, force: 6 }, weapon: 'shieldsaw',
+          });
+          feed('<b>parry</b>');
+          state.parries = (state.parries || 0) + 1;
+        } else {
+          state.blocks = (state.blocks || 0) + 1;
+        }
+        return;
+      }
+    }
     const r = b.splash ? b.splash.radius : 2;
     effects.flash(x, y, z, r * 0.9, 1.0, 0.45, 0.08, 0.25);
     for (let i = 0; i < 14; i++) {
@@ -5039,6 +5099,104 @@ async function main() {
       feed(`<b>${world.nameAt(site.x, site.z)}</b> is free of them`);
     }
   };
+
+  // --- the Slayer weapons -------------------------------------------------------
+  /** Everything hostile within reach of you, in front, that a wall does not hide. */
+  function inReach(reach, arc) {
+    const fx = camera.forward[0], fz = camera.forward[2];
+    const fl = Math.hypot(fx, fz) || 1;
+    const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    const out = [];
+    for (const s of soldiers.active) {
+      if (!s.alive || s.civilian || s.health <= 0 || s.state === 5 || s.rise > 0) continue;
+      const dx = s.x - player.x, dz = s.z - player.z;
+      const d = Math.hypot(dx, dz) - 0.42 * (s.scale || 1);
+      if (d > reach) continue;
+      if ((dx * fx + dz * fz) / (fl * (Math.hypot(dx, dz) || 1)) < arc) continue;
+      if (!world.lineOfSight(eye.x, eye.y, eye.z, s.x, s.y + 1.0, s.z)) continue;
+      out.push({ kind: 'soldier', t: s, d });
+    }
+    for (const g of drones.active) {
+      if (!g.alive || g.health <= 0) continue;
+      const dx = g.x - player.x, dz = g.z - player.z;
+      const d = Math.hypot(dx, g.y - eye.y, dz) - g.radius;
+      if (d > reach) continue;
+      if ((dx * fx + dz * fz) / (fl * (Math.hypot(dx, dz) || 1)) < arc) continue;
+      out.push({ kind: 'drone', t: g, d });
+    }
+    out.sort((a, b) => a.d - b.d);
+    return out;
+  }
+
+  weapon.onMelee = (spec, eye, dir) => {
+    if (spec.fuel) {
+      // The saw takes the nearest thing in front of you, if it has the fuel
+      // for something that size.
+      const near = inReach(spec.reach, 0.5)[0];
+      if (!near) { audio.saw(0.25); return; }
+      const t = near.t;
+      const size = t.demon === 'tyrant' ? 99 : t.demon === 'brute' ? 2 : 1;
+      if (size > 3) { toast('too big for the saw'); return; }
+      if (weapon.ammo < size) { toast(`the saw needs ${size} fuel`); audio.dryFire(); return; }
+      weapon.ammo -= size;
+      audio.saw(0.8);
+      const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+      const killed = near.kind === 'drone' ? drones.damage(t, 1e6)
+        : soldiers.damage(t, 1e6, { x: dx / dl, y: 0.4, z: dz / dl });
+      for (let i = 0; i < 4; i++) effects.blood(t.x, t.y + 1.1, t.z, dx / dl, 0.5, dz / dl, cheats.goreScale * 2.5);
+      effects.shake = Math.min(1.4, effects.shake + 0.4);
+      // Ammunition everywhere: some of every reserve back.
+      const got = weapon.resupply(0.5, 0.35);
+      feed(`<b>chainsaw</b> +${got} rounds`);
+      if (killed) creditTarget(t, false, near.kind);
+      return;
+    }
+    // The flail: everything in the arc.
+    const hits = inReach(spec.reach, spec.arc);
+    effects.shake = Math.min(1, effects.shake + 0.15);
+    audio.swoosh(0);
+    for (const h of hits) {
+      const t = h.t;
+      const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+      const amount = spec.damage * (weapon.damageScale || 1);
+      const killed = h.kind === 'drone' ? drones.damage(t, amount)
+        : soldiers.damage(t, amount, { x: dx / dl, y: 0.2, z: dz / dl });
+      effects.blood(t.x, t.y + 1.1, t.z, dx / dl, 0.3, dz / dl, cheats.goreScale);
+      audio.hitMarker(false);
+      showHitmarker(killed ? 'kill' : '');
+      if (killed) creditTarget(t, false, h.kind);
+    }
+  };
+
+  projectiles.onSaw = (b, hit) => {
+    const t = hit.target;
+    const amount = (WEAPONS.shieldsaw.damage || 150) * (weapon.damageScale || 1);
+    const sp = Math.hypot(b.vx, b.vz) || 1;
+    let killed = false;
+    if (hit.actorKind === 'soldier') killed = soldiers.damage(t, amount, { x: b.vx / sp, y: 0, z: b.vz / sp });
+    else if (hit.actorKind === 'drone') killed = drones.damage(t, amount);
+    else if (hit.actorKind === 'mech') killed = mechs.damage(t, amount * 0.3);
+    else if (hit.actorKind === 'jet') killed = jets.damage(t, amount);
+    for (let i = 0; i < 10; i++) effects.spark(hit.x, hit.y, hit.z, 1.0, 0.8, 0.4);
+    effects.blood(hit.x, hit.y, hit.z, b.vx / sp, 0.2, b.vz / sp, cheats.goreScale);
+    audio.hitMarker(false);
+    showHitmarker(killed ? 'kill' : '');
+    if (killed) creditTarget(t, false, hit.actorKind);
+  };
+  projectiles.onSawBack = () => {
+    weapon.carried.shieldsaw.ammo = 1;
+    audio.hitMarker(true);
+  };
+
+  // Fuel for the saw comes back by itself, one pip at a time, up to one.
+  function sawFuel(dt) {
+    const slot = weapon.carried.chainsaw;
+    if (!slot || slot.ammo >= 1) { state.fuelLeft = 15; return; }
+    state.fuelLeft = (state.fuelLeft ?? 15) - dt;
+    if (state.fuelLeft <= 0) { slot.ammo = 1; state.fuelLeft = 15; }
+  }
+
+  soldiers.onStagger = (s) => { if (Math.hypot(s.x - player.x, s.z - player.z) < 30) audio.roar(20, s.scale || 1); };
 
   soldiers.onSpot = (s, how) => { if (tactics.enabled) tactics.spot(s, how); };
   soldiers.onDown = (s) => { if (tactics.enabled) tactics.guardDown(s); };
@@ -5186,8 +5344,8 @@ async function main() {
     combat.reset();
     drones.reset();
     weapon.reset();
-    // Tactics has a number row of its own: the quiet three first.
-    weapon.setKit(campaign.mode === 'tactics' ? 'tactics' : null);
+    // Tactics and Slayer have a number row of their own.
+    weapon.setKit(campaign.active ? campaign.mode : null);
     pickups.reset();
     gibs.clear();
     demolition.reset();
@@ -6277,7 +6435,7 @@ async function main() {
       // A man who has not seen you, within arm's reach, comes before any car.
       const quietKill = (state.inVehicle || state.inMech) ? null : takedownTarget();
       el.rideHint.classList.toggle('hidden', !near && !quietKill);
-      if (quietKill) el.rideHintName.textContent = 'Takedown';
+      if (quietKill) el.rideHintName.textContent = quietKill.demon ? 'Finish' : 'Takedown';
       else if (near) el.rideHintName.textContent = near.spec.name;
       // The scope: a picture of one, and no rifle in the way of it.
       const scoped = !!weapon.spec.scope && weapon.aimBlend > 0.85 && !weapon.holstered;

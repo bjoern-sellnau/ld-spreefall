@@ -378,6 +378,12 @@ export function buildProjectileMesh(kind) {
     // The mech's: the same ball, nearly twice across, so it reads as the
     // bigger thing before it lands.
     m.icosphere(0, 0, 0, 1.3, 14, 7, 30);
+  } else if (kind === 'shieldsaw') {
+    m.cylinder(0, 0, 0, 0.30, 0.30, 0.05, 18, 2, 'y');
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.32, 0.025, Math.sin(a) * 0.32, 0.06, 0.04, 0.06, 44, a);
+    }
   } else if (kind === 'fireball') {
     // A demon's fire: a ball of the blast orange.
     m.icosphere(0, 0, 0, 0.3, 10, 6, 48);
@@ -540,6 +546,61 @@ export function buildMarksmanMesh() {
   m.box(0, 0.046, -0.330, 0.020, 0.020, 0.030, 3);       // mount
   m.box(0, 0.046, -0.440, 0.020, 0.020, 0.030, 3);
   muzzleFlash(m, 0, 0.010, -0.980, 0.07, 0.03);
+  return m;
+}
+
+/** Two barrels side by side, a short stock and a fat fore end. */
+export function buildDoubleBarrelMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.180, 0.058, 0.085, 0.170, 2);      // stock
+  m.box(0, -0.004, -0.320, 0.064, 0.070, 0.120, 0);      // breech
+  for (const side of [-1, 1]) {
+    m.cylinder(side * 0.017, 0.012, -0.380, 0.016, 0.016, -0.380, 10, 1, 'z');
+  }
+  m.box(0, -0.020, -0.470, 0.060, 0.040, 0.160, 2);      // fore end
+  m.box(0, -0.090, -0.250, 0.044, 0.110, 0.060, 2);      // grip
+  m.box(0, 0.032, -0.740, 0.008, 0.010, 0.010, 3);       // bead
+  muzzleFlash(m, 0, 0.012, -0.760, 0.20, 0.10);
+  return m;
+}
+
+/** A chainsaw: engine, handles, and a long bar with its teeth. */
+export function buildChainsawMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.280, 0.110, 0.130, 0.220, 0);      // engine
+  m.box(0, 0.070, -0.250, 0.030, 0.050, 0.150, 2);       // top handle
+  m.box(0, -0.100, -0.200, 0.040, 0.080, 0.050, 2);      // rear grip
+  m.box(0, -0.020, -0.600, 0.022, 0.080, 0.460, 1);      // the bar
+  for (let i = 0; i < 12; i++) {
+    const z = -0.40 - i * 0.036;
+    m.box(0, 0.026, z, 0.026, 0.012, 0.014, 3);
+    m.box(0, -0.066, z - 0.018, 0.026, 0.012, 0.014, 3);
+  }
+  return m;
+}
+
+/** A round shield with a ring of teeth, held on the left. */
+export function buildShieldSawMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, -0.330, 0.200, 0.200, -0.030, 20, 0, 'z');
+  m.cylinder(0, 0, -0.362, 0.060, 0.040, -0.020, 12, 3, 'z');   // boss
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    m.box(Math.cos(a) * 0.215, Math.sin(a) * 0.215, -0.345, 0.04, 0.04, 0.02, 3, 0);
+  }
+  m.box(0, 0, -0.300, 0.030, 0.120, 0.030, 2);           // the grip behind it
+  return m;
+}
+
+/** A flail: a haft, a short chain and a spiked head. */
+export function buildFlailMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, -0.080, -0.200, 0.018, 0.020, 0.260, 8, 2, 'y');  // haft
+  for (let i = 0; i < 4; i++) m.box(0.010 * i, 0.190 + i * 0.035, -0.205 - i * 0.02, 0.016, 0.03, 0.016, 1);
+  m.icosphere(0.05, 0.360, -0.290, 0.070, 10, 6, 0);
+  for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1], [0.7, 0.7, 0], [-0.7, 0.7, 0]]) {
+    m.box(0.05 + dx * 0.085, 0.360 + dy * 0.085, -0.290 + dz * 0.085, 0.025, 0.025, 0.025, 3);
+  }
   return m;
 }
 
@@ -1255,6 +1316,10 @@ export class Actors {
       sdpistol: this._uploadMesh(buildPistolMesh(), 0, 0),
       bow: this._uploadMesh(buildBowMesh(), 0, 0),
       marksman: this._uploadMesh(buildMarksmanMesh(), 0, 0),
+      doublebarrel: this._uploadMesh(buildDoubleBarrelMesh(), 0, 0),
+      chainsaw: this._uploadMesh(buildChainsawMesh(), 0, 0),
+      shieldsaw: this._uploadMesh(buildShieldSawMesh(), 0, 0),
+      flail: this._uploadMesh(buildFlailMesh(), 0, 0),
       void: this._uploadMesh(buildVoidMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
@@ -1288,6 +1353,7 @@ export class Actors {
       ultraBlast: this._uploadMesh(buildProjectileMesh('ultraBlast'), MAX_ULTRA, 2),
       arrow: this._uploadMesh(buildProjectileMesh('arrow'), MAX_PROPS, 2),
       fireball: this._uploadMesh(buildProjectileMesh('fireball'), MAX_PROPS * 2, 2),
+      shieldsaw: this._uploadMesh(buildProjectileMesh('shieldsaw'), 4, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -1399,13 +1465,14 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0, fireball: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0, fireball: 0, shieldsaw: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
       const cap = b.kind === 'nuke' || b.kind === 'void' || b.kind === 'voidMaw' ? 8
         : b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA
-          : b.kind === 'voidStorm' ? MAX_STORM : b.kind === 'fireball' ? MAX_PROPS * 2 : MAX_PROPS;
+          : b.kind === 'voidStorm' ? MAX_STORM : b.kind === 'fireball' ? MAX_PROPS * 2
+            : b.kind === 'shieldsaw' ? 4 : MAX_PROPS;
       if (counts[b.kind] >= cap) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;

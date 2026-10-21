@@ -12,6 +12,7 @@ export const KIND = {
   THROW: 'throw',       // leaves your hand on an arc
   PLACE: 'place',       // stuck where you put it, fired later
   STREAM: 'stream',     // pours while you hold it, and burns what it touches
+  MELEE: 'melee',       // in reach, swung or run, and the game layer decides what it met
 };
 
 /**
@@ -159,6 +160,49 @@ export const WEAPONS = {
     aimFov: 11, scope: true, sound: 'suppressed', noise: 20,
   },
 
+  // Slayer: in the tradition of the demon shooters. A double barrel that
+  // empties both into one thing, a saw that is not for wood, a round shield
+  // with teeth that you throw and that comes back, and a flail.
+  doublebarrel: {
+    name: 'Double barrel', short: 'DOUBLE', kind: KIND.HITSCAN, slot: null,
+    magazine: 2, reserve: 48, reloadTime: 1.15, fireInterval: 0.32, auto: false,
+    damage: 19, coreMultiplier: 1.6, range: 60, pellets: 18,
+    spreadHip: 0.085, spreadAim: 0.06, spreadPerShot: 0.004, spreadMax: 0.1,
+    spreadRecover: 0.3,
+    recoilKick: 0.032, recoilSide: 0.006, recoilRetain: 0.3,
+    aimFov: 56, sound: 'doublebarrel',
+  },
+  chainsaw: {
+    // Fuel, three pips of it, which comes back slowly by itself. What it
+    // takes from a demon depends on the size of the demon; what it gives
+    // back is ammunition, all over the street.
+    name: 'Chainsaw', short: 'SAW', kind: KIND.MELEE, slot: null,
+    magazine: 3, reserve: 0, reloadTime: 0.1, fireInterval: 0.9, auto: false,
+    reach: 2.8, damage: 1e6, fuel: true,
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.004, recoilSide: 0.004, recoilRetain: 0, aimFov: 64, sound: 'saw',
+  },
+  shieldsaw: {
+    // Thrown, it cuts through what it meets and comes back to your hand.
+    // Held up on the second trigger it stops fire, and raised just as the
+    // fire arrives it sends it back.
+    name: 'Shield saw', short: 'SHIELD', kind: KIND.LAUNCH, slot: null,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.4, auto: false,
+    projectile: 'shieldsaw', muzzleSpeed: 46, range: 40, damage: 150,
+    spreadHip: 0.002, spreadAim: 0.001, spreadPerShot: 0, spreadMax: 0.002, spreadRecover: 1,
+    recoilKick: 0.006, recoilSide: 0.002, recoilRetain: 0, aimFov: 66, sound: 'throw',
+    block: { cone: -0.35, parry: 0.35, parryDamage: 160 },
+  },
+  flail: {
+    // Swung in an arc in front of you: everything in the arc takes it, and
+    // a demon low enough on its feet goes down reeling.
+    name: 'Flail', short: 'FLAIL', kind: KIND.MELEE, slot: null,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.75, auto: true,
+    reach: 3.8, arc: 0.55, damage: 150,
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.012, recoilSide: 0.004, recoilRetain: 0, aimFov: 64, sound: 'throw',
+  },
+
   banana: {
     name: 'Banana', short: 'BANANA', kind: KIND.THROW, slot: 6,
     magazine: 1, reserve: 14, reloadTime: 0.5, fireInterval: 0.7, auto: false,
@@ -301,11 +345,16 @@ WEAPONS.splinter.hold = { x: 0.215, y: -0.140, z: -0.420, pitch: -0.012, yaw: 0.
 WEAPONS.sdpistol.hold = { x: 0.180, y: -0.125, z: -0.300, pitch: -0.010, yaw: 0.150, roll: 0.05 };
 WEAPONS.bow.hold = { x: 0.170, y: -0.070, z: -0.330, pitch: 0.000, yaw: 0.180, roll: 0.30 };
 WEAPONS.marksman.hold = { x: 0.220, y: -0.150, z: -0.480, pitch: -0.016, yaw: 0.120, roll: 0.04 };
+WEAPONS.doublebarrel.hold = { x: 0.205, y: -0.150, z: -0.420, pitch: -0.012, yaw: 0.120, roll: 0.04 };
+WEAPONS.chainsaw.hold = { x: 0.200, y: -0.170, z: -0.360, pitch: 0.020, yaw: 0.140, roll: 0.06 };
+WEAPONS.shieldsaw.hold = { x: -0.130, y: -0.120, z: -0.330, pitch: 0.000, yaw: -0.200, roll: -0.10 };
+WEAPONS.flail.hold = { x: 0.190, y: -0.120, z: -0.320, pitch: 0.100, yaw: 0.180, roll: 0.10 };
 
 export const LOADOUT = [
   'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'flamer', 'incendiary',
   'emp', 'mechkiller', 'railgun', 'plasma', 'flak', 'splinter', 'void',
   'sdpistol', 'bow', 'marksman',
+  'doublebarrel', 'chainsaw', 'shieldsaw', 'flail',
 ];
 
 /**
@@ -315,6 +364,7 @@ export const LOADOUT = [
  */
 export const KITS = {
   tactics: ['sdpistol', 'bow', 'marksman', 'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'railgun'],
+  slayer: ['doublebarrel', 'm16', 'plasma', 'rpg', 'railgun', 'shieldsaw', 'flail', 'chainsaw', 'flak', 'void'],
 };
 
 export function weaponBySlot(slot) {

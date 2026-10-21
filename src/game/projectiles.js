@@ -73,6 +73,12 @@ export const PROJECTILE = {
     radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 9,
     detonateOnContact: true, trail: 'void', light: true, spin: 3,
   },
+  shieldsaw: {
+    // Thrown flat and spinning: it cuts through what it meets, turns round
+    // after a moment or off a wall, and comes back to your hand.
+    radius: 0.32, gravity: 0, drag: 0, bounce: 0, armTime: 0.0, maxAge: 4,
+    detonateOnContact: false, saw: true, out: 0.6, back: 42, trail: 'spark', light: true, spin: 30,
+  },
   fireball: {
     // A demon's fire. It is not ours: it does not go through the blast that
     // knocks the city down, it does not hurt other demons, and the only
@@ -133,6 +139,8 @@ export class Projectiles {
     // Hostile fire: where the player is, and what to do when it arrives.
     this.player = null;      // {x, y, z} at the feet
     this.onHostile = null;   // fn(body, x, y, z, direct) when it goes off
+    this.onSaw = null;       // fn(body, hit) the shield saw goes through somebody
+    this.onSawBack = null;   // fn(body) and comes back to the hand
     // Set by the game layer: the same raycast the bullets use against drones
     // and soldiers. Without it a rocket flies through the man it was aimed at
     // and goes off on the wall behind him, which is exactly what the first
@@ -197,6 +205,8 @@ export class Projectiles {
     b.carbomb = o.carbomb || 0;
     b.spin = 0;
     b.fx = undefined;
+    b.returning = false;
+    b.hitSet = null;
     b.seed = Math.random();
     this.active.push(b);
     return b;
@@ -297,6 +307,35 @@ export class Projectiles {
         }
       }
 
+      // The shield saw: out for a moment, then back to the hand, which it
+      // reaches whatever is in the way, because a weapon that can be lost
+      // round a corner is a weapon you stop throwing.
+      if (b.spec.saw && this.player) {
+        const p = this.player;
+        const hx = p.x - b.x, hy = p.y + 1.3 - b.y, hz = p.z - b.z;
+        const hd = Math.hypot(hx, hy, hz) || 1;
+        if (b.age > b.spec.out) b.returning = true;
+        if (b.returning) {
+          if (hd < 1.4 || b.age > b.spec.maxAge - 0.1) {
+            if (this.onSawBack) this.onSawBack(b);
+            this._remove(b);
+            continue;
+          }
+          b.vx = hx / hd * b.spec.back; b.vy = hy / hd * b.spec.back; b.vz = hz / hd * b.spec.back;
+          b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+          // On the way back it still cuts.
+          if (this.hitActors) {
+            const a = this.hitActors(b.x, b.y, b.z, hx / hd, hy / hd, hz / hd, 1.2);
+            if (a && a.kind !== 'vehicle' && !(b.hitSet && b.hitSet.has(a.target))) {
+              (b.hitSet || (b.hitSet = new Set())).add(a.target);
+              if (this.onSaw) this.onSaw(b, { kind: 'actor', actorKind: a.kind, target: a.target, core: false,
+                x: b.x, y: b.y, z: b.z });
+            }
+          }
+          continue;
+        }
+      }
+
       // Hostile fire looks for you and for nothing else.
       if (b.spec.hostile && this.player && b.age > b.spec.armTime) {
         const p = this.player;
@@ -355,6 +394,24 @@ export class Projectiles {
         if (b.spec.hostile) {
           if (this.onHostile) this.onHostile(b, b.x, b.y, b.z, false);
           this._remove(b);
+          remaining = 0;
+          break;
+        }
+
+        // The saw goes through a body and on, and off a wall it turns home.
+        if (b.spec.saw) {
+          if (hit.kind === 'actor') {
+            if (!(b.hitSet && b.hitSet.has(hit.target))) {
+              (b.hitSet || (b.hitSet = new Set())).add(hit.target);
+              if (this.onSaw) this.onSaw(b, hit);
+            }
+            b.x += dx * Math.min(remaining * speed, 1.2);
+            b.y += dy * Math.min(remaining * speed, 1.2);
+            b.z += dz * Math.min(remaining * speed, 1.2);
+            remaining = 0;
+            break;
+          }
+          b.returning = true;
           remaining = 0;
           break;
         }

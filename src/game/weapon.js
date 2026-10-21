@@ -70,6 +70,7 @@ export class Weapon {
     this.onWall = null;
     this.streaming = false;
     this.onDryFire = null;
+    this.onMelee = null;     // fn(spec, eye, dir) a swing or a cut
     this.onReloadStart = null;
     this.onReloadEnd = null;
     // Set by the game layer from whatever you have picked up.
@@ -466,6 +467,15 @@ export class Weapon {
 
   fire(eye, dir) {
     const spec = this.spec;
+    // Something swung or run: no round, no trace. The game layer finds what
+    // was in reach, and a saw's fuel is spent there, on what it cut.
+    if (spec.kind === KIND.MELEE) {
+      this.cooldown = spec.fireInterval * this.rateScale;
+      this.kick = 1;
+      this.shotsFired++;
+      if (this.onMelee) this.onMelee(spec, eye, dir);
+      return;
+    }
     // Never below empty. The trigger upstairs will not let a shot through
     // without a round behind it, but the checks fire this directly, and a
     // magazine that reads minus one on the screen is a bug wherever it came

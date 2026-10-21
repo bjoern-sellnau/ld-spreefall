@@ -654,6 +654,159 @@ async function run() {
     last.kinds.join(', '));
   check('and when it falls the district is free of them', last.free && last.presence === 0, `presence ${last.presence}`);
 
+  // --- the Slayer weapons -----------------------------------------------------
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    document.getElementById('playbtn').click();
+    s.skipToWalk();
+    s.state.opsTravel = false;
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear();
+    s.teleport(81, 0);
+  });
+  const skit = {};
+  for (const k of ['Digit1', 'Digit6', 'Digit7', 'Digit8']) {
+    await page.keyboard.press(k);
+    skit[k] = await page.evaluate(() => window.spreefall.weapon.id);
+  }
+  check('in Slayer the number row is the double barrel, the shield saw, the flail and the chainsaw among the rest',
+    skit.Digit1 === 'doublebarrel' && skit.Digit6 === 'shieldsaw' && skit.Digit7 === 'flail' && skit.Digit8 === 'chainsaw',
+    JSON.stringify(skit));
+
+  const melee = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    const eye = () => ({ x: s.player.x, y: s.player.y + 1.7, z: s.player.z });
+    const put = (kind, dx, dz) => {
+      const d = s.spawnDemon(kind, dx, dz);
+      d.rise = 0; d.y = s.world.groundHeight(d.x, d.z);
+      return d;
+    };
+    s.soldiers.enabled = false;
+    // Facing west: two ghouls just in front, side by side, for the flail.
+    s.look(90, 0); s.camera.update(16 / 10);
+    const fwd = { x: s.camera.forward[0], z: s.camera.forward[2] };
+    const a = put('ghoul', fwd.x * 2.5 - fwd.z * 0.8, fwd.z * 2.5 + fwd.x * 0.8);
+    const b = put('ghoul', fwd.x * 2.5 + fwd.z * 0.8, fwd.z * 2.5 - fwd.x * 0.8);
+    s.weapon.select('flail'); s.weapon.cooldown = 0;
+    s.shoot();
+    out.flail = [a.health < a.maxHealth, b.health < b.maxHealth];
+    // The flail again: both low enough now to reel.
+    s.weapon.cooldown = 0;
+    out.reel = a.staggered > 0 || a.state === 5;
+    // A finisher on one that reels, and health for it: a fresh one, brought
+    // low by an ordinary hit so that it reels the way it would in a fight.
+    s.soldiers.reset();
+    s.combat.health = 50;
+    const target = put('ghoul', fwd.x * 2.2, fwd.z * 2.2);
+    target.health = target.maxHealth * 0.3;
+    s.soldiers.damage(target, target.maxHealth * 0.15, { x: fwd.x, y: 0, z: fwd.z });
+    const reeling = target.staggered > 0;
+    const hint = reeling && s.takedownTarget() === target;
+    s.takedown();
+    out.finisher = { reeling, hint, dead: target.state === 5 || !target.alive, health: Math.round(s.combat.health) };
+    s.soldiers.reset();
+    // The chainsaw: one fuel for a ghoul, two for a brute, none for the tyrant.
+    s.weapon.select('chainsaw');
+    s.weapon.carried.chainsaw.ammo = 3;
+    s.weapon.carried.m16.reserve = 0;
+    const g = put('ghoul', fwd.x * 2, fwd.z * 2);
+    s.weapon.cooldown = 0; s.shoot();
+    out.sawGhoul = { dead: g.state === 5 || !g.alive, fuel: s.weapon.carried.chainsaw.ammo, rounds: s.weapon.carried.m16.reserve };
+    s.soldiers.reset();
+    const br = put('brute', fwd.x * 2.4, fwd.z * 2.4);
+    s.weapon.cooldown = 0; s.shoot();
+    out.sawBrute = { dead: br.state === 5 || !br.alive, fuel: s.weapon.carried.chainsaw.ammo };
+    s.soldiers.reset();
+    s.weapon.carried.chainsaw.ammo = 3;
+    const ty = put('tyrant', fwd.x * 3.5, fwd.z * 3.5);
+    s.weapon.cooldown = 0; s.shoot();
+    out.sawTyrant = { alive: ty.state !== 5, fuel: s.weapon.carried.chainsaw.ammo };
+    s.soldiers.reset();
+    // Fuel comes back by itself, one pip.
+    s.weapon.carried.chainsaw.ammo = 0;
+    for (let i = 0; i < 60 * 16; i++) s.fixedForTest(1 / 60);
+    out.fuelBack = s.weapon.carried.chainsaw.ammo;
+    // The double barrel: a ghoul at four metres goes down in two.
+    s.weapon.select('doublebarrel'); s.weapon.spread = 0;
+    const dg = put('ghoul', fwd.x * 4, fwd.z * 4);
+    s.look(90, -1); s.camera.update(16 / 10);
+    for (let i = 0; i < 2 && dg.state !== 5; i++) { s.weapon.cooldown = 0; s.weapon.spread = 0; s.shoot(); }
+    out.double = dg.state === 5 || !dg.alive;
+    s.soldiers.reset();
+    s.soldiers.enabled = true;
+    return out;
+  });
+  check('the flail takes everything in its arc', melee.flail.every(Boolean));
+  check('a demon low on its feet reels, and F finishes it for health', melee.finisher.hint && melee.finisher.dead
+    && melee.finisher.health > 50, JSON.stringify(melee.finisher));
+  check('the chainsaw takes a ghoul for one fuel and gives ammunition back', melee.sawGhoul.dead
+    && melee.sawGhoul.fuel === 2 && melee.sawGhoul.rounds > 0, JSON.stringify(melee.sawGhoul));
+  check('a brute for two, and not the tyrant at all', melee.sawBrute.dead && melee.sawBrute.fuel === 0
+    && melee.sawTyrant.alive && melee.sawTyrant.fuel === 3);
+  check('and the fuel comes back by itself', melee.fuelBack === 1);
+  check('the double barrel puts a ghoul down at four metres', melee.double);
+
+  const shield = await page.evaluate(() => {
+    const s = window.spreefall;
+    const put = (kind, dx, dz) => {
+      const d = s.spawnDemon(kind, dx, dz);
+      d.rise = 0; d.y = s.world.groundHeight(d.x, d.z);
+      return d;
+    };
+    s.soldiers.enabled = false;
+    s.look(90, 0); s.camera.update(16 / 10);
+    const f = { x: s.camera.forward[0], z: s.camera.forward[2] };
+    const a = put('ghoul', f.x * 6, f.z * 6);
+    const b = put('ghoul', f.x * 11, f.z * 11);
+    s.weapon.select('shieldsaw');
+    s.weapon.carried.shieldsaw.ammo = 1;
+    s.weapon.cooldown = 0; s.weapon.spread = 0;
+    s.look(90, -4); s.camera.update(16 / 10);
+    s.shoot();
+    const thrown = s.weapon.carried.shieldsaw.ammo === 0;
+    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
+    const out = { thrown, both: a.health < a.maxHealth && b.health < b.maxHealth, back: s.weapon.carried.shieldsaw.ammo === 1 };
+    s.soldiers.reset();
+    // Held up: fire from in front does nothing to you.
+    s.combat.reset();
+    const before = s.combat.health + s.combat.shield;
+    s.setAim(true);
+    for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+    const eye = { x: s.player.x, y: s.player.y + 1.2, z: s.player.z };
+    s.projectiles.launch('fireball', { x: eye.x + f.x * 12, y: eye.y, z: eye.z + f.z * 12,
+      vx: -f.x * 30, vy: 0, vz: -f.z * 30, splash: { radius: 2, damage: 30 }, weapon: 'demon' });
+    for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+    out.blocked = s.combat.health + s.combat.shield === before;
+    // Raised just as it arrives: it goes back.
+    s.setAim(false);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.projectiles.launch('fireball', { x: eye.x + f.x * 4, y: eye.y, z: eye.z + f.z * 4,
+      vx: -f.x * 30, vy: 0, vz: -f.z * 30, splash: { radius: 2, damage: 30 }, weapon: 'demon' });
+    s.setAim(true);
+    let blast = 0;
+    const launch = s.projectiles.launch.bind(s.projectiles);
+    s.projectiles.launch = (k, o) => { if (k === 'blast') blast++; return launch(k, o); };
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    s.projectiles.launch = launch;
+    s.setAim(false);
+    out.parried = blast === 1;
+    s.projectiles.clear();
+    s.soldiers.enabled = true;
+    return out;
+  });
+  check('the shield saw cuts through two in a line and comes back to the hand',
+    shield.thrown && shield.both && shield.back, JSON.stringify(shield));
+  check('held up it stops fire from in front, and raised just in time it sends it back',
+    shield.blocked && shield.parried);
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.weapon.select('doublebarrel');
+    s.look(90, 2);
+  });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-07-doublebarrel.png') });
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

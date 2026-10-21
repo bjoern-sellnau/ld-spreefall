@@ -119,6 +119,7 @@ class Soldier {
     this.scale = 1;
     this.charging = 0;
     this.staggered = 0;
+    this.reeled = false;
     this.nest = null;
     return this;
   }
@@ -197,6 +198,7 @@ export class Soldiers {
     this.onMelee = null;          // fn(soldier, melee)
     this.onFireball = null;       // fn(soldier, fire)
     this.onCharge = null;         // fn(soldier)
+    this.onStagger = null;        // fn(soldier) one starts to reel
   }
 
   /**
@@ -475,6 +477,13 @@ export class Soldiers {
     if (s.health > 0 && s.post && !s.post.alert && this.onSpot) {
       s.suspicion = 1;
       this.onSpot(s, 'hit');
+    }
+    // A demon low on its feet reels for a moment, which is the moment to
+    // finish it. Once each, and never the tyrant.
+    if (s.demon && s.health > 0 && !s.dspec.boss && !s.reeled && s.health < s.maxHealth * 0.22) {
+      s.reeled = true;
+      s.staggered = 3;
+      if (this.onStagger) this.onStagger(s);
     }
     if (s.health <= 0 && this.onDown) this.onDown(s);
     if (s.health <= 0) {
