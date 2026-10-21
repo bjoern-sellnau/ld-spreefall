@@ -272,6 +272,9 @@ export class Renderer {
         ? -Math.max(0.01, s.rubble) : s.rubble;
     }
     this.collapseCount = n;
+    let spared = 0;
+    for (let i = 0; i < n; i++) if (sites[i].spared) spared |= 1 << i;
+    this.collapseSpared = spared;
   }
 
   /**
@@ -323,11 +326,28 @@ export class Renderer {
     // The memorial's field, where no collapse reaches. The first dome is the
     // one there is.
     const f = this.field.domes[0];
-    prog.vec4('uShield', f ? f.x : 0, f ? f.z : 0, f ? f.radius : 0, 0);
+    prog.vec4('uShield', f ? f.x : 0, f ? f.z : 0, f ? f.radius : 0, this.field.open ? 1 : 0);
+    prog.int('uSpared', this.collapseSpared || 0);
     const a = prog.loc('uCollapse');
     const b = prog.loc('uCollapseInfo');
     if (a) gl.uniform4fv(a, this.collapse);
     if (b) gl.uniform4fv(b, this.collapseInfo);
+  }
+
+  /**
+   * Takes the scorch marks off a circle, for the memorial when you leave its
+   * field. @returns {number} how many there were
+   */
+  clearScarsIn(x, z, r) {
+    let n = 0;
+    for (let i = 0; i < this.MAX_SCARS; i++) {
+      const sr = this.scars[i * 4 + 3];
+      if (!(sr > 0)) continue;
+      if (Math.hypot(this.scars[i * 4] - x, this.scars[i * 4 + 2] - z) >= r) continue;
+      this.scars[i * 4 + 3] = 0;
+      n++;
+    }
+    return n;
   }
 
   clearScars() {

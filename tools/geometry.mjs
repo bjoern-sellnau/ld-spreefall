@@ -196,8 +196,16 @@ export function facadeBand(mesh, ring, y, height, out, mat, seed, hgt, minEdge =
     const len = Math.hypot(dx, dz);
     if (len < minEdge) { run += len; continue; }
     const nx = dz / len, nz = -dx / len;
-    const ax = a[0] + nx * out, az = a[1] + nz * out;
-    const bx = b[0] + nx * out, bz = b[1] + nz * out;
+    // Never across a column line from the wall it is on. A collapse takes
+    // a building down by four metre columns of the world, and a band that
+    // stood a few centimetres over the line from its wall was in another
+    // column: the wall came down and the band stayed where it was, a plate
+    // hanging in the air. So at each end it stands out only as far as the
+    // column the wall is in goes.
+    const oa = inColumn(a[0], a[1], nx, nz, out);
+    const ob = inColumn(b[0], b[1], nx, nz, out);
+    const ax = a[0] + nx * oa, az = a[1] + nz * oa;
+    const bx = b[0] + nx * ob, bz = b[1] + nz * ob;
     // The face.
     const f0 = mesh.vertex(ax, y, az, nx, 0, nz, run, 0, mat, seed, 0, flags, hgt, 255);
     const f1 = mesh.vertex(bx, y, bz, nx, 0, nz, run + len, 0, mat, seed, 0, flags, hgt, 255);
@@ -207,11 +215,28 @@ export function facadeBand(mesh, ring, y, height, out, mat, seed, hgt, minEdge =
     // And the underside, which is the shadow.
     const u0 = mesh.vertex(a[0], y, a[1], 0, -1, 0, run, 0, mat, seed, 0, flags, hgt, 120);
     const u1 = mesh.vertex(b[0], y, b[1], 0, -1, 0, run + len, 0, mat, seed, 0, flags, hgt, 120);
-    const u2 = mesh.vertex(bx, y, bz, 0, -1, 0, run + len, out, mat, seed, 0, flags, hgt, 120);
-    const u3 = mesh.vertex(ax, y, az, 0, -1, 0, run, out, mat, seed, 0, flags, hgt, 120);
+    const u2 = mesh.vertex(bx, y, bz, 0, -1, 0, run + len, ob, mat, seed, 0, flags, hgt, 120);
+    const u3 = mesh.vertex(ax, y, az, 0, -1, 0, run, oa, mat, seed, 0, flags, hgt, 120);
     mesh.quad(u0, u1, u2, u3);
     run += len;
   }
+}
+
+/**
+ * How far a point on a wall can be moved out along the wall's normal and
+ * still be in the same four metre column of the world as the wall, up to
+ * `out`. The columns are the collapse's (src/shaders/world.js, bake.js).
+ */
+export function inColumn(x, z, nx, nz, out, cell = 4) {
+  let t = out;
+  const room = (p, n) => {
+    if (Math.abs(n) < 1e-6) return Infinity;
+    const k = Math.floor(p / cell);
+    const edge = n > 0 ? (k + 1) * cell : k * cell;
+    return (edge - p) / n - 0.01;
+  };
+  t = Math.min(t, room(x, nx), room(z, nz));
+  return Math.max(0, t);
 }
 
 function normaliseRing(ring, ccw) {

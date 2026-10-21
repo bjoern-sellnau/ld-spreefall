@@ -1068,10 +1068,17 @@ function buildDistrict(district, overflight = false) {
     const kind = tags['spreefall:kind'];
     const builder = kind ? LANDMARK_BUILDERS[kind] : null;
     if (builder) {
-      builder(mesh, ring, base, {
+      const built = builder(mesh, ring, base, {
         h: height, w: 0, d: 0, lat: cz, material: tags['building:material'], key: lmKey,
       });
-      pushFootprintCollision(collision, ring, base - 1, base + height, SURFACE.STONE);
+      // A landmark that is not solid all through, the Gate with its passages,
+      // says where it is; anything else is solid to its outline.
+      if (built && built.solid) {
+        for (const r of built.solid) pushFootprintCollision(collision, r, base - 1, built.top, SURFACE.STONE);
+        if (built.over) pushFootprintCollision(collision, ring, built.over.from, built.over.to, SURFACE.STONE);
+      } else {
+        pushFootprintCollision(collision, ring, base - 1, base + height, SURFACE.STONE);
+      }
       buildingCount++;
       landmarkIndex.push({ key: lmKey || kind, name: tags.name || '', x: cx, z: cz, h: height });
       continue;

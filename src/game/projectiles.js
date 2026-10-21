@@ -136,6 +136,7 @@ export class Projectiles {
     this.active = [];
     this.onBounce = null;
     this.onArrow = null;     // fn(body, hit) when an arrow goes into somebody
+    this.onArrowHead = null; // fn(body, x, y, z) wherever an arrow lands, for its head
     // Hostile fire: where the player is, and what to do when it arrives.
     this.player = null;      // {x, y, z} at the feet
     this.onHostile = null;   // fn(body, x, y, z, direct) when it goes off
@@ -198,6 +199,8 @@ export class Projectiles {
     b.mechKill = o.mechKill || null;
     // And what a void ball reaches out with, when it was not the cannon's.
     b.void = o.void || null;
+    // An arrow's head: plain, fire, poison or blast.
+    b.head = o.head || null;
     // Flak: how near the thing it was fired at the shell has to get before it
     // bursts. A shell that has to hit an aircraft is a shell that never does.
     b.proximity = o.proximity || 0;
@@ -420,10 +423,12 @@ export class Projectiles {
         if (b.spec.arrow) {
           if (hit.kind === 'actor') {
             if (this.onArrow) this.onArrow(b, hit);
+            if (this.onArrowHead) this.onArrowHead(b, hit.x, hit.y, hit.z);
             this._remove(b);
             remaining = 0;
             break;
           }
+          if (this.onArrowHead) this.onArrowHead(b, b.x + dx * 0.22, b.y + dy * 0.22, b.z + dz * 0.22);
           b.stuck = true;
           b.fx = b.vx; b.fy = b.vy; b.fz = b.vz;
           b.vx = b.vy = b.vz = 0;

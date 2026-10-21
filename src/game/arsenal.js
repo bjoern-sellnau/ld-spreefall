@@ -148,6 +148,10 @@ export const WEAPONS = {
     spreadRecover: 0.2,
     recoilKick: 0.006, recoilSide: 0.001, recoilRetain: 0.05,
     aimFov: 46, sound: 'bow', noise: 4,
+    // What is on the end of the arrow, changed with R while the bow is in
+    // your hands: a plain head, one that sets where it lands burning, one
+    // that lets out a cloud of poison, and one that goes off.
+    heads: ['plain', 'fire', 'poison', 'blast'],
   },
   marksman: {
     name: 'Marksman rifle', short: 'MARKSMAN', kind: KIND.HITSCAN, slot: null,
@@ -349,6 +353,21 @@ WEAPONS.doublebarrel.hold = { x: 0.205, y: -0.150, z: -0.420, pitch: -0.012, yaw
 WEAPONS.chainsaw.hold = { x: 0.200, y: -0.170, z: -0.360, pitch: 0.020, yaw: 0.140, roll: 0.06 };
 WEAPONS.shieldsaw.hold = { x: -0.130, y: -0.120, z: -0.330, pitch: 0.000, yaw: -0.200, roll: -0.10 };
 WEAPONS.flail.hold = { x: 0.190, y: -0.120, z: -0.320, pitch: 0.100, yaw: 0.180, roll: 0.10 };
+
+/**
+ * The heads a bow can carry. Fire and poison do their own harm where they
+ * land on top of the arrow's; the blast head is a small charge and is heard
+ * like one.
+ */
+export const ARROW_HEADS = {
+  plain: { name: 'Arrow', short: '' },
+  fire: { name: 'Fire arrow', short: 'FIRE', damage: 1, burn: { radius: 4.5, seconds: 8, damagePerSecond: 24 },
+    colour: [1.0, 0.55, 0.15] },
+  poison: { name: 'Poison arrow', short: 'POISON', damage: 0.8,
+    cloud: { radius: 5.5, seconds: 9, damagePerSecond: 20 }, colour: [0.45, 1.0, 0.25] },
+  blast: { name: 'Explosive arrow', short: 'BLAST', damage: 0.6,
+    splash: { radius: 6.5, damage: 240, force: 11 }, colour: [1.0, 0.2, 0.12] },
+};
 
 export const LOADOUT = [
   'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'flamer', 'incendiary',

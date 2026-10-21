@@ -781,6 +781,152 @@ async function run() {
   check('and getting out puts you beside it', drive.out && drive.dropped <= 4,
     `${drive.dropped} m away`);
 
+  // --- faster, and through whatever is in the way -----------------------------
+  const ram = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.soldiers.enabled = false; s.drones.enabled = false;
+    const out = {};
+    // How fast the jeep gets on the flat: along the open length of Unter den
+    // Linden east of the spawn, eight seconds of full throttle.
+    s.teleport(160, 3.3);
+    const j = s.vehicles.spawn('jeep', 162, 3.3, -Math.PI / 2);
+    s.teleport(j.x + 1.5, j.z);
+    s.look(-90, 0);
+    s.toggleVehicle();
+    s.input.keys.add('KeyW');
+    let top = 0;
+    for (let i = 0; i < 60 * 8; i++) { s.fixedForTest(1 / 60); top = Math.max(top, Math.abs(j.speed)); }
+    s.input.keys.delete('KeyW');
+    s.toggleVehicle();
+    out.top = +top.toFixed(1);
+    // A wall: from the square, the nearest frontage taller than a house in
+    // some direction, between twenty five and seventy metres off.
+    const from = { x: 81, z: 0 };
+    const walls = [];
+    for (let k = 0; k < 72 && walls.length < 2; k++) {
+      const a = (k / 72) * Math.PI * 2;
+      const dx = Math.cos(a), dz = Math.sin(a);
+      const g = s.world.groundHeight(from.x, from.z);
+      const hit = s.world.raycast(from.x, g + 1, from.z, dx, 0, dz, 70);
+      if (!hit || hit.kind !== 'wall' || hit.t < 25) continue;
+      const segs = s.world.segments(hit.tile);
+      const o = hit.seg;
+      if (segs[o + 5] - segs[o + 4] < 8) continue;
+      // A second one well round from the first, so the tank meets a wall
+      // the jeep has not already been through.
+      if (walls.length && Math.abs(Math.atan2(dz, dx) - walls[0].a) < 0.9) continue;
+      walls.push({ dx, dz, t: hit.t, a: Math.atan2(dz, dx) });
+    }
+    if (walls.length < 2) return { ...out, walls: walls.length };
+    const drive = (type, wall) => {
+      s.vehicles.reset();
+      s.teleport(from.x, from.z);
+      const yaw = Math.atan2(-wall.dx, -wall.dz);
+      const v = s.vehicles.spawn(type, from.x, from.z, yaw);
+      s.teleport(v.x - wall.dx * 2, v.z - wall.dz * 2);
+      s.look(yaw * 180 / Math.PI, 0);
+      s.toggleVehicle();
+      const smashes = s.state.smashes || 0;
+      s.input.keys.add('KeyW');
+      let past = 0;
+      for (let i = 0; i < 60 * 10; i++) {
+        s.fixedForTest(1 / 60);
+        past = Math.max(past, (v.x - from.x) * wall.dx + (v.z - from.z) * wall.dz);
+      }
+      s.input.keys.delete('KeyW');
+      s.toggleVehicle();
+      return { smashes: (s.state.smashes || 0) - smashes, past: +past.toFixed(1), wallAt: +wall.t.toFixed(1) };
+    };
+    out.jeep = drive('jeep', walls[0]);
+    out.tank = drive('tank', walls[1]);
+    s.soldiers.enabled = true; s.drones.enabled = true;
+    return out;
+  });
+  check('the jeep reaches its top speed, past a hundred and thirty kilometres an hour', ram.top >= 36,
+    `${ram.top} m/s`);
+  check('driven into a frontage the jeep goes through it, and on out the other side',
+    !!ram.jeep && ram.jeep.smashes >= 1 && ram.jeep.past > ram.jeep.wallAt + 8, JSON.stringify(ram.jeep));
+  check('and so does the tank', !!ram.tank && ram.tank.smashes >= 1 && ram.tank.past > ram.tank.wallAt + 8,
+    JSON.stringify(ram.tank));
+  await page.evaluate(() => window.spreefall.parkVehicles && window.spreefall.parkVehicles());
+
+  // --- nothing left hanging in the air after a collapse -----------------------
+  // A piece of roof or wall whose corners stand in different collapse
+  // columns, one of which came down while another stood, is a slab hanging
+  // in the air. Counted after shells landing beside each other (the site
+  // grows) and after a warhead, from the tile bytes before and after.
+  const slabs = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const W = await import('/src/engine/world.js');
+    const C = await import('/src/shared/constants.js');
+    s.soldiers.enabled = false; s.drones.enabled = false; s.soldiers.reset(); s.drones.reset();
+    const w = s.world;
+    const read = (index) => {
+      const rec = w.tiles[index]; if (!rec) return null;
+      const m = W.tileMesh(rec); const [ox, oz] = w.tileOrigin(index);
+      const v = m.view; const pos = []; const ground = [];
+      for (let i = 0; i < m.vCount; i++) {
+        const o = m.vOff + i * C.VERTEX_STRIDE;
+        pos.push([v.getInt16(o, true) / C.POS_SCALE + ox, v.getInt16(o + 2, true) / C.POS_SCALE, v.getInt16(o + 4, true) / C.POS_SCALE + oz]);
+        ground.push((v.getUint8(o + 17) & C.FACADE_FLAG.GROUND) !== 0);
+      }
+      const idx = m.i32 ? new Uint32Array(m.buffer, m.iOff, m.iCount) : new Uint16Array(m.buffer, m.iOff, m.iCount);
+      return { pos, ground, idx: Array.from(idx) };
+    };
+    const out = [];
+    const runCase = (name, blasts, cx, cz, reach) => {
+      for (const [x, z, r, d] of blasts) {
+        const g = w.groundHeight(x, z);
+        s.demolition.blast(x, g + 2, z, r, d);
+      }
+      let frames = 0;
+      while (s.refineJobs.length && frames < 400) { s.refineStep(); frames++; }
+      // Snapshot after every refine, before anything has moved.
+      const tiles = new Set();
+      w.forEachSegmentTile(cx - reach, cz - reach, cx + reach, cz + reach, (a, b, index) => tiles.add(index));
+      const snap = new Map();
+      for (const t of tiles) { const r = read(t); if (r) snap.set(t, r); }
+      for (let i = 0; i < 60 * 14; i++) s.fixedForTest(1 / 60);
+      s.demolition.bakeAll();
+      let sheets = 0, tris = 0; const where = [];
+      const cell = (v) => Math.floor(v / 4);
+      for (const [t, before] of snap) {
+        const after = read(t);
+        if (!after || after.pos.length < before.pos.length) continue;
+        for (let i = 0; i < after.idx.length; i += 3) {
+          const vs = [after.idx[i], after.idx[i + 1], after.idx[i + 2]];
+          if (vs.some((v) => v >= before.pos.length || before.ground[v])) continue;
+          tris++;
+          const P = vs.map((v) => before.pos[v]);
+          const sameCell = P.every((p) => cell(p[0]) === cell(P[0][0]) && cell(p[2]) === cell(P[0][2]));
+          if (sameCell) continue;
+          const fall = vs.map((v) => before.pos[v][1] - after.pos[v][1]);
+          const k = fall.indexOf(Math.min(...fall));
+          const standing = after.pos[vs[k]][1] - w.groundHeight(after.pos[vs[k]][0], after.pos[vs[k]][2]);
+          if (Math.max(...fall) > 3 && Math.min(...fall) < 0.5 && standing > 2) {
+            sheets++;
+            const mx = (P[0][0] + P[1][0] + P[2][0]) / 3, mz = (P[0][2] + P[1][2] + P[2][2]) / 3;
+            where.push(Math.round(Math.hypot(mx - cx, mz - cz)));
+          }
+        }
+      }
+      const R = blasts[blasts.length - 1][2];
+      out.push({ name, frames, sheets, tris, refineMs: Math.round(s.state.refineMs || 0), where: where.sort((a, b) => a - b), R });
+    };
+    // Shells landing beside each other, so the site grows.
+    runCase('grown', [[300, -60, 10, 900], [312, -52, 10, 900], [322, -66, 10, 900], [306, -74, 10, 900], [316, -60, 12, 1400]], 312, -62, 70);
+    // A warhead.
+    runCase('warhead', [[700, 200, 120, 6000]], 700, 200, 140);
+    return out;
+  });
+  const grown = slabs.find((x) => x.name === 'grown'), warhead = slabs.find((x) => x.name === 'warhead');
+  check('shells landing beside each other leave nothing hanging in the air',
+    grown && grown.sheets <= 2, JSON.stringify(grown));
+  check('and nor does a warhead, cut a few tiles a frame', warhead && warhead.sheets === 0 && warhead.frames > 1,
+    JSON.stringify(warhead));
+  await page.evaluate(() => { const s = window.spreefall; s.soldiers.enabled = true; s.drones.enabled = true; });
+
   const fly = await page.evaluate(async () => {
     const s = window.spreefall;
     // A live one. The checks above shoot at what is parked here, and a blast
@@ -1225,6 +1371,9 @@ async function run() {
     s.demolition.reset();
     s.renderer.clearCollapses();
     s.renderer.scarredTiles.clear();
+    // The shell's mark has to be the first in the ring, which is where the
+    // hole is read from below, whatever went off earlier in the suite.
+    s.renderer.clearScars();
     s.setCheat('godmode', true);
     s.setTime(11);
     s.teleport(81, 0);

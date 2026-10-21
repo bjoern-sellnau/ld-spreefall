@@ -11,7 +11,7 @@
 
 import { SITE } from './campaign.js';
 import { makeMachine } from './machines.js';
-import { CAMP_RADIO } from '../render/actors.js';
+import { CAMP_RADIO, CAMP_ALARM } from '../render/actors.js';
 
 export const TACTICS = {
   // Manned within this of you, stood down past this.
@@ -43,6 +43,8 @@ export const TACTICS = {
   // The radio: how much it takes, how long after the alarm it calls for help,
   // how many waves, how far apart, and how many in each.
   radioHealth: 40,
+  // The alarm box: a few rounds, and then the siren cannot be sounded.
+  boxHealth: 30,
   callDelay: 9,
   waves: 2,
   waveGap: 38,
@@ -93,6 +95,7 @@ export class Tactics {
     this.onSpotted = null;      // fn(site, run, guard, how) somebody is sure
     this.onCall = null;         // fn(site, run, count) a wave of help is sent
     this.onRadio = null;        // fn(site, run) the radio is in pieces
+    this.onBox = null;          // fn(site, run, wasSounding) the alarm box is broken
     this.onBody = null;         // fn(site, run, finder) a body is found
     soldiers.stealth = TACTICS.stealth;
   }
@@ -140,6 +143,20 @@ export class Tactics {
   /** The siren. Everybody in the camp knows, and the radio calls for help. */
   raiseAlarm(r) {
     if (r.alarm) return;
+    // With the alarm box broken there is nothing to sound: they know, and
+    // fight, but the siren is silent and nobody is called.
+    if (!r.boxUp) {
+      for (const g of r.guards) {
+        if (!g.post) continue;
+        g.post.alert = true;
+        g.sentry = false;
+        g.suspicion = 1;
+        if (g.alive && g.health > 0 && g.state === 0) { g.state = 1; g.stateTime = 0; }
+      }
+      r.spotted = false;
+      r.silent = true;
+      return;
+    }
     r.alarm = true;
     r.alarmed = true;
     r.alarmTime = 0;
@@ -164,6 +181,48 @@ export class Tactics {
     const x = site.x + c * CAMP_RADIO.x + sn * CAMP_RADIO.z;
     const z = site.z - sn * CAMP_RADIO.x + c * CAMP_RADIO.z;
     return { x, y: this.world.groundHeight(site.x, site.z) + CAMP_RADIO.y, z };
+  }
+
+  /** Where a camp's alarm box is in the world. */
+  boxAt(site) {
+    const c = Math.cos(site.yaw), sn = Math.sin(site.yaw);
+    const x = site.x + c * CAMP_ALARM.x + sn * CAMP_ALARM.z;
+    const z = site.z - sn * CAMP_ALARM.x + c * CAMP_ALARM.z;
+    return { x, y: this.world.groundHeight(site.x, site.z) + CAMP_ALARM.y - 0.2, z };
+  }
+
+  /** Damage to whichever alarm box is within reach of a point. */
+  hitBox(x, y, z, amount, reach = 0.6) {
+    for (const r of this.live.values()) {
+      if (!r.boxUp || r.site.state === SITE.FREE) continue;
+      const p = this.boxAt(r.site);
+      if (Math.hypot(p.x - x, p.y - y, p.z - z) > reach) continue;
+      r.boxHealth -= amount;
+      r.radioFlash = 1;
+      if (r.boxHealth <= 0) {
+        r.boxUp = false;
+        const was = r.alarm;
+        // A siren going quiet stops calling for help as well.
+        r.alarm = false;
+        if (this.onBox) this.onBox(r.site, r, was);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** A shot along a segment: does it pass through an alarm box on the way? */
+  shotBox(a, b, amount) {
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+    const len2 = dx * dx + dy * dy + dz * dz || 1;
+    for (const r of this.live.values()) {
+      if (!r.boxUp || r.site.state === SITE.FREE) continue;
+      const p = this.boxAt(r.site);
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy + (p.z - a.z) * dz) / len2));
+      const q = { x: a.x + dx * t, y: a.y + dy * t, z: a.z + dz * t };
+      if (Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) < 0.42) return this.hitBox(p.x, p.y, p.z, amount, 0.01);
+    }
+    return false;
   }
 
   /** Damage to whichever radio is within reach of a point. */
@@ -215,7 +274,7 @@ export class Tactics {
     let r = this.live.get(site.id);
     if (!r) {
       r = { site, guards: [], manned: false, alarm: false, alarmed: false, radioUp: true,
-        radioHealth: TACTICS.radioHealth, radioFlash: 0, spotted: false, spotTimer: 0,
+        radioHealth: TACTICS.radioHealth, radioFlash: 0, boxUp: true, boxHealth: TACTICS.boxHealth, silent: false, spotted: false, spotTimer: 0,
         spotters: new Set(), alarmTime: 0, waves: 0, nextWave: 0, away: 0, bodies: 0 };
       this.live.set(site.id, r);
     }
@@ -265,6 +324,10 @@ export class Tactics {
     // A camp manned afresh has a working radio again.
     r.radioUp = true;
     r.radioHealth = TACTICS.radioHealth;
+    // And a working alarm box.
+    r.boxUp = true;
+    r.boxHealth = TACTICS.boxHealth;
+    r.silent = false;
     if (this.onManned) this.onManned(s0, r);
   }
 
@@ -350,7 +413,8 @@ export class Tactics {
       if (!this.world.isLoaded(site.x, site.z)) continue;
       const r = this.run(site);
       out.push({ x: site.x, y: this.world.groundHeight(site.x, site.z), z: site.z, yaw: site.yaw,
-        free: site.state === SITE.FREE, radioDown: !r.radioUp, alarm: r.alarm, flash: r.radioFlash });
+        free: site.state === SITE.FREE, radioDown: !r.radioUp, alarm: r.alarm, flash: r.radioFlash,
+        boxDown: !r.boxUp });
     }
     out.sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz));
     return out;

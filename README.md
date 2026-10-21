@@ -80,7 +80,7 @@ district by hand. A comparison of the same street at either tier is in
 | Touch | drag left to walk, drag right to look |
 | Gamepad | left stick walks, right stick looks, A jumps, L3 runs |
 | P | photo mode: hides the interface, unlocks the clock, saves a PNG |
-| M | enlarge the map, on the streets around you |
+| M | enlarge the map, on the streets around you; click it to set a mark the compass points to, click the mark again (or right click) to take it off |
 | N | sound on and off |
 | H | help |
 | 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |
@@ -93,8 +93,9 @@ district by hand. A comparison of the same street at either tier is in
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
 | F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels |
+| R | reload; with the bow in hand, the head on the next arrow: plain, fire, poison or explosive |
 | J | in Tactics and Slayer, the journal: every district, and the camps or nests given back, or given back harder |
-| driving | W forward, S back, A D steer, Shift brake, left mouse fires |
+| driving | W forward, S back, A D steer, Shift brake, left mouse fires; drive into a wall fast enough and you go through it |
 | flying | it flies where you look; W S throttle (a fighter holds it), A D turn, Space climbs, right mouse drops |
 | F4 | debug overlay |
 | V | free travel: pick a place on the map and fly there |
@@ -102,7 +103,6 @@ district by hand. A comparison of the same street at either tier is in
 | T | blow the C4 you have put down |
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight |
-| R | reload |
 | G | holster the weapon, for walking and for photographs |
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
@@ -293,6 +293,7 @@ visits.
 | Ultra gore | the three above, considerably more of it |
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
 | Overkill | every kill an execution: the skeleton out of the body, pieces raining down, a fountain, a word across the screen |
+| Comic carnage | overkill drawn as a comic book: bright red blood by the bucket from every hit, heads that pop, blood rain, splashes on the screen, the word in yellow |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 | Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
 
@@ -307,7 +308,7 @@ it brings the block down onto a street that stays level. Both are honoured by
 the picture, by the collision and by the ruin that is written into the city
 afterwards, so what you walk on is always what you can see.
 
-What the six gore switches actually are:
+What the seven gore switches actually are:
 
 - **Tearing apart** replaces the death animation with its absence. There is no
   body to fall, so the soldier leaves the fight at once and a dozen chunks
@@ -346,6 +347,11 @@ What the six gore switches actually are:
   they were for nearly three seconds, the walls round them are sprayed, and
   the clock stops for half a second while a word is stamped across the
   screen, counting a run of kills inside three seconds.
+- **Comic carnage** is overkill drawn as a comic book. The blood is a
+  bright comic red in drops twice the size, every hit gushes, a head shot
+  that kills takes the head, every kill brings a red rain down over the
+  street round it and a taller, longer fountain, the word is yellow with a
+  red outline, and a kill close to you throws splashes on the screen.
 
 And the last kill:
 
@@ -473,6 +479,10 @@ in the browser.
   arrows drop and stay where they go in, and a suppressed marksman rifle
   with a scope; then the M16, the shotgun, the rocket launcher, grenade, C4,
   banana and railgun. F behind a guard who has not seen you is a takedown.
+- Every camp has an alarm box on the siren's pole. Shoot it, blow it up or
+  put an arrow in it and the siren cannot be sounded: they still fight when
+  they see you, but nobody is called and the camp still pays the bonus for no
+  alarm. Break it while the siren is going and it stops.
 
 ## Spree Fall Slayer
 
@@ -495,12 +505,25 @@ all of them, a start district, how many nests, and bosses on or off.
   faster. Its name and a long bar sit at the top of the screen while it is
   near, and the cheat menu can bring one out any time.
 - The number row: a double barrel, the M16, the plasma rifle, rockets, the
-  railgun, a shield saw you throw (it cuts through and comes back; held up
+  railgun, a shield saw you throw (it leaves your hand, the world slows while it flies, it cuts through and comes back; held up
   on the second trigger it stops fire, and raised just in time it sends it
   back), a flail, a chainsaw (fuel by the size of what it cuts, ammunition
   everywhere when it does, and the fuel comes back slowly), flak and the
   void cannon. A demon low on its feet reels and glows; F finishes it, and
   gives you thirty health.
+
+## The end of an operation
+
+When every camp or nest in the operation has been taken, a card says what it
+came to (taken, quiet ones, level, score, time) and asks what next: a new
+operation on the same settings, or back to the main menu.
+
+## The memorial
+
+The Memorial to the Murdered Jews of Europe stands under a force field. From
+outside nothing reaches it. Standing inside it you can break it like anything
+else in the city, and the moment you step out it stands again, every stele,
+every metre of ground. It can be destroyed; it will always come back.
 
 ## Just a Walk
 

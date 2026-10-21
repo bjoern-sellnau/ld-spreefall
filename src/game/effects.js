@@ -631,6 +631,32 @@ export class Effects {
   }
 
   /**
+   * A cloud of poison: low, slow, sickly green, hanging where it was let out.
+   */
+  gas(x, y, z, radius, strength = 1) {
+    const n = Math.round(10 * strength);
+    for (let i = 0; i < n; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.8;
+      s.ax = x + Math.cos(a) * r;
+      s.ay = y + 0.3 + Math.random() * 1.6;
+      s.az = z + Math.sin(a) * r;
+      s.vx = Math.cos(a) * 0.6;
+      s.vy = 0.2 + Math.random() * 0.5;
+      s.vz = Math.sin(a) * 0.6;
+      s.gravity = -0.05;
+      s.maxLife = 1.6 + Math.random() * 1.4;
+      s.life = s.maxLife;
+      s.r = 0.32; s.g = 0.62; s.b = 0.16;
+      s.size = radius * (0.22 + Math.random() * 0.18);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+  }
+
+  /**
    * Blood off a hit. Dark, heavy, and gone quickly, with a mist that hangs for
    * a moment where the round went in.
    *
@@ -660,6 +686,14 @@ export class Effects {
       s.life = s.maxLife;
       s.r = 0.095; s.g = 0.009; s.b = 0.008;
       s.size = 0.03 + Math.random() * 0.06 * k;
+      // The comic book: a red you could paint a fire engine with, in drops
+      // the size of coins, thrown further and hanging longer.
+      if (this.comic) {
+        s.r = 0.62; s.g = 0.012; s.b = 0.01;
+        s.size *= 1.9;
+        s.vx *= 1.25; s.vy = s.vy * 1.3 + 1.5; s.vz *= 1.25;
+        s.maxLife *= 1.5; s.life = s.maxLife;
+      }
       s.bx = 0; s.by = 0; s.bz = 0;
     }
     // The mist, which is what reads at twenty metres when the drops do not.
@@ -679,6 +713,7 @@ export class Effects {
       s.life = s.maxLife;
       s.r = 0.085; s.g = 0.011; s.b = 0.010;
       s.size = (0.18 + Math.random() * 0.26) * k;
+      if (this.comic) { s.r = 0.5; s.g = 0.01; s.b = 0.01; s.size *= 1.4; }
       s.bx = 0; s.by = 0; s.bz = 0;
     }
   }
@@ -716,6 +751,7 @@ export class Effects {
     s.life = seconds;
     s.r = 0.048; s.g = 0.0055; s.b = 0.005;
     s.size = size;
+    if (this.comic) { s.r = 0.3; s.g = 0.008; s.b = 0.006; s.size = size * 1.25; }
     // The spread, in bx, and the seed that gives it an edge, in bz. A pool
     // opens out over the first second or so and then stops.
     s.bx = 0;
@@ -737,6 +773,7 @@ export class Effects {
     s.maxLife = 0.5 + Math.random() * 0.5;
     s.life = s.maxLife;
     s.r = 0.09; s.g = 0.009; s.b = 0.008;
+    if (this.comic) { s.r = 0.6; s.g = 0.012; s.b = 0.01; s.size = (s.size || 0.05) * 1.8; }
     s.size = 0.026 + Math.random() * 0.022;
     s.bx = 0; s.by = 0; s.bz = 0;
   }

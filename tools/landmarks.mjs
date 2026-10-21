@@ -38,6 +38,10 @@ function frame(ring) {
 }
 
 // The Gate: twelve Doric columns in two rows of six, an attic, and the quadriga.
+//
+// It hands back what it is solid at, because its outline is the whole gate,
+// passages and all, and a wall round that is a gate nobody can walk through:
+// the columns and the four cross walls, and between them the five passages.
 function brandenburgGate(mesh, ring, base, def) {
   const f = frame(ring);
   const long = f.lu >= f.lv;
@@ -49,6 +53,11 @@ function brandenburgGate(mesh, ring, base, def) {
   const colH = 15.0;
   const halfL = L / 2, halfW = W / 2;
   const P = (a, b) => [f.cx + ax * a + bx * b, f.cz + az * a + bz * b];
+  const solid = [];
+  const block = (a, b, along, across) => {
+    const ha = along / 2, hb = across / 2;
+    solid.push([P(a - ha, b - hb), P(a + ha, b - hb), P(a + ha, b + hb), P(a - ha, b + hb)]);
+  };
 
   // Stylobate.
   const [sx, sz] = P(0, 0);
@@ -58,6 +67,7 @@ function brandenburgGate(mesh, ring, base, def) {
     const [x0, z0] = P(-halfL + 3.0, side * (halfW - 2.4));
     const [x1, z1] = P(halfL - 3.0, side * (halfW - 2.4));
     colonnade(mesh, base + 0.1, x0, z0, x1, z1, 6, 1.05, colH, MAT.SANDSTONE, seed);
+    for (let i = 0; i < 6; i++) block(-halfL + 3.0 + (i * (L - 6.0)) / 5, side * (halfW - 2.4), 2.1, 2.1);
   }
   // Four cross walls divide the five passages. The middle one stays open, it is
   // the carriageway the Gate was built around.
@@ -66,6 +76,7 @@ function brandenburgGate(mesh, ring, base, def) {
     const t = -halfL + 3.0 + (i * inner) / 5;
     const [wx, wz] = P(t, 0);
     box(mesh, wx, base + 0.1, wz, 1.6, colH, W - 3.0, MAT.SANDSTONE, { seed, rot: Math.atan2(az, ax), flags: LM });
+    block(t, 0, 1.6, W - 3.0);
   }
   // Entablature and attic.
   const [ex, ez] = P(0, 0);
@@ -83,6 +94,8 @@ function brandenburgGate(mesh, ring, base, def) {
   const [chx, chz] = P(4.6, 0.2);
   box(mesh, chx, qy + 0.7, chz, 2.6, 2.2, 3.0, MAT.COPPER, { seed, rot, flags: LM });
   box(mesh, chx, qy + 2.9, chz, 0.8, 2.2, 0.8, MAT.COPPER, { seed, rot, flags: LM });
+  // Above the passages the entablature and the attic are solid all through.
+  return { solid, top: base + colH, over: { from: base + colH, to: base + colH + 8.6 } };
 }
 
 // The Reichstag: a stone block with corner towers, a portico and Foster's dome.

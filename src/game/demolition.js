@@ -156,6 +156,11 @@ export class Demolition {
   constructor(world, isShielded) {
     this.world = world;
     this.isShielded = isShielded || (() => false);
+    // Under the field at all, open or not, and whether a finished site may
+    // not be baked yet: one that reaches into an open field waits, so that
+    // what it did there can still be taken back.
+    this.inField = () => false;
+    this.holdBake = null;
     this.sites = [];
     this.damage = new Map();
     // What every wall in a touched tile was before any of this started, by
@@ -419,7 +424,7 @@ export class Demolition {
       // the city's own bytes and gives its slot back, which is what lets the
       // next sixteen explosions happen somewhere else entirely.
       site.rest = (site.rest || 0) + dt;
-      if (site.rest >= DEMO.settle) this.bake(site);
+      if (site.rest >= DEMO.settle && !(this.holdBake && this.holdBake(site))) this.bake(site);
     }
   }
 
@@ -464,6 +469,8 @@ export class Demolition {
       rubble: rec.rubble,
       opened: true, dugLevel: 0, dugShape: null,
       fall: DEMO.fallTime, t: DEMO.fallTime,
+      // A ruin put back never reaches the memorial.
+      spared: true,
     };
     this.lowerWalls(site);
     this.sinkCrater(site);
@@ -475,6 +482,81 @@ export class Demolition {
     const { tiles } = bakeSite(this.world, site);
     this.baked++;
     return tiles;
+  }
+
+  /**
+   * What the walls under a circle are, kept for later: taken when the
+   * memorial's field opens, while everything in it is still whole.
+   */
+  snapshotIn(x, z, r) {
+    const snap = new Map();
+    const tiles = new Set();
+    this.world.forEachSegmentTile(x - r, z - r, x + r, z + r, (segs, count, index) => { tiles.add(index); });
+    for (const index of tiles) {
+      const segs = this.splitTile(index);
+      const tops = this.original.get(index);
+      const keep = [];
+      const keepTops = [];
+      for (let i = 0; i < segs.length / 6; i++) {
+        const o = i * 6;
+        const mx = (segs[o] + segs[o + 2]) * 0.5, mz = (segs[o + 1] + segs[o + 3]) * 0.5;
+        if (Math.hypot(mx - x, mz - z) >= r) continue;
+        for (let k = 0; k < 6; k++) keep.push(segs[o + k]);
+        keepTops.push(tops[i]);
+      }
+      snap.set(index, { segs: keep, tops: keepTops });
+    }
+    this.snapshot = { x, z, r, tiles: snap };
+  }
+
+  /**
+   * Every wall under the circle of the last snapshot put back as it was
+   * then, holes and all, for the memorial when you leave its field. The
+   * walls outside the circle keep whatever has happened to them.
+   *
+   * @returns {number} how many walls had changed
+   */
+  restoreIn() {
+    const snap = this.snapshot;
+    if (!snap) return 0;
+    let changed = 0;
+    for (const [index, kept] of snap.tiles) {
+      const segs = this.splitTile(index);
+      const tops = this.original.get(index);
+      const out = [];
+      const outTops = [];
+      let inside = 0;
+      for (let i = 0; i < segs.length / 6; i++) {
+        const o = i * 6;
+        const mx = (segs[o] + segs[o + 2]) * 0.5, mz = (segs[o + 1] + segs[o + 3]) * 0.5;
+        if (Math.hypot(mx - snap.x, mz - snap.z) < snap.r) {
+          inside++;
+          continue;
+        }
+        for (let k = 0; k < 6; k++) out.push(segs[o + k]);
+        outTops.push(tops[i]);
+      }
+      // Whether anything under the circle is different from what was kept.
+      let same = inside === kept.tops.length;
+      if (same) {
+        let j = 0;
+        for (let i = 0; i < segs.length / 6 && same; i++) {
+          const o = i * 6;
+          const mx = (segs[o] + segs[o + 2]) * 0.5, mz = (segs[o + 1] + segs[o + 3]) * 0.5;
+          if (Math.hypot(mx - snap.x, mz - snap.z) >= snap.r) continue;
+          for (let k = 0; k < 6; k++) if (segs[o + k] !== kept.segs[j * 6 + k]) { same = false; break; }
+          j++;
+        }
+      }
+      if (same) continue;
+      changed++;
+      for (const v of kept.segs) out.push(v);
+      for (const t of kept.tops) outTops.push(t);
+      this.world.collisionCache.set(index, new Float32Array(out));
+      this.original.set(index, new Float32Array(outTops));
+    }
+    this.snapshot = null;
+    return changed;
   }
 
   /** Everything that is still standing, baked where it stands. */
@@ -517,6 +599,9 @@ export class Demolition {
         const k = bite(mx, mz, site);
         if (k <= 0) continue;
         if (this.isShielded(mx, 0, mz)) continue;
+        // A site the memorial has already been put back from does not reach
+        // into it again.
+        if (site.spared && this.inField(mx, mz)) continue;
         const base = segs[o + 4];
         // The same cut the shader makes, out of the same original height,
         // and the heap the rubble leaves on top of it.

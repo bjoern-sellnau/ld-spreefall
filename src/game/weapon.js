@@ -31,6 +31,9 @@ export class Weapon {
     this.mechs = opts.mechs || null;
     this.projectiles = opts.projectiles || null;
 
+    // Which head is on the next arrow, as an index into the bow's heads.
+    this.arrowHead = 0;
+    this.onArrowHead = null;     // fn(head) when it changes
     this.carried = {};
     for (const id of LOADOUT) {
       this.carried[id] = { ammo: WEAPONS[id].magazine, reserve: WEAPONS[id].reserve };
@@ -38,6 +41,8 @@ export class Weapon {
     this.id = 'm16';
     // A mode's own kit, or null for the ordinary number row.
     this.kit = null;
+    // The cheat that lets the wheel reach every weapon whatever the mode.
+    this.everyWeapon = false;
 
     this.state = STATE.READY;
     this.cooldown = 0;
@@ -198,6 +203,21 @@ export class Weapon {
     }
   }
 
+  /** The head on the next arrow, or null for anything but a bow. */
+  get head() {
+    const heads = this.spec.heads;
+    return heads ? heads[this.arrowHead % heads.length] : null;
+  }
+
+  /** The next head along, for a bow. @returns {string|null} */
+  cycleHead() {
+    const heads = this.spec.heads;
+    if (!heads || this.holstered) return null;
+    this.arrowHead = (this.arrowHead + 1) % heads.length;
+    if (this.onArrowHead) this.onArrowHead(heads[this.arrowHead]);
+    return heads[this.arrowHead];
+  }
+
   startReload() {
     if (this.state === STATE.RELOADING || this.holstered) return false;
     const spec = this.spec;
@@ -349,7 +369,7 @@ export class Weapon {
   /** Where in the loadout list this weapon is, for cycling with the wheel. */
   cycle(step) {
     // The wheel goes through a mode's kit when it has one.
-    const list = this.kit || LOADOUT;
+    const list = this.everyWeapon ? LOADOUT : (this.kit || LOADOUT);
     const at = Math.max(0, list.indexOf(this.id));
     const next = list[(at + step + list.length * 2) % list.length];
     return this.select(next);
@@ -695,6 +715,7 @@ export class Weapon {
       slip: spec.slip,
       weapon: this.id,
       homing, target,
+      head: this.head,
     });
     if (spec.lock) {
       // Clearing it silently leaves the ring on screen for ever, because the

@@ -70,6 +70,13 @@ void main() {
     if ((st & 1) != 0 && part > 70.5 && part < 71.5) part = 73.0;
     if ((st & 4) != 0 && part > 71.5) part = 74.0;
   }
+  // The camp's alarm box: gone once it is broken, its lamp lit while the
+  // alarm sounds.
+  if (part > 84.5 && part < 86.5) {
+    int st = int(iState.w + 0.5);
+    if ((st & 8) != 0) p = vec3(-6.2, -0.5, -3.3);
+    else if ((st & 4) != 0 && part > 85.5) part = 87.0;
+  }
   // A nest: dead, it slumps and its heart goes dark; awake, the heart beats.
   if (part > 74.5 && part < 77.5) {
     int st = int(iState.w + 0.5);
@@ -391,6 +398,21 @@ void main() {
     }
     // Reeling: it glows from inside, which is the cue to finish it.
     emissive += vec3(1.4, 0.55, 0.08) * vStun * (0.6 + 0.4 * sin(uCamPos.w * 12.0));
+  } else if (vPart > 84.5 && vPart < 87.5) {
+    // A camp's alarm box: yellow and black, a red lamp, the lamp lit and
+    // flashing while the alarm sounds.
+    int k = int(vPart + 0.5);
+    rough = 0.5; metal = 0.4;
+    if (k == 85) {
+      float stripe = step(0.5, fract((vWorld.x + vWorld.y + vWorld.z) * 4.0));
+      albedo = mix(vec3(0.62, 0.48, 0.04), vec3(0.03), stripe * step(vWorld.y - floor(vWorld.y), 0.25));
+    } else if (k == 86) {
+      albedo = vec3(0.35, 0.03, 0.02);
+      emissive = vec3(0.4, 0.02, 0.01);
+    } else {
+      albedo = vec3(0.1, 0.01, 0.01);
+      emissive = vec3(4.5, 0.1, 0.03) * step(0.5, fract(uCamPos.w * 3.0));
+    }
   } else if (vPart > 79.5 && vPart < 84.5) {
     // The Warlord: near black hide with fire in its cracks, horn, the iron
     // bolted to it, and the heart and eyes, which are what to shoot.
@@ -910,6 +932,8 @@ void main() {
   }
   // A camp's radio, once it is in pieces, casts nothing.
   if (aInfo.x > 66.5 && aInfo.x < 69.5 && (int(iState.w + 0.5) & 2) != 0) p = vec3(6.5, -0.5, -5.0);
+  // Nor its alarm box.
+  if (aInfo.x > 84.5 && aInfo.x < 86.5 && (int(iState.w + 0.5) & 8) != 0) p = vec3(-6.2, -0.5, -3.3);
   float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
   gl_Position = uLightViewProj * vec4(rot * p + iPosYaw.xyz, 1.0);

@@ -618,10 +618,15 @@ export class World {
   craterOffset(index, x, z) {
     const list = this.craters.get(index);
     if (!list) return 0;
-    // Nor under the memorial's force field, which the game says where it is.
-    if (this.shielded && this.shielded(x, z)) return 0;
+    // Nor under the memorial's force field while it holds, which the game
+    // says where it is; open, only the holes dug since it was last put back.
+    const field = !!(this.shielded && this.shielded(x, z));
+    if (field && !this.fieldOpen) return 0;
     let d = 0;
-    for (const c of list) d += craterProfile(x, z, c, c.level);
+    for (const c of list) {
+      if (field && c.spared) continue;
+      d += craterProfile(x, z, c, c.level);
+    }
     return d;
   }
 
@@ -654,6 +659,28 @@ export class World {
         n++;
       }
     }
+    return n;
+  }
+
+  /**
+   * Every crater reaching under a circle stops counting there, for the
+   * memorial when you leave its field.
+   *
+   * @returns {number} how many were reaching into it
+   */
+  spareCraters(x, z, r) {
+    let n = 0;
+    const seen = new Set();
+    for (const list of this.craters.values()) {
+      for (const c of list) {
+        if (seen.has(c)) continue;
+        seen.add(c);
+        if (c.spared) continue;
+        const reach = (c.craterRadius || c.radius || 0) * CRATER_RIM_OUT;
+        if (Math.hypot(c.x - x, c.z - z) < r + reach) { c.spared = true; n++; }
+      }
+    }
+    if (n) this.heightCache.clear();
     return n;
   }
 

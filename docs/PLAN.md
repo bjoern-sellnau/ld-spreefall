@@ -3743,3 +3743,226 @@ So there are two cities now, and a profile picks which:
   and the Warlord for the last nest, the game layer deciding the last nest
   when every district is in scope, and none of it with bosses off.
   ops-08-warlord.png.
+
+## 87. A compass across the top, a mark of your own, and a Gate you can walk through
+
+- A compass strip across the top of the screen while walking, in the manner
+  of the open world shooters: ticks every five degrees, letters every forty
+  five, north picked out, a mark at the middle for where you are looking.
+- In Tactics and Slayer every camp or nest is on it where it lies, red while
+  held, blue once it is yours, pulsing while its alarm is going or its fight
+  is on. The nearest one still held is drawn larger with its distance under
+  it, and when it is behind you it waits at the edge the near way round,
+  with an arrow.
+- A mark of your own: click the big map (M) and a yellow pin goes down; a
+  click near a camp or nest puts it on the site. The compass shows it with
+  its distance, the small map shows it, and when it or the next site is
+  further than the small map reaches an arrow at its rim points the way.
+  Clicking the pin again, right clicking the map or the clear mark button
+  takes it off, and it goes by itself once you are within 14 m of it.
+- The top of the screen is in one order now: the compass, the street name,
+  the operation line, the boss bar. The operation line was under the street
+  name before.
+- The Brandenburg Gate could not be walked through. Its mesh has had its
+  five passages since the landmarks were built, but every landmark was given
+  a wall all the way round its OSM outline, and the Gate's outline is the
+  whole gate. A landmark builder can now say where it is solid: for the Gate
+  that is the twelve columns and the four cross walls up to the entablature,
+  and the entablature and attic over the whole outline above that. Every
+  other landmark is solid to its outline as before.
+- Checks (ops, 65 now): the compass shows the nearest camp in the middle when
+  you face it and at the edge when you turn away; the compass, the street
+  name and the operation line do not overlap; a real click on the big map
+  sets a mark and shows the button; the compass points at the mark and the
+  mark goes once you are there; walking west through three passages of the
+  Gate and being stopped by a cross wall. Unit (89 now): the Gate's cross
+  wall stops a bullet and a line of sight, and its middle passage and the
+  one north of it are open. ops-09-compass.png.
+
+## 88. The memorial can be broken from inside its field, and it always comes back
+
+- The force field over the memorial holds against everything from outside,
+  as it did. Stand inside it and it opens: the stelae can be shot down and
+  the ground dug like anywhere in the city. Step out and it closes, and
+  everything under it is as it was: the stelae, their collision, the ground,
+  the scorch marks and anything left burning. Walk back in and it is whole.
+  It can be destroyed, and it will always come back.
+- How: when the field opens, the walls under it are written down as they
+  are (snapshotIn); when it closes they are put back exactly, holes and all,
+  while the walls outside keep whatever happened to them (restoreIn). Every
+  live collapse site reaching into the field is marked spared, and the world
+  shader leaves spared sites out under the field (uSpared, one bit a site;
+  uShield.w says whether the field is open). Craters reaching into it are
+  marked spared and stop counting there. A finished site that reaches into
+  an open field is not baked until it closes, and baking never writes into
+  the field, so nothing done to the memorial is made permanent. Trees and
+  fires under the field keep to it whether it is open or not, and camps and
+  nests are never put there.
+- When it closes with something to put back, the field flashes round its
+  edge and says so.
+- Checks (ops, 69 now): shells from outside change nothing; from inside the
+  field opens and the stone under it drops by three per cent and the ground
+  by 1.7 m where they landed; stepping out puts both back exactly; walking
+  back in finds it whole. A pixel comparison of the same view intact,
+  broken and restored was run by hand while building it. ops-10 and
+  ops-11.
+
+## 89. Fire, poison and explosive arrows
+
+- The bow carries four heads, changed with R while it is in your hands (the
+  bow nocks its own arrow, so R had nothing else to do there): plain, fire,
+  poison and blast. The HUD shows the head next to the weapon's name and a
+  toast says which it is.
+- A fire arrow sets where it lands burning: the trees there catch, a scorch
+  mark, and a patch of ground that burns for eight seconds at 24 a second
+  for anyone standing in it. It flames in the air on the way.
+- A poison arrow lets out a low green cloud 5.5 m across that hangs for nine
+  seconds and does 20 a second to everyone in it who breathes, you included
+  at half that. It does a fifth less on the arrow itself.
+- A blast arrow goes off where it lands, 6.5 m and 240, and is heard like an
+  explosion, which is the price of it in a camp.
+- All three do their work wherever the arrow ends up: in a man or in a wall
+  or the ground. Each leaves a trail of its colour behind it in the air.
+- The combat checks were brought up to date with the Gate and the memorial:
+  the cover check now fires along a cross wall of the Gate rather than down
+  the open carriageway, and the memorial blasts are set off from outside the
+  field, where it holds.
+- Checks (ops, 73 now): R goes plain, fire, poison, blast and the HUD says
+  which; a fire arrow at a man's feet leaves the ground burning and burns
+  him; a poison arrow leaves a cloud that hurts him; a blast arrow goes off.
+
+## 93. Every weapon in every mode, from the cheat menu
+
+- A switch in the cheat menu, Every weapon in every mode. Tactics and Slayer
+  hand out a kit of ten on the number row and the wheel used to go through
+  only those; with the switch on the wheel goes through all twenty two the
+  game has, from the M16 to the flail, and switching it on loads them all.
+  The number row keeps the mode's kit. Off, the wheel is the kit again. In
+  Berlin the wheel already went through everything.
+- Checks (ops, 74 now): in Slayer the wheel reaches ten weapons, with the
+  switch on all twenty two (the bow and the flamethrower among them), and
+  with it off the kit again.
+
+## 90. A faster jeep, and every vehicle goes through what it drives into
+
+- The jeep was slow because of its drag, not its top speed: drag takes the
+  speed times the drag off every second, so on the flat it settles where
+  that equals its acceleration. Fourteen over nought point eight is
+  seventeen and a half metres a second, sixty three kilometres an hour,
+  whatever the top speed said; the tank's numbers held it to four metres a
+  second. The jeep now reaches 38 m/s (137 km/h) in a few seconds and the
+  tank 16 m/s.
+- Driven into a wall at seven metres a second or more, a ground vehicle
+  goes through: a hole the size of what hit it is punched in the collision
+  and the picture, the frontage round it takes a blow by speed squared
+  times mass (a tank hits four times as hard as a jeep at the same speed),
+  there is dust, rubble and a crash, and the vehicle carries on with some of
+  its speed (a tank with most of it). A tree it meets goes over, and a
+  parked car goes up. Anything on wheels or tracks going that fast flattens
+  the trees it drives through, the way a mech does. The edge of the river
+  and the memorial, while its field holds, stay where they are.
+- An aircraft flown into a building takes a piece of it with it as well.
+- Checks (city, 87 now): eight seconds of full throttle along Unter den
+  Linden reaches 38 m/s; a jeep and a tank driven at two different
+  frontages from Pariser Platz each go through and come out a long way past
+  where the wall was.
+
+## 91. An alarm box in every camp
+
+- Every camp has an alarm box on the siren's pole at chest height: a yellow
+  and black housing with a red lamp on top, lit and flashing while the
+  alarm sounds. One rifle round, a grenade, a blast or an arrow breaks it
+  (30), the way the radio is broken, and it is gone from the picture and
+  from the shadows.
+- Broken before anybody sees you, the siren cannot be sounded: when they do
+  see you they know and they fight, but nothing goes off, nobody is called,
+  and the camp taken like that still pays the bonus for no alarm, which is
+  the point of going for the box first.
+- Broken while the siren is going, it stops: the siren is quiet and no more
+  help is called.
+- A camp manned afresh, after a reset or a walk away, has a working box
+  again.
+- Checks (ops, 78 now): a rifle round through the real weapon breaks the
+  box and the camp is drawn without it; broken first, the guards are all
+  alert but there is no siren and nobody comes, and the camp pays the quiet
+  bonus; with the siren going, a grenade at the box stops it and the call.
+  ops-12-alarm-box.png.
+
+## 94. The end of an operation
+
+- When every camp or nest in scope has been taken (the start district with
+  one district in scope, all of them with all), a card comes up a couple of
+  seconds after the last one falls: Operation complete for Tactics, The
+  presence is broken for Slayer, with how many were taken, how many camps
+  without an alarm, the level, the score and how long it took.
+- And the question: New operation starts again on the same settings, every
+  camp or nest held again and the score at nought, with you taken back to
+  the start district; Main menu goes back to the title screen.
+- Checks (ops, 80 now): with every nest gone the card comes up with its rows
+  and both buttons; a real click on New operation hides it, puts every nest
+  back and the score at nought, still in Slayer. ops-13-end.png.
+
+## 92. Comic carnage, past overkill
+
+- A gore switch past overkill, Comic carnage: everything overkill does,
+  drawn as a comic book. The blood is a bright comic red instead of the near
+  black of the others, in drops nearly twice the size, thrown further and
+  hanging longer, and the pools it leaves are red too and a quarter larger.
+- Every hit gushes from the far side for most of a second. A head shot that
+  kills takes the head with it in a burst of pieces and four sprays.
+- Every kill: the overkill burst, a second burst of twenty two pieces, a
+  fountain five seconds long and twice as tall, a red rain over everything
+  within seven metres for two seconds that leaves pools where it lands, and
+  the word in yellow with a thick red outline from its own list (SPLAT!,
+  KA-SPLAT!, GUTS!, SQUELCH! and the rest). A kill within twelve metres
+  throws a splash or a few on the lens: a blob with drops round it and a
+  run down from it, gone in a couple of seconds, never more than seven up.
+- Every weapon the gore switches already affected is affected by this one,
+  since it is overkill underneath.
+- Checks (cheats, 119 now): the switch is in the menu; a kill with nothing
+  else on comes apart with the word in yellow, a blood rain and splashes on
+  the lens; the blood is comic red. cheat-07-comic.png.
+
+## 95. The thrown shield saw leaves the hand, and the world slows while it flies
+
+- Thrown, the shield saw is not in your hand: the viewmodel goes until it
+  comes back to it, and while it is out there is nothing to block or parry
+  with.
+- And the world slows to forty per cent while it is in the air (you a little
+  less, as with every slow motion here), so you watch it go through a line of
+  them and come back, and it is full speed again the moment it is caught.
+- Checks (ops, 81 now): thrown, the hand is empty and the world is at
+  forty per cent; back, the shield is in the hand and the world at full
+  speed.
+
+## 96. Nothing left hanging in the air after a collapse
+
+- A building comes down by four metre columns of the world, and a piece of
+  it whose corners stand in different columns, where one column came down
+  and the next stood, is pulled between them: a slab of roof or wall hanging
+  in the air. The pieces are cut on the column lines before anything moves
+  (remesh.js), and two kinds of site were not being cut where they needed to
+  be:
+  - A site grows when the next shell lands beside it, and it was cut only
+    the first time. The ring it grew into was left in whole pieces. Now each
+    time it grows the new ring is cut as well (`finedRadius`).
+  - A site over seventy metres, a warhead's, was never cut at all, for the
+    cost, and even its middle does not come down whole: some columns stand a
+    storey or two while their neighbours go. Now it is cut too, coarser, and
+    a few tiles a frame within eight milliseconds, so the third of a second
+    it takes is spread over a few frames while it falls over seconds.
+- And the cornice and the string course on a frontage stand up to 26 cm
+  proud of the wall, which near a column line put them in the next column:
+  the wall came down and the band stayed. A band now stands out only as far
+  as its wall's column goes at each end (tools/geometry.mjs, `inColumn`).
+  Mitte is rebuilt with it; the others are rebuilt by the pages workflow.
+- Measured from the tile bytes before and after, counting a piece with one
+  corner that barely moved and still stands more than two metres up while
+  another fell more than three: a warhead left 75 of them before and none
+  now; shells landing beside each other left one before and none now.
+- Checks (city, 89 now): both of those, the warhead cut over more than one
+  frame. Unit (91 now): a point moves out only as far as its own column goes,
+  and every corner of a band is in the column of the wall behind it, for
+  four hundred buildings at random places and turns. The wall hole check now
+  clears the scorch mark ring first, since it reads the first mark in it.
+

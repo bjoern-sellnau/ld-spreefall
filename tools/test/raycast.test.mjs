@@ -45,10 +45,12 @@ test('a ray straight up leaves the city', opts, () => {
   assert.equal(w.raycast(81, 2, 0, 0, 1, 0, 300), null);
 });
 
-test('the Brandenburg Gate stops a bullet fired west from the spawn', opts, () => {
+// The Gate stands across x = 0 with its middle at z 3.3: five passages with
+// four cross walls between them, the nearest at z -2.6 and 9.3.
+test('a cross wall of the Brandenburg Gate stops a bullet fired west from the spawn', opts, () => {
   const w = loadWorld();
   // The spawn is on Pariser Platz, 81 m east of the Gate.
-  const h = w.raycast(81, 6, 0, -1, 0, 0, 200);
+  const h = w.raycast(81, 6, -2.6, -1, 0, 0, 200);
   assert.ok(h, 'the Gate was hit');
   assert.equal(h.kind, 'wall');
   assert.ok(h.t > 60 && h.t < 95, `hit at ${h.t} m, expected somewhere near 80`);
@@ -59,8 +61,17 @@ test('line of sight is clear across open ground and blocked by the Gate', opts, 
   const w = loadWorld();
   // Both ends on the open part of Pariser Platz, clear of the Adlon.
   assert.equal(w.lineOfSight(100, 2, 0, 140, 2, 0), true, 'across the square');
-  // Straight through the Gate, which stands at x 0.
-  assert.equal(w.lineOfSight(60, 3, 0, -60, 3, 0), false, 'through the Gate');
+  // Into a cross wall of the Gate, which stands at x 0.
+  assert.equal(w.lineOfSight(60, 3, -2.6, -60, 3, -2.6), false, 'into a wall of the Gate');
+});
+
+test('the middle passage of the Gate is open, and so is the next one', opts, () => {
+  const w = loadWorld();
+  assert.equal(w.lineOfSight(30, 1.7, 3.3, -30, 1.7, 3.3), true, 'the carriageway');
+  assert.equal(w.lineOfSight(30, 1.7, 15.2, -30, 1.7, 15.2), true, 'the passage north of it');
+  // Over the passages the attic is still there.
+  const up = w.raycast(0, 1.7, 3.3, 0, 1, 0, 40);
+  assert.ok(!up || up.t > 12, 'nothing low over the carriageway');
 });
 
 test('the Fernsehturm shaft is hit from two hundred metres', opts, () => {

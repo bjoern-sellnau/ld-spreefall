@@ -835,6 +835,9 @@ export function buildJetMesh() {
  * read off the instance in the vertex shader.
  */
 export const CAMP_RADIO = { x: 6.5, z: -5.0, y: 1.05 };
+// The alarm box, on the siren's pole at chest height, facing into the camp:
+// break it and the siren cannot be sounded.
+export const CAMP_ALARM = { x: -6.2, z: -3.32, y: 1.35 };
 export function buildCampMesh() {
   const m = new MeshBuild();
   // The sandbags: four arcs of two courses, with a gap between each pair of
@@ -887,6 +890,12 @@ export function buildCampMesh() {
   // The siren on its pole.
   m.cylinder(-6.2, 0, -3.6, 0.06, 0.05, 4.2, 6, 70);
   m.cylinder(-6.2, 4.2, -3.6, 0.22, 0.32, 0.45, 10, 72);
+  // And the alarm box on the pole: a yellow housing, a red lamp on top, and
+  // a conduit up to the siren.
+  const al = CAMP_ALARM;
+  m.box(al.x, al.y - 0.3, al.z, 0.5, 0.6, 0.26, 85);
+  m.box(al.x, al.y + 0.06, al.z + 0.04, 0.18, 0.12, 0.18, 86);
+  m.box(al.x + 0.18, al.y + 0.02, al.z - 0.08, 0.06, 2.8, 0.06, 70);
   return m;
 }
 
@@ -1799,7 +1808,7 @@ export class Actors {
       d[o + 3] = -c.yaw;
       d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = c.flash || 0;
       // Three switches in one channel: taken, radio down, alarm on.
-      d[o + 7] = (c.free ? 1 : 0) + (c.radioDown ? 2 : 0) + (c.alarm ? 4 : 0);
+      d[o + 7] = (c.free ? 1 : 0) + (c.radioDown ? 2 : 0) + (c.alarm ? 4 : 0) + (c.boxDown ? 8 : 0);
       n++;
     }
     mesh.instanceCount = n;

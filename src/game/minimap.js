@@ -69,6 +69,10 @@ export class Minimap {
     this.openSpan = 0;
     this.across = 0;              // metres across the window, set by draw
     this.centre = null;
+    // A mark of your own, set by clicking the big map, and the next site of
+    // an operation, both of which the small map points at from its rim.
+    this.waypoint = null;
+    this.goal = null;
     // How many street names the last draw managed to fit on, which is a
     // number the tests read.
     this.labelsDrawn = 0;
@@ -296,7 +300,65 @@ export class Minimap {
         ctx.restore();
       }
     }
+
+    // Your own mark, a yellow pin, the same size whatever the zoom.
+    const mark = this.waypoint;
+    if (mark) {
+      ctx.save();
+      ctx.translate(mark.x, mark.z);
+      ctx.scale(1 / scale, 1 / scale);
+      if (!this.big) ctx.rotate(-yaw);
+      const k = this.dpr * (this.big ? 1.15 : 1);
+      ctx.fillStyle = '#ffd65c';
+      ctx.strokeStyle = 'rgba(6, 7, 9, 0.9)';
+      ctx.lineWidth = 2 * this.dpr;
+      ctx.beginPath();
+      ctx.arc(0, -11 * k, 5.5 * k, Math.PI * 0.8, Math.PI * 2.2);
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(6, 7, 9, 0.9)';
+      ctx.beginPath();
+      ctx.arc(0, -11 * k, 2 * k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
+
+    // On the small map, an arrow at the rim towards your mark and towards the
+    // next site, when they are further than the map reaches.
+    if (!this.big) {
+      const rim = Math.min(cx, cy) - 9 * this.dpr;
+      const arrow = (t, colour) => {
+        const dx = t.x - px, dz = t.z - pz;
+        if (Math.hypot(dx, dz) * scale < rim) return;
+        // The same turn the map is drawn with, so the arrow points where the
+        // thing is on the screen.
+        const sx = dx * Math.cos(yaw) - dz * Math.sin(yaw);
+        const sy = dx * Math.sin(yaw) + dz * Math.cos(yaw);
+        const a = Math.atan2(sy, sx);
+        const ax = cx + Math.cos(a) * rim, ay = cy + Math.sin(a) * rim;
+        const size = 7 * this.dpr;
+        ctx.save();
+        ctx.translate(ax, ay);
+        ctx.rotate(a);
+        ctx.fillStyle = colour;
+        ctx.strokeStyle = 'rgba(6, 7, 9, 0.9)';
+        ctx.lineWidth = 1.5 * this.dpr;
+        ctx.beginPath();
+        ctx.moveTo(size, 0);
+        ctx.lineTo(-size * 0.7, -size * 0.75);
+        ctx.lineTo(-size * 0.35, 0);
+        ctx.lineTo(-size * 0.7, size * 0.75);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+        ctx.restore();
+      };
+      if (this.goal) arrow(this.goal, this.siteKind === 'slayer' ? '#d0402a' : '#e2574a');
+      if (mark) arrow(mark, '#ffd65c');
+    }
 
     // The street names, in screen pixels rather than in metres: text that is
     // scaled with the map is either a hairline or a billboard, and never the

@@ -210,7 +210,7 @@ html, body {
   position: absolute;
   left: 50%; top: 0;
   transform: translate(-50%, 0);
-  margin-top: 18px;
+  margin-top: 50px;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 600;
@@ -628,6 +628,9 @@ html, body {
   right: 50%; top: 50%;
   transform: translate(50%, -50%);
   border-radius: 6px;
+  /* It takes clicks, for your mark. */
+  pointer-events: auto;
+  cursor: crosshair;
 }
 
 /* The big map's own controls. The targeting map has had these since it was
@@ -831,6 +834,39 @@ html, body {
   z-index: 8;
 }
 #overkill.show { animation: stamp 1.4s ease-out forwards; }
+/* The comic book version: yellow with a thick red outline and a hard shadow. */
+#overkill.comic {
+  color: #ffd83a;
+  -webkit-text-stroke: 3px #b30000;
+  text-shadow: 0 0 22px rgba(255, 60, 20, 0.7), 7px 9px 0 #5a0000;
+  font-size: clamp(40px, 11vw, 120px);
+}
+/* Blood on the lens: a few splashes, thrown on and running off. */
+#splatter { position: absolute; inset: 0; pointer-events: none; z-index: 7; overflow: hidden; }
+#splatter i {
+  position: absolute;
+  /* A blob and the drops thrown off it, all in one background. */
+  background:
+    radial-gradient(circle at 46% 44%, rgba(235, 20, 15, 0.82) 0 17%, rgba(150, 0, 0, 0.7) 24%, rgba(150, 0, 0, 0) 26%),
+    radial-gradient(circle at 18% 30%, rgba(200, 10, 10, 0.75) 0 4%, rgba(200, 10, 10, 0) 5%),
+    radial-gradient(circle at 76% 22%, rgba(200, 10, 10, 0.75) 0 3%, rgba(200, 10, 10, 0) 4%),
+    radial-gradient(circle at 84% 62%, rgba(200, 10, 10, 0.7) 0 5%, rgba(200, 10, 10, 0) 6%),
+    radial-gradient(circle at 28% 74%, rgba(200, 10, 10, 0.7) 0 3%, rgba(200, 10, 10, 0) 4%),
+    radial-gradient(circle at 62% 80%, rgba(200, 10, 10, 0.65) 0 2.5%, rgba(200, 10, 10, 0) 3.5%);
+  animation: splash 2.4s ease-in forwards;
+}
+#splatter i::after {
+  content: ''; position: absolute; left: 45%; top: 52%; width: 5%; height: 60%;
+  background: linear-gradient(rgba(170, 0, 0, 0.75), rgba(170, 0, 0, 0));
+  border-radius: 40% 40% 50% 50%;
+}
+@keyframes splash {
+  0% { opacity: 0; transform: scale(0.3); }
+  8% { opacity: 1; transform: scale(1.08); }
+  14% { transform: scale(1); }
+  70% { opacity: 0.9; transform: translateY(24px); }
+  100% { opacity: 0; transform: translateY(60px); }
+}
 @keyframes stamp {
   0% { opacity: 0; transform: translate(-50%, -50%) skewX(-12deg) scale(2.6); }
   12% { opacity: 1; transform: translate(-50%, -50%) skewX(-12deg) scale(0.92); }
@@ -1569,7 +1605,7 @@ html, body {
 .opsline { margin: 8px 0 0; color: var(--ink); }
 
 #ops {
-  position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  position: absolute; left: 50%; top: 74px; transform: translateX(-50%);
   display: flex; gap: 12px; align-items: baseline;
   font: 11px/1 ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.12em; text-transform: uppercase;
@@ -1597,13 +1633,13 @@ html, body {
 #opslist .opsd.done b { color: #7fd6a0; }
 .opsbuttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
 @media (max-width: 640px) {
-  #ops { top: 8px; font-size: 9.5px; gap: 8px; letter-spacing: 0.06em; }
+  #ops { top: 60px; font-size: 9.5px; gap: 8px; letter-spacing: 0.06em; }
 }
 #ops i[data-level="wary"] { color: #ffc24a; }
 
 /* The boss: its name and one long bar across the top of the screen. */
 #bossbar {
-  position: absolute; left: 50%; top: 36px; transform: translateX(-50%);
+  position: absolute; left: 50%; top: 96px; transform: translateX(-50%);
   width: min(560px, 80vw); pointer-events: none; text-align: center;
   font: 600 12px/1 ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.32em; text-transform: uppercase;
@@ -1621,7 +1657,28 @@ html, body {
 }
 #bossbar .notch { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgba(0, 0, 0, 0.75); }
 #bossbar.tyrant .notch { display: none; }
-@media (max-width: 640px) { #bossbar { top: 26px; font-size: 10px; letter-spacing: 0.18em; } }
+@media (max-width: 640px) { #bossbar { top: 78px; font-size: 10px; letter-spacing: 0.18em; } }
+
+/* The end of an operation: what you did, and again or back to the title. */
+#opsendstats { list-style: none; padding: 0; margin: 14px 0 18px; font: 13px/1.8 ui-sans-serif, system-ui, sans-serif;
+  color: var(--ink); letter-spacing: 0.04em; }
+#opsendstats b { color: var(--accent); font-variant-numeric: tabular-nums; margin-left: 6px; }
+.opsendbuttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.opsendbuttons .play { margin-top: 0.4rem; }
+#opsendmenu.quiet { background: transparent; color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.3); }
+#opsendmenu.quiet:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* The compass across the top: heading, sites and your own mark. */
+#compassbar {
+  position: absolute; left: 50%; top: 6px; transform: translateX(-50%);
+  width: min(560px, 74vw); height: 38px; pointer-events: none;
+}
+#compassbar.hidden { display: none; }
+#maphint { margin-left: 8px; color: var(--dim); font-size: 10px; letter-spacing: 0.1em; }
+@media (max-width: 640px) {
+  #compassbar { top: 4px; height: 34px; width: 86vw; }
+  #streetname { margin-top: 40px; }
+}
 
 /* A scope: everything outside the glass is black, a thin crosshair across it. */
 #scope {

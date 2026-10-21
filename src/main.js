@@ -17,6 +17,7 @@ import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
 import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
+import { ARROW_HEADS } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
 import { Projectiles } from './game/projectiles.js';
@@ -31,7 +32,7 @@ import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
 import { bakeCrush } from './game/bake.js';
-import { fineGround, fineWalls, holeInWall } from './game/remesh.js';
+import { fineGround, fineWalls, fineWallsByTile, holeInWall } from './game/remesh.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
@@ -43,6 +44,7 @@ import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
+import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -57,10 +59,14 @@ const el = {
   found: $('found'), total: $('total'), district: $('district'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
+  splatter: $('splatter'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
+  opsEnd: $('opsend'), opsEndTitle: $('opsendtitle'), opsEndText: $('opsendtext'), opsEndStats: $('opsendstats'),
+  opsEndAgain: $('opsendagain'), opsEndMenu: $('opsendmenu'),
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
+  mapUnmark: $('mapunmark'), compassBar: $('compassbar'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -234,7 +240,10 @@ async function main() {
   };
   // The ground under the field is never dug, which the world asks about
   // every time it is asked how high the ground is.
-  world.shielded = (x, z) => combat.isShielded(x, 0, z);
+  // Trees, fires and the bytes a ruin is baked into keep to the field whether
+  // it is open or not; craters ask whether it is open as well.
+  world.shielded = (x, z) => combat.inField(x, z);
+  world.fieldOpen = false;
   world.onManifest = (manifest) => {
     landmarks.refresh(manifest);
     combat.refreshSanctuaries(manifest);
@@ -266,6 +275,10 @@ async function main() {
   const cars = new Cars(world);
   const trains = new Trains(world);
   const demolition = new Demolition(world, shielded);
+  demolition.inField = (x, z) => combat.inField(x, z);
+  // A finished site that reaches into the field while it is open is not
+  // baked yet: baked, what it did to the memorial could not be taken back.
+  demolition.holdBake = (site) => combat.fieldOpen && reachesField(site);
   // A ruin that has stopped moving is written into the city's own bytes, and
   // the card needs the new ones. Nothing else changes: the same ruin, drawn
   // from the buffers instead of from a uniform slot, which is then free for
@@ -339,6 +352,7 @@ async function main() {
   const ion = new Ion(world);
   const ultra = new Ultra(world);
   const healthBars = new HealthBars(document.getElementById('healthbars'));
+  const compassBar = new CompassBar(el.compassBar);
   // Operations: the campaign book that Tactics and Slayer keep, and the part
   // of Tactics that runs, which mans the camps near you out of the soldiers.
   const campaign = new Campaign();
@@ -604,7 +618,10 @@ async function main() {
       // carries a few metres; everything else carries a long way.
       if (tactics.enabled) soldiers.hear(player.x, player.z, spec.noise ?? TACTICS.noise.shot);
     }
-    if (tactics.enabled && shot.end && shot.from) tactics.shotRadio(shot.from, shot.end, spec.damage || 20);
+    if (tactics.enabled && shot.end && shot.from) {
+      tactics.shotRadio(shot.from, shot.end, spec.damage || 20);
+      tactics.shotBox(shot.from, shot.end, spec.damage || 20);
+    }
     const m = muzzlePoint(shot.from);
     if (shot.end) {
       effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
@@ -616,6 +633,19 @@ async function main() {
         effects.blood(shot.end.x, shot.end.y, shot.end.z,
           -shot.end.nx, Math.abs(shot.end.ny) * 0.4 + 0.3, -shot.end.nz,
           cheats.goreScale * (shot.core ? 1.8 : 1));
+        if (cheats.comicGore) {
+          // Every hit gushes for a moment, out of the far side.
+          gushes.push({ x: shot.end.x, y: shot.end.y, z: shot.end.z, nx: -shot.end.nx, nz: -shot.end.nz, life: 0.7 });
+          // And a head shot that kills takes the head with it.
+          if (shot.core && shot.killed) {
+            gibs.burst(shot.end.x, shot.end.y, shot.end.z, { x: -shot.end.nx, y: 0.6, z: -shot.end.nz }, 3, 10);
+            for (let k = 0; k < 4; k++) {
+              effects.blood(shot.end.x, shot.end.y + 0.1, shot.end.z, (Math.random() - 0.5) * 2, 1.4,
+                (Math.random() - 0.5) * 2, cheats.goreScale);
+            }
+            state.headPops = (state.headPops || 0) + 1;
+          }
+        }
         if (Math.random() < 0.5 || shot.core) {
           const px = shot.end.x - shot.end.nx * (0.6 + Math.random() * 1.6);
           const pz = shot.end.z - shot.end.nz * (0.6 + Math.random() * 1.6);
@@ -649,6 +679,7 @@ async function main() {
     if (tactics.enabled) {
       soldiers.hear(x, z, TACTICS.noise.explosion);
       tactics.hitRadio(x, y, z, splash.damage || 50, splash.radius * 0.8 + 1);
+      tactics.hitBox(x, y, z, splash.damage || 50, splash.radius * 0.8 + 1);
     }
     strikeField(x, y, z, splash.radius);
     if (splash.fusion) {
@@ -1235,7 +1266,7 @@ async function main() {
   weapon.onSwap = (id, spec) => {
     audio.swap();
     toast(spec.name);
-    el.weaponname.textContent = spec.short;
+    el.weaponname.textContent = weaponLabel(spec);
     el.combat.classList.toggle('explosive', spec.kind !== 'hitscan');
   };
   // The wheel, while the pointer is locked. In a mech it goes through the
@@ -1868,6 +1899,11 @@ async function main() {
       if (!m.alive) continue;
       flattenTrees(m.x, m.z, (m.spec.radius || 2.3) + 1.2);
     }
+    // And anything on wheels or tracks going at a decent lick.
+    for (const v of vehicles.active) {
+      if (!v.alive || v.spec.kind !== 'ground' || Math.abs(v.speed) < SMASH.from) continue;
+      flattenTrees(v.x, v.z, (v.spec.radius || 1.5) + 0.6);
+    }
   }
 
   /**
@@ -2060,11 +2096,52 @@ async function main() {
    * district that size into storeys is a second's work for nothing.
    */
   function refineSite(site) {
-    if (site.fined || site.walls === false) return;
-    site.fined = true;
-    if (site.radius > 70) return;
+    if (site.walls === false) return;
+    // Cut as far out as the site now reaches. A site grows when the next
+    // shell lands beside it, and it used to be cut only the first time: the
+    // ring it grew into was left in whole pieces, a roof or a wall whose
+    // corners stood in different columns, and where one column came down
+    // and the next stood the piece hung between them as a slab in the air.
+    // So each time it grows, the new ring is cut as well.
+    const want = site.radius * 1.05;
+    const done = site.finedRadius || 0;
+    if (want <= done + 0.5) return;
     const edge = Math.max(2.5, Math.min(4.5, site.radius / 7));
-    const changed = fineWalls(world, site.x, site.z, site.radius * 1.05, edge);
+    // A warhead's site is cut as well, coarser. It was never cut at all, for
+    // the cost, and even its middle does not come down whole: some columns
+    // stand to a storey or two while their neighbours go, and an uncut roof
+    // across them hung from the ones still standing. A third of a second
+    // once, against the warhead itself.
+    const inner = done > 0 ? done : 0;
+    site.finedRadius = want;
+    if (site.radius > 70) {
+      // A warhead's worth is cut a tile at a time over the next frames, so
+      // the third of a second it takes does not land in one of them. It
+      // falls over seconds, so the cut is done well before much has moved.
+      const job = fineWallsByTile(world, site.x, site.z, want, 4.5, inner);
+      refineJobs.push({ ...job, at: 0 });
+      return;
+    }
+    const t0 = performance.now();
+    const changed = fineWalls(world, site.x, site.z, want, edge, inner);
+    state.refineMs = performance.now() - t0;
+    if (changed.length) tiles.refresh(changed);
+  }
+
+  // The big cuts in progress, and a few milliseconds of them a frame.
+  const refineJobs = [];
+  const REFINE_BUDGET_MS = 8;
+  function refineStep() {
+    if (!refineJobs.length) return;
+    const t0 = performance.now();
+    const changed = [];
+    while (refineJobs.length && performance.now() - t0 < REFINE_BUDGET_MS) {
+      const job = refineJobs[0];
+      if (job.at >= job.tiles.length) { refineJobs.shift(); continue; }
+      const index = job.tiles[job.at++];
+      if (job.cut(index)) changed.push(index);
+    }
+    state.refineMs = (state.refineMs || 0) + (performance.now() - t0);
     if (changed.length) tiles.refresh(changed);
   }
 
@@ -2218,6 +2295,84 @@ async function main() {
   // that one is about trees and this one is about people.
   const burning = [];
 
+  // --- arrow heads ----------------------------------------------------------------
+  /** The weapon's name on the HUD, with the head on the next arrow for a bow. */
+  function weaponLabel(spec) {
+    const head = spec.heads ? ARROW_HEADS[weapon.head] : null;
+    return head && head.short ? `${spec.short} ${head.short}` : spec.short;
+  }
+  weapon.onArrowHead = (head) => {
+    const row = ARROW_HEADS[head];
+    toast(row ? row.name : head);
+    audio.swap();
+    el.weaponname.textContent = weaponLabel(weapon.spec);
+  };
+
+  // Poison let out by an arrow: it hangs, and it hurts whoever breathes it.
+  const poisonClouds = [];
+  function updatePoison(dt) {
+    for (let i = poisonClouds.length - 1; i >= 0; i--) {
+      const c = poisonClouds[i];
+      c.left -= dt;
+      if (c.left <= 0) { poisonClouds.splice(i, 1); continue; }
+      c.puff -= dt;
+      if (c.puff <= 0) {
+        c.puff = 0.22;
+        effects.gas(c.x, c.y, c.z, c.radius, Math.min(1, c.left / 2));
+      }
+      for (const sd of [...soldiers.active]) {
+        if (!sd.alive || sd.health <= 0 || sd.state === 5) continue;
+        if (Math.hypot(sd.x - c.x, sd.z - c.z) > c.radius + 0.4 || Math.abs(sd.y - c.y) > 3) continue;
+        if (soldiers.damage(sd, c.damagePerSecond * dt, { x: 0, y: 0, z: 0 })) creditTarget(sd, false, 'soldier');
+      }
+      if (!state.inMech && !state.inVehicle && combat.health > 0
+          && Math.hypot(player.x - c.x, player.z - c.z) < c.radius && Math.abs(player.y - c.y) < 3) {
+        combat.hurt(c.damagePerSecond * 0.5 * dt, c.x, c.z, player.x, player.z);
+      }
+    }
+  }
+
+  // Wherever an arrow lands, in somebody or in a wall, its head does its work.
+  projectiles.onArrowHead = (b, x, y, z) => {
+    // An arrow into a camp's radio or alarm box breaks it like a round does.
+    if (tactics.enabled) {
+      const harm = (WEAPONS.bow.damage || 100);
+      tactics.hitRadio(x, y, z, harm, 0.6);
+      tactics.hitBox(x, y, z, harm, 0.6);
+    }
+    const row = ARROW_HEADS[b.head];
+    if (!row) return;
+    const g = world.groundHeight(x, z);
+    if (row.burn) {
+      const bn = row.burn;
+      fires.ignite(x, g, z, bn.radius, 0.8);
+      renderer.addScar(x, g, z, bn.radius * 0.7, 0.5);
+      if (!combat.isShielded(x, g, z)) {
+        burning.push({ x, y: g, z, radius: bn.radius, left: bn.seconds, damagePerSecond: bn.damagePerSecond });
+      }
+      for (let i = 0; i < 5; i++) effects.flame(x + (Math.random() - 0.5) * 2, g + 0.3, z + (Math.random() - 0.5) * 2, 2.2, 0.9);
+      audio.flameWall();
+    } else if (row.cloud) {
+      const cl = row.cloud;
+      poisonClouds.push({ x, y: g, z, radius: cl.radius, left: cl.seconds, damagePerSecond: cl.damagePerSecond, puff: 0 });
+      effects.gas(x, g, z, cl.radius, 1.6);
+    } else if (row.splash) {
+      explode(x, y, z, row.splash, { weapon: 'bow' });
+    }
+  };
+
+  /** What an arrow with a head leaves behind it in the air. */
+  function arrowTrails() {
+    for (const b of projectiles.active || []) {
+      if (!b.alive || b.stuck || !b.head || b.head === 'plain') continue;
+      const row = ARROW_HEADS[b.head];
+      if (!row || !row.colour) continue;
+      const [r, g, bl] = row.colour;
+      if (b.head === 'fire' && Math.random() < 0.6) effects.flame(b.x, b.y - 0.2, b.z, 0.5, 0.5);
+      else effects.spark(b.x, b.y, b.z, r, g, bl);
+    }
+  }
+
   function updateBurning(dt) {
     for (let i = burning.length - 1; i >= 0; i--) {
       const b = burning[i];
@@ -2368,6 +2523,51 @@ async function main() {
     gibs.rubble(v.x, v.y + 1, v.z, 6, 12, 2);
     feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
     if (state.inVehicle === v) leaveVehicle(true);
+  };
+
+  // A vehicle driven into something hard enough goes through it: a tree goes
+  // over, a parked car goes up, a wall gets a hole the size of what hit it and
+  // the frontage round it takes the blow, more of it for the tank. The edge
+  // of the river holds, and so does the memorial while its field does.
+  const SMASH = { from: 7, perMass: 1, radiusBase: 1.6, radiusPer: 1 / 11, maxRadius: 7 };
+  vehicles.onSmash = (v, speed, hit) => {
+    if (speed < SMASH.from || !hit) return false;
+    const segs = world.segments(hit.tile);
+    if (!segs || hit.seg === undefined) return false;
+    const o = hit.seg;
+    const base = segs[o + 4], top = segs[o + 5];
+    if (base < world.waterLevel - 1) return false;
+    const len = Math.hypot(segs[o + 2] - segs[o], segs[o + 3] - segs[o + 1]);
+    const hx = hit.x, hy = hit.y, hz = hit.z;
+    const away = Math.hypot(player.x - hx, player.z - hz);
+    // A trunk: four short sides round a box a little over half a metre.
+    if (len < 0.8 && top - base <= 4.5) {
+      const n = flattenTrees(hx, hz, 1.6);
+      if (n) { effects.shake = Math.min(1.2, effects.shake + 0.25); return true; }
+    }
+    // A parked car.
+    if (top - base < 2.5) {
+      const car = cars.at(hx, hz, 4);
+      if (car) {
+        cars.destroy(car);
+        effects.shake = Math.min(1.4, effects.shake + 0.4);
+        return true;
+      }
+    }
+    if (shielded(hx, hy, hz)) return false;
+    const mass = (v.spec.mass || 1) * SMASH.perMass;
+    const energy = speed * speed * mass;
+    const radius = Math.min(SMASH.maxRadius, SMASH.radiusBase + Math.sqrt(energy) * SMASH.radiusPer);
+    const cut = demolition.punch(hx, hy, hz, radius);
+    demolition.blast(hx, hy, hz, radius * 1.5, energy * 0.8, false);
+    effects.impact(hx, hy, hz, hit.nx || 0, 0, hit.nz || 0, 'wall');
+    effects.dust(hx, Math.max(world.groundHeight(hx, hz), hy - 1), hz, radius * 1.4);
+    gibs.rubble(hx, hy, hz, radius * 0.8, Math.round(4 + radius * 2), 1.2);
+    audio.land(0);
+    if (away < 160) audio.explosion();
+    if (v === state.inVehicle) effects.shake = Math.min(1.6, effects.shake + 0.5 + radius * 0.05);
+    state.smashes = (state.smashes || 0) + 1;
+    return cut > 0;
   };
 
   vehicles.onBump = (v, speed) => {
@@ -3173,7 +3373,7 @@ async function main() {
       }
     }
     effects.shake = Math.min(1, effects.shake + 0.12);
-    if (cheats.overkill) overkill(s, dir);
+    if (cheats.excess) overkill(s, dir);
     // The kill itself is credited by whoever made it, the same as any other,
     // because a gib is still one dead soldier and not two.
     return n;
@@ -3186,6 +3386,27 @@ async function main() {
   // burst the ordinary switches already made.
   const fountains = [];
   const OVERKILL_WORDS = ['OVERKILL', 'SPLATTER', 'TOTAL CARNAGE', 'NO MERCY', 'EXCESSIVE', 'MESSY'];
+  const COMIC_WORDS = ['SPLAT!', 'KA-SPLAT!', 'GUTS!', 'SQUELCH!', 'OBLITERATED!', 'SPLATTERED!', 'GIBBED!',
+    'CARNAGE!', 'MESSY!!'];
+  // Blood falling out of the sky after a comic kill, and short gushes from
+  // every wound: on the render clock, beside the fountains.
+  const bloodRain = [];
+  const gushes = [];
+  /** Splashes on the lens, for a comic kill close enough to reach you. */
+  function splashLens(n) {
+    const box = el.splatter;
+    if (!box) return;
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('i');
+      const size = 110 + Math.random() * 150;
+      d.style.width = `${size}px`; d.style.height = `${size * (0.8 + Math.random() * 0.4)}px`;
+      d.style.left = `${Math.random() * 90}%`; d.style.top = `${Math.random() * 80}%`;
+      d.style.animationDelay = `${(Math.random() * 0.15).toFixed(2)}s`;
+      box.appendChild(d);
+      setTimeout(() => d.remove(), 2900);
+    }
+    while (box.childElementCount > 7) box.firstChild.remove();
+  }
   const overkillRun = { streak: 0, at: -10, shown: 0 };
   function overkill(s, dir) {
     const floor = world.groundHeight(s.x, s.z);
@@ -3196,7 +3417,16 @@ async function main() {
     // everyone standing near for a second or two after the kill.
     gibs.burst(s.x, s.y, s.z, { x: 0, y: 0, z: 0 }, 4, 16);
     // And a fountain where they stood, on the render clock below.
-    fountains.push({ x: s.x, y: floor, z: s.z, life: 2.8, max: 2.8, next: 0 });
+    const comic = cheats.comicGore;
+    fountains.push({ x: s.x, y: floor, z: s.z, life: comic ? 5 : 2.8, max: comic ? 5 : 2.8, next: 0, comic });
+    if (comic) {
+      // It comes back down: a red rain over everything for a few metres
+      // round, for a couple of seconds.
+      bloodRain.push({ x: s.x, y: floor, z: s.z, life: 2.2, next: 0 });
+      gibs.burst(s.x, s.y + 1.2, s.z, dir, 6, 22);
+      const away = Math.hypot(player.x - s.x, player.z - s.z);
+      if (away < 12) splashLens(Math.round(1 + (12 - away) * 0.22));
+    }
     effects.stain(s.x, floor, s.z, 2.8, 60);
     for (let i = 0; i < 12; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -3219,7 +3449,9 @@ async function main() {
     overkillRun.streak = now - overkillRun.at < 3 ? overkillRun.streak + 1 : 1;
     overkillRun.at = now;
     overkillRun.shown++;
-    const word = OVERKILL_WORDS[(Math.random() * OVERKILL_WORDS.length) | 0];
+    const words = cheats.comicGore ? COMIC_WORDS : OVERKILL_WORDS;
+    const word = words[(Math.random() * words.length) | 0];
+    el.overkill.classList.toggle('comic', !!cheats.comicGore);
     el.overkill.textContent = overkillRun.streak > 1 ? `${word} x${overkillRun.streak}` : word;
     el.overkill.classList.remove('show');
     // Read the layout once so the animation starts again from its first frame.
@@ -3240,8 +3472,29 @@ async function main() {
       // Strongest at the start and dying away, the way a pulse does.
       const k = f.life / f.max;
       const pulse = 0.75 + 0.25 * Math.sin(f.life * 18);
+      const tall = f.comic ? 2.2 : 1;
       effects.blood(f.x, f.y + 0.3, f.z, (Math.random() - 0.5) * 0.25,
-        (1.2 + 1.4 * k) * pulse, (Math.random() - 0.5) * 0.25, 1.2 + 2.2 * k);
+        (1.2 + 1.4 * k) * pulse * tall, (Math.random() - 0.5) * 0.25, (1.2 + 2.2 * k) * (f.comic ? 1.6 : 1));
+    }
+    for (let i = bloodRain.length - 1; i >= 0; i--) {
+      const r = bloodRain[i];
+      r.life -= dt;
+      if (r.life <= 0 || !cheats.bleeding) { bloodRain.splice(i, 1); continue; }
+      r.next -= dt;
+      if (r.next > 0) continue;
+      r.next = 0.05;
+      for (let k = 0; k < 3; k++) {
+        const a = Math.random() * Math.PI * 2, d = Math.random() * 7;
+        const x = r.x + Math.cos(a) * d, z = r.z + Math.sin(a) * d;
+        effects.blood(x, r.y + 6 + Math.random() * 3, z, 0, -1, 0, 0.6);
+        if (Math.random() < 0.15) effects.stain(x, world.groundHeight(x, z), z, 0.25 + Math.random() * 0.4, 50);
+      }
+    }
+    for (let i = gushes.length - 1; i >= 0; i--) {
+      const g = gushes[i];
+      g.life -= dt;
+      if (g.life <= 0) { gushes.splice(i, 1); continue; }
+      effects.blood(g.x, g.y, g.z, g.nx, 0.5 + Math.random() * 0.4, g.nz, 1.4 * (g.life / 0.7));
     }
   }
   soldiers.onDeath = (s) => {
@@ -3337,6 +3590,10 @@ async function main() {
     combat.godmode = cheats.godmode;
     combat.cheated = cheats.used;
     weapon.infiniteAmmo = cheats.infiniteAmmo;
+    // Every weapon, whatever the mode hands out: the wheel goes through all of
+    // them, and switching it on loads them.
+    if (cheats.everyWeapon && !weapon.everyWeapon) weapon.giveAll();
+    weapon.everyWeapon = cheats.everyWeapon;
     // Switching the drones off stops them coming and takes down whatever is
     // already up, because an enemy frozen in the air is worse than no enemy.
     if (drones.enabled === cheats.noDrones) {
@@ -3351,6 +3608,8 @@ async function main() {
     soldiers.gore.gib = cheats.gibbing;
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;
+    // The comic book draws its blood in a red you can see from orbit.
+    effects.comic = !!cheats.comicGore;
     soldiers.boneTime = cheats.value('boneTime');
     el.cheatMark.classList.toggle('hidden', !cheats.used);
     for (const sw of cheatRows) sw.el.classList.toggle('on', !!cheats[sw.id]);
@@ -4565,6 +4824,67 @@ async function main() {
     relock();
   }
 
+  // --- the memorial ------------------------------------------------------------
+  //
+  // The field holds against everything from outside. Stand inside it and it
+  // opens: what is in it can be broken like anything else in the city. Step
+  // out and it closes, and everything in it is as it was: the stelae, the
+  // ground, the scorch marks. It can be destroyed and it always comes back.
+  function reachesField(site) {
+    for (const f of combat.sanctuaries) {
+      const reach = site.radius + (site.craterRadius || 0) * 2;
+      if (Math.hypot(site.x - f.x, site.z - f.z) < f.radius + reach) return true;
+    }
+    return false;
+  }
+
+  function memorialStep() {
+    if (!combat.sanctuaries.length) return;
+    const inside = combat.inField(player.x, player.z);
+    if (inside === !!combat.fieldOpen) return;
+    // What is under it is taken down as it is before it can be touched.
+    if (inside) for (const f of combat.sanctuaries) demolition.snapshotIn(f.x, f.z, f.radius);
+    combat.fieldOpen = inside;
+    world.fieldOpen = inside;
+    renderer.field.open = inside;
+    world.heightCache.clear();
+    if (!inside) restoreMemorial();
+  }
+
+  /** Everything under the field back as it was. @returns {number} what was put back */
+  function restoreMemorial() {
+    let n = 0;
+    for (const f of combat.sanctuaries) {
+      for (const site of demolition.sites) {
+        if (site.spared || !reachesField(site)) continue;
+        site.spared = true;
+        n++;
+      }
+      n += demolition.restoreIn();
+      n += world.spareCraters(f.x, f.z, f.radius);
+      n += renderer.clearScarsIn(f.x, f.z, f.radius);
+      for (let i = burning.length - 1; i >= 0; i--) {
+        if (Math.hypot(burning[i].x - f.x, burning[i].z - f.z) < f.radius) { burning.splice(i, 1); n++; }
+      }
+    }
+    world.heightCache.clear();
+    if (n) {
+      // The field shows where it put things back, all round its edge.
+      for (const f of combat.sanctuaries) {
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const x = f.x + Math.cos(a) * f.radius, z = f.z + Math.sin(a) * f.radius;
+          renderer.field.struck(x, world.groundHeight(x, z) + 6, z, state.time, 1.6);
+        }
+      }
+      audio.emp(30);
+      toast('the memorial stands again');
+      feed('<i>memorial</i> it cannot be destroyed, it will always come back');
+    }
+    state.memorialRestored = (state.memorialRestored || 0) + (n ? 1 : 0);
+    return n;
+  }
+
   /**
    * A blast that reaches the memorial lights its force field from the point
    * where it touched: the middle of the blast if it went off inside, the edge
@@ -4821,11 +5141,65 @@ async function main() {
   function startOps() {
     tactics.clear();
     slayer.clear();
+    state.opsEnded = false;
+    state.opsEndAt = 0;
+    state.opsStartedAt = state.time;
     if (!campaign.active) { el.ops.classList.add('hidden'); return; }
     if (!campaign.settings.start) campaign.set('start', el.opsStart.value || world.idAt(player.x, player.z) || world.home);
     state.opsTravel = true;
     state.opsPlaceAt = 0;
   }
+
+  // --- the end of an operation ---------------------------------------------------
+  //
+  // Every camp or nest in scope taken: a card with what it came to, and the
+  // question of what next, a new operation on the same settings or the
+  // title screen.
+  function opsEndCheck(dt) {
+    if (state.opsEnded || !campaign.active) return;
+    const sum = campaign.summary(builtDistricts().map((d) => d.id));
+    if (!sum || !sum.districts || sum.done < sum.districts) { state.opsEndAt = 0; return; }
+    // A moment for the last capture to be seen and heard first.
+    state.opsEndAt = (state.opsEndAt || 0) + dt;
+    if (state.opsEndAt < 2.5) return;
+    state.opsEnded = true;
+    showOpsEnd(sum);
+  }
+
+  function showOpsEnd(sum) {
+    const slay = campaign.mode === 'slayer';
+    const where = campaign.settings.scope === 'all' ? 'Berlin'
+      : ((world.entryFor(campaign.settings.start) || {}).name || 'the district');
+    el.opsEndTitle.textContent = slay ? 'The presence is broken' : 'Operation complete';
+    el.opsEndText.textContent = slay
+      ? `Not one nest is left in ${where}.`
+      : `Every camp in ${where} is yours.`;
+    const minutes = Math.max(0, Math.round((state.time - (state.opsStartedAt || 0)) / 60));
+    const rows = [
+      [slay ? 'Nests destroyed' : 'Camps taken', `${sum.free} of ${sum.total}`],
+      ...(slay ? [] : [['Taken without an alarm', `${sum.quiet || 0}`]]),
+      ['Level', `${(sum.level || 0) + 1}`],
+      ['Score', `${sum.score}`],
+      ['Time', `${minutes} min`],
+    ];
+    el.opsEndStats.innerHTML = rows.map(([k, v]) => `<li>${k}<b>${v}</b></li>`).join('');
+    el.opsEnd.classList.remove('hidden');
+    input.exitLock();
+    audio.ultraCharge && audio.ultraCharge(0.6);
+  }
+
+  el.opsEndAgain.addEventListener('click', () => {
+    el.opsEnd.classList.add('hidden');
+    campaign.wipe();
+    soldiers.reset();
+    drones.reset();
+    startOps();
+    toast(campaign.mode === 'slayer' ? 'a new operation: the nests are back' : 'a new operation: the camps are manned again');
+    if (!isTouch) input.requestLock();
+  });
+  // The title screen is where the page starts, so that is the way back to it:
+  // everything in the run is left behind, the campaign book is kept.
+  el.opsEndMenu.addEventListener('click', () => { location.reload(); });
 
   /** Somewhere on a road near the middle of a district, to land on. */
   function districtLanding(entry) {
@@ -4845,7 +5219,7 @@ async function main() {
   function opsStep(dt) {
     // The shield coming up, for the parry, and the saw's fuel: these are the
     // Slayer weapons' and work in any mode that hands them out.
-    const blocking = weapon.id === 'shieldsaw' && weapon.aiming;
+    const blocking = weapon.id === 'shieldsaw' && weapon.aiming && !sawOut();
     if (blocking && !state.blocking) state.blockAt = state.time;
     state.blocking = blocking;
     sawFuel(dt);
@@ -4870,12 +5244,14 @@ async function main() {
         if (!campaign.inScope(id) || campaign.sitesIn(id) || world.isOverflight(id)) continue;
         const entry = world.entryFor(id);
         if (!entry) continue;
-        const placed = campaign.place(id, (rand, clear) => campSpot(world, entry, rand, clear, shielded));
+        const placed = campaign.place(id, (rand, clear) => campSpot(world, entry, rand, clear,
+          (x, y, z) => combat.inField(x, z)));
         if (placed.length) feed(`<i>${entry.name}</i> ${placed.length} ${opsWord()}${placed.length === 1 ? '' : 's'}`);
         break;
       }
     }
     if (campaign.mode === 'slayer') slayer.update(dt, player);
+    opsEndCheck(dt);
     if (campaign.mode === 'tactics') {
       soldiers.playerSpeed = Math.hypot(player.vx || 0, player.vz || 0);
       tactics.update(dt, player);
@@ -4898,7 +5274,9 @@ async function main() {
     const row = WEAPONS[b.weapon] || WEAPONS.bow;
     const t = hit.target;
     const core = !!hit.core;
-    const dmg = (row.damage || 100) * (core ? (row.coreMultiplier || 1) : 1) * (weapon.damageScale || 1);
+    const headRow = ARROW_HEADS[b.head];
+    const dmg = (row.damage || 100) * (core ? (row.coreMultiplier || 1) : 1) * (weapon.damageScale || 1)
+      * (headRow && headRow.damage !== undefined ? headRow.damage : 1);
     const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
     const dir = { x: b.vx / sp, y: 0, z: b.vz / sp };
     let killed = false;
@@ -5010,7 +5388,8 @@ async function main() {
   projectiles.onHostile = (b, x, y, z, direct) => {
     // The shield saw held up: fire from in front is stopped, and fire that
     // arrives just as the shield comes up goes back the way it came.
-    if (direct && weapon.id === 'shieldsaw' && weapon.aimBlend > 0.5 && !state.inMech && !state.inVehicle) {
+    if (direct && weapon.id === 'shieldsaw' && weapon.aimBlend > 0.5 && !state.inMech && !state.inVehicle
+      && !sawOut()) {
       const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
       const f = camera.forward;
       const facing = (b.vx * f[0] + b.vy * f[1] + b.vz * f[2]) / sp;
@@ -5353,6 +5732,14 @@ async function main() {
     showHitmarker(killed ? 'kill' : '');
     if (killed) creditTarget(t, false, hit.actorKind);
   };
+  /** The shield saw is in the air: not in your hand, and nothing to block with. */
+  function sawOut() {
+    for (const b of projectiles.active) if (b.alive && b.spec && b.spec.saw) return true;
+    return false;
+  }
+  // How far the world slows while it flies, the way the shooters it comes
+  // from let you watch it go through a room.
+  const SAW_SLOW = 0.4;
   projectiles.onSawBack = () => {
     weapon.carried.shieldsaw.ammo = 1;
     audio.hitMarker(true);
@@ -5391,6 +5778,17 @@ async function main() {
     audio.hitMarker(true);
     feed(run.alarm ? '<b>radio down</b> nobody else is coming' : '<b>radio down</b>');
     toast('radio destroyed');
+  };
+  tactics.onBox = (site, run, wasSounding) => {
+    const p = tactics.boxAt(site);
+    effects.flash(p.x, p.y, p.z, 1.4, 1.0, 0.8, 0.2, 0.2);
+    for (let i = 0; i < 18; i++) {
+      effects.spark(p.x + (Math.random() - 0.5) * 0.5, p.y + Math.random() * 0.4,
+        p.z + (Math.random() - 0.5) * 0.5, 1.0, 0.85, 0.3);
+    }
+    audio.hitMarker(true);
+    feed(wasSounding ? '<b>alarm off</b> the siren is quiet' : '<b>alarm box down</b> they cannot sound the alarm');
+    toast(wasSounding ? 'alarm silenced' : 'alarm disabled');
   };
   tactics.onCall = (site, run, count) => {
     // Help comes the way everybody arrives in this game: out of the street,
@@ -5650,6 +6048,84 @@ async function main() {
   // twenty eight turns of the wheel. So it has the same three buttons the
   // targeting map has had since it was built, plus a readout of how far out
   // you are and how wide the window is in metres.
+  // --- the compass and your own mark ----------------------------------------
+  //
+  // A mark is put down by clicking the big map, taken up by clicking it again
+  // or with the button, and goes by itself once you are standing on it. A
+  // click near a camp or nest puts the mark on it.
+  const MARK_REACHED = 14;
+  function setMark(at) {
+    if (!at) { state.waypoint = null; minimap.waypoint = null; el.mapUnmark.classList.add('hidden'); return; }
+    let x = at.x, z = at.z;
+    if (campaign.active) {
+      const snap = Math.max(25, minimap.spanAcross() * 0.02);
+      for (const st of campaign.allSites()) {
+        if (Math.hypot(st.x - x, st.z - z) < snap) { x = st.x; z = st.z; break; }
+      }
+    }
+    state.waypoint = { x, z };
+    minimap.waypoint = state.waypoint;
+    el.mapUnmark.classList.remove('hidden');
+    feed(`<i>mark</i> ${world.nameAt(x, z) || 'set'}, ${distanceLabel(Math.hypot(x - player.x, z - player.z))}`);
+  }
+  el.minimap.addEventListener('click', (ev) => {
+    if (!minimap.big) return;
+    const at = minimap.worldAt(ev.clientX, ev.clientY);
+    if (!at) return;
+    const w = state.waypoint;
+    const near = Math.max(12, minimap.spanAcross() * 0.015);
+    if (w && Math.hypot(w.x - at.x, w.z - at.z) < near) setMark(null);
+    else setMark(at);
+    mapTools();
+  });
+  el.minimap.addEventListener('contextmenu', (ev) => {
+    if (!minimap.big) return;
+    ev.preventDefault();
+    setMark(null);
+  });
+  el.mapUnmark.addEventListener('click', () => setMark(null));
+
+  /** The compass across the top, with the sites of an operation and your mark on it. */
+  function placeCompass(heading) {
+    if (state.mode !== 'walk' || photo.active || minimap.big) { compassBar.hide(); return; }
+    const marks = [];
+    let goal = null, goalSite = null;
+    if (campaign.active) {
+      let best = Infinity;
+      for (const st of campaign.allSites()) {
+        const dist = Math.hypot(st.x - player.x, st.z - player.z);
+        const free = st.state === SITE.FREE;
+        const m = { bearing: bearing(player.x, player.z, st.x, st.z), dist, free,
+          hot: !free && isHot(st), kind: campaign.mode, goal: false };
+        marks.push(m);
+        if (!free && dist < best) { best = dist; goal = m; goalSite = st; }
+      }
+      if (goal) goal.goal = true;
+    }
+    minimap.goal = goalSite;
+    const w = state.waypoint;
+    if (w) {
+      const dist = Math.hypot(w.x - player.x, w.z - player.z);
+      if (dist < MARK_REACHED) {
+        toast('you are there');
+        setMark(null);
+      } else {
+        marks.push({ bearing: bearing(player.x, player.z, w.x, w.z), dist, free: false, hot: false,
+          kind: 'mark', goal: true });
+      }
+    }
+    compassBar.draw(heading, marks, state.time);
+  }
+  /** A camp with its alarm going, or a nest in a fight. */
+  function isHot(site) {
+    if (campaign.mode === 'slayer') {
+      const r = slayer.live.get(site.id);
+      return !!(r && r.phase !== 'idle');
+    }
+    const r = tactics.live.get(site.id);
+    return !!(r && r.alarm);
+  }
+
   function mapTools() {
     el.mapTools.classList.toggle('hidden', !minimap.big);
     if (!minimap.big) return;
@@ -5800,7 +6276,12 @@ async function main() {
         el.btnSound.textContent = on ? 'sound on' : 'sound off';
         break;
       }
-      case 'KeyR': weapon.startReload(); break;
+      case 'KeyR':
+        // With the bow in hand R changes the head on the next arrow; the bow
+        // nocks its own.
+        if (weapon.spec.heads) weapon.cycleHead();
+        else weapon.startReload();
+        break;
       case 'KeyG':
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
@@ -5904,6 +6385,9 @@ async function main() {
       state.airSlow = Math.max(0, state.airSlow - dt);
       scale = Math.min(scale, 0.34);
     }
+    // The shield saw in flight: the world slows until it is back in the hand.
+    state.sawFlying = state.mode === 'walk' && sawOut();
+    if (state.sawFlying) scale = Math.min(scale, SAW_SLOW);
     if (state.killRest > 0) state.killRest = Math.max(0, state.killRest - dt);
     if (state.mode === 'cinema') {
       scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
@@ -5964,8 +6448,12 @@ async function main() {
       fires.update(worldDt, player);
       fireWalls.update(worldDt);
       updateBurning(worldDt);
+      updatePoison(worldDt);
+      arrowTrails();
       updateReactors(worldDt);
       warlordStep(worldDt);
+      memorialStep();
+      refineStep();
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -6155,8 +6643,12 @@ async function main() {
     fires.update(worldDt, player);
     fireWalls.update(worldDt);
     updateBurning(worldDt);
+    updatePoison(worldDt);
+    arrowTrails();
     updateReactors(worldDt);
     warlordStep(worldDt);
+    memorialStep();
+    refineStep();
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -6545,6 +7037,8 @@ async function main() {
     if (renderer.updateDynamicScale(loop.stats.intervalMs)) resize();
     // Through a scope there is no rifle in the way of the picture.
     if (renderer.viewmodel && weapon.spec.scope && weapon.aimBlend > 0.85) renderer.viewmodel = null;
+    // Thrown, the shield is not in your hand until it comes back to it.
+    if (renderer.viewmodel && weapon.id === 'shieldsaw' && sawOut()) renderer.viewmodel = null;
     renderer.render(camera, state.time, w, h);
 
     if (photo.pendingShot) {
@@ -6628,6 +7122,9 @@ async function main() {
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
       const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
       el.compass.textContent = `${names[Math.round(deg / 45) % 8]} ${Math.round(deg)}`;
+      placeCompass(deg);
+    } else {
+      compassBar.hide();
     }
 
     // Automatic quality tier from the first three seconds of real frames.
@@ -6714,6 +7211,12 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
+    compassBar, setMark: (at) => setMark(at),
+    toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
+    restoreMemorial: () => restoreMemorial(),
+    refineJobs, refineStep: () => refineStep(),
+    bloodRain, gushes,
+    poisonClouds, burningCount: () => burning.length,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
     /** The arms the mech you are in carries, in the order the keys pick them. */

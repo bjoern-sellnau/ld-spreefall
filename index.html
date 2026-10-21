@@ -126,6 +126,7 @@
   <div id="healthbars"></div>
   <div id="gunmark" class="hidden"></div>
   <div id="blastcharge" class="hidden"></div>
+  <canvas id="compassbar" class="hidden"></canvas>
   <div id="streetname" class="hidden"></div>
   <div id="hitmarker"></div>
   <div id="lockon" class="hidden"><i></i><span id="locktext">lock</span></div>
@@ -201,12 +202,15 @@
     <button id="mapout" title="Zoom out">&minus;</button>
     <button id="mapfit" title="The whole of Berlin">all of it</button>
     <button id="maphere" title="Back to where you are standing">me</button>
+    <button id="mapunmark" title="Take your mark off the map" class="hidden">clear mark</button>
     <span id="mapzoom">1.0x</span>
+    <span id="maphint">click to set a mark</span>
   </div>
   <div id="compass"><span id="compasslabel">N</span></div>
   <div id="cardhost"></div>
   <div id="toast"></div>
   <div id="overkill" aria-hidden="true"></div>
+  <div id="splatter" aria-hidden="true"></div>
   <div id="progress">
     <span id="found">0</span> of <span id="total">11</span> landmarks
   </div>
@@ -247,7 +251,8 @@
     <tr><td>E, or right Shift</td><td>reflexes: the city slows down and you do not</td></tr>
     <tr><td>Mouse, or drag on the right of the screen</td><td>look</td></tr>
     <tr><td>P</td><td>photo mode, hides the interface and unlocks the clock</td></tr>
-    <tr><td>M</td><td>enlarge the map</td></tr>
+    <tr><td>R</td><td>reload; with the bow, change the arrow head: fire, poison, explosive</td></tr>
+    <tr><td>M</td><td>enlarge the map; click it to set a mark for the compass</td></tr>
     <tr><td>N</td><td>sound on and off</td></tr>
     <tr><td>F</td><td>get into the nearest vehicle, or out of the one you are in; a
       silent takedown on a guard who has not seen you; a finisher on a demon that reels</td></tr>
@@ -281,7 +286,6 @@
     <tr><td>Right mouse with the launcher</td><td>hold the sight on a target to lock, then the rocket chases it</td></tr>
     <tr><td>Q</td><td>back to the last weapon</td></tr>
     <tr><td>T</td><td>blow the C4 you have put down</td></tr>
-    <tr><td>R</td><td>reload</td></tr>
     <tr><td>G</td><td>holster the weapon, for walking and for photographs</td></tr>
     <tr><td>C</td><td>cheats</td></tr>
     <tr><td>V</td><td>free travel: pick a place on the map and fly there</td></tr>
@@ -364,6 +368,18 @@
     <div class="wordmark">All eleven found</div>
     <p class="blurb" id="completiontext"></p>
     <button id="completionclose">keep walking</button>
+  </div>
+</div>
+
+<div id="opsend" class="overlay hidden">
+  <div class="titlebox">
+    <div class="wordmark" id="opsendtitle">Operation complete</div>
+    <p class="blurb" id="opsendtext"></p>
+    <ul id="opsendstats"></ul>
+    <div class="opsendbuttons">
+      <button id="opsendagain" class="play">New operation</button>
+      <button id="opsendmenu" class="play quiet">Main menu</button>
+    </div>
   </div>
 </div>
 

@@ -102,6 +102,115 @@ async function run() {
   check('the line at the top says where you stand', /tactics/i.test(placed.hud) && /camps/.test(placed.hud),
     placed.hud);
 
+  // --- the compass, a mark of your own, and the order at the top ------------
+  const compass = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const site = s.campaign.allSites()[0];
+    // Facing the first camp: it is on the bar, in the middle.
+    s.teleport(site.x + 300, site.z);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.look(90, 0);
+    await frame();
+    const out = {};
+    const bar = document.getElementById('compassbar');
+    out.shown = !bar.classList.contains('hidden');
+    out.ahead = s.compassBar.last ? { ...s.compassBar.last } : null;
+    // Turned round, it waits at the edge.
+    s.look(-90, 0);
+    await frame();
+    out.behind = { ...s.compassBar.last };
+    // The street name sits under the compass and the operation line under that.
+    const box = (id) => document.getElementById(id).getBoundingClientRect();
+    const street = document.getElementById('streetname');
+    const hid = street.classList.contains('hidden');
+    street.textContent = street.textContent || 'Unter den Linden';
+    street.classList.remove('hidden');
+    out.order = { bar: box('compassbar').bottom, street: box('streetname').top, ops: box('ops').top,
+      streetBottom: box('streetname').bottom };
+    if (hid) street.classList.add('hidden');
+    return out;
+  });
+  check('a compass across the top, with the nearest camp on it and how far',
+    compass.shown && compass.ahead && compass.ahead.goals.length === 1
+      && Math.abs(compass.ahead.goals[0].x - compass.ahead.width / 2) < 12 && !compass.ahead.goals[0].behind,
+    JSON.stringify(compass.ahead));
+  check('turned away, the camp waits at the edge with an arrow', compass.behind.goals[0].behind,
+    JSON.stringify(compass.behind.goals));
+  check('the compass, then the street name, then the operation line, nothing on top of anything',
+    compass.order.street >= compass.order.bar - 1 && compass.order.ops >= compass.order.streetBottom - 1,
+    JSON.stringify(compass.order));
+
+  // A mark: open the map, click it, and the compass points there.
+  await page.evaluate(() => { const s = window.spreefall; if (!s.minimap.big) s.toggleMap(); });
+  await page.waitForTimeout(700);
+  const target = await page.evaluate(() => {
+    const r = document.getElementById('minimap').getBoundingClientRect();
+    const x = r.left + r.width * 0.7, y = r.top + r.height * 0.4;
+    const top = document.elementFromPoint(x, y);
+    return { x, y, top: top ? (top.id || top.className) : null };
+  });
+  await page.mouse.click(target.x, target.y);
+  const marked = await page.evaluate((target) => {
+    const s = window.spreefall;
+    return { mark: s.state.waypoint ? { ...s.state.waypoint } : null, big: s.minimap.big, top: target.top,
+      button: !document.getElementById('mapunmark').classList.contains('hidden') };
+  }, target);
+  await page.evaluate(() => window.spreefall.toggleMap());
+  await page.waitForTimeout(300);
+  const toMark = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const w = s.state.waypoint;
+    if (!w) return null;
+    // Face it, and it is in the middle of the bar.
+    const a = Math.atan2(-(w.x - s.player.x), -(w.z - s.player.z));
+    s.look(a * 180 / Math.PI, 0);
+    await frame();
+    const goal = (s.compassBar.last.goals || []).find((g) => g.kind === 'mark');
+    const centred = !!goal && Math.abs(goal.x - s.compassBar.last.width / 2) < 12;
+    // Stand on it and it goes.
+    s.teleport(w.x + 3, w.z + 3);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    await frame();
+    return { centred, gone: !s.state.waypoint };
+  });
+  check('click the big map and there is a mark, with a button to take it off', !!marked.mark && marked.button,
+    JSON.stringify(marked));
+  check('the compass points at the mark, and it goes once you are there', !!toMark && toMark.centred && toMark.gone,
+    JSON.stringify(toMark));
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[0];
+    s.teleport(site.x + 120, site.z + 30);
+    s.setMark({ x: site.x - 400, z: site.z + 500 });
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.look(80, 2);
+  });
+  await page.waitForTimeout(2000);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-09-compass.png') });
+  await page.evaluate(() => window.spreefall.setMark(null));
+
+  // --- through the Brandenburg Gate ---------------------------------------------
+  const gate = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = [];
+    // The gate stands across x = 0, its passages running east to west; the
+    // middle one and one either side of it, then a cross wall.
+    for (const z of [3.3, 15.2, -8.6, 9.27]) {
+      s.teleport(25, z);
+      for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+      s.look(90, 0);
+      s.input.keys.add('KeyW');
+      for (let i = 0; i < 60 * 20; i++) s.fixedForTest(1 / 60);
+      s.input.keys.delete('KeyW');
+      out.push(+s.player.x.toFixed(1));
+    }
+    return out;
+  });
+  check('the Brandenburg Gate can be walked through, its five passages open and its walls solid',
+    gate[0] < -10 && gate[1] < -10 && gate[2] < -10 && gate[3] > 3, JSON.stringify(gate));
+
   const again = await page.evaluate(() => {
     const s = window.spreefall;
     const before = s.campaign.allSites().map((c) => `${c.x},${c.z}`).join(' ');
@@ -348,6 +457,96 @@ async function run() {
     loud.state === 1 && loud.paid === 1000 + 400 * loud.level && !loud.siren,
     `+${loud.paid}`);
 
+  // --- the alarm box: shot first, the siren cannot be sounded ----------------
+  await fresh();
+  const box = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    const hurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    // A rifle at the box from four metres, through the real weapon.
+    const p = s.tactics.boxAt(site);
+    const at = (x, z) => {
+      s.teleport(x, z);
+      for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+      const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+      const dx = p.x - ex, dy = p.y - ey, dz = p.z - ez;
+      const l = Math.hypot(dx, dy, dz);
+      s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.asin(dy / l) * 180 / Math.PI);
+      s.camera.update(16 / 10);
+    };
+    // From the side the box faces, a few metres off.
+    let shots = 0;
+    for (const [ox, oz] of [[0, 4], [4, 0], [-4, 0], [0, -4], [3, 3], [-3, 3]]) {
+      if (!run.boxUp) break;
+      at(p.x + ox, p.z + oz);
+      s.weapon.select('m16');
+      for (let k = 0; k < 4 && run.boxUp; k++) { s.weapon.cooldown = 0; s.weapon.spread = 0; s.shoot(); shots++; }
+    }
+    const down = !run.boxUp;
+    const drawn = s.tactics.drawList(s.player.x, s.player.z).find((c) => Math.abs(c.x - site.x) < 1);
+    // Seen now: they know, but no siren and nobody called.
+    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    s.tactics.raiseAlarm(run);
+    const alerted = run.guards.filter((g) => g.post && g.post.alert).length;
+    for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 2); i++) s.fixedForTest(1 / 60);
+    const came = s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before;
+    const siren = run.alarm;
+    // And taken like that it still pays the bonus: the alarm never sounded.
+    const score = s.campaign.book.score;
+    for (const g of run.guards) s.soldiers.damage(g, 9999, { x: 1, y: 0, z: 0 });
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    const paid = s.campaign.book.score - score;
+    s.combat.hurt = hurt;
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+    return { down, shots, drawn: !!(drawn && drawn.boxDown), alerted, came, siren, paid, level: site.level,
+      taken: site.state };
+  });
+  check('every camp has an alarm box, and a few rounds break it', box.down && box.drawn && box.shots <= 8,
+    JSON.stringify(box));
+  check('broken, they still fight but the siren stays quiet and nobody is called',
+    box.alerted >= 3 && !box.siren && box.came === 0, JSON.stringify(box));
+  check('and the camp taken like that still pays the bonus for no alarm',
+    box.taken === 1 && box.paid === 1000 + 400 * box.level + 1500, `+${box.paid}`);
+
+  // Sounding already: breaking the box stops the siren and the calls.
+  await fresh();
+  const hush = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.tactics.raiseAlarm(run);
+    const sounding = run.alarm;
+    const p = s.tactics.boxAt(site);
+    s.explode(p.x + 0.4, p.y, p.z, { radius: 4, damage: 120 }, { weapon: 'grenade' });
+    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 2); i++) s.fixedForTest(1 / 60);
+    return { sounding, after: run.alarm, boxUp: run.boxUp,
+      came: s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before };
+  });
+  check('with the siren going, a grenade at the box silences it and stops the call',
+    hush.sounding && !hush.after && !hush.boxUp && hush.came === 0, JSON.stringify(hush));
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.tactics.clear(); s.campaign.reset({}); s.soldiers.reset();
+    s.teleport(site.x + 30, site.z + 30);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const p = s.tactics.boxAt(site);
+    const run = s.tactics.live.get(site.id);
+    s.tactics.raiseAlarm(run);
+    s.soldiers.enabled = false;
+    s.teleport(p.x + 3.2, p.z + 2.4);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    const dx = p.x - s.player.x, dz = p.z - s.player.z;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, -6);
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-12-alarm-box.png') });
+  await page.evaluate(() => { window.spreefall.soldiers.enabled = true; });
+
   // --- the quiet three, and a takedown ---------------------------------------
   await page.evaluate(() => {
     const s = window.spreefall;
@@ -415,6 +614,62 @@ async function run() {
   });
   check('an arrow in the head kills a guard without a sound', arrow.dead && !arrow.alarm && arrow.heard === 0);
   check('and an arrow that misses stays where it went in', arrow.stuck === 1);
+
+  // The heads: R changes them with the bow in hand, and each does its own work.
+  await page.evaluate(() => { const s = window.spreefall; s.weapon.select('bow'); s.weapon.arrowHead = 0; });
+  const heads = [];
+  for (let i = 0; i < 4; i++) {
+    heads.push(await page.evaluate(() => ({ head: window.spreefall.weapon.head,
+      label: document.getElementById('weaponname').textContent })));
+    await page.keyboard.press('KeyR');
+  }
+  const headed = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    const site = s.campaign.allSites()[0];
+    const hurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    // Three men standing in the open, one for each head, well apart.
+    const put = (dx) => {
+      const g = s.spawnSoldier(dx, 40);
+      g.state = 0; g.rise = 0; g.y = s.world.groundHeight(g.x, g.z);
+      return g;
+    };
+    s.teleport(site.x + 300, site.z + 300);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    const shotAt = (g, head) => {
+      // Into the ground at his feet, from above, so only the head can do it.
+      s.projectiles.launch('arrow', { x: g.x + 1.2, y: g.y + 3, z: g.z, vx: 0, vy: -40, vz: 0, weapon: 'bow', head });
+    };
+    const fire = put(-30), poison = put(0), blast = put(30);
+    const h0 = { fire: fire.health, poison: poison.health, blast: blast.health };
+    const burning0 = s.burningCount();
+    shotAt(fire, 'fire'); shotAt(poison, 'poison'); shotAt(blast, 'blast');
+    for (let i = 0; i < 12; i++) s.fixedForTest(1 / 60);
+    out.burning = s.burningCount() - burning0;
+    out.clouds = s.poisonClouds.length;
+    out.blastHit = blast.health < h0.blast || blast.state === 5 || !blast.alive;
+    for (let i = 0; i < 60 * 6; i++) {
+      // Held where they stand, so the fire and the gas have them to work on.
+      for (const g of [fire, poison]) if (g.alive && g.state !== 5) { g.vx = 0; g.vz = 0; }
+      s.fixedForTest(1 / 60);
+    }
+    out.fireHurt = fire.health < h0.fire || fire.state === 5 || !fire.alive;
+    out.poisonHurt = poison.health < h0.poison || poison.state === 5 || !poison.alive;
+    s.combat.hurt = hurt;
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+    s.soldiers.reset();
+    return out;
+  });
+  check('R with the bow in hand goes plain, fire, poison, explosive, and the HUD says which',
+    heads.map((h) => h.head).join(',') === 'plain,fire,poison,blast' && /FIRE/.test(heads[1].label)
+      && /POISON/.test(heads[2].label) && /BLAST/.test(heads[3].label), JSON.stringify(heads));
+  check('a fire arrow sets the ground burning and burns who stands in it', headed.burning >= 1 && headed.fireHurt,
+    JSON.stringify(headed));
+  check('a poison arrow lets out a cloud that hurts who breathes it', headed.clouds >= 1 && headed.poisonHurt,
+    JSON.stringify(headed));
+  check('an explosive arrow goes off where it lands', headed.blastHit, JSON.stringify(headed));
 
   await fresh();
   const knife = await page.evaluate(async () => {
@@ -658,6 +913,31 @@ async function run() {
     last.kinds.join(', '));
   check('and when it falls the district is free of them', last.free && last.presence === 0, `presence ${last.presence}`);
 
+  // Every nest gone: the end of the operation, and the question.
+  const ended = await page.evaluate(async () => {
+    const s = window.spreefall;
+    for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    const box = document.getElementById('opsend');
+    return { shown: !box.classList.contains('hidden'), title: document.getElementById('opsendtitle').textContent,
+      rows: document.querySelectorAll('#opsendstats li').length,
+      again: !!document.getElementById('opsendagain'), menu: !!document.getElementById('opsendmenu') };
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'ops-13-end.png') });
+  check('with every nest gone the operation ends, with what it came to and the question of what next',
+    ended.shown && /presence is broken/i.test(ended.title) && ended.rows >= 4 && ended.again && ended.menu,
+    JSON.stringify(ended));
+  await page.click('#opsendagain');
+  const anew = await page.evaluate(() => {
+    const s = window.spreefall;
+    for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+    const sites = s.campaign.allSites();
+    return { hidden: document.getElementById('opsend').classList.contains('hidden'),
+      held: sites.length > 0 && sites.every((x) => x.state === 0), score: s.campaign.book.score,
+      mode: s.campaign.mode };
+  });
+  check('a new operation puts every nest back and starts the score again',
+    anew.hidden && anew.held && anew.score === 0 && anew.mode === 'slayer', JSON.stringify(anew));
+
   // --- the Warlord -------------------------------------------------------------
   const lord = await page.evaluate(() => {
     const s = window.spreefall;
@@ -820,6 +1100,28 @@ async function run() {
     skit.Digit1 === 'doublebarrel' && skit.Digit6 === 'shieldsaw' && skit.Digit7 === 'flail' && skit.Digit8 === 'chainsaw',
     JSON.stringify(skit));
 
+  // The cheat: every weapon in every mode, through the wheel.
+  const every = await page.evaluate(() => {
+    const s = window.spreefall;
+    const reach = () => {
+      const seen = new Set();
+      s.weapon.select('doublebarrel');
+      for (let i = 0; i < 40; i++) { s.weapon.cycle(1); seen.add(s.weapon.id); }
+      return seen;
+    };
+    const before = reach();
+    s.setCheat('everyWeapon', true);
+    const after = reach();
+    s.setCheat('everyWeapon', false);
+    const off = reach();
+    return { before: before.size, after: after.size, all: s.loadout.length,
+      bow: after.has('bow'), flamer: after.has('flamer'), offBow: off.has('bow') };
+  });
+  check('the every weapon cheat puts the whole arsenal on the wheel in Slayer, and off it is the kit again',
+    every.after === every.all && every.bow && every.flamer && every.before < every.all && !every.offBow,
+    JSON.stringify(every));
+  await page.evaluate(() => window.spreefall.weapon.select('doublebarrel'));
+
   const melee = await page.evaluate(() => {
     const s = window.spreefall;
     const out = {};
@@ -894,7 +1196,7 @@ async function run() {
   check('and the fuel comes back by itself', melee.fuelBack === 1);
   check('the double barrel puts a ghoul down at four metres', melee.double);
 
-  const shield = await page.evaluate(() => {
+  const shield = await page.evaluate(async () => {
     const s = window.spreefall;
     const put = (kind, dx, dz) => {
       const d = s.spawnDemon(kind, dx, dz);
@@ -912,8 +1214,17 @@ async function run() {
     s.look(90, -4); s.camera.update(16 / 10);
     s.shoot();
     const thrown = s.weapon.carried.shieldsaw.ammo === 0;
-    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
-    const out = { thrown, both: a.health < a.maxHealth && b.health < b.maxHealth, back: s.weapon.carried.shieldsaw.ammo === 1 };
+    // In the air: not in the hand, and the world slowed while it flies.
+    s.fixedForTest(1 / 60);
+    const slowed = s.state.timeScale <= 0.41;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const empty = s.renderer.viewmodel === null;
+    for (let i = 0; i < 60 * 8 && s.weapon.carried.shieldsaw.ammo !== 1; i++) s.fixedForTest(1 / 60);
+    s.fixedForTest(1 / 60);
+    const out = { thrown, slowed, empty, after: +s.state.timeScale.toFixed(2),
+      both: a.health < a.maxHealth && b.health < b.maxHealth, back: s.weapon.carried.shieldsaw.ammo === 1 };
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    out.inHand = !!s.renderer.viewmodel;
     s.soldiers.reset();
     // Held up: fire from in front does nothing to you.
     s.combat.reset();
@@ -944,6 +1255,8 @@ async function run() {
   });
   check('the shield saw cuts through two in a line and comes back to the hand',
     shield.thrown && shield.both && shield.back, JSON.stringify(shield));
+  check('thrown, it is not in your hand and the world slows until it is back',
+    shield.empty && shield.slowed && shield.inHand && shield.after > 0.9, JSON.stringify(shield));
   check('held up it stops fire from in front, and raised just in time it sends it back',
     shield.blocked && shield.parried);
 
@@ -954,6 +1267,104 @@ async function run() {
   });
   await page.waitForTimeout(1500);
   await page.screenshot({ path: path.join(SHOTS, 'ops-07-doublebarrel.png') });
+
+  // --- the memorial: broken from inside its field, whole again outside -------
+  const memorial = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.enabled = false; s.drones.enabled = false; s.soldiers.reset(); s.drones.reset();
+    s.projectiles.clear();
+    const f = s.combat.sanctuaries[0];
+    if (!f) return null;
+    const step = (n) => { for (let i = 0; i < n; i++) s.fixedForTest(1 / 60); };
+    // How much stone stands under the field, and the ground at one point.
+    const stone = () => {
+      let h = 0;
+      s.world.forEachSegmentTile(f.x - 70, f.z - 70, f.x + 70, f.z + 70, (segs, count) => {
+        for (let i = 0; i < count; i++) {
+          const o = i * 6;
+          const mx = (segs[o] + segs[o + 2]) / 2, mz = (segs[o + 1] + segs[o + 3]) / 2;
+          if (Math.hypot(mx - f.x, mz - f.z) < 60) h += segs[o + 5] - segs[o + 4];
+        }
+      });
+      return h;
+    };
+    const at = [f.x + 22, f.z + 14];
+    const ground = () => s.world.groundHeight(at[0], at[1]);
+    const shells = () => {
+      for (const [dx, dz] of [[22, 14], [-18, 20], [10, -24], [26, -6], [22, 14]]) {
+        const x = f.x + dx, z = f.z + dz;
+        s.explode(x, s.world.groundHeight(x, z) + 1, z, { radius: 16, damage: 1600 }, { weapon: 'rpg' });
+      }
+    };
+    const out = {};
+    const stone0 = stone(), ground0 = ground();
+    // From outside the field holds.
+    s.teleport(f.x, f.z + f.radius + 40);
+    step(10);
+    shells();
+    step(60 * 8);
+    out.outside = { stone: +(stone() / stone0).toFixed(4), ground: +(ground() - ground0).toFixed(2), open: !!s.combat.fieldOpen };
+    // Inside it opens, and the same shells break it.
+    s.teleport(f.x - 10, f.z - 10);
+    step(10);
+    out.opened = !!s.combat.fieldOpen;
+    shells();
+    step(60 * 12);
+    out.inside = { stone: +(stone() / stone0).toFixed(4), ground: +(ground() - ground0).toFixed(2),
+      held: s.demolition.sites.filter((x) => !x.spared).length };
+    // Out again: it closes, and all of it is put back.
+    const restored = s.state.memorialRestored || 0;
+    s.teleport(f.x, f.z + f.radius + 40);
+    step(10);
+    out.closed = { open: !!s.combat.fieldOpen, restored: (s.state.memorialRestored || 0) - restored,
+      stone: +(stone() / stone0).toFixed(4), ground: +(ground() - ground0).toFixed(2) };
+    // And in again it is still whole.
+    s.teleport(f.x - 10, f.z - 10);
+    step(60 * 3);
+    out.back = { open: !!s.combat.fieldOpen, stone: +(stone() / stone0).toFixed(4),
+      ground: +(ground() - ground0).toFixed(2) };
+    out.field = { x: f.x, z: f.z, r: f.radius };
+    return out;
+  });
+  check('the memorial field holds against everything from outside',
+    !!memorial && memorial.outside.stone === 1 && memorial.outside.ground === 0 && !memorial.outside.open,
+    JSON.stringify(memorial && memorial.outside));
+  check('stand inside and it opens, and the stelae can be broken',
+    !!memorial && memorial.opened && memorial.inside.stone < 0.995 && memorial.inside.held > 0,
+    JSON.stringify(memorial && memorial.inside));
+  check('step out and the memorial stands again, stone and ground',
+    !!memorial && !memorial.closed.open && memorial.closed.restored === 1 && memorial.closed.stone === 1
+      && memorial.closed.ground === 0, JSON.stringify(memorial && memorial.closed));
+  check('and walking back in finds it whole', !!memorial && memorial.back.open && memorial.back.stone === 1
+    && memorial.back.ground === 0, JSON.stringify(memorial && memorial.back));
+
+  // The pictures: broken from inside, then whole again after a step outside.
+  const shellsInside = () => page.evaluate(() => {
+    const s = window.spreefall;
+    const f = s.combat.sanctuaries[0];
+    s.teleport(f.x - 40, f.z + 35);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    for (const [dx, dz] of [[0, 0], [8, -8], [-6, -4], [4, 6], [14, -16], [-2, -14], [10, 2], [-14, 10]]) {
+      const x = f.x + dx, z = f.z + dz;
+      s.explode(x, s.world.groundHeight(x, z) + 1, z, { radius: 26, damage: 4000 }, { weapon: 'rpg' });
+    }
+    for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
+    s.look(-45, -6);
+  });
+  await shellsInside();
+  await page.waitForTimeout(8000);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-10-memorial-broken.png') });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const f = s.combat.sanctuaries[0];
+    s.teleport(f.x, f.z + f.radius + 40);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.teleport(f.x - 40, f.z + 35);
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    s.look(-45, -6);
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-11-memorial-whole.png') });
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
