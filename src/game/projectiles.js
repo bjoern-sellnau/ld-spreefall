@@ -73,6 +73,13 @@ export const PROJECTILE = {
     radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 9,
     detonateOnContact: true, trail: 'void', light: true, spin: 3,
   },
+  voidStorm: {
+    // The same ball out of orbit: faster, because four hundred metres at the
+    // cannon's walking pace is a quarter of a minute, and given long enough
+    // to come in at a slant from a long way off.
+    radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 28,
+    detonateOnContact: true, trail: 'void', light: true, spin: 3,
+  },
   nuke: {
     // Dropped rather than fired, so it comes in fast and nothing stops it on
     // the way down. The radius is the warhead's own body, not its blast.
@@ -158,6 +165,8 @@ export class Projectiles {
     b.thermite = o.thermite || null;
     b.emp = o.emp || null;
     b.mechKill = o.mechKill || null;
+    // And what a void ball reaches out with, when it was not the cannon's.
+    b.void = o.void || null;
     // Flak: how near the thing it was fired at the shell has to get before it
     // bursts. A shell that has to hit an aircraft is a shell that never does.
     b.proximity = o.proximity || 0;

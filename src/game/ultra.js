@@ -43,15 +43,40 @@ export const ULTRA = {
   },
 };
 
+// Void storm: the same thing with the void cannon's ball instead of a plasma
+// bolt. Far fewer of them, because each one is a ball of green that reaches
+// out at everybody it passes and lands like the cannon's own shot: a flash
+// the width of a street and a tendril to everybody in reach. It cuts no
+// holes in walls one at a time, for the reason given for ultra plasma; the
+// wreck is the cannon's own, and enough of them bring a block down.
+export const VOID_STORM = {
+  charge: 6,
+  height: 420,
+  speed: 90,
+  rate: 3,
+  rateMax: 14,
+  rampSeconds: 6,
+  // Every one in the air looks for somebody to reach seven times a second,
+  // which is what holds this down, not the pool.
+  maxLive: 48,
+  splash: { radius: 24, damage: 700, force: 46, quiet: true, punch: false, self: 0.08,
+    wreck: { radius: 12, damage: 200 } },
+  void: { aura: 16, auraDamage: 70, every: 0.14, reach: 48, damage: 450 },
+  defaults: { count: 60, radius: 160, bearing: 225, tilt: 20 },
+  limits: {
+    count: [1, 600], radius: [20, 1200], bearing: [0, 359], tilt: [0, 75],
+  },
+};
+
 const STATE = { OFF: 0, CHARGE: 1, RAIN: 2 };
 export const ULTRA_STATE = STATE;
 
 /** A setting held to what it may be. The count has no top. */
-export function clampUltra(key, v) {
+export function clampUltra(key, v, spec = ULTRA) {
   if (key === 'blast') return v === true || v === 'true' || v === 1;
   const n = Math.round(Number(v));
-  if (!Number.isFinite(n)) return ULTRA.defaults[key];
-  const [lo, hi] = ULTRA.limits[key];
+  if (!Number.isFinite(n)) return spec.defaults[key];
+  const [lo, hi] = spec.limits[key];
   if (key === 'count') return Math.max(lo, n);
   if (key === 'bearing') return ((n % 360) + 360) % 360;
   return Math.min(hi, Math.max(lo, n));
@@ -72,9 +97,11 @@ export class Ultra {
   /**
    * @param {object} world for the ground under the circle
    * @param {(x,y,z)=>boolean} isSanctuary the memorial, which this cannot touch
+   * @param {object} spec ULTRA, or VOID_STORM for the void cannon's ball
    */
-  constructor(world, isSanctuary) {
+  constructor(world, isSanctuary, spec = ULTRA) {
     this.world = world;
+    this.spec = spec;
     this.isSanctuary = isSanctuary || (() => false);
     this.state = STATE.OFF;
     this.left = 0;           // still to come
@@ -98,7 +125,8 @@ export class Ultra {
    */
   fire(x, z, opts) {
     if (this.active) return false;
-    const radius = clampUltra('radius', opts.radius);
+    const spec = this.spec;
+    const radius = clampUltra('radius', opts.radius, spec);
     // Any part of the circle over the memorial is refused, the same as the
     // other two: a ball bounces, and the circle is where they land.
     for (let a = 0; a < 16; a++) {
@@ -109,16 +137,16 @@ export class Ultra {
     }
     this.shot = {
       x, z, radius,
-      count: clampUltra('count', opts.count),
-      bearing: clampUltra('bearing', opts.bearing),
-      tilt: clampUltra('tilt', opts.tilt),
+      count: clampUltra('count', opts.count, spec),
+      bearing: clampUltra('bearing', opts.bearing, spec),
+      tilt: clampUltra('tilt', opts.tilt, spec),
     };
     this.left = this.shot.count;
     this.sent = 0;
     this.t = 0;
     this.acc = 0;
     this.state = STATE.CHARGE;
-    if (this.onCharge) this.onCharge(ULTRA.charge);
+    if (this.onCharge) this.onCharge(spec.charge);
     return true;
   }
 
@@ -134,19 +162,20 @@ export class Ultra {
    */
   update(dt, live) {
     if (this.state === STATE.OFF) return;
+    const spec = this.spec;
     this.t += dt;
     if (this.state === STATE.CHARGE) {
-      if (this.t < ULTRA.charge) return;
+      if (this.t < spec.charge) return;
       this.state = STATE.RAIN;
       this.t = 0;
       if (this.onRain) this.onRain();
     }
-    const ramp = Math.min(1, this.t / ULTRA.rampSeconds);
-    const rate = ULTRA.rate + (ULTRA.rateMax - ULTRA.rate) * ramp;
+    const ramp = Math.min(1, this.t / spec.rampSeconds);
+    const rate = spec.rate + (spec.rateMax - spec.rate) * ramp;
     this.acc += rate * dt;
     const s = this.shot;
     const dir = ultraDirection(s.bearing, s.tilt);
-    let room = Math.max(0, ULTRA.maxLive - live);
+    let room = Math.max(0, spec.maxLive - live);
     while (this.acc >= 1 && this.left > 0 && room > 0) {
       this.acc -= 1;
       // Spread evenly over the disc, not bunched in the middle of it.
@@ -155,9 +184,9 @@ export class Ultra {
       const tx = s.x + Math.cos(a) * r, tz = s.z + Math.sin(a) * r;
       const ty = this.world.groundHeight(tx, tz);
       // Back up the line it comes in on until it is the full height up.
-      const back = ULTRA.height / Math.max(0.2, -dir.y);
+      const back = spec.height / Math.max(0.2, -dir.y);
       const from = { x: tx - dir.x * back, y: ty - dir.y * back, z: tz - dir.z * back };
-      const speed = ULTRA.speed * (0.9 + Math.random() * 0.2);
+      const speed = spec.speed * (0.9 + Math.random() * 0.2);
       if (this.launch && this.launch(from, { x: dir.x * speed, y: dir.y * speed, z: dir.z * speed })) {
         this.left--;
         this.sent++;

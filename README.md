@@ -262,6 +262,7 @@ visits.
 | Drop a nuke | opens a map of the city; click where you want it, then confirm |
 | Ion cannon | three beams in a ring, then the middle one |
 | Ultra plasma | as many plasma balls from orbit as you like, over a circle, from a side and at an angle you set |
+| Void storm | the void cannon's ball from orbit, by the dozen, set the same way |
 | Soldiers, Drones, Jets | brings a section, a flight or a pair out around you |
 | God mode | nothing hurts you, though you are still told which way it came from |
 | Infinite ammunition | the magazine never reaches the bottom |
@@ -416,6 +417,13 @@ hard kind. It does not bounce, it goes off on the first thing it touches and
 it does ten times the harm, and it burns a very bright orange where the
 ordinary bolt is cyan, so you can tell from the street which one is coming.
 The charge shows under the crosshair and is lost if you let go early.
+
+**Void storm.** The same map and the same four numbers, kept apart from ultra
+plasma's, with the void cannon's ball coming down instead of a bolt: up to
+six hundred of them, never more than forty eight in the air, after six
+seconds of charge. Each one reaches out at everybody it passes on the way
+down and lands the way the cannon's own shot does, a green flash the width
+of a street and a tendril to everybody in reach that a wall does not hide.
 
 The skeleton is real geometry rather than a texture. The soldier mesh carries
 a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the

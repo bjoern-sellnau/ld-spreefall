@@ -3382,3 +3382,27 @@ So there are two cities now, and a profile picks which:
   and the one after is ordinary again. Checks: arsenal (charge, kind, damage,
   no bounce, next shot ordinary) and cheats (a blast rain sends only the hard
   kind, at 800, without a bounce).
+
+## 76. Void storm: the void cannon's ball from orbit
+
+- 2026-10-21: asked for: a new super weapon like Ultra Plasma, Void Storm,
+  with the void weapon's ball as the projectile.
+- Ultra takes its numbers from a spec now (ULTRA or VOID_STORM), so the
+  storm is a second instance of the same queue and the same map mode with
+  its own four settings in the cheats (count up to 600 on the slider, any
+  number in the box). The blast switch is hidden for it.
+- A projectile can carry its own void spec (b.void), which the in-flight
+  tendrils and the landing burst read before the weapon row's. The storm's
+  balls are a kind of their own, voidStorm, with the void mesh, 90 m/s and
+  long enough to live to come in at a slant. Their splash is the cannon's
+  without the punch: a hole cut per ball is a tile re-mesh each.
+- At most 48 in the air, because each looks for somebody to reach seven
+  times a second; that is the cost, not the pool.
+- The void ball's green was white from across a square, for the reason
+  blast plasma's orange was: brought down to (0, 1.7, 0.05) at the rim and
+  (0.3, 3, 0.2) facing you, which lands on a neon green after the ACES fit.
+- Checks (cheats): the panel shows its own numbers and leaves ultra plasma's
+  alone, it rains only voidStorm, all twelve sent and none left up, the four
+  soldiers under it are taken, never more than 48 up. storm-01-map.png,
+  storm-02-rain.png. The blast rain check now switches blast off again so
+  later checks are not run with it on.

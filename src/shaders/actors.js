@@ -264,8 +264,11 @@ void main() {
     // The void cannon's green, in its cell and in the ball it fires. Brighter
     // and slower to pulse than plasma, because there is a lot more of it.
     albedo = vec3(0.02);
-    float pulse = 0.7 + 0.3 * sin(uCamPos.w * 9.0 + vWorld.y * 2.0);
-    emissive = vec3(0.35, 1.0, 0.28) * 9.0 * pulse;
+    // Kept low in red and blue for the same reason as blast plasma's orange:
+    // at nine times over, the tonemapper had it white from across a square.
+    float pulse = 0.75 + 0.25 * sin(uCamPos.w * 9.0 + vWorld.y * 2.0);
+    float face = abs(dot(n, normalize(uCamPos.xyz - vWorld)));
+    emissive = mix(vec3(0.0, 1.7, 0.05), vec3(0.3, 3.0, 0.2), face * face) * pulse;
     rough = 0.1;
     metal = 0.0;
   } else if (vPart > 30.5 && vPart < 31.5) {

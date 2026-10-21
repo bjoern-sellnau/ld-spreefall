@@ -11,7 +11,7 @@
 // clean run and the end screen says so too.
 
 import { CHASSIS, chassisById, mechKey } from './chassis.js';
-import { ULTRA, clampUltra } from './ultra.js';
+import { ULTRA, VOID_STORM, clampUltra } from './ultra.js';
 
 const KEY = 'spreefall.cheats';
 
@@ -78,6 +78,7 @@ export const ACTIONS = [
   { id: 'nuke', label: 'Drop a nuke', note: 'pick the target on the map' },
   { id: 'ion', label: 'Ion cannon', note: 'three beams, then the middle one' },
   { id: 'ultra', label: 'Ultra plasma', note: 'a rain of plasma from orbit: as many as you like, as wide as you like, from where you like' },
+  { id: 'storm', label: 'Void storm', note: 'the void cannon\'s ball, from orbit, by the dozen' },
 ];
 
 /** Bringing more of them out. Each button is one squad, flight or section. */
@@ -151,6 +152,8 @@ export class Cheats {
     // Ultra plasma: how many, how wide, from which way and how steep. Kept
     // with the choices rather than the switches, for the same reason.
     this.ultra = { ...ULTRA.defaults };
+    // And the void storm's, the same four.
+    this.storm = { ...VOID_STORM.defaults };
     // Set the first time anything is switched on, and never cleared, so that
     // turning a cheat off again does not launder the run.
     this.used = false;
@@ -253,6 +256,14 @@ export class Cheats {
     return true;
   }
 
+  /** And the void storm's. */
+  setStorm(key, v) {
+    if (!(key in VOID_STORM.defaults)) return false;
+    this.storm[key] = clampUltra(key, v, VOID_STORM);
+    this.save();
+    return true;
+  }
+
   /** The mech table key for the next one of yours to come down. */
   myMech() { return mechKey(this.mechs.mine, true); }
 
@@ -274,7 +285,7 @@ export class Cheats {
 
   save() {
     try {
-      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra };
+      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra, storm: this.storm };
       for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
@@ -297,6 +308,11 @@ export class Cheats {
       if (saved.ultra) {
         for (const k of Object.keys(ULTRA.defaults)) {
           if (saved.ultra[k] !== undefined) this.ultra[k] = clampUltra(k, saved.ultra[k]);
+        }
+      }
+      if (saved.storm) {
+        for (const k of Object.keys(VOID_STORM.defaults)) {
+          if (saved.storm[k] !== undefined) this.storm[k] = clampUltra(k, saved.storm[k], VOID_STORM);
         }
       }
       if (saved.mechs) {

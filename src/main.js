@@ -26,7 +26,7 @@ import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
 import { CHASSIS } from './game/chassis.js';
-import { Ultra, ULTRA, ULTRA_STATE } from './game/ultra.js';
+import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
@@ -326,6 +326,7 @@ async function main() {
   const machines = new Machines();
   const ion = new Ion(world);
   const ultra = new Ultra(world);
+  const storm = new Ultra(world, null, VOID_STORM);
   const vehicles = new Vehicles(world);
   const mechs = new Mechs(world);
   weapon.mechs = mechs;
@@ -807,7 +808,7 @@ async function main() {
 
     // The void cannon's ball, landing: a green flash the size of the blast,
     // and a tendril out to everybody within reach that a wall does not hide.
-    const voidSpec = row && row.void ? row.void : null;
+    const voidSpec = (body && body.void) || (row && row.void) || null;
     if (voidSpec) voidBurst(x, y, z, splash, voidSpec);
 
     // And what it did to the city itself. Small blasts add up on a grid and
@@ -1002,8 +1003,8 @@ async function main() {
    */
   function voidTick(dt) {
     for (const b of projectiles.active) {
-      if (b.kind !== 'void' || !b.alive) continue;
-      const spec = WEAPONS.void.void;
+      if ((b.kind !== 'void' && !b.void) || !b.alive) continue;
+      const spec = b.void || WEAPONS.void.void;
       for (let i = 0; i < 3; i++) {
         effects.spark(b.x + (Math.random() - 0.5) * 1.4, b.y + (Math.random() - 0.5) * 1.4,
           b.z + (Math.random() - 0.5) * 1.4, 0.35, 1.0, 0.3);
@@ -2984,6 +2985,30 @@ async function main() {
     return n;
   };
 
+  // Void storm: the void cannon's ball from orbit. Each one carries the
+  // cannon's reach with it, so it tears out at whoever it passes on the way
+  // down and lands the way the cannon's own shot does.
+  storm.launch = (from, v) => projectiles.launch('voidStorm', {
+    x: from.x, y: from.y, z: from.z, vx: v.x, vy: v.y, vz: v.z,
+    splash: VOID_STORM.splash, void: VOID_STORM.void, weapon: 'storm',
+  });
+  storm.onCharge = (seconds) => {
+    audio.ultraCharge(seconds);
+    toast('void storm, charging');
+    feed('<i>void storm</i> charging');
+  };
+  storm.onRain = () => {
+    audio.explosion();
+    state.flash = Math.max(state.flash, 0.3);
+    feed(`<b>void storm</b> ${storm.left} inbound`);
+  };
+  storm.onDone = (sent) => { feed(`<i>void storm</i> ${sent} away`); };
+  const stormLive = () => {
+    let n = 0;
+    for (const b of projectiles.active) if (b.kind === 'voidStorm') n++;
+    return n;
+  };
+
   ion.onCharge = () => {
     audio.ionCharge();
     toast('ion cannon, charging');
@@ -3571,6 +3596,9 @@ async function main() {
     } else if (id === 'ultra') {
       openMap('ultra');
       return;
+    } else if (id === 'storm') {
+      openMap('storm');
+      return;
     }
     applyCheats();
   }
@@ -3642,6 +3670,12 @@ async function main() {
       armed: 'Enter to fire, Esc to cancel.',
       button: 'Fire',
     },
+    storm: {
+      hint: 'Set how many, how wide, from where and how steep, then click the city. '
+        + 'Wheel zooms, drag moves. Esc to think better of it.',
+      armed: 'Enter to fire, Esc to cancel.',
+      button: 'Fire',
+    },
     ion: {
       hint: 'Click the city to put the ion cannon on it. '
         + 'Wheel zooms, drag moves. Esc to think better of it.',
@@ -3670,8 +3704,8 @@ async function main() {
     state.mapPull = { from: MAP_ZOOM.near, to: MAP_ZOOM.pick, t: 0, back: false };
     targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true, ...aimArrow(mode) };
     el.nukeTarget.classList.toggle('travel', mode === 'travel');
-    el.ultraPanel.classList.toggle('hidden', mode !== 'ultra');
-    if (mode === 'ultra') showUltra();
+    el.ultraPanel.classList.toggle('hidden', mode !== 'ultra' && mode !== 'storm');
+    if (mode === 'ultra' || mode === 'storm') showUltra();
     el.nukeTarget.classList.remove('hidden');
     el.targetConfirm.classList.add('hidden');
     el.confirmFire.textContent = MAP_MODE[mode].button;
@@ -3789,7 +3823,7 @@ async function main() {
     const radius = aimRadius(state.mapMode);
     state.pendingNuke = { x, z };
     const inside = countInside(x, z, radius);
-    const u = cheats.ultra;
+    const u = state.mapMode === 'storm' ? cheats.storm : cheats.ultra;
     el.confirmWhere.textContent = state.mapMode === 'ion'
       ? `${away} m away. Three beams for ${Math.round(ION.charge)} seconds, `
         + `then ${radius} m of everything. ${inside} target${inside === 1 ? '' : 's'} inside.`
@@ -3797,7 +3831,11 @@ async function main() {
         ? `${away} m away. ${u.count} plasma balls over ${radius} m, from the `
           + `${compassName(u.bearing)} at ${u.tilt}\u00b0, after ${ULTRA.charge.toFixed(0)} seconds of charge. `
           + `${inside} target${inside === 1 ? '' : 's'} inside.`
-        : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
+        : state.mapMode === 'storm'
+          ? `${away} m away. ${u.count} void balls over ${radius} m, from the `
+            + `${compassName(u.bearing)} at ${u.tilt}\u00b0, after ${VOID_STORM.charge.toFixed(0)} seconds of charge. `
+            + `${inside} target${inside === 1 ? '' : 's'} inside.`
+          : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
     const self = away < radius;
     el.confirmSelf.classList.toggle('hidden', !self);
     el.confirmSelf.textContent = combat.godmode
@@ -3828,6 +3866,18 @@ async function main() {
     if (state.mapMode === 'ultra') {
       if (!ultra.fire(at.x, at.z, cheats.ultra)) {
         el.targetHint.textContent = ultra.active
+          ? 'the last one is still coming down'
+          : 'it cannot be fired there';
+        return false;
+      }
+      cheats.used = true;
+      applyCheats();
+      closeTargeting();
+      return true;
+    }
+    if (state.mapMode === 'storm') {
+      if (!storm.fire(at.x, at.z, cheats.storm)) {
+        el.targetHint.textContent = storm.active
           ? 'the last one is still coming down'
           : 'it cannot be fired there';
         return false;
@@ -4150,24 +4200,38 @@ async function main() {
     if (mode === 'travel') return 14;
     if (mode === 'ion') return ionRadius();
     if (mode === 'ultra') return cheats.ultra.radius;
+    if (mode === 'storm') return cheats.storm.radius;
     return nukeRadius();
   }
 
-  /** The way ultra plasma comes in, for the arrow the map draws. */
+  /** The way ultra plasma or the void storm comes in, for the arrow the map draws. */
   function aimArrow(mode) {
-    return mode === 'ultra' ? { bearing: cheats.ultra.bearing, tilt: cheats.ultra.tilt } : {};
+    const u = mode === 'ultra' ? cheats.ultra : mode === 'storm' ? cheats.storm : null;
+    return u ? { bearing: u.bearing, tilt: u.tilt } : {};
   }
 
   // The four numbers, on the map while it is up for ultra plasma. Each one
   // moves the circle or the arrow as it is dragged, and a point already
   // picked is asked about again with the new numbers.
+  // The void storm uses the same panel with its own four numbers, and no
+  // blast switch: a void ball is already the hard kind.
   const ultraRows = {};
+  const rainMode = () => (state.mapMode === 'storm' ? 'storm' : 'ultra');
   function showUltra() {
-    const u = cheats.ultra;
+    const mode = rainMode();
+    const u = mode === 'storm' ? cheats.storm : cheats.ultra;
+    const spec = mode === 'storm' ? VOID_STORM : ULTRA;
     const toggle = document.getElementById('ultrablast');
-    if (toggle) toggle.checked = !!u.blast;
+    if (toggle) {
+      toggle.checked = !!u.blast;
+      toggle.closest('label').classList.toggle('hidden', mode === 'storm');
+    }
     for (const key of Object.keys(ultraRows)) {
       const row = ultraRows[key];
+      const [lo, hi] = spec.limits[key];
+      row.slider.min = String(lo);
+      row.slider.max = String(hi);
+      if (key === 'count') row.name.textContent = mode === 'storm' ? 'Void balls' : 'Plasma balls';
       row.slider.value = String(Math.min(Number(row.slider.max), u[key]));
       if (row.box) row.box.value = String(u[key]);
       row.say.textContent = key === 'count' ? `${u.count}`
@@ -4179,10 +4243,12 @@ async function main() {
     return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8];
   }
   function setUltra(key, v) {
-    cheats.setUltra(key, v);
+    const mode = rainMode();
+    if (mode === 'storm') cheats.setStorm(key, v);
+    else cheats.setUltra(key, v);
     showUltra();
     if (targetMap.aim) {
-      targetMap.aim = { ...targetMap.aim, radius: aimRadius('ultra'), ...aimArrow('ultra') };
+      targetMap.aim = { ...targetMap.aim, radius: aimRadius(mode), ...aimArrow(mode) };
     }
     if (state.pendingNuke) armNuke(state.pendingNuke.x, state.pendingNuke.z);
     else drawTargetMap();
@@ -4214,7 +4280,7 @@ async function main() {
       row.append(box);
     }
     el.ultraPanel.appendChild(row);
-    ultraRows[key] = { slider, box, say };
+    ultraRows[key] = { slider, box, say, name };
   }
   // And which kind comes down: the rifle's plasma, or blast plasma.
   const blastRow = document.createElement('label');
@@ -5004,6 +5070,7 @@ async function main() {
       trains.update(worldDt, player);
       ion.update(worldDt);
       ultra.update(worldDt, ultraLive());
+      storm.update(worldDt, stormLive());
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
@@ -5192,6 +5259,7 @@ async function main() {
     trains.update(worldDt, player);
     ion.update(worldDt);
     ultra.update(worldDt, ultraLive());
+    storm.update(worldDt, stormLive());
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     // And the ones hunting you keep walking whether or not you are in one.
@@ -5697,6 +5765,7 @@ async function main() {
     cinema, cinemaSpec: CINEMA,
     ion, ionSpec: ION, ionState: ION_STATE,
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
+    storm, stormSpec: VOID_STORM,
     reactors, fusionSpec: FUSION,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,

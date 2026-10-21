@@ -23,6 +23,8 @@ const MAX_PICKUPS = 16;
 const MAX_GIBS = 256;
 // Ultra plasma's balls in the air at once, which is its own ceiling.
 const MAX_ULTRA = 480;
+// And the void storm's balls, which VOID_STORM.maxLive holds to 48.
+const MAX_STORM = 64;
 // Past this there is no point drawing a pad: the fog has it anyway.
 const PICKUP_RANGE = 260;
 
@@ -1051,6 +1053,7 @@ export class Actors {
       banana: this._uploadMesh(buildProjectileMesh('banana'), MAX_PROPS, 2),
       nuke: this._uploadMesh(buildProjectileMesh('nuke'), 8, 2),
       void: this._uploadMesh(buildProjectileMesh('void'), 8, 2),
+      voidStorm: this._uploadMesh(buildProjectileMesh('void'), MAX_STORM, 2),
       ultra: this._uploadMesh(buildProjectileMesh('ultra'), MAX_ULTRA, 2),
       blast: this._uploadMesh(buildProjectileMesh('blast'), MAX_PROPS, 2),
       ultraBlast: this._uploadMesh(buildProjectileMesh('ultraBlast'), MAX_ULTRA, 2),
@@ -1161,12 +1164,13 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
       const cap = b.kind === 'nuke' || b.kind === 'void' ? 8
-        : (b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA : MAX_PROPS);
+        : b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA
+          : b.kind === 'voidStorm' ? MAX_STORM : MAX_PROPS;
       if (counts[b.kind] >= cap) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
