@@ -615,7 +615,10 @@ async function main() {
       // carries a few metres; everything else carries a long way.
       if (tactics.enabled) soldiers.hear(player.x, player.z, spec.noise ?? TACTICS.noise.shot);
     }
-    if (tactics.enabled && shot.end && shot.from) tactics.shotRadio(shot.from, shot.end, spec.damage || 20);
+    if (tactics.enabled && shot.end && shot.from) {
+      tactics.shotRadio(shot.from, shot.end, spec.damage || 20);
+      tactics.shotBox(shot.from, shot.end, spec.damage || 20);
+    }
     const m = muzzlePoint(shot.from);
     if (shot.end) {
       effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
@@ -660,6 +663,7 @@ async function main() {
     if (tactics.enabled) {
       soldiers.hear(x, z, TACTICS.noise.explosion);
       tactics.hitRadio(x, y, z, splash.damage || 50, splash.radius * 0.8 + 1);
+      tactics.hitBox(x, y, z, splash.damage || 50, splash.radius * 0.8 + 1);
     }
     strikeField(x, y, z, splash.radius);
     if (splash.fusion) {
@@ -2273,6 +2277,12 @@ async function main() {
 
   // Wherever an arrow lands, in somebody or in a wall, its head does its work.
   projectiles.onArrowHead = (b, x, y, z) => {
+    // An arrow into a camp's radio or alarm box breaks it like a round does.
+    if (tactics.enabled) {
+      const harm = (WEAPONS.bow.damage || 100);
+      tactics.hitRadio(x, y, z, harm, 0.6);
+      tactics.hitBox(x, y, z, harm, 0.6);
+    }
     const row = ARROW_HEADS[b.head];
     if (!row) return;
     const g = world.groundHeight(x, z);
@@ -5592,6 +5602,17 @@ async function main() {
     audio.hitMarker(true);
     feed(run.alarm ? '<b>radio down</b> nobody else is coming' : '<b>radio down</b>');
     toast('radio destroyed');
+  };
+  tactics.onBox = (site, run, wasSounding) => {
+    const p = tactics.boxAt(site);
+    effects.flash(p.x, p.y, p.z, 1.4, 1.0, 0.8, 0.2, 0.2);
+    for (let i = 0; i < 18; i++) {
+      effects.spark(p.x + (Math.random() - 0.5) * 0.5, p.y + Math.random() * 0.4,
+        p.z + (Math.random() - 0.5) * 0.5, 1.0, 0.85, 0.3);
+    }
+    audio.hitMarker(true);
+    feed(wasSounding ? '<b>alarm off</b> the siren is quiet' : '<b>alarm box down</b> they cannot sound the alarm');
+    toast(wasSounding ? 'alarm silenced' : 'alarm disabled');
   };
   tactics.onCall = (site, run, count) => {
     // Help comes the way everybody arrives in this game: out of the street,

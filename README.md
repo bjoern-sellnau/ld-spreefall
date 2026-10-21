@@ -473,6 +473,10 @@ in the browser.
   arrows drop and stay where they go in, and a suppressed marksman rifle
   with a scope; then the M16, the shotgun, the rocket launcher, grenade, C4,
   banana and railgun. F behind a guard who has not seen you is a takedown.
+- Every camp has an alarm box on the siren's pole. Shoot it, blow it up or
+  put an arrow in it and the siren cannot be sounded: they still fight when
+  they see you, but nobody is called and the camp still pays the bonus for no
+  alarm. Break it while the siren is going and it stops.
 
 ## Spree Fall Slayer
 

@@ -457,6 +457,96 @@ async function run() {
     loud.state === 1 && loud.paid === 1000 + 400 * loud.level && !loud.siren,
     `+${loud.paid}`);
 
+  // --- the alarm box: shot first, the siren cannot be sounded ----------------
+  await fresh();
+  const box = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    const hurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    // A rifle at the box from four metres, through the real weapon.
+    const p = s.tactics.boxAt(site);
+    const at = (x, z) => {
+      s.teleport(x, z);
+      for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+      const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+      const dx = p.x - ex, dy = p.y - ey, dz = p.z - ez;
+      const l = Math.hypot(dx, dy, dz);
+      s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.asin(dy / l) * 180 / Math.PI);
+      s.camera.update(16 / 10);
+    };
+    // From the side the box faces, a few metres off.
+    let shots = 0;
+    for (const [ox, oz] of [[0, 4], [4, 0], [-4, 0], [0, -4], [3, 3], [-3, 3]]) {
+      if (!run.boxUp) break;
+      at(p.x + ox, p.z + oz);
+      s.weapon.select('m16');
+      for (let k = 0; k < 4 && run.boxUp; k++) { s.weapon.cooldown = 0; s.weapon.spread = 0; s.shoot(); shots++; }
+    }
+    const down = !run.boxUp;
+    const drawn = s.tactics.drawList(s.player.x, s.player.z).find((c) => Math.abs(c.x - site.x) < 1);
+    // Seen now: they know, but no siren and nobody called.
+    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    s.tactics.raiseAlarm(run);
+    const alerted = run.guards.filter((g) => g.post && g.post.alert).length;
+    for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 2); i++) s.fixedForTest(1 / 60);
+    const came = s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before;
+    const siren = run.alarm;
+    // And taken like that it still pays the bonus: the alarm never sounded.
+    const score = s.campaign.book.score;
+    for (const g of run.guards) s.soldiers.damage(g, 9999, { x: 1, y: 0, z: 0 });
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    const paid = s.campaign.book.score - score;
+    s.combat.hurt = hurt;
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+    return { down, shots, drawn: !!(drawn && drawn.boxDown), alerted, came, siren, paid, level: site.level,
+      taken: site.state };
+  });
+  check('every camp has an alarm box, and a few rounds break it', box.down && box.drawn && box.shots <= 8,
+    JSON.stringify(box));
+  check('broken, they still fight but the siren stays quiet and nobody is called',
+    box.alerted >= 3 && !box.siren && box.came === 0, JSON.stringify(box));
+  check('and the camp taken like that still pays the bonus for no alarm',
+    box.taken === 1 && box.paid === 1000 + 400 * box.level + 1500, `+${box.paid}`);
+
+  // Sounding already: breaking the box stops the siren and the calls.
+  await fresh();
+  const hush = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.tactics.raiseAlarm(run);
+    const sounding = run.alarm;
+    const p = s.tactics.boxAt(site);
+    s.explode(p.x + 0.4, p.y, p.z, { radius: 4, damage: 120 }, { weapon: 'grenade' });
+    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 2); i++) s.fixedForTest(1 / 60);
+    return { sounding, after: run.alarm, boxUp: run.boxUp,
+      came: s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before };
+  });
+  check('with the siren going, a grenade at the box silences it and stops the call',
+    hush.sounding && !hush.after && !hush.boxUp && hush.came === 0, JSON.stringify(hush));
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.tactics.clear(); s.campaign.reset({}); s.soldiers.reset();
+    s.teleport(site.x + 30, site.z + 30);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const p = s.tactics.boxAt(site);
+    const run = s.tactics.live.get(site.id);
+    s.tactics.raiseAlarm(run);
+    s.soldiers.enabled = false;
+    s.teleport(p.x + 3.2, p.z + 2.4);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    const dx = p.x - s.player.x, dz = p.z - s.player.z;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, -6);
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-12-alarm-box.png') });
+  await page.evaluate(() => { window.spreefall.soldiers.enabled = true; });
+
   // --- the quiet three, and a takedown ---------------------------------------
   await page.evaluate(() => {
     const s = window.spreefall;

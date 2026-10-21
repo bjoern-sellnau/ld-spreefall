@@ -3867,3 +3867,24 @@ So there are two cities now, and a profile picks which:
   frontages from Pariser Platz each go through and come out a long way past
   where the wall was.
 
+## 91. An alarm box in every camp
+
+- Every camp has an alarm box on the siren's pole at chest height: a yellow
+  and black housing with a red lamp on top, lit and flashing while the
+  alarm sounds. One rifle round, a grenade, a blast or an arrow breaks it
+  (30), the way the radio is broken, and it is gone from the picture and
+  from the shadows.
+- Broken before anybody sees you, the siren cannot be sounded: when they do
+  see you they know and they fight, but nothing goes off, nobody is called,
+  and the camp taken like that still pays the bonus for no alarm, which is
+  the point of going for the box first.
+- Broken while the siren is going, it stops: the siren is quiet and no more
+  help is called.
+- A camp manned afresh, after a reset or a walk away, has a working box
+  again.
+- Checks (ops, 78 now): a rifle round through the real weapon breaks the
+  box and the camp is drawn without it; broken first, the guards are all
+  alert but there is no siren and nobody comes, and the camp pays the quiet
+  bonus; with the siren going, a grenade at the box stops it and the call.
+  ops-12-alarm-box.png.
+
