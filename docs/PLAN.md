@@ -3743,3 +3743,39 @@ So there are two cities now, and a profile picks which:
   and the Warlord for the last nest, the game layer deciding the last nest
   when every district is in scope, and none of it with bosses off.
   ops-08-warlord.png.
+
+## 87. A compass across the top, a mark of your own, and a Gate you can walk through
+
+- A compass strip across the top of the screen while walking, in the manner
+  of the open world shooters: ticks every five degrees, letters every forty
+  five, north picked out, a mark at the middle for where you are looking.
+- In Tactics and Slayer every camp or nest is on it where it lies, red while
+  held, blue once it is yours, pulsing while its alarm is going or its fight
+  is on. The nearest one still held is drawn larger with its distance under
+  it, and when it is behind you it waits at the edge the near way round,
+  with an arrow.
+- A mark of your own: click the big map (M) and a yellow pin goes down; a
+  click near a camp or nest puts it on the site. The compass shows it with
+  its distance, the small map shows it, and when it or the next site is
+  further than the small map reaches an arrow at its rim points the way.
+  Clicking the pin again, right clicking the map or the clear mark button
+  takes it off, and it goes by itself once you are within 14 m of it.
+- The top of the screen is in one order now: the compass, the street name,
+  the operation line, the boss bar. The operation line was under the street
+  name before.
+- The Brandenburg Gate could not be walked through. Its mesh has had its
+  five passages since the landmarks were built, but every landmark was given
+  a wall all the way round its OSM outline, and the Gate's outline is the
+  whole gate. A landmark builder can now say where it is solid: for the Gate
+  that is the twelve columns and the four cross walls up to the entablature,
+  and the entablature and attic over the whole outline above that. Every
+  other landmark is solid to its outline as before.
+- Checks (ops, 65 now): the compass shows the nearest camp in the middle when
+  you face it and at the edge when you turn away; the compass, the street
+  name and the operation line do not overlap; a real click on the big map
+  sets a mark and shows the button; the compass points at the mark and the
+  mark goes once you are there; walking west through three passages of the
+  Gate and being stopped by a cross wall. Unit (89 now): the Gate's cross
+  wall stops a bullet and a line of sight, and its middle passage and the
+  one north of it are open. ops-09-compass.png.
+

@@ -80,7 +80,7 @@ district by hand. A comparison of the same street at either tier is in
 | Touch | drag left to walk, drag right to look |
 | Gamepad | left stick walks, right stick looks, A jumps, L3 runs |
 | P | photo mode: hides the interface, unlocks the clock, saves a PNG |
-| M | enlarge the map, on the streets around you |
+| M | enlarge the map, on the streets around you; click it to set a mark the compass points to, click the mark again (or right click) to take it off |
 | N | sound on and off |
 | H | help |
 | 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |

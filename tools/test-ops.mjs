@@ -102,6 +102,114 @@ async function run() {
   check('the line at the top says where you stand', /tactics/i.test(placed.hud) && /camps/.test(placed.hud),
     placed.hud);
 
+  // --- the compass, a mark of your own, and the order at the top ------------
+  const compass = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const site = s.campaign.allSites()[0];
+    // Facing the first camp: it is on the bar, in the middle.
+    s.teleport(site.x + 300, site.z);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.look(90, 0);
+    await frame();
+    const out = {};
+    const bar = document.getElementById('compassbar');
+    out.shown = !bar.classList.contains('hidden');
+    out.ahead = s.compassBar.last ? { ...s.compassBar.last } : null;
+    // Turned round, it waits at the edge.
+    s.look(-90, 0);
+    await frame();
+    out.behind = { ...s.compassBar.last };
+    // The street name sits under the compass and the operation line under that.
+    const box = (id) => document.getElementById(id).getBoundingClientRect();
+    const street = document.getElementById('streetname');
+    const hid = street.classList.contains('hidden');
+    street.textContent = street.textContent || 'Unter den Linden';
+    street.classList.remove('hidden');
+    out.order = { bar: box('compassbar').bottom, street: box('streetname').top, ops: box('ops').top,
+      streetBottom: box('streetname').bottom };
+    if (hid) street.classList.add('hidden');
+    return out;
+  });
+  check('a compass across the top, with the nearest camp on it and how far',
+    compass.shown && compass.ahead && compass.ahead.goals.length === 1
+      && Math.abs(compass.ahead.goals[0].x - compass.ahead.width / 2) < 12 && !compass.ahead.goals[0].behind,
+    JSON.stringify(compass.ahead));
+  check('turned away, the camp waits at the edge with an arrow', compass.behind.goals[0].behind,
+    JSON.stringify(compass.behind.goals));
+  check('the compass, then the street name, then the operation line, nothing on top of anything',
+    compass.order.street >= compass.order.bar - 1 && compass.order.ops >= compass.order.streetBottom - 1,
+    JSON.stringify(compass.order));
+
+  // A mark: open the map, click it, and the compass points there.
+  await page.evaluate(() => window.spreefall.toggleMap());
+  await page.waitForTimeout(400);
+  const target = await page.evaluate(() => {
+    const s = window.spreefall;
+    const r = document.getElementById('minimap').getBoundingClientRect();
+    return { x: r.left + r.width * 0.7, y: r.top + r.height * 0.4 };
+  });
+  await page.mouse.click(target.x, target.y);
+  const marked = await page.evaluate(() => {
+    const s = window.spreefall;
+    return { mark: s.state.waypoint ? { ...s.state.waypoint } : null,
+      button: !document.getElementById('mapunmark').classList.contains('hidden') };
+  });
+  await page.evaluate(() => window.spreefall.toggleMap());
+  await page.waitForTimeout(300);
+  const toMark = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const w = s.state.waypoint;
+    if (!w) return null;
+    // Face it, and it is in the middle of the bar.
+    const a = Math.atan2(-(w.x - s.player.x), -(w.z - s.player.z));
+    s.look(a * 180 / Math.PI, 0);
+    await frame();
+    const goal = (s.compassBar.last.goals || []).find((g) => g.kind === 'mark');
+    const centred = !!goal && Math.abs(goal.x - s.compassBar.last.width / 2) < 12;
+    // Stand on it and it goes.
+    s.teleport(w.x + 3, w.z + 3);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    await frame();
+    return { centred, gone: !s.state.waypoint };
+  });
+  check('click the big map and there is a mark, with a button to take it off', !!marked.mark && marked.button,
+    JSON.stringify(marked));
+  check('the compass points at the mark, and it goes once you are there', !!toMark && toMark.centred && toMark.gone,
+    JSON.stringify(toMark));
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[0];
+    s.teleport(site.x + 120, site.z + 30);
+    s.setMark({ x: site.x - 400, z: site.z + 500 });
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.look(80, 2);
+  });
+  await page.waitForTimeout(2000);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-09-compass.png') });
+  await page.evaluate(() => window.spreefall.setMark(null));
+
+  // --- through the Brandenburg Gate ---------------------------------------------
+  const gate = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = [];
+    // The gate stands across x = 0, its passages running east to west; the
+    // middle one and one either side of it, then a cross wall.
+    for (const z of [3.3, 15.2, -8.6, 9.27]) {
+      s.teleport(25, z);
+      for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+      s.look(90, 0);
+      s.input.keys.add('KeyW');
+      for (let i = 0; i < 60 * 20; i++) s.fixedForTest(1 / 60);
+      s.input.keys.delete('KeyW');
+      out.push(+s.player.x.toFixed(1));
+    }
+    return out;
+  });
+  check('the Brandenburg Gate can be walked through, its five passages open and its walls solid',
+    gate[0] < -10 && gate[1] < -10 && gate[2] < -10 && gate[3] > 3, JSON.stringify(gate));
+
   const again = await page.evaluate(() => {
     const s = window.spreefall;
     const before = s.campaign.allSites().map((c) => `${c.x},${c.z}`).join(' ');

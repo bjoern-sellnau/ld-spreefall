@@ -43,6 +43,7 @@ import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
+import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -61,6 +62,7 @@ const el = {
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
+  mapUnmark: $('mapunmark'), compassBar: $('compassbar'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -339,6 +341,7 @@ async function main() {
   const ion = new Ion(world);
   const ultra = new Ultra(world);
   const healthBars = new HealthBars(document.getElementById('healthbars'));
+  const compassBar = new CompassBar(el.compassBar);
   // Operations: the campaign book that Tactics and Slayer keep, and the part
   // of Tactics that runs, which mans the camps near you out of the soldiers.
   const campaign = new Campaign();
@@ -5650,6 +5653,84 @@ async function main() {
   // twenty eight turns of the wheel. So it has the same three buttons the
   // targeting map has had since it was built, plus a readout of how far out
   // you are and how wide the window is in metres.
+  // --- the compass and your own mark ----------------------------------------
+  //
+  // A mark is put down by clicking the big map, taken up by clicking it again
+  // or with the button, and goes by itself once you are standing on it. A
+  // click near a camp or nest puts the mark on it.
+  const MARK_REACHED = 14;
+  function setMark(at) {
+    if (!at) { state.waypoint = null; minimap.waypoint = null; el.mapUnmark.classList.add('hidden'); return; }
+    let x = at.x, z = at.z;
+    if (campaign.active) {
+      const snap = Math.max(25, minimap.spanAcross() * 0.02);
+      for (const st of campaign.allSites()) {
+        if (Math.hypot(st.x - x, st.z - z) < snap) { x = st.x; z = st.z; break; }
+      }
+    }
+    state.waypoint = { x, z };
+    minimap.waypoint = state.waypoint;
+    el.mapUnmark.classList.remove('hidden');
+    feed(`<i>mark</i> ${world.nameAt(x, z) || 'set'}, ${distanceLabel(Math.hypot(x - player.x, z - player.z))}`);
+  }
+  el.minimap.addEventListener('click', (ev) => {
+    if (!minimap.big) return;
+    const at = minimap.worldAt(ev.clientX, ev.clientY);
+    if (!at) return;
+    const w = state.waypoint;
+    const near = Math.max(12, minimap.spanAcross() * 0.015);
+    if (w && Math.hypot(w.x - at.x, w.z - at.z) < near) setMark(null);
+    else setMark(at);
+    mapTools();
+  });
+  el.minimap.addEventListener('contextmenu', (ev) => {
+    if (!minimap.big) return;
+    ev.preventDefault();
+    setMark(null);
+  });
+  el.mapUnmark.addEventListener('click', () => setMark(null));
+
+  /** The compass across the top, with the sites of an operation and your mark on it. */
+  function placeCompass(heading) {
+    if (state.mode !== 'walk' || photo.active || minimap.big) { compassBar.hide(); return; }
+    const marks = [];
+    let goal = null, goalSite = null;
+    if (campaign.active) {
+      let best = Infinity;
+      for (const st of campaign.allSites()) {
+        const dist = Math.hypot(st.x - player.x, st.z - player.z);
+        const free = st.state === SITE.FREE;
+        const m = { bearing: bearing(player.x, player.z, st.x, st.z), dist, free,
+          hot: !free && isHot(st), kind: campaign.mode, goal: false };
+        marks.push(m);
+        if (!free && dist < best) { best = dist; goal = m; goalSite = st; }
+      }
+      if (goal) goal.goal = true;
+    }
+    minimap.goal = goalSite;
+    const w = state.waypoint;
+    if (w) {
+      const dist = Math.hypot(w.x - player.x, w.z - player.z);
+      if (dist < MARK_REACHED) {
+        toast('you are there');
+        setMark(null);
+      } else {
+        marks.push({ bearing: bearing(player.x, player.z, w.x, w.z), dist, free: false, hot: false,
+          kind: 'mark', goal: true });
+      }
+    }
+    compassBar.draw(heading, marks, state.time);
+  }
+  /** A camp with its alarm going, or a nest in a fight. */
+  function isHot(site) {
+    if (campaign.mode === 'slayer') {
+      const r = slayer.live.get(site.id);
+      return !!(r && r.phase !== 'idle');
+    }
+    const r = tactics.live.get(site.id);
+    return !!(r && r.alarm);
+  }
+
   function mapTools() {
     el.mapTools.classList.toggle('hidden', !minimap.big);
     if (!minimap.big) return;
@@ -6628,6 +6709,9 @@ async function main() {
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
       const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
       el.compass.textContent = `${names[Math.round(deg / 45) % 8]} ${Math.round(deg)}`;
+      placeCompass(deg);
+    } else {
+      compassBar.hide();
     }
 
     // Automatic quality tier from the first three seconds of real frames.
@@ -6714,6 +6798,8 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
+    compassBar, setMark: (at) => setMark(at),
+    toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
     /** The arms the mech you are in carries, in the order the keys pick them. */
