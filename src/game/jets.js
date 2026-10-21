@@ -50,6 +50,7 @@ class Jet {
     this.roll = 0;
     this.speed = SPEC.speed;
     this.health = SPEC.health + tier * 30;
+    this.maxHealth = this.health;
     this.state = STATE.INBOUND;
     this.stateTime = 0;
     this.hitFlash = 0;

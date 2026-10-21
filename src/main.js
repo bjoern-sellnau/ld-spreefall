@@ -42,6 +42,7 @@ import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
+import { HealthBars } from './ui/healthbars.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -326,6 +327,7 @@ async function main() {
   const machines = new Machines();
   const ion = new Ion(world);
   const ultra = new Ultra(world);
+  const healthBars = new HealthBars(document.getElementById('healthbars'));
   const storm = new Ultra(world, null, VOID_STORM);
   const vehicles = new Vehicles(world);
   const mechs = new Mechs(world);
@@ -2365,6 +2367,45 @@ async function main() {
     if (off > Math.PI) off -= Math.PI * 2;
     if (off < -Math.PI) off += Math.PI * 2;
     el.gunmark.classList.toggle('laid', Math.abs(off) < 0.02);
+  }
+
+  /**
+   * A bar over everything hostile in sight: soldiers and machines, drones,
+   * jets and their mechs. Passers by and anything of yours get none.
+   */
+  const hostiles = [];
+  function placeHealthBars() {
+    const wall = performance.now() / 1000;
+    const dt = Math.min(0.1, Math.max(0, wall - (state.hbWall || wall)));
+    state.hbWall = wall;
+    if (photo.active) { healthBars.hide(); return; }
+    hostiles.length = 0;
+    for (const sd of soldiers.active) {
+      if (!sd.alive || sd.civilian || sd.health <= 0 || sd.state === 5) continue;
+      hostiles.push({ body: sd, kind: sd.machine ? 'machine' : 'soldier',
+        x: sd.x, y: sd.y + 2.15, z: sd.z, health: sd.health, max: sd.maxHealth });
+    }
+    for (const d of drones.active) {
+      if (d.health <= 0) continue;
+      hostiles.push({ body: d, kind: 'drone', x: d.x, y: d.y + 0.9, z: d.z,
+        health: d.health, max: d.maxHealth });
+    }
+    for (const j of jets.active) {
+      if (!j.alive || j.health <= 0) continue;
+      hostiles.push({ body: j, kind: 'jet', x: j.x, y: j.y + 2.6, z: j.z,
+        health: j.health, max: j.maxHealth });
+    }
+    for (const mk of mechs.active) {
+      if (mk.mine || mk.health <= 0) continue;
+      hostiles.push({ body: mk, kind: 'mech', x: mk.x, y: mk.y + mk.spec.height + 0.8, z: mk.z,
+        health: mk.health, max: mk.maxHealth });
+    }
+    const eye = camera.position
+      ? { x: camera.position[0], y: camera.position[1], z: camera.position[2] }
+      : { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    healthBars.update(hostiles, camera.viewProj, eye,
+      (x, y, z) => world.lineOfSight(eye.x, eye.y, eye.z, x, y, z),
+      dt, wall, window.innerWidth, window.innerHeight);
   }
 
   /** Into the nearest one, or out of the one you are in. */
@@ -5682,6 +5723,7 @@ async function main() {
       el.crosshair.classList.toggle('aiming', weapon.aimBlend > 0.6);
       el.crosshair.classList.toggle('holstered', weapon.holstered);
       placeGunMark();
+      placeHealthBars();
       // How far a blast plasma charge has got, under the crosshair while it
       // builds, and what it is once it is full.
       const charge = weapon.blastCharge;

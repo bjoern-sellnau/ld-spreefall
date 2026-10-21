@@ -3429,3 +3429,21 @@ So there are two cities now, and a profile picks which:
   case it comes back.
 - The cockpit hint and the help row said 1 to 5 and named five arms, which
   has not been true since phase 68; they now say the number row.
+
+## 78. A bar over every enemy in sight
+
+- 2026-10-21: asked for: enemy health bars.
+- src/ui/healthbars.js: a pool of 24 plain elements in a layer over the
+  canvas, placed each frame with the camera's view projection (the same sum
+  the tank's gun mark uses) and moved by transform. Soldiers and machines,
+  drones, jets (which now keep a maxHealth) and enemy mechs; passers by and
+  anything of yours get none, nor do the dead. Nearest first, within a range
+  per kind (110 m for a man, 520 for a mech, 700 for a jet), only on the
+  screen, and only with a line of sight, asked again per body every 0.2 s
+  rather than every frame.
+- Green to red by what is left, and a white chip of what the last hit took
+  that drains over 0.6 s. Wider for a jet or a mech, and narrower with
+  distance down to 26 px.
+- Checks (combat): a drone in front gets one bar at the centre of the
+  screen at 100% and the drone behind you none; one shot takes it to 25%
+  with the chip still at 82%; dead, no bar. combat-01-contact.png shows four.

@@ -208,6 +208,12 @@ What is under the hood:
   first version of the rocket flew through the man it was aimed at and went off
   on the wall behind him. A blast damages everything inside its radius that it
   can see, including you. C4 sticks where it lands and waits.
+- Everything hostile in sight carries a bar over its head: soldiers and
+  machines, drones, jets and their mechs, never a passer by and nothing of
+  yours. It goes from green to red, and the part a hit just took off stays
+  white for a moment before it drains, so a connect shows on the bar as well
+  as on the body. The nearest twenty four get one, and only those a wall
+  does not hide.
 - Drones patrol, pursue, attack and evade. They steer with four horizontal probes
   and a ground clearance term, so they do not fly into walls, and they re-test
   line of sight every 0.22 s rather than every frame, on a rota, so the cost is

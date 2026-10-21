@@ -139,6 +139,22 @@ html, body {
 }
 #blastcharge.ready { color: #ffb347; text-shadow: 0 0 10px rgba(255, 130, 20, 0.9), 0 0 3px #000; }
 
+/* A bar over each enemy in sight. Placed by transform from the top left of
+   the layer, so moving one is a composite and not a layout. */
+#healthbars { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.hbar {
+  position: absolute; left: 0; top: 0;
+  height: 5px;
+  background: rgba(10, 10, 12, 0.72);
+  border: 1px solid rgba(0, 0, 0, 0.85);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+  will-change: transform;
+}
+.hbar[data-kind="mech"], .hbar[data-kind="jet"] { height: 7px; }
+.hbar .chip, .hbar b { position: absolute; left: 0; top: 0; bottom: 0; }
+.hbar .chip { background: rgba(255, 255, 255, 0.85); }
+.hbar b { background: rgb(70, 220, 60); }
+
 /* Where a tank's gun is pointing, which is not where you are looking while
    the turret is still coming round. */
 #gunmark {

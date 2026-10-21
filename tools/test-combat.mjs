@@ -238,6 +238,58 @@ async function run() {
   check('a drone over the memorial stays and fights', keepOut.insideEver > keepOut.frames * 0.8,
     `${keepOut.insideEver} of ${keepOut.frames} frames inside`);
 
+  // --- a bar over what is trying to kill you --------------------------------
+  const frames = (n) => page.evaluate((k) => new Promise((done) => {
+    let i = 0;
+    const step = () => (++i >= k ? done() : requestAnimationFrame(step));
+    requestAnimationFrame(step);
+  }), n);
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.weapon.reset(); s.combat.reset(); s.soldiers.reset();
+    s.teleport(81, 0);
+    window.T.bar = window.T.park(-30, 5, 0);
+    // And one behind you, which is not on the screen and gets no bar.
+    window.T.park(30, 5, 0);
+    window.T.aimAt(window.T.bar);
+  });
+  await frames(4);
+  const readBars = () => page.evaluate(() => {
+    const bars = [...document.querySelectorAll('#healthbars .hbar:not(.hidden)')];
+    return bars.map((b) => {
+      const r = b.getBoundingClientRect();
+      return { kind: b.dataset.kind, x: Math.round(r.left + r.width / 2), y: Math.round(r.top),
+        w: Math.round(r.width),
+        fill: parseFloat(b.querySelector('b').style.width), chip: parseFloat(b.querySelector('.chip').style.width) };
+    });
+  });
+  const whole = await readBars();
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    window.T.aimAt(window.T.bar);
+    s.weapon.spread = 0;
+    s.shoot();
+  });
+  await frames(2);
+  const hit = await readBars();
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    for (let i = 0; i < 6 && window.T.bar.health > 0; i++) {
+      window.T.aimAt(window.T.bar); s.weapon.spread = 0; s.weapon.cooldown = 0; s.shoot();
+    }
+  });
+  await frames(3);
+  const gone = await readBars();
+  const centre = 640;
+  check('an enemy in sight has a bar over it, and the one behind you has none',
+    whole.length === 1 && whole[0].kind === 'drone' && Math.abs(whole[0].x - centre) < 40
+      && whole[0].y < 360 && whole[0].fill === 100,
+    JSON.stringify(whole));
+  check('a hit takes the bar down, with the part it took held in white',
+    hit.length === 1 && hit[0].fill < 100 && hit[0].chip > hit[0].fill,
+    hit.length ? `${hit[0].fill}% left, ${hit[0].chip}% chip` : 'no bar');
+  check('and the dead have no bar', gone.length === 0, `${gone.length} left`);
+
   // --- a pretty picture of an engagement -----------------------------------
   await page.evaluate(() => {
     const s = window.spreefall;
