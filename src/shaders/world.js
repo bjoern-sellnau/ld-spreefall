@@ -100,22 +100,38 @@ float craterAt(vec2 p, vec4 site, float depth, float craterRadius, float level) 
  */
 float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
   float worst = 0.0;
+  // Every site is read from where the vertex was built, and a wall takes the
+  // one site that brings it furthest down rather than every site in turn.
+  // Taking them in turn moved each corner from where the last site had left
+  // it: a dozen shells into one frontage threw its top a few metres a shell
+  // and left its foot where it was, and the frontage came down as spikes
+  // twenty metres long. A column falls once.
+  vec3 p0 = p;
+  vec2 cell = (floor(p0.xz / 4.0) + 0.5) * 4.0;
+  vec3 move = vec3(0.0);
+  float most = 0.0;
   for (int i = 0; i < ${16}; i++) {
     if (i >= uCollapseCount) break;
     vec4 site = uCollapse[i];
     if (site.w <= 0.0) continue;
-    float bite = collapseBite(p, site);
-    if (bite <= 0.0) continue;
     if (uCollapseInfo[i].x <= 0.0) continue;
 
     if (isGround) {
-      p.y += craterAt(p.xz, site, uCollapseInfo[i].y, uCollapseInfo[i].z,
+      if (collapseBite(p0, site) <= 0.0) continue;
+      p.y += craterAt(p0.xz, site, uCollapseInfo[i].y, uCollapseInfo[i].z,
                       min(1.0, uCollapseInfo[i].x));
       continue;
     }
+    // A wall is read by the four metre column it stands in, not corner by
+    // corner. Every corner of a piece used to take its own bite, its own
+    // heap and its own throw, and the corners of one piece landed metres
+    // apart. The pieces are cut on these lines (src/game/remesh.js), so
+    // every corner of one now moves with the rest of it.
+    float bite = collapseBite(vec3(cell.x, p0.y, cell.y), site);
+    if (bite <= 0.0) continue;
     // A column that goes comes all the way down; one that stays loses its
     // broken top, more of it near the middle.
-    float colH = columnHash(p.xz);
+    float colH = columnHash(cell);
     float share = columnShare(bite, colH);
     float level = collapseLocal(uCollapseInfo[i].x, max(share, bite * 0.45 * (0.6 + 0.8 * colH)));
     if (level <= 0.0) continue;
@@ -128,13 +144,13 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
 
     // Where this building has been cut back to. At a quarter gone it is the
     // top quarter that is missing; at one it is the whole thing.
-    float above = p.y - site.y;
+    float above = p0.y - site.y;
     if (above <= 0.001) continue;
     float full = max(height, above);
     float cut = full * (1.0 - level);
     if (above <= cut) continue;
 
-    float jitter = collapseHash(p);
+    float jitter = collapseHash(vec3(cell.x, 0.0, cell.y));
     float heap = uCollapseInfo[i].w * (0.3 + jitter * 0.8) * bite;
     // Each storey lands on the one under it as a thin slab, so what came
     // down is a stack of floors and not one long sheet. Up to a metre of
@@ -142,20 +158,23 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
     // cannot climb over is a wall.
     float landed = min(above, cut + heap + min((above - cut) * 0.08, 1.0));
     float fell = above - landed;
-    p.y -= fell;
+    worst = max(worst, clamp(fell / max(1.0, above), 0.0, 1.0));
+    if (fell <= most) continue;
+    most = fell;
     // What fell spreads out as it lands, by how far it fell rather than by
     // how tall the building was, so a top storey coming off scatters and a
     // whole block folding in piles up. Up to a point: past SCATTER_FALL it
     // is rubble, and a landmark forty metres up is not thrown four times as
     // far as a house, it is pulled apart into sheets.
     float spread = min(fell, SCATTER_FALL);
-    vec2 away = p.xz - site.xz;
+    vec2 away = cell - site.xz;
     float l = max(0.001, length(away));
-    p.xz += (away / l) * spread * (0.09 + jitter * 0.13);
-    p.x += (jitter - 0.5) * spread * 0.30;
-    p.z += (collapseHash(p.zyx) - 0.5) * spread * 0.30;
-    worst = max(worst, clamp(fell / max(1.0, above), 0.0, 1.0));
+    vec2 throwXZ = (away / l) * spread * (0.09 + jitter * 0.13);
+    throwXZ.x += (jitter - 0.5) * spread * 0.30;
+    throwXZ.y += (collapseHash(vec3(cell.y, 1.0, cell.x)) - 0.5) * spread * 0.30;
+    move = vec3(throwXZ.x, -fell, throwXZ.y);
   }
+  p += move;
   // Rubble has no walls left in it: the normals go flat as the fall completes,
   // or a collapsed facade lights like a facade lying down.
   // An underside turned towards up passes through nothing on the way, and
@@ -206,7 +225,12 @@ void main() {
   // Bit 16 is FACADE_FLAG.GROUND. It used to read bit 1, which is the shop
   // window band at the bottom of a wall, so streets were treated as walls and
   // never moved: the collision had a crater in it and the picture did not.
-  vFall = uCollapseCount > 0
+  // A wall that a finished site already put on the ground stays where it
+  // was put: the sites still open read it from where it lies, which is not
+  // the column it was cut in, and threw its corners apart a second time.
+  bool baked = (aPacked.w & ${FACADE_FLAG.RUBBLE}u) != 0u
+    && (aPacked.w & ${FACADE_FLAG.GROUND}u) == 0u;
+  vFall = uCollapseCount > 0 && !baked
     ? applyCollapse(p, nrm, (aPacked.w & ${FACADE_FLAG.GROUND}u) != 0u, bHeight)
     : 0.0;
   // A ruin that was baked into the buffers is rubble for good, whether or not
@@ -1089,7 +1113,9 @@ ${COLLAPSE}
 void main() {
   vec3 p = vec3(aPos) * ${(1 / POS_SCALE).toFixed(8)} + uTileOrigin;
   vec3 nrm = vec3(0.0, 1.0, 0.0);
-  if (uCollapseCount > 0) {
+  bool baked = (aPacked.w & ${FACADE_FLAG.RUBBLE}u) != 0u
+    && (aPacked.w & ${FACADE_FLAG.GROUND}u) == 0u;
+  if (uCollapseCount > 0 && !baked) {
     applyCollapse(p, nrm, (aPacked.w & ${FACADE_FLAG.GROUND}u) != 0u,
       float(aHeight) * ${(1 / HEIGHT_SCALE).toFixed(8)});
   }

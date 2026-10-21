@@ -1077,20 +1077,28 @@ async function run() {
     const half = t.turret;
     for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
     const laid = t.turret;
-    // And fire it: the shell leaves the muzzle along the turret.
-    const before = s.projectiles.active.length;
+    // And fire it: the shell leaves the muzzle along the turret. Read off the
+    // launch itself, because the last projectile in the pool after a step is
+    // not necessarily this one, and a shell into a wall at eight metres is
+    // gone before anybody looks at it.
+    let shell = null;
+    const launch = s.projectiles.launch.bind(s.projectiles);
+    s.projectiles.launch = (kind, o) => {
+      if (o && o.weapon === 'tank') shell = { ...o };
+      return launch(kind, o);
+    };
     t.cooldown = 0;
     s.input.fire = true;
     s.fixedForTest(1 / 60);
     s.input.fire = false;
-    const shell = s.projectiles.active[s.projectiles.active.length - 1];
+    s.projectiles.launch = launch;
     const turretYaw = t.yaw + t.turret;
     const want = [-Math.sin(turretYaw), -Math.cos(turretYaw)];
     const sp = shell ? Math.hypot(shell.vx, shell.vz) || 1 : 1;
     const out = {
       half: +half.toFixed(2),
       laid: +laid.toFixed(2),
-      fired: s.projectiles.active.length > before,
+      fired: !!shell,
       along: shell ? +((shell.vx / sp) * want[0] + (shell.vz / sp) * want[1]).toFixed(3) : 0,
       ahead: shell ? +(((shell.x - t.x) * want[0] + (shell.z - t.z) * want[1])).toFixed(1) : 0,
     };

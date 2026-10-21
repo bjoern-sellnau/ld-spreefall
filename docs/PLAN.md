@@ -3304,3 +3304,29 @@ So there are two cities now, and a profile picks which:
   has caught up. Checks: the hull drawn the way it drives at three headings,
   0.35 rad of turret after half a second and 1.2 of 1.2 after three and a
   half, the shell along the turret from 8.8 m out in front. City 84 of 84.
+
+## 73. A frontage under shellfire comes down in pieces, not in spikes
+
+- 2026-10-21: reported from the live site, the ruins at Pariser Platz after a
+  tank had been at them: walls drawn out into sheets and spikes twenty
+  metres long. Reproduced with eight shells into the Gate end of the square
+  (collapse-05-spikes-before.png). Three causes, found in order:
+  - Every corner of a piece took its own bite, its own heap and its own throw
+    from its own position. A wall is now read by the four metre column it
+    stands in, the same lines remesh cuts it on, so the corners of a piece
+    move together. In the shader and in the bake alike.
+  - The sites were applied in turn, each from where the last had left the
+    corner, and a dozen shells threw a frontage's top a few metres a shell
+    while its foot stayed put. A wall now takes the one site that brings it
+    furthest down, read from where it was built, and rubble a finished site
+    baked is left where it lies by the sites still open.
+  - The one that mattered most, measured: after six shells 662 of the 6,396
+    wall triangles within 20 m of the hits still crossed a column line,
+    because columnCut only cut a piece whose middle was inside the site, and
+    the corners of an uncut piece just outside came down with the columns
+    they were in. Cut two columns past the rim, the count is 0 of 7,704.
+  collapse-06-spikes-after.png is the same shot. Still wrong and left for
+  later: the Gate's attic has nothing under it, so a piece of it that comes
+  down stops at the height the Gate is cut back to and hangs there, and a
+  column left standing next to fallen ones is a facade with no sides, which
+  reads as a thin panel. Machines 62 of 62, city 84 of 84.

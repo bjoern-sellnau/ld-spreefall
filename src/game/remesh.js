@@ -151,8 +151,12 @@ function columnCut(o, kept, pos, verts, isGround) {
     const tri = [a, b, c];
     const mx = (pos[a][0] + pos[b][0] + pos[c][0]) / 3;
     const mz = (pos[a][2] + pos[b][2] + pos[c][2]) / 3;
+    // Two columns past the rim as well. A piece whose middle was just outside
+    // the circle was left whole while the corners of it inside came down,
+    // and that piece was a spike from the ground to the roof: one in ten of
+    // the walls round a frontage hit by six shells.
     if (isGround(a) || isGround(b) || isGround(c)
-      || Math.hypot(mx - cx, mz - cz) > radius) {
+      || Math.hypot(mx - cx, mz - cz) > radius + COLUMN * 2) {
       out.push(a, b, c);
       continue;
     }
