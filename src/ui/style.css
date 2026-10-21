@@ -1626,6 +1626,15 @@ html, body {
 #bossbar.tyrant .notch { display: none; }
 @media (max-width: 640px) { #bossbar { top: 78px; font-size: 10px; letter-spacing: 0.18em; } }
 
+/* The end of an operation: what you did, and again or back to the title. */
+#opsendstats { list-style: none; padding: 0; margin: 14px 0 18px; font: 13px/1.8 ui-sans-serif, system-ui, sans-serif;
+  color: var(--ink); letter-spacing: 0.04em; }
+#opsendstats b { color: var(--accent); font-variant-numeric: tabular-nums; margin-left: 6px; }
+.opsendbuttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.opsendbuttons .play { margin-top: 0.4rem; }
+#opsendmenu.quiet { background: transparent; color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.3); }
+#opsendmenu.quiet:hover { background: rgba(255, 255, 255, 0.08); }
+
 /* The compass across the top: heading, sites and your own mark. */
 #compassbar {
   position: absolute; left: 50%; top: 6px; transform: translateX(-50%);

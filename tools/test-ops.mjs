@@ -913,6 +913,31 @@ async function run() {
     last.kinds.join(', '));
   check('and when it falls the district is free of them', last.free && last.presence === 0, `presence ${last.presence}`);
 
+  // Every nest gone: the end of the operation, and the question.
+  const ended = await page.evaluate(async () => {
+    const s = window.spreefall;
+    for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    const box = document.getElementById('opsend');
+    return { shown: !box.classList.contains('hidden'), title: document.getElementById('opsendtitle').textContent,
+      rows: document.querySelectorAll('#opsendstats li').length,
+      again: !!document.getElementById('opsendagain'), menu: !!document.getElementById('opsendmenu') };
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'ops-13-end.png') });
+  check('with every nest gone the operation ends, with what it came to and the question of what next',
+    ended.shown && /presence is broken/i.test(ended.title) && ended.rows >= 4 && ended.again && ended.menu,
+    JSON.stringify(ended));
+  await page.click('#opsendagain');
+  const anew = await page.evaluate(() => {
+    const s = window.spreefall;
+    for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+    const sites = s.campaign.allSites();
+    return { hidden: document.getElementById('opsend').classList.contains('hidden'),
+      held: sites.length > 0 && sites.every((x) => x.state === 0), score: s.campaign.book.score,
+      mode: s.campaign.mode };
+  });
+  check('a new operation puts every nest back and starts the score again',
+    anew.hidden && anew.held && anew.score === 0 && anew.mode === 'slayer', JSON.stringify(anew));
+
   // --- the Warlord -------------------------------------------------------------
   const lord = await page.evaluate(() => {
     const s = window.spreefall;

@@ -506,6 +506,12 @@ all of them, a start district, how many nests, and bosses on or off.
   void cannon. A demon low on its feet reels and glows; F finishes it, and
   gives you thirty health.
 
+## The end of an operation
+
+When every camp or nest in the operation has been taken, a card says what it
+came to (taken, quiet ones, level, score, time) and asks what next: a new
+operation on the same settings, or back to the main menu.
+
 ## The memorial
 
 The Memorial to the Murdered Jews of Europe stands under a force field. From

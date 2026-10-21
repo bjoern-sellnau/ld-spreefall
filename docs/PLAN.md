@@ -3888,3 +3888,17 @@ So there are two cities now, and a profile picks which:
   bonus; with the siren going, a grenade at the box stops it and the call.
   ops-12-alarm-box.png.
 
+## 94. The end of an operation
+
+- When every camp or nest in scope has been taken (the start district with
+  one district in scope, all of them with all), a card comes up a couple of
+  seconds after the last one falls: Operation complete for Tactics, The
+  presence is broken for Slayer, with how many were taken, how many camps
+  without an alarm, the level, the score and how long it took.
+- And the question: New operation starts again on the same settings, every
+  camp or nest held again and the score at nought, with you taken back to
+  the start district; Main menu goes back to the title screen.
+- Checks (ops, 80 now): with every nest gone the card comes up with its rows
+  and both buttons; a real click on New operation hides it, puts every nest
+  back and the score at nought, still in Slayer. ops-13-end.png.
+

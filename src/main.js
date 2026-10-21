@@ -60,6 +60,8 @@ const el = {
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
+  opsEnd: $('opsend'), opsEndTitle: $('opsendtitle'), opsEndText: $('opsendtext'), opsEndStats: $('opsendstats'),
+  opsEndAgain: $('opsendagain'), opsEndMenu: $('opsendmenu'),
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
@@ -5029,11 +5031,65 @@ async function main() {
   function startOps() {
     tactics.clear();
     slayer.clear();
+    state.opsEnded = false;
+    state.opsEndAt = 0;
+    state.opsStartedAt = state.time;
     if (!campaign.active) { el.ops.classList.add('hidden'); return; }
     if (!campaign.settings.start) campaign.set('start', el.opsStart.value || world.idAt(player.x, player.z) || world.home);
     state.opsTravel = true;
     state.opsPlaceAt = 0;
   }
+
+  // --- the end of an operation ---------------------------------------------------
+  //
+  // Every camp or nest in scope taken: a card with what it came to, and the
+  // question of what next, a new operation on the same settings or the
+  // title screen.
+  function opsEndCheck(dt) {
+    if (state.opsEnded || !campaign.active) return;
+    const sum = campaign.summary(builtDistricts().map((d) => d.id));
+    if (!sum || !sum.districts || sum.done < sum.districts) { state.opsEndAt = 0; return; }
+    // A moment for the last capture to be seen and heard first.
+    state.opsEndAt = (state.opsEndAt || 0) + dt;
+    if (state.opsEndAt < 2.5) return;
+    state.opsEnded = true;
+    showOpsEnd(sum);
+  }
+
+  function showOpsEnd(sum) {
+    const slay = campaign.mode === 'slayer';
+    const where = campaign.settings.scope === 'all' ? 'Berlin'
+      : ((world.entryFor(campaign.settings.start) || {}).name || 'the district');
+    el.opsEndTitle.textContent = slay ? 'The presence is broken' : 'Operation complete';
+    el.opsEndText.textContent = slay
+      ? `Not one nest is left in ${where}.`
+      : `Every camp in ${where} is yours.`;
+    const minutes = Math.max(0, Math.round((state.time - (state.opsStartedAt || 0)) / 60));
+    const rows = [
+      [slay ? 'Nests destroyed' : 'Camps taken', `${sum.free} of ${sum.total}`],
+      ...(slay ? [] : [['Taken without an alarm', `${sum.quiet || 0}`]]),
+      ['Level', `${(sum.level || 0) + 1}`],
+      ['Score', `${sum.score}`],
+      ['Time', `${minutes} min`],
+    ];
+    el.opsEndStats.innerHTML = rows.map(([k, v]) => `<li>${k}<b>${v}</b></li>`).join('');
+    el.opsEnd.classList.remove('hidden');
+    input.exitLock();
+    audio.ultraCharge && audio.ultraCharge(0.6);
+  }
+
+  el.opsEndAgain.addEventListener('click', () => {
+    el.opsEnd.classList.add('hidden');
+    campaign.wipe();
+    soldiers.reset();
+    drones.reset();
+    startOps();
+    toast(campaign.mode === 'slayer' ? 'a new operation: the nests are back' : 'a new operation: the camps are manned again');
+    if (!isTouch) input.requestLock();
+  });
+  // The title screen is where the page starts, so that is the way back to it:
+  // everything in the run is left behind, the campaign book is kept.
+  el.opsEndMenu.addEventListener('click', () => { location.reload(); });
 
   /** Somewhere on a road near the middle of a district, to land on. */
   function districtLanding(entry) {
@@ -5085,6 +5141,7 @@ async function main() {
       }
     }
     if (campaign.mode === 'slayer') slayer.update(dt, player);
+    opsEndCheck(dt);
     if (campaign.mode === 'tactics') {
       soldiers.playerSpeed = Math.hypot(player.vx || 0, player.vz || 0);
       tactics.update(dt, player);
