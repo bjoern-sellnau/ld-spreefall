@@ -128,13 +128,23 @@ export class Combat {
     this.started = performance.now();
   }
 
-  /** True under the force field, where nothing can be damaged. */
-  isShielded(x, y, z) {
+  /** Under the force field, whether or not it is holding. */
+  inField(x, z) {
     for (const s of this.sanctuaries) {
       const dx = x - s.x, dz = z - s.z;
       if (dx * dx + dz * dz < s.radius * s.radius) return true;
     }
     return false;
+  }
+
+  /**
+   * True under the force field while it holds, where nothing can be damaged.
+   * It holds against everything from outside; standing inside it, you can
+   * break what it keeps, and it puts it back when you leave (main.js).
+   */
+  isShielded(x, y, z) {
+    if (this.fieldOpen) return false;
+    return this.inField(x, z);
   }
 
   sanctuaryName(x, z) {

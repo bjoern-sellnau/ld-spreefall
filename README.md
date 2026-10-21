@@ -502,6 +502,13 @@ all of them, a start district, how many nests, and bosses on or off.
   void cannon. A demon low on its feet reels and glows; F finishes it, and
   gives you thirty health.
 
+## The memorial
+
+The Memorial to the Murdered Jews of Europe stands under a force field. From
+outside nothing reaches it. Standing inside it you can break it like anything
+else in the city, and the moment you step out it stands again, every stele,
+every metre of ground. It can be destroyed; it will always come back.
+
 ## Just a Walk
 
 A third mode on the title screen, next to Berlin and Rise of the Machines.

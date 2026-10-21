@@ -1063,6 +1063,104 @@ async function run() {
   await page.waitForTimeout(1500);
   await page.screenshot({ path: path.join(SHOTS, 'ops-07-doublebarrel.png') });
 
+  // --- the memorial: broken from inside its field, whole again outside -------
+  const memorial = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.enabled = false; s.drones.enabled = false; s.soldiers.reset(); s.drones.reset();
+    s.projectiles.clear();
+    const f = s.combat.sanctuaries[0];
+    if (!f) return null;
+    const step = (n) => { for (let i = 0; i < n; i++) s.fixedForTest(1 / 60); };
+    // How much stone stands under the field, and the ground at one point.
+    const stone = () => {
+      let h = 0;
+      s.world.forEachSegmentTile(f.x - 70, f.z - 70, f.x + 70, f.z + 70, (segs, count) => {
+        for (let i = 0; i < count; i++) {
+          const o = i * 6;
+          const mx = (segs[o] + segs[o + 2]) / 2, mz = (segs[o + 1] + segs[o + 3]) / 2;
+          if (Math.hypot(mx - f.x, mz - f.z) < 60) h += segs[o + 5] - segs[o + 4];
+        }
+      });
+      return h;
+    };
+    const at = [f.x + 22, f.z + 14];
+    const ground = () => s.world.groundHeight(at[0], at[1]);
+    const shells = () => {
+      for (const [dx, dz] of [[22, 14], [-18, 20], [10, -24], [26, -6], [22, 14]]) {
+        const x = f.x + dx, z = f.z + dz;
+        s.explode(x, s.world.groundHeight(x, z) + 1, z, { radius: 16, damage: 1600 }, { weapon: 'rpg' });
+      }
+    };
+    const out = {};
+    const stone0 = stone(), ground0 = ground();
+    // From outside the field holds.
+    s.teleport(f.x, f.z + f.radius + 40);
+    step(10);
+    shells();
+    step(60 * 8);
+    out.outside = { stone: +(stone() / stone0).toFixed(4), ground: +(ground() - ground0).toFixed(2), open: !!s.combat.fieldOpen };
+    // Inside it opens, and the same shells break it.
+    s.teleport(f.x - 10, f.z - 10);
+    step(10);
+    out.opened = !!s.combat.fieldOpen;
+    shells();
+    step(60 * 12);
+    out.inside = { stone: +(stone() / stone0).toFixed(4), ground: +(ground() - ground0).toFixed(2),
+      held: s.demolition.sites.filter((x) => !x.spared).length };
+    // Out again: it closes, and all of it is put back.
+    const restored = s.state.memorialRestored || 0;
+    s.teleport(f.x, f.z + f.radius + 40);
+    step(10);
+    out.closed = { open: !!s.combat.fieldOpen, restored: (s.state.memorialRestored || 0) - restored,
+      stone: +(stone() / stone0).toFixed(4), ground: +(ground() - ground0).toFixed(2) };
+    // And in again it is still whole.
+    s.teleport(f.x - 10, f.z - 10);
+    step(60 * 3);
+    out.back = { open: !!s.combat.fieldOpen, stone: +(stone() / stone0).toFixed(4),
+      ground: +(ground() - ground0).toFixed(2) };
+    out.field = { x: f.x, z: f.z, r: f.radius };
+    return out;
+  });
+  check('the memorial field holds against everything from outside',
+    !!memorial && memorial.outside.stone === 1 && memorial.outside.ground === 0 && !memorial.outside.open,
+    JSON.stringify(memorial && memorial.outside));
+  check('stand inside and it opens, and the stelae can be broken',
+    !!memorial && memorial.opened && memorial.inside.stone < 0.995 && memorial.inside.held > 0,
+    JSON.stringify(memorial && memorial.inside));
+  check('step out and the memorial stands again, stone and ground',
+    !!memorial && !memorial.closed.open && memorial.closed.restored === 1 && memorial.closed.stone === 1
+      && memorial.closed.ground === 0, JSON.stringify(memorial && memorial.closed));
+  check('and walking back in finds it whole', !!memorial && memorial.back.open && memorial.back.stone === 1
+    && memorial.back.ground === 0, JSON.stringify(memorial && memorial.back));
+
+  // The pictures: broken from inside, then whole again after a step outside.
+  const shellsInside = () => page.evaluate(() => {
+    const s = window.spreefall;
+    const f = s.combat.sanctuaries[0];
+    s.teleport(f.x - 40, f.z + 35);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    for (const [dx, dz] of [[0, 0], [8, -8], [-6, -4], [4, 6], [14, -16], [-2, -14], [10, 2], [-14, 10]]) {
+      const x = f.x + dx, z = f.z + dz;
+      s.explode(x, s.world.groundHeight(x, z) + 1, z, { radius: 26, damage: 4000 }, { weapon: 'rpg' });
+    }
+    for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
+    s.look(-45, -6);
+  });
+  await shellsInside();
+  await page.waitForTimeout(8000);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-10-memorial-broken.png') });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const f = s.combat.sanctuaries[0];
+    s.teleport(f.x, f.z + f.radius + 40);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.teleport(f.x - 40, f.z + 35);
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    s.look(-45, -6);
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-11-memorial-whole.png') });
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

@@ -236,7 +236,10 @@ async function main() {
   };
   // The ground under the field is never dug, which the world asks about
   // every time it is asked how high the ground is.
-  world.shielded = (x, z) => combat.isShielded(x, 0, z);
+  // Trees, fires and the bytes a ruin is baked into keep to the field whether
+  // it is open or not; craters ask whether it is open as well.
+  world.shielded = (x, z) => combat.inField(x, z);
+  world.fieldOpen = false;
   world.onManifest = (manifest) => {
     landmarks.refresh(manifest);
     combat.refreshSanctuaries(manifest);
@@ -268,6 +271,10 @@ async function main() {
   const cars = new Cars(world);
   const trains = new Trains(world);
   const demolition = new Demolition(world, shielded);
+  demolition.inField = (x, z) => combat.inField(x, z);
+  // A finished site that reaches into the field while it is open is not
+  // baked yet: baked, what it did to the memorial could not be taken back.
+  demolition.holdBake = (site) => combat.fieldOpen && reachesField(site);
   // A ruin that has stopped moving is written into the city's own bytes, and
   // the card needs the new ones. Nothing else changes: the same ruin, drawn
   // from the buffers instead of from a uniform slot, which is then free for
@@ -4568,6 +4575,67 @@ async function main() {
     relock();
   }
 
+  // --- the memorial ------------------------------------------------------------
+  //
+  // The field holds against everything from outside. Stand inside it and it
+  // opens: what is in it can be broken like anything else in the city. Step
+  // out and it closes, and everything in it is as it was: the stelae, the
+  // ground, the scorch marks. It can be destroyed and it always comes back.
+  function reachesField(site) {
+    for (const f of combat.sanctuaries) {
+      const reach = site.radius + (site.craterRadius || 0) * 2;
+      if (Math.hypot(site.x - f.x, site.z - f.z) < f.radius + reach) return true;
+    }
+    return false;
+  }
+
+  function memorialStep() {
+    if (!combat.sanctuaries.length) return;
+    const inside = combat.inField(player.x, player.z);
+    if (inside === !!combat.fieldOpen) return;
+    // What is under it is taken down as it is before it can be touched.
+    if (inside) for (const f of combat.sanctuaries) demolition.snapshotIn(f.x, f.z, f.radius);
+    combat.fieldOpen = inside;
+    world.fieldOpen = inside;
+    renderer.field.open = inside;
+    world.heightCache.clear();
+    if (!inside) restoreMemorial();
+  }
+
+  /** Everything under the field back as it was. @returns {number} what was put back */
+  function restoreMemorial() {
+    let n = 0;
+    for (const f of combat.sanctuaries) {
+      for (const site of demolition.sites) {
+        if (site.spared || !reachesField(site)) continue;
+        site.spared = true;
+        n++;
+      }
+      n += demolition.restoreIn();
+      n += world.spareCraters(f.x, f.z, f.radius);
+      n += renderer.clearScarsIn(f.x, f.z, f.radius);
+      for (let i = burning.length - 1; i >= 0; i--) {
+        if (Math.hypot(burning[i].x - f.x, burning[i].z - f.z) < f.radius) { burning.splice(i, 1); n++; }
+      }
+    }
+    world.heightCache.clear();
+    if (n) {
+      // The field shows where it put things back, all round its edge.
+      for (const f of combat.sanctuaries) {
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const x = f.x + Math.cos(a) * f.radius, z = f.z + Math.sin(a) * f.radius;
+          renderer.field.struck(x, world.groundHeight(x, z) + 6, z, state.time, 1.6);
+        }
+      }
+      audio.emp(30);
+      toast('the memorial stands again');
+      feed('<i>memorial</i> it cannot be destroyed, it will always come back');
+    }
+    state.memorialRestored = (state.memorialRestored || 0) + (n ? 1 : 0);
+    return n;
+  }
+
   /**
    * A blast that reaches the memorial lights its force field from the point
    * where it touched: the middle of the blast if it went off inside, the edge
@@ -4873,7 +4941,8 @@ async function main() {
         if (!campaign.inScope(id) || campaign.sitesIn(id) || world.isOverflight(id)) continue;
         const entry = world.entryFor(id);
         if (!entry) continue;
-        const placed = campaign.place(id, (rand, clear) => campSpot(world, entry, rand, clear, shielded));
+        const placed = campaign.place(id, (rand, clear) => campSpot(world, entry, rand, clear,
+          (x, y, z) => combat.inField(x, z)));
         if (placed.length) feed(`<i>${entry.name}</i> ${placed.length} ${opsWord()}${placed.length === 1 ? '' : 's'}`);
         break;
       }
@@ -6047,6 +6116,7 @@ async function main() {
       updateBurning(worldDt);
       updateReactors(worldDt);
       warlordStep(worldDt);
+      memorialStep();
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -6238,6 +6308,7 @@ async function main() {
     updateBurning(worldDt);
     updateReactors(worldDt);
     warlordStep(worldDt);
+    memorialStep();
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -6800,6 +6871,7 @@ async function main() {
     reactors, fusionSpec: FUSION,
     compassBar, setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
+    restoreMemorial: () => restoreMemorial(),
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
     /** The arms the mech you are in carries, in the order the keys pick them. */

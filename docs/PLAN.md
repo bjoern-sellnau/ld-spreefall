@@ -3779,3 +3779,31 @@ So there are two cities now, and a profile picks which:
   wall stops a bullet and a line of sight, and its middle passage and the
   one north of it are open. ops-09-compass.png.
 
+## 88. The memorial can be broken from inside its field, and it always comes back
+
+- The force field over the memorial holds against everything from outside,
+  as it did. Stand inside it and it opens: the stelae can be shot down and
+  the ground dug like anywhere in the city. Step out and it closes, and
+  everything under it is as it was: the stelae, their collision, the ground,
+  the scorch marks and anything left burning. Walk back in and it is whole.
+  It can be destroyed, and it will always come back.
+- How: when the field opens, the walls under it are written down as they
+  are (snapshotIn); when it closes they are put back exactly, holes and all,
+  while the walls outside keep whatever happened to them (restoreIn). Every
+  live collapse site reaching into the field is marked spared, and the world
+  shader leaves spared sites out under the field (uSpared, one bit a site;
+  uShield.w says whether the field is open). Craters reaching into it are
+  marked spared and stop counting there. A finished site that reaches into
+  an open field is not baked until it closes, and baking never writes into
+  the field, so nothing done to the memorial is made permanent. Trees and
+  fires under the field keep to it whether it is open or not, and camps and
+  nests are never put there.
+- When it closes with something to put back, the field flashes round its
+  edge and says so.
+- Checks (ops, 69 now): shells from outside change nothing; from inside the
+  field opens and the stone under it drops by three per cent and the ground
+  by 1.7 m where they landed; stepping out puts both back exactly; walking
+  back in finds it whole. A pixel comparison of the same view intact,
+  broken and restored was run by hand while building it. ops-10 and
+  ops-11.
+
