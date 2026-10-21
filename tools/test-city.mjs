@@ -472,11 +472,22 @@ async function run() {
     const m = s.combat.sanctuaries[0];
     if (!m) return { skip: true };
     const y = s.world.groundHeight(m.x, m.z);
-    const made = s.demolition.blast(m.x, y, m.z, 170, 4000);
-    return { made: made.length, sites: s.demolition.count, name: m.name };
+    // The field keeps the place, whatever goes off on it: the stelae stand
+    // and the ground is not dug, after the collapse has run its course.
+    const px = m.x + 15, pz = m.z + 10;
+    const before = { g: s.world.groundHeight(px, pz), t: s.world.tallestNear(px, pz, 12) };
+    s.demolition.blast(m.x, y, m.z, 170, 4000);
+    for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
+    const after = { g: s.world.groundHeight(px, pz), t: s.world.tallestNear(px, pz, 12) };
+    s.demolition.reset(); s.renderer.clearCollapses();
+    return {
+      dug: +Math.abs(after.g - before.g).toFixed(2),
+      fell: +(before.t - after.t).toFixed(2),
+      name: m.name,
+    };
   });
-  check('nothing in the memorial comes down', memorial.made === 0 && memorial.sites === 0,
-    memorial.name);
+  check('nothing in the memorial comes down', !memorial.skip && memorial.dug < 0.05 && memorial.fell < 0.1,
+    `${memorial.name}: ground ${memorial.dug} m, walls ${memorial.fell} m lower`);
 
   // --- the shader is told about it ------------------------------------------
   const uniforms = await page.evaluate(() => {
@@ -488,7 +499,10 @@ async function run() {
     s.demolition.blast(x, y, z, 80, 3000);
     for (let i = 0; i < 120; i++) s.demolition.update(1 / 60);
     s.renderer.setCollapses(s.demolition.sites);
-    const site = s.demolition.sites[0];
+    // Read now: the sixty blasts below run out of slots and merge into the
+    // nearest site, which grows this one to hundreds of metres.
+    const first = s.demolition.sites[0];
+    const site = first ? { x: first.x, radius: first.radius } : null;
     const packed = Array.from(s.renderer.collapse.slice(0, 4));
     // And a lot of them never take more slots than the shader has.
     for (let i = 0; i < 60; i++) {
@@ -502,12 +516,14 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
     return {
       quiet, after: s.renderer.collapseCount,
-      matches: Math.abs(packed[0] - site.x) < 0.01 && Math.abs(packed[3] - site.radius) < 0.01,
+      matches: !!site && Math.abs(packed[0] - site.x) < 0.01 && Math.abs(packed[3] - site.radius) < 0.01,
+      detail: site ? `site at ${site.x.toFixed(1)} r ${site.radius.toFixed(1)}, slot 0 at ${packed[0].toFixed(1)} r ${packed[3].toFixed(1)}`
+        : `no site left after two seconds, blast at ${Math.round(x)}, ${Math.round(z)}`,
       many, max: s.demoSpec.maxSites,
     };
   });
   check('an untouched city costs the vertex shader nothing', uniforms.quiet === 0);
-  check('and a collapse reaches it with the right numbers', uniforms.matches);
+  check('and a collapse reaches it with the right numbers', uniforms.matches, uniforms.detail);
   check('sixty blasts never ask for more slots than there are',
     uniforms.many.sites <= uniforms.max && uniforms.many.uniforms <= uniforms.max,
     `${uniforms.many.sites} sites, ${uniforms.max} slots`);
@@ -674,8 +690,8 @@ async function run() {
     `${arrived.off} m out`);
   check('on the ground, with the interface back', arrived.onGround && arrived.hudBack);
 
-  // Travel into the memorial is allowed: walking there always has been, it is
-  // firing there that is not.
+  // Travel into the memorial is allowed, as walking and fighting there are:
+  // the force field keeps the place whole, not anybody out of it.
   const intoMemorial = await page.evaluate(() => {
     const s = window.spreefall;
     const m = s.combat.sanctuaries[0];

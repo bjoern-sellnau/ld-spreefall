@@ -473,20 +473,6 @@ html, body {
 #buildinfo b { color: #e2c98d; font-weight: 600; }
 #buildinfo i { color: #8d8a84; font-style: normal; }
 
-#sanctuary {
-  position: absolute;
-  left: 50%; top: 22%;
-  transform: translateX(-50%);
-  max-width: min(460px, 82vw);
-  padding: 12px 20px;
-  text-align: center;
-  background: rgba(10, 12, 15, 0.7);
-  border: 1px solid var(--edge);
-  font-size: 12px;
-  line-height: 1.6;
-  color: #d6d1c6;
-  backdrop-filter: blur(3px);
-}
 /* The call. Two lines across the middle of the screen while forty tonnes
    falls out of the sky, and gone the moment it lands. */
 #titanfall {
@@ -536,15 +522,6 @@ html, body {
   color: var(--accent);
   font-size: 11px; font-weight: 700; text-align: center;
 }
-#sanctuary b {
-  display: block;
-  color: var(--accent);
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  margin-bottom: 5px;
-}
-
 /* What you are carrying that has a clock on it. One chip per power up, with
    the seconds left counting down, because the whole decision a power up asks
    of you is how long you have got. */

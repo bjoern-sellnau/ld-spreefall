@@ -123,6 +123,8 @@ export class Fires {
         if (!data) continue;
         for (let i = 0; i < data.length; i += 5) {
           const x = data[i], y = data[i + 1], z = data[i + 2];
+          // A tree under the memorial's force field does not catch.
+          if (w.shielded && w.shielded(x, z)) continue;
           const d = Math.hypot(x - site.x, z - site.z);
           if (d > r) continue;
           const seed = data[i + 4] % 128;

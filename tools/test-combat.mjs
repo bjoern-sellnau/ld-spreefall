@@ -150,7 +150,10 @@ async function run() {
     reload.started && reload.ammo === 30 && reload.reserve === 213,
     `ammo ${reload.ammo}, reserve ${reload.reserve}`);
 
-  // --- the weapons free zone ----------------------------------------------
+  // --- the force field over the memorial -----------------------------------
+  // It was a weapons free zone. Now the fight can go anywhere and the field
+  // keeps the place whole: the weapon fires there, things fly into it, and a
+  // blast in it neither brings anything down nor digs anything up.
   const zone = await page.evaluate(async () => {
     const s = window.spreefall;
     const mem = s.world.manifest.landmarks.find((l) => l.key === 'memorial');
@@ -158,40 +161,82 @@ async function run() {
     s.drones.reset(); s.weapon.reset();
     const d = window.T.park(-28, 6, 0);
     window.T.aimAt(d);
-    // Run one simulation step so the holster rule applies.
     for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
     const before = d.health;
     const holstered = s.weapon.holstered;
     s.weapon.update(1 / 60, true, { x: s.player.x, y: s.player.y + 1.7, z: s.player.z },
       { x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] });
-    const inZone = s.combat.isSanctuary(s.player.x, 0, s.player.z);
-    const banner = !document.getElementById('sanctuary').classList.contains('hidden');
-    return { inZone, holstered, banner, damage: before - d.health, ammo: s.weapon.ammo };
+    const shielded = s.combat.isShielded(mem.x, 0, mem.z);
+    const domes = s.renderer.field.domes.length;
+    // A rocket's worth in the middle of the stelae, and a warhead's worth.
+    const g = s.world.groundHeight(mem.x + 12, mem.z + 9);
+    const tall = s.world.tallestNear(mem.x + 12, mem.z + 9, 15);
+    const glowBefore = s.renderer.field.glow;
+    // And something outside the field, inside the warhead's reach, which the
+    // field must not save: it keeps the memorial, not the street.
+    // The warhead goes off on the edge of the field, so half of it is over
+    // the memorial and half over the street.
+    const field = s.combat.sanctuaries[0];
+    let outside = null, edge = null;
+    for (let a = 0; a < 24 && !outside; a++) {
+      const ex = mem.x + Math.cos(a / 24 * 6.283) * field.radius;
+      const ez = mem.z + Math.sin(a / 24 * 6.283) * field.radius;
+      for (let r = 15; r < 50 && !outside; r += 5) {
+        for (let b = 0; b < 12; b++) {
+          const x = ex + Math.cos(b / 12 * 6.283) * r, z = ez + Math.sin(b / 12 * 6.283) * r;
+          if (Math.hypot(x - mem.x, z - mem.z) < field.radius + 10) continue;
+          const t = s.world.tallestNear(x, z, 6);
+          if (t > 10) { outside = { x, z, before: t }; edge = { x: ex, z: ez }; break; }
+        }
+      }
+    }
+    s.explode(mem.x + 12, g + 1, mem.z + 9, { radius: 8, damage: 120 });
+    const opened = s.demolition.blast(mem.x + 12, g + 1, mem.z + 9, 8, 120).length
+      + (edge ? s.demolition.blast(edge.x, g, edge.z, 170, 4000).length : 0);
+    for (let i = 0; i < 60 * 6; i++) s.fixedForTest(1 / 60);
+    return {
+      shielded, domes, holstered, damage: before - d.health, ammo: s.weapon.ammo, opened,
+      groundMoved: +Math.abs(s.world.groundHeight(mem.x + 12, mem.z + 9) - g).toFixed(2),
+      tallBefore: +tall.toFixed(1),
+      tallAfter: +s.world.tallestNear(mem.x + 12, mem.z + 9, 15).toFixed(1),
+      lit: s.renderer.field.glow > glowBefore || s.renderer.field.hit.at > 0,
+      outsideBefore: outside ? +outside.before.toFixed(1) : null,
+      outsideAfter: outside ? +s.world.tallestNear(outside.x, outside.z, 6).toFixed(1) : null,
+    };
   });
-  check('the memorial is recognised as a weapons free zone', zone.inZone);
-  check('the weapon holsters itself there', zone.holstered, `ammo untouched: ${zone.ammo === 30}`);
-  check('and it will not fire', zone.damage === 0 && zone.ammo === 30);
-  check('the reason is shown on screen', zone.banner);
-  await page.screenshot({ path: path.join(SHOTS, 'combat-04-sanctuary.png') });
+  check('the memorial is under a force field', zone.shielded && zone.domes > 0,
+    `${zone.domes} dome drawn`);
+  check('and the weapon fires there', !zone.holstered && zone.damage > 0 && zone.ammo < 30,
+    `${zone.damage} damage, ${zone.ammo} rounds left`);
+  check('a blast in it brings nothing down and digs nothing up',
+    zone.groundMoved < 0.05 && zone.tallAfter >= zone.tallBefore - 0.1,
+    `ground moved ${zone.groundMoved} m, stelae ${zone.tallBefore} m then ${zone.tallAfter} m`);
+  check('but the street outside it still comes down',
+    zone.outsideBefore !== null && zone.outsideAfter < zone.outsideBefore - 2,
+    `${zone.outsideBefore} m before, ${zone.outsideAfter} m after, ${zone.opened} sites opened`);
+  check('and the field lights where it was hit', zone.lit);
 
-  // --- drones will not enter the zone --------------------------------------
+  // --- drones go where the fight is, the memorial included -----------------
+  // They used to be turned back at the edge of it. One put down over the
+  // stelae now stays and fights.
   const keepOut = await page.evaluate(() => {
     const s = window.spreefall;
     const mem = s.world.manifest.landmarks.find((l) => l.key === 'memorial');
     s.drones.reset();
     s.drones.enabled = true;
-    let insideEver = 0;
-    for (let i = 0; i < 1200; i++) {
+    s.teleport(mem.x, mem.z);
+    const d = window.T.park(-20, 8, 0);
+    let insideEver = 0, frames = 0;
+    for (let i = 0; i < 60 * 6; i++) {
       s.drones.update(1 / 60, { x: mem.x, y: 2, z: mem.z, alive: true }, i / 60);
-      for (const d of s.drones.active) {
-        if (Math.hypot(d.x - mem.x, d.z - mem.z) < 60) insideEver++;
-      }
+      frames++;
+      if (d.alive !== false && Math.hypot(d.x - mem.x, d.z - mem.z) < 60) insideEver++;
     }
     s.drones.enabled = false;
-    return { insideEver, live: s.drones.count };
+    return { insideEver, frames };
   });
-  check('drones stay out of the weapons free zone', keepOut.insideEver === 0,
-    `${keepOut.insideEver} drone frames inside, ${keepOut.live} live`);
+  check('a drone over the memorial stays and fights', keepOut.insideEver > keepOut.frames * 0.8,
+    `${keepOut.insideEver} of ${keepOut.frames} frames inside`);
 
   // --- a pretty picture of an engagement -----------------------------------
   await page.evaluate(() => {

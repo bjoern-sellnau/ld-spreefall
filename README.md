@@ -40,7 +40,7 @@ npm run serve        # http://localhost:8080/
 screenshots in a headless browser and fails on any console error, `npm run
 test:ui` drives the whole game layer through a real browser, `npm run
 test:combat` fights drones in one and checks the damage, the cover and the
-weapons free zone, and `npm run clip` records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
+memorial's force field, and `npm run clip` records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
 Cloudflare Pages, or any static host. There is nothing to run on the server.
 
 ### All of Berlin at full detail, on your own machine
@@ -155,8 +155,7 @@ and a chip on the interface counting it down:
 | Ultrashield | an overshield well above your normal maximum, for 26 s, then it bleeds back down rather than vanishing |
 | Overload | you fire almost twice as fast and reload in under half the time, for 18 s |
 
-None of them spawns in the weapons free zone. The map marks every pad that is
-up, in the colour it glows in on the street.
+The map marks every pad that is up, in the colour it glows in on the street.
 
 ## The shooter
 
@@ -167,11 +166,14 @@ ones are also the more interesting problem: a quadrotor moves in three dimension
 has to find its way around buildings it can see, and has to lose you when you
 break line of sight.
 
-**The memorial is a weapons free zone.** Within 135 m of Peter Eisenman's field
-the weapon holsters itself, it will not fire, and the screen says why. No drone
-spawns inside the circle, one that drifts in turns and accelerates back out, and
-while you are in there none of them can see you. It is enforced in the game code
-rather than in the interface, and the combat test checks each part of it.
+**The memorial is under a force field.** It used to be a weapons free zone; now
+the fight can go anywhere, and within 100 m of the middle of Peter Eisenman's
+field nothing can be damaged. A blast there or one that reaches into it brings
+no stele down, digs no crater, sets no tree alight and leaves no scorch mark,
+while the street outside the circle comes down as it would anywhere else. The
+field is a low dome of hexagons, faint until something lands on it and then lit
+from the point of the hit outward. It is enforced in the shader, the baked
+ruins, the collision and the ground alike, and the combat test checks each.
 
 What is under the hood:
 
@@ -217,8 +219,7 @@ What is under the hood:
   missile that chases you slowly enough that moving is an answer.
 - Soldiers walk the same streets. They advance, take an angle on you, fire in
   bursts and lose you when you break line of sight, testing that line of sight
-  from their eyes to yours through the real geometry. They will not walk into
-  the weapons free zone. And they slip on a banana, which lays them out for
+  from their eyes to yours through the real geometry. And they slip on a banana, which lays them out for
   three and a half seconds.
 - Holding ground raises the threat tier, which raises how many of them are in the
   air at once, from six to fourteen. Integrity regenerates after a pause, and
@@ -361,11 +362,10 @@ And the warhead:
   kilometre a second: the crack, a sub tone falling for most of a second, and a
   roll of noise that takes eight seconds to go away. The roll is the part that
   sells the size.
-- **The memorial cannot be targeted, and neither can anywhere within a hundred
-  and seventy metres of it.** The map draws the weapons free zone and the ring
-  the blast may not cross, so a refused target is something you can see coming
-  rather than a message you get after clicking. This is the one line in the
-  project that no switch in this menu moves.
+- **A warhead can go anywhere, the memorial included, and the memorial's force
+  field takes what lands on it.** The map draws the field. That nothing under it
+  can be damaged is the one line in the project that no switch in this menu
+  moves.
 
 **Cinematic warheads.** With that switch on, releasing one hands the camera
 over. It leaves you where you are standing, takes a station beside the fall
@@ -802,10 +802,10 @@ already draws. Only where the data has nothing does a surveyed footprint get
 used as it stands.
 
 This matters more than it sounds. Every piece of curated content rides on those
-facts, including the weapons free zone: the game finds the memorial through the
+facts, including the force field: the game finds the memorial through the
 landmark card, so without this pass the deployed city would have no memorial,
-no stelae and no sanctuary at all, which was exactly the state of it until the
-build log was read.
+no stelae and no field over them at all, which was exactly the state of it
+until the build log was read.
 
 ## What is real and what is generated
 
@@ -1098,7 +1098,7 @@ worth naming because each of them was invisible until something was checked:
 ![Contact over Pariser Platz](docs/screenshots/combat-01-contact.png)
 *Four drones over Pariser Platz, with the Gate behind them.*
 
-![The weapons free zone](docs/screenshots/combat-04-sanctuary.png)
+![The force field over the memorial](docs/screenshots/field-01-dome.png)
 *Inside the memorial the weapon is holstered and the screen says why.*
 
 ![Soldiers on Pariser Platz](docs/screenshots/combat-05-soldiers.png)

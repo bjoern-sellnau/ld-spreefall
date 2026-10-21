@@ -270,6 +270,8 @@ export function bakeSite(world, site) {
           const now = Math.round(burn * 255);
           if (now > was) { view.setUint8(o + 16, now); burntNow = true; }
         }
+        // Nothing under the memorial's force field is moved, as in the shader.
+        if (world.shielded && world.shielded(p.x, p.z)) continue;
         // Rubble a site before this one put down stays where it lies, as it
         // does in the shader.
         if (!isGround && (flags & FACADE_FLAG.RUBBLE) !== 0) continue;

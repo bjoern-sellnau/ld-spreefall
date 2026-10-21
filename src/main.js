@@ -66,7 +66,7 @@ const el = {
   diffnote: $('diffnote'),
   weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
-  sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
+  killfeed: $('killfeed'), powers: $('powers'),
   buildInfo: $('buildinfo'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
   cheatValues: $('cheatvalues'),
@@ -212,14 +212,31 @@ async function main() {
   try { wanted = localStorage.getItem('spreefall.difficulty') || 'normal'; } catch { /* private mode */ }
   const combat = new Combat(m, wanted);
   // Districts arrive and leave while you walk, and two things took a copy of
-  // the city's landmarks when they were built: the cards and the weapons free
-  // zone. Both are taken again whenever the city changes shape, so the
-  // memorial is still a sanctuary after Mitte has been dropped and reloaded.
+  // the city's landmarks when they were built: the cards and the memorial's
+  // force field. Both are taken again whenever the city changes shape, so the
+  // memorial is still shielded after Mitte has been dropped and reloaded.
+  const placeDomes = () => {
+    renderer.field.domes = combat.sanctuaries.map((f) => ({
+      x: f.x, y: world.groundHeight(f.x, f.z), z: f.z, radius: f.radius,
+    }));
+  };
+  // The ground under the field is never dug, which the world asks about
+  // every time it is asked how high the ground is.
+  world.shielded = (x, z) => combat.isShielded(x, 0, z);
   world.onManifest = (manifest) => {
     landmarks.refresh(manifest);
     combat.refreshSanctuaries(manifest);
+    placeDomes();
   };
-  const drones = new Drones(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  placeDomes();
+  // The field keeps the memorial whole; it does not keep anybody out of it.
+  // Nothing below is told about it except what could damage the place.
+  const shielded = (x, y, z) => combat.isShielded(x, y, z);
+  // Nor is it burnt: a scorch mark that would land under the field is not
+  // put down at all.
+  const addScar = renderer.addScar.bind(renderer);
+  renderer.addScar = (x, y, z, ...rest) => (shielded(x, y, z) ? undefined : addScar(x, y, z, ...rest));
+  const drones = new Drones(world);
   // Filled in by the soldier layer below, and referenced by the blast handler
   // before it exists, which is why it is a binding rather than a constant.
   let soldiers = null;   // built below, once combat exists to ask about zones
@@ -228,15 +245,15 @@ async function main() {
   const effects = new Effects();
   const reflex = new Reflex();
   reflex.drainScale = combat.rules.reflexDrain;
-  soldiers = new Soldiers(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const jets = new Jets(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  soldiers = new Soldiers(world);
+  const jets = new Jets(world);
   jets.accuracyScale = combat.rules.enemyAccuracy;
-  const pickups = new Pickups(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const pickups = new Pickups(world);
   const cheats = new Cheats();
   const gibs = new Gibs(world);
   const cars = new Cars(world);
   const trains = new Trains(world);
-  const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const demolition = new Demolition(world, shielded);
   // A ruin that has stopped moving is written into the city's own bytes, and
   // the card needs the new ones. Nothing else changes: the same ruin, drawn
   // from the buffers instead of from a uniform slot, which is then free for
@@ -305,12 +322,12 @@ async function main() {
   const travel = new Travel();
   const cinema = new Cinema();
   const fires = new Fires(world);
-  const fireWalls = new FireWalls(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const fireWalls = new FireWalls(world, shielded);
   const machines = new Machines();
-  const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const ultra = new Ultra(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const mechs = new Mechs(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const ion = new Ion(world);
+  const ultra = new Ultra(world);
+  const vehicles = new Vehicles(world);
+  const mechs = new Mechs(world);
   weapon.mechs = mechs;
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
@@ -445,7 +462,6 @@ async function main() {
     shieldTimer: 0,
     recoilApplied: { pitch: 0, yaw: 0 },
     bob: 0,
-    inSanctuary: false,
     targeting: false,
     // Just a Walk: nothing is sent after you. What the cheat menu brings out
     // by hand is still real, and still fights; it simply does not come back
@@ -608,6 +624,7 @@ async function main() {
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
     // Heard a great deal further than a rifle, and run from accordingly.
     soldiers.scare(x, z, Math.max(90, splash.radius * 3));
+    strikeField(x, y, z, splash.radius);
     if (splash.fusion) {
       // A mech's reactor: the warhead's code path at a fiftieth of the
       // volume, in blue and neon green, and a flash that washes the frame
@@ -2127,7 +2144,7 @@ async function main() {
       const px = x + Math.cos(a) * r;
       const pz = z + Math.sin(a) * r;
       const py = world.groundHeight(px, pz);
-      if (combat.isSanctuary(px, py, pz)) continue;
+      if (combat.isShielded(px, py, pz)) continue;
       fires.ignite(px, py, pz, 8, 0.9);
       renderer.addScar(px, py, pz, 4.5, 0.6);
       effects.flame(px, py + 0.5, pz, 3.0, 0.9);
@@ -2208,7 +2225,7 @@ async function main() {
     // untouched after a wall of fire had crossed it.
     fires.ignite(x, y, z, radius, 0.9);
     renderer.addScar(x, y, z, radius * 0.9, 0.55);
-    if (combat.isSanctuary(x, y, z)) return;
+    if (combat.isShielded(x, y, z)) return;
     burning.push({ x, y, z, radius: Math.max(5, radius * 0.6), left: spec.burnSeconds,
       damagePerSecond: spec.groundDamagePerSecond });
   };
@@ -2869,7 +2886,7 @@ async function main() {
    * spot, with the difference that nobody can see why.
    */
   function placeable(x, z) {
-    return world.isLoaded(x, z) && !combat.isSanctuary(x, 0, z);
+    return world.isLoaded(x, z);
   }
 
   /**
@@ -2888,7 +2905,6 @@ async function main() {
         const r = 30 + Math.random() * 110;
         const x = at.x + Math.cos(a) * r;
         const z = at.z + Math.sin(a) * r;
-        if (combat.isSanctuary(x, 0, z)) continue;
         // Somewhere a vehicle could actually sit: nothing within its own
         // length in four directions.
         let boxed = false;
@@ -3321,7 +3337,7 @@ async function main() {
   /**
    * More of them, now. Each goes in through the same spawn the game uses, so
    * a soldier put here is a soldier like any other: it finds a place to stand,
-   * keeps out of the weapons free zone, and belongs to the same budget.
+   * and belongs to the same budget.
    *
    * @returns {number} how many actually arrived
    */
@@ -3467,7 +3483,6 @@ async function main() {
         if (x < world.minX + 80 || x > world.maxX - 80) continue;
         if (z < world.minZ + 80 || z > world.maxZ - 80) continue;
         if (!world.isLoaded(x, z)) continue;
-        if (sanctuaryWithin(x, z, nukeRadius())) continue;
         dropNuke(x, z, true);
         break;
       }
@@ -3766,12 +3781,6 @@ async function main() {
       return true;
     }
     const radius = aimRadius(state.mapMode);
-    if (sanctuaryWithin(x, z, radius)) {
-      el.targetHint.textContent = 'not there: the memorial is a weapons free zone';
-      el.targetConfirm.classList.add('hidden');
-      state.pendingNuke = null;
-      return false;
-    }
     state.pendingNuke = { x, z };
     const inside = countInside(x, z, radius);
     const u = cheats.ultra;
@@ -3814,7 +3823,7 @@ async function main() {
       if (!ultra.fire(at.x, at.z, cheats.ultra)) {
         el.targetHint.textContent = ultra.active
           ? 'the last one is still coming down'
-          : 'not there: the memorial is a weapons free zone';
+          : 'it cannot be fired there';
         return false;
       }
       cheats.used = true;
@@ -3826,7 +3835,7 @@ async function main() {
       if (!ion.fire(at.x, at.z)) {
         el.targetHint.textContent = ion.firing
           ? 'the cannon is already firing'
-          : 'not there: the memorial is a weapons free zone';
+          : 'it cannot be fired there';
         return false;
       }
       cheats.used = true;
@@ -3835,7 +3844,7 @@ async function main() {
       return true;
     }
     if (!dropNuke(at.x, at.z)) {
-      el.targetHint.textContent = 'not there: the memorial is a weapons free zone';
+      el.targetHint.textContent = 'it cannot be dropped there';
       return false;
     }
     closeTargeting();
@@ -4204,7 +4213,7 @@ async function main() {
     const r = aimRadius(state.mapMode);
     targetMap.aim = {
       x, z, radius: r,
-      allowed: state.mapMode === 'travel' || !sanctuaryWithin(x, z, r),
+      allowed: true,
       ...aimArrow(state.mapMode),
     };
   }
@@ -4292,7 +4301,6 @@ async function main() {
    *   not mark the run the way reaching for one in the cheat menu does.
    */
   function dropNuke(x, z, ofTheMode = false) {
-    if (sanctuaryWithin(x, z, nukeRadius())) return false;
     if (!ofTheMode) {
       cheats.used = true;
       applyCheats();
@@ -4341,20 +4349,27 @@ async function main() {
     relock();
   }
 
-  /** True when a circle of this radius would reach into a weapons free zone. */
-  function sanctuaryWithin(x, z, radius) {
-    for (const sanctuary of combat.sanctuaries) {
-      const dx = x - sanctuary.x, dz = z - sanctuary.z;
-      if (Math.hypot(dx, dz) < sanctuary.radius + radius) return true;
+  /**
+   * A blast that reaches the memorial lights its force field from the point
+   * where it touched: the middle of the blast if it went off inside, the edge
+   * of the field facing it if not. What it does to the memorial is nothing,
+   * which is the demolition layer's business.
+   */
+  function strikeField(x, y, z, radius) {
+    for (const f of combat.sanctuaries) {
+      const d = Math.hypot(x - f.x, z - f.z);
+      if (d >= f.radius + radius) continue;
+      const at = d < f.radius ? { x, z } : { x: f.x + ((x - f.x) / d) * f.radius, z: f.z + ((z - f.z) / d) * f.radius };
+      renderer.field.struck(at.x, Math.max(y, world.groundHeight(at.x, at.z) + 2), at.z,
+        state.time, Math.min(3, Math.max(0.3, radius / 12)));
     }
-    return false;
   }
 
   /**
    * Nuke rain. One warhead every few seconds, somewhere you can see but not
-   * where you are standing, and never into the memorial. Because it has to
-   * pick a point that is allowed, it tries a handful and gives this tick up
-   * rather than looping until it finds one.
+   * where you are standing; the memorial's field takes any that land on it.
+   * Because it has to pick a point that is allowed, it tries a handful and
+   * gives this tick up rather than looping until it finds one.
    */
   function rainTick(dt) {
     if (!cheats.nukeRain || state.mode !== 'walk') return;
@@ -5092,11 +5107,10 @@ async function main() {
       z: player.z,
       alive: combat.health > 0,
     };
-    state.inSanctuary = combat.isSanctuary(eye.x, eye.y, eye.z);
     // The cheat menu and the target map are both modal: the mouse belongs to
     // them, so nothing fires while either is up.
     const paused = state.targeting || !el.cheats.classList.contains('hidden');
-    const holstered = state.holstered || photo.active || state.inSanctuary
+    const holstered = state.holstered || photo.active
       || combat.health <= 0 || paused;
     weapon.setHolstered(holstered);
     // A flamethrower has nothing to aim down. Its second trigger throws a
@@ -5570,18 +5584,6 @@ async function main() {
       showBuildingDamage();
       // Aiming narrows the field of view, which is most of what aiming is.
       camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;
-      if (state.inSanctuary !== state.sanctuaryShown) {
-        state.sanctuaryShown = state.inSanctuary;
-        if (state.inSanctuary) {
-          const name = combat.sanctuaryName(player.x, player.z) || 'This place';
-          el.sanctuary.innerHTML =
-            `<b>weapons free zone</b>${name} is a memorial. `
-            + 'The weapon holsters itself here and nothing will follow you in.';
-          el.sanctuary.classList.remove('hidden');
-        } else {
-          el.sanctuary.classList.add('hidden');
-        }
-      }
       // What you are standing next to. Vehicles were always here and F always
       // worked, but nothing on the screen said so, which is the same thing as
       // them not working.

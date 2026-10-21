@@ -1,5 +1,5 @@
-// Player health, the threat level that rises as you fight, and the weapons free
-// zone. Keeping this separate from the weapon and the drones means the rules of
+// Player health, the threat level that rises as you fight, and the force field
+// over the memorial. Keeping this separate from the weapon and the drones means the rules of
 // the game live in one readable place.
 
 export const COMBAT = {
@@ -38,6 +38,9 @@ export const DIFFICULTY = {
   },
 };
 
+/** How far the memorial's force field reaches from its middle, in metres. */
+export const FIELD_RADIUS = 100;
+
 export class Combat {
   constructor(manifest, difficulty = 'normal') {
     this.rules = DIFFICULTY[difficulty] || DIFFICULTY.normal;
@@ -74,10 +77,13 @@ export class Combat {
     this.onPower = null;
     this.onPowerEnd = null;
 
-    // The memorial is a weapons free zone. Peter Eisenman's field is a memorial
-    // to the murdered Jews of Europe, and turning it into a place to shoot in
-    // would be grotesque. Inside it the weapon holsters itself and the drones
-    // keep out.
+    // The memorial is under a force field. Peter Eisenman's field is a
+    // memorial to the murdered Jews of Europe, and nothing in this game may
+    // break a stele, burn it or dig a crater in it. It used to be a weapons
+    // free zone, where the weapon holstered itself and nothing would fight;
+    // now the fight can go anywhere and the field takes what lands on the
+    // memorial instead. The circle is the field, about the size of the
+    // stelae, with the streets round it left as streets.
     this.sanctuaries = [];
     this.refreshSanctuaries(manifest);
   }
@@ -87,7 +93,7 @@ export class Combat {
     this.sanctuaries.length = 0;
     for (const l of (manifest.landmarks || [])) {
       if (l.key === 'memorial') {
-        this.sanctuaries.push({ x: l.x, z: l.z, radius: 135, name: l.name });
+        this.sanctuaries.push({ x: l.x, z: l.z, radius: FIELD_RADIUS, name: l.name });
       }
     }
   }
@@ -122,8 +128,8 @@ export class Combat {
     this.started = performance.now();
   }
 
-  /** True inside a weapons free zone. */
-  isSanctuary(x, y, z) {
+  /** True under the force field, where nothing can be damaged. */
+  isShielded(x, y, z) {
     for (const s of this.sanctuaries) {
       const dx = x - s.x, dz = z - s.z;
       if (dx * dx + dz * dz < s.radius * s.radius) return true;

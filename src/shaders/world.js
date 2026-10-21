@@ -19,6 +19,7 @@ export const COLLAPSE = `
 uniform vec4 uCollapse[${16}];      // xyz centre at ground level, w collapse radius
 uniform vec4 uCollapseInfo[${16}];  // x level, y crater depth, z crater radius, w heap (negative: crater only)
 uniform int uCollapseCount;
+uniform vec4 uShield;    // xy the middle of the memorial's force field, z its radius
 
 // How far the fall runs ahead of itself at the middle of a site. A whole
 // district does not come down in one piece: the centre goes first and the
@@ -100,6 +101,8 @@ float craterAt(vec2 p, vec4 site, float depth, float craterRadius, float level) 
  */
 float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
   float worst = 0.0;
+  // Under the force field nothing moves, whatever went off outside it.
+  if (uShield.z > 0.0 && length(p.xz - uShield.xy) < uShield.z) return 0.0;
   // Every site is read from where the vertex was built, and a wall takes the
   // one site that brings it furthest down rather than every site in turn.
   // Taking them in turn moved each corner from where the last site had left

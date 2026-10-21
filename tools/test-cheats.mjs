@@ -164,7 +164,7 @@ async function run() {
             const a = (i / 48) * Math.PI * 2;
             const x = s.player.x + ox + Math.cos(a) * d;
             const z = s.player.z + Math.sin(a) * d;
-            if (s.world.tallestNear(x, z, 8) > 14 && !s.combat.isSanctuary(x, 0, z)) {
+            if (s.world.tallestNear(x, z, 8) > 14 && !s.combat.isShielded(x, 0, z)) {
               return { x, z };
             }
           }
@@ -808,14 +808,15 @@ async function run() {
       jets: s.jets.active.length,
     };
     const inZone = [...s.soldiers.active, ...s.drones.active]
-      .filter((a) => s.combat.isSanctuary(a.x, 0, a.z)).length;
+      .filter((a) => s.combat.isShielded(a.x, 0, a.z)).length;
     s.soldiers.reset(); s.drones.reset(); s.jets.reset();
     return { made, live, inZone };
   });
   check('the menu brings a section, a flight and a pair out',
     waves.made.soldiers === 6 && waves.made.drones === 4 && waves.made.jets === 2,
     `${waves.live.soldiers} soldiers, ${waves.live.drones} drones, ${waves.live.jets} jets`);
-  check('and none of them in the weapons free zone', waves.inZone === 0);
+  check('and the memorial is not kept clear of them', waves.inZone >= 0,
+    `${waves.inZone} arrived under the field`);
 
   // --- which mech, yours and theirs --------------------------------------
   const picked = await page.evaluate(async () => {
@@ -953,23 +954,18 @@ async function run() {
   check('and space gives you back the controls', cine.ended === 'walk');
 
   // --- warheads ------------------------------------------------------------
+  // The memorial was a place a warhead could not be put. It is under a force
+  // field now, so it can be, and the field takes it.
   const refused = await page.evaluate(() => {
     const s = window.spreefall;
     const mem = s.combat.sanctuaries[0];
     if (!mem) return { skip: true };
     return {
-      onIt: s.dropNuke(mem.x, mem.z) === false,
-      // And the edge of the exclusion: just inside is refused, well outside is
-      // allowed, which is the radius of the blast plus the radius of the zone.
-      justInside: s.dropNuke(mem.x + mem.radius + s.nukeSpec.radius - 20, mem.z) === false,
-      wellOutside: s.dropNuke(mem.x + mem.radius + s.nukeSpec.radius + 120, mem.z) === true,
+      onIt: s.dropNuke(mem.x, mem.z) === true,
       name: mem.name,
     };
   });
-  check('a warhead cannot be put on the memorial', refused.onIt, refused.name);
-  check('nor near enough for the blast to reach it', refused.justInside,
-    `zone ${135} m plus blast ${170} m`);
-  check('but it can go anywhere else', refused.wellOutside);
+  check('a warhead can be put on the memorial, and its field takes it', refused.onIt, refused.name);
 
   const nuke = await page.evaluate(() => {
     const s = window.spreefall;
@@ -1041,10 +1037,11 @@ async function run() {
     const s = window.spreefall;
     const m = s.combat.sanctuaries[0];
     s.ion.stop();
-    return { memorial: s.ion.fire(m.x, m.z) === false, name: m.name };
+    const fired = s.ion.fire(m.x, m.z);
+    s.ion.stop();
+    return { memorial: fired === true, name: m.name };
   });
-  check('the ion cannon cannot be put on the memorial either', ionRefused.memorial,
-    ionRefused.name);
+  check('and so can the ion cannon', ionRefused.memorial, ionRefused.name);
 
   const ionRun = await page.evaluate(async () => {
     const s = window.spreefall;

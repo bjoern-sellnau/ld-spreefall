@@ -3330,3 +3330,34 @@ So there are two cities now, and a profile picks which:
   down stops at the height the Gate is cut back to and hangs there, and a
   column left standing next to fallen ones is a facade with no sides, which
   reads as a thin panel. Machines 62 of 62, city 84 of 84.
+
+## 74. The memorial is under a force field instead of out of bounds
+
+- 2026-10-21: asked for: no weapons free zone at the memorial, a force field
+  so it cannot be damaged instead. The zone was one test, combat.isSanctuary,
+  asked by thirteen modules for two different things: keep away (the weapon
+  holsters, drones and soldiers turn back and stop seeing you, mechs, pads
+  and parked vehicles are not put there, the warhead, the ion cannon and the
+  plasma rain refuse it) and do no harm (no collapse, no crater, no fire).
+  The first kind is gone: nothing is told about the memorial any more. The
+  second is the field, combat.isShielded, 100 m from the middle of the
+  stelae rather than the 135 the zone kept clear of the streets round it.
+- What it protects, everywhere a blast can change the city: the collapse in
+  the world shader (a uniform for the field, and no vertex inside it moves),
+  the bake that writes a finished ruin into the tiles, the collision walls,
+  the craters in the ground the player stands on, the holes a shell punches
+  in a wall, trees catching fire or being blown over, and scorch marks. A
+  site may now open on the memorial, and it was wrong that it could not: a
+  warhead there used to spare the whole street round it. Measured: a
+  warhead on the edge of the field took a block outside it from 17 m to 3 m
+  and moved nothing inside it.
+- What it looks like: src/render/field.js, a low dome of hexagons generated
+  in the vertex shader, additive, faint at rest and lit from the point of a
+  hit outward with a ring that runs across it (field-01-dome.png, from a
+  helicopter over the synthetic city).
+- Checks rewritten to say what is true now: the weapon fires there and
+  hurts, a drone parked over the stelae stays and fights, a warhead and the
+  ion cannon can be put on it, a blast in it leaves the ground and the walls
+  where they were, and the street outside still comes down. The city check
+  that a collapse reaches the shader read its site after sixty more blasts
+  had merged into it; it reads it first now.
