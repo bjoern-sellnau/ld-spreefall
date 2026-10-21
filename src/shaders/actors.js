@@ -70,6 +70,17 @@ void main() {
     if ((st & 1) != 0 && part > 70.5 && part < 71.5) part = 73.0;
     if ((st & 4) != 0 && part > 71.5) part = 74.0;
   }
+  // A nest: dead, it slumps and its heart goes dark; awake, the heart beats.
+  if (part > 74.5 && part < 77.5) {
+    int st = int(iState.w + 0.5);
+    if ((st & 1) != 0) {
+      p.y *= 0.3;
+      if (part > 76.5) part = 78.0;
+    } else if ((st & 2) != 0 && part > 76.5) {
+      part = 79.0;
+      p *= 1.0 + 0.08 * max(0.0, sin(uCamPos.w * 7.0));
+    }
+  }
   mat3 body = rotY(-iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
@@ -380,6 +391,29 @@ void main() {
     }
     // Reeling: it glows from inside, which is the cue to finish it.
     emissive += vec3(1.4, 0.55, 0.08) * vStun * (0.6 + 0.4 * sin(uCamPos.w * 12.0));
+  } else if (vPart > 74.5 && vPart < 79.5) {
+    // A nest: flesh with red running in it, bone, and the heart.
+    int k = int(vPart + 0.5);
+    float v = vnoise(vWorld.xz * 2.3 + vWorld.y * 1.9);
+    float vein = smoothstep(0.62, 0.7, vnoise(vWorld.xz * 6.0 + vWorld.y * 4.0));
+    rough = 0.55;
+    metal = 0.02;
+    if (k == 75) {
+      albedo = vec3(0.30, 0.06, 0.05) * (0.7 + 0.5 * v);
+      emissive = vec3(1.4, 0.08, 0.02) * vein * (0.6 + 0.4 * sin(uCamPos.w * 2.0));
+    } else if (k == 76) {
+      albedo = vec3(0.58, 0.52, 0.42) * (0.8 + 0.3 * v);
+      rough = 0.6;
+    } else if (k == 77) {
+      albedo = vec3(0.1, 0.01, 0.01);
+      emissive = vec3(2.6, 0.32, 0.04) * (0.7 + 0.3 * sin(uCamPos.w * 2.5));
+    } else if (k == 78) {
+      albedo = vec3(0.07, 0.03, 0.025);
+      rough = 0.9;
+    } else {
+      albedo = vec3(0.1, 0.01, 0.01);
+      emissive = vec3(4.2, 0.5, 0.05) * (0.55 + 0.45 * sin(uCamPos.w * 7.0));
+    }
   } else if (vPart > 63.5 && vPart < 74.5) {
     // A camp. Sandbags, canvas, crates, the radio and its mast, poles, the
     // flag in their red or, once the camp is yours, in blue, and the siren.

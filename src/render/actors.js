@@ -829,6 +829,30 @@ export function buildCampMesh() {
   return m;
 }
 
+/**
+ * A nest, for Slayer: a mound of flesh with a heart in the top of it, bone
+ * spikes round it and roots across the street. Parts 75 flesh, 76 bone, 77
+ * the heart. Dead, it slumps and the heart goes dark; awake, the heart
+ * beats hard. Both are read off the instance in the vertex shader.
+ */
+export function buildNestMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, 0, 3.4, 2.2, 1.4, 16, 75);
+  m.cylinder(0, 1.4, 0, 2.2, 1.0, 1.1, 14, 75);
+  m.icosphere(0, 2.75, 0, 1.0, 14, 8, 77);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + 0.2;
+    const r = 3.2 + (i % 3) * 0.5;
+    m.cylinder(Math.cos(a) * r, 0, Math.sin(a) * r, 0.22, 0.02, 2.6 + (i % 4) * 0.9, 6, 76);
+  }
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const len = 4 + (i % 3) * 2;
+    m.box(Math.cos(a) * (3 + len / 2), 0.18, Math.sin(a) * (3 + len / 2), len, 0.36, 0.5, 75, -a);
+  }
+  return m;
+}
+
 export function buildJeepMesh() {
   const m = new MeshBuild();
   const P = 31;
@@ -1204,6 +1228,8 @@ export class Actors {
     // ones that come after you, because it is the same aircraft.
     // Tactics camps, drawn through the same body shader as the vehicles.
     this.camp = this._uploadMesh(buildCampMesh(), MAX_CAMPS, 2);
+    // Slayer's nests, through the same shader.
+    this.nest = this._uploadMesh(buildNestMesh(), MAX_CAMPS, 2);
     this.vehicles = {
       jeep: this._uploadMesh(buildJeepMesh(), MAX_VEHICLES, 2),
       tank: this._uploadMesh(buildTankMesh(), MAX_VEHICLES, 2),
@@ -1716,24 +1742,54 @@ export class Actors {
     }
   }
 
-  drawCamps() {
-    if (!this.camp.instanceCount) return 0;
+  /** Slayer's nests: taken slumps them, awake makes the heart beat hard. */
+  updateNests(list) {
     const gl = this.gl;
-    this.progDrone.use();
-    gl.bindVertexArray(this.camp.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.camp.count, this.camp.indexType, 0, this.camp.instanceCount);
+    const mesh = this.nest;
+    const d = mesh.instData;
+    let n = 0;
+    for (const c of list) {
+      if (n >= MAX_CAMPS) break;
+      const o = n * 8;
+      d[o] = c.x; d[o + 1] = c.y; d[o + 2] = c.z; d[o + 3] = -c.yaw;
+      d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = 0;
+      d[o + 7] = (c.free ? 1 : 0) + (c.awake ? 2 : 0);
+      n++;
+    }
+    mesh.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  drawCamps() {
+    const gl = this.gl;
+    let draws = 0;
+    for (const mesh of [this.camp, this.nest]) {
+      if (!mesh.instanceCount) continue;
+      this.progDrone.use();
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawCampShadows(lightViewProj) {
-    if (!this.camp.instanceCount) return 0;
     const gl = this.gl;
-    this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
-    gl.bindVertexArray(this.camp.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.camp.count, this.camp.indexType, 0, this.camp.instanceCount);
+    let draws = 0;
+    for (const mesh of [this.camp, this.nest]) {
+      if (!mesh.instanceCount) continue;
+      this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawVehicles() {

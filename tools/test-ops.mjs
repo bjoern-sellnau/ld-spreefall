@@ -269,11 +269,15 @@ async function run() {
     s.teleport(site.x + 60, site.z);
     for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
     const run = s.tactics.live.get(site.id);
+    // Only the one: the rest are kept from seeing you for themselves, which
+    // is a different check.
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
     const g = run.guards[0];
     s.tactics.spot(g, 'seen');
     for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
     s.soldiers.damage(g, 9999, { x: 1, y: 0, z: 0 });
     for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    s.soldiers.stealth = s.tacticsSpec.stealth;
     return { alarm: run.alarm, spotted: run.spotted };
   });
   check('kill the one who saw you before he gets to it and there is no alarm',
@@ -553,6 +557,102 @@ async function run() {
     s.soldiers.enabled = true; s.drones.enabled = true;
     s.soldiers.reset(); s.drones.reset(); s.projectiles.clear();
   });
+
+  // --- Slayer: nests, waves, presence, a boss --------------------------------
+  const slay = await page.evaluate(() => {
+    const s = window.spreefall;
+    document.querySelector('.diff.mode[data-mode=slayer]').click();
+    const bossesShown = !document.querySelector('#opssetup .opsslayer').classList.contains('hidden');
+    s.campaign.wipe();
+    s.campaign.set('scope', 'district');
+    s.campaign.set('start', s.world.home);
+    s.campaign.set('perDistrict', 3);
+    s.campaign.set('bosses', true);
+    s.startOps();
+    s.state.opsTravel = false;
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear();
+    s.teleport(81, 0);
+    for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+    const nests = s.campaign.allSites();
+    return { mode: s.campaign.mode, bossesShown, n: nests.length,
+      presence: s.slayer.presence(s.world.home) };
+  });
+  check('Slayer is a mode too, with bosses on its setup', slay.mode === 'slayer' && slay.bossesShown);
+  check('and its nests are put down, the presence whole', slay.n >= 2 && slay.presence === 1,
+    `${slay.n} nests`);
+
+  const fightNest = (index, killAll) => page.evaluate(([index, killAll]) => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[index];
+    const run = s.slayer.run(site);
+    s.teleport(site.x + 50, site.z);
+    const hurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    let woke = false, most = 0, kinds = {}, presenceMid = 1, waves = 0, lastWave = -1;
+    for (let i = 0; i < 60 * 240 && site.state === 0; i++) {
+      s.fixedForTest(1 / 60);
+      if (run.phase !== 'idle') woke = true;
+      if (run.wave !== lastWave) { waves++; lastWave = run.wave; }
+      most = Math.max(most, run.demons.size);
+      for (const b of run.demons) kinds[b.demon] = (kinds[b.demon] || 0) + 1;
+      if (woke && i % 20 === 0) {
+        if (run.killed > 6 && presenceMid === 1) presenceMid = s.slayer.presence(site.d);
+        if (killAll) {
+          for (const b of [...run.demons]) {
+            if (b.rise > 0) continue;
+            if (b.demon === 'gazer') s.drones.damage(b, 1e6); else s.soldiers.damage(b, 1e6, { x: 1, y: 0, z: 0 });
+          }
+        }
+      }
+    }
+    s.combat.hurt = hurt;
+    return { woke, free: site.state === 1, most, kinds: Object.keys(kinds), presenceMid: +presenceMid.toFixed(2),
+      waves, boss: run.boss, killed: run.killed, total: run.total, presence: +s.slayer.presence(site.d).toFixed(2) };
+  }, [index, killAll]);
+
+  const first = await fightNest(0, true);
+  check('walk up to a nest and it wakes, and they come in waves', first.woke && first.waves >= 3,
+    `${first.waves} waves, ${first.kinds.join(', ')}`);
+  check('never more than so many at once', first.most <= 8, `${first.most} at once`);
+  check('kill them all and the nest is dead, and the presence falls', first.free && first.killed === first.total
+    && first.presence < 1 && !first.boss, `${first.killed} killed, presence ${first.presence}`);
+
+  // Run from a fight: it calls them back.
+  const ran = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1];
+    const run = s.slayer.run(site);
+    s.teleport(site.x + 50, site.z);
+    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
+    const up = run.demons.size;
+    s.teleport(site.x + 600, site.z);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    return { up, idle: run.phase === 'idle', left: run.demons.size, held: site.state === 0 };
+  });
+  check('run from a fight and the nest calls them back and waits', ran.up > 0 && ran.idle && ran.left === 0 && ran.held);
+
+  // Every nest but the last taken by hand: the last keeps a tyrant.
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const sites = s.campaign.allSites();
+    for (let i = 1; i < sites.length - 1; i++) s.campaign.free(sites[i]);
+  });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const sites = s.campaign.allSites();
+    const site = sites[sites.length - 1];
+    s.teleport(site.x + 40, site.z + 10);
+    for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    s.soldiers.enabled = false; s.drones.enabled = false;
+    s.look(80, 4);
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-06-nest.png') });
+  await page.evaluate(() => { const s = window.spreefall; s.soldiers.enabled = true; s.drones.enabled = true; });
+  const last = await fightNest(slay.n - 1, true);
+  check('with bosses on, the last nest in a district keeps a tyrant', last.boss && last.kinds.includes('tyrant'),
+    last.kinds.join(', '));
+  check('and when it falls the district is free of them', last.free && last.presence === 0, `presence ${last.presence}`);
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

@@ -3628,3 +3628,36 @@ So there are two cities now, and a profile picks which:
   four kinds and their sizes, a head shot at three and a half times a
   man's height, closing, clawing and burning, the brute's charge, and fire
   that does not touch another demon. ops-05-demons.png.
+
+## 84. Slayer: nests, waves out of portals, presence, and a boss
+
+- src/game/slayer.js. A nest is a site in the campaign book, placed like a
+  camp (three a district by default, 220 m apart, 16 m of open ground),
+  drawn as a mound of flesh with a heart in the top, bone spikes and roots
+  across the street (parts 75 to 79: slumped with a dark heart once it is
+  dead, the heart beating hard while it is awake).
+- Within 75 m a nest wakes and the fight is the nest's: three waves (five
+  ghouls; four ghouls, a gazer and a brute; five ghouls, two gazers, two
+  brutes), more of everything a level. They come out of portals 12 to 34 m
+  round it, one every 0.4 s while fewer than eight (two more a level) are
+  up, fodder first and the heavy ones after, the way the genre paces it;
+  three seconds' breath between waves. Spend the last wave and the nest is
+  dead (1500, 600 a level). Run 240 m from a fight and the nest calls its
+  demons back and waits for you.
+- With bosses on, the last nest still standing in a district keeps a fourth
+  wave for itself: four ghouls and a tyrant, out of a portal of its own
+  size 22 to 40 m off.
+- Presence, per district: each nest standing is its share, and a nest in a
+  fight counts by what is left of it. The line at the top says the presence
+  where you are, and in a fight the wave and how many are left.
+- A demon's arrival is the blue sphere every arrival in the game is, in red
+  and orange (effects.arrival takes a tint now), the size of what is
+  coming; a gazer's opens in the air. Roars for a wake, a brute and a
+  tyrant.
+- Checks (ops, 41 now): Slayer and its setup, the nests and a whole
+  presence, a nest woken and fought through all its waves with never more
+  than eight up, the presence falling, running and the nest resetting, and
+  with every other nest taken the last one bringing a tyrant and the
+  presence going to nought. A Tactics check that let the other guards see
+  the tester on their own was made to check only what it says.
+  ops-06-nest.png.

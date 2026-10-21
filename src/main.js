@@ -46,6 +46,7 @@ import { HealthBars } from './ui/healthbars.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { DEMON, GAZER, makeDemon, makeGazer } from './game/demons.js';
+import { Slayer, SLAYER } from './game/slayer.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -2899,12 +2900,12 @@ async function main() {
    * @param {number} radius how big the sphere is
    * @param {number} scale how much of everything, for a machine over a man
    */
-  function arriveAt(x, z, radius, scale = 1) {
+  function arriveAt(x, z, radius, scale = 1, tint = null) {
     const y = world.groundHeight(x, z);
     // Whatever just appeared on the street, the people on it do not wait to
     // find out what it is.
     soldiers.scare(x, z, 20 + radius * 9);
-    effects.arrival(x, y, z, radius, scale);
+    effects.arrival(x, y, z, radius, scale, tint);
     renderer.addScar(x, y, z, radius * 1.1, 0.45);
     const away = Math.hypot(player.x - x, player.z - z);
     if (away < 140) audio.emp(away);
@@ -4768,12 +4769,14 @@ async function main() {
     el.opsWipe.dataset.armed = '';
     campaign.wipe();
     tactics.clear();
+    slayer.clear();
     showOps();
   });
 
   /** A run starting: the start district, if one is set, is flown to once the intro is over. */
   function startOps() {
     tactics.clear();
+    slayer.clear();
     if (!campaign.active) { el.ops.classList.add('hidden'); return; }
     if (!campaign.settings.start) campaign.set('start', el.opsStart.value || world.idAt(player.x, player.z) || world.home);
     state.opsTravel = true;
@@ -4822,6 +4825,7 @@ async function main() {
         break;
       }
     }
+    if (campaign.mode === 'slayer') slayer.update(dt, player);
     if (campaign.mode === 'tactics') {
       soldiers.playerSpeed = Math.hypot(player.vx || 0, player.vz || 0);
       tactics.update(dt, player);
@@ -4972,17 +4976,69 @@ async function main() {
     audio.roar(Math.hypot(player.x - s.x, player.z - s.z), s.scale || 1);
   };
 
-  /** A demon out of the street near a point: a soldier, made one. */
+  /**
+   * A demon out of the street near a point: a soldier, made one, coming up
+   * through a portal of red and orange instead of the blue sphere; or a
+   * drone, made the floating one, out of the same portal in the air.
+   */
+  const HELL = [1.0, 0.28, 0.06];
   function spawnDemonNear(kind, x, z, minR, maxR, level = 0) {
     if (kind === 'gazer') {
       const d = drones.spawnNear(x, z, minR, maxR);
-      if (d) makeGazer(d, level);
+      if (d) {
+        makeGazer(d, level);
+        effects.arrival(d.x, d.y - 1.5, d.z, 2.4, 1.2, HELL);
+      }
       return d;
     }
+    const was = soldiers.onArrive;
+    const big = kind === 'tyrant' ? 5.5 : kind === 'brute' ? 2.6 : 1.8;
+    soldiers.onArrive = (s) => arriveAt(s.x, s.z, big, kind === 'tyrant' ? 2 : 1, HELL);
     const s = soldiers.spawnNear(x, z, minR, maxR);
+    soldiers.onArrive = was;
     if (s) makeDemon(s, kind, level);
     return s;
   }
+
+  // Slayer's nests in play.
+  const slayer = new Slayer(campaign, world,
+    (kind, x, z, min, max, level) => spawnDemonNear(kind, x, z, min, max, level),
+    (b) => {
+      if (b.demon === 'gazer') {
+        b.alive = false;
+        const i = drones.active.indexOf(b);
+        if (i >= 0) drones.active.splice(i, 1);
+      } else {
+        soldiers._retire(b);
+      }
+    });
+  slayer.onWake = (site) => {
+    toast('the nest wakes');
+    feed(`<b>nest</b> ${world.nameAt(site.x, site.z)} wakes`);
+    audio.roar(Math.hypot(player.x - site.x, player.z - site.z), 2.5);
+  };
+  slayer.onWave = (site, run) => {
+    const last = run.wave === run.waves.length - 1;
+    toast(run.boss && last ? 'something very large is coming' : `wave ${run.wave + 1} of ${run.waves.length}`);
+  };
+  slayer.onHeavy = (site, run, kind, b) => {
+    feed(`<b>${DEMON[kind] ? DEMON[kind].name : 'Gazer'}</b> inbound`);
+    if (kind === 'tyrant') { audio.roar(Math.hypot(player.x - b.x, player.z - b.z), 3.5); effects.shake = 1.2; }
+  };
+  slayer.onReset = () => { toast('the nest calls them back'); };
+  slayer.onFree = (site, pts) => {
+    toast(`nest destroyed  +${pts}`);
+    feed(`<b>nest destroyed</b> ${world.nameAt(site.x, site.z)} +${pts}`);
+    combat.score += pts;
+    audio.explosion();
+    effects.flash(site.x, world.groundHeight(site.x, site.z) + 2, site.z, 8, 1.0, 0.4, 0.1, 0.6);
+    state.flash = Math.max(state.flash, 0.3);
+    const list = campaign.sitesIn(site.d) || [];
+    if (list.length && list.every((x) => x.state === SITE.FREE)) {
+      toast(`${world.nameAt(site.x, site.z)}: the presence is broken`);
+      feed(`<b>${world.nameAt(site.x, site.z)}</b> is free of them`);
+    }
+  };
 
   soldiers.onSpot = (s, how) => { if (tactics.enabled) tactics.spot(s, how); };
   soldiers.onDown = (s) => { if (tactics.enabled) tactics.guardDown(s); };
@@ -5048,10 +5104,16 @@ async function main() {
     const free = list.filter((x) => x.state === SITE.FREE).length;
     const sum = campaign.summary(builtDistricts().map((d) => d.id));
     el.opsTitle.textContent = campaign.mode === 'slayer' ? 'Slayer' : 'Tactics';
+    const fight = campaign.mode === 'slayer' ? slayer.active(player.x, player.z) : null;
     el.opsLine.textContent = !campaign.inScope(here)
       ? `outside the operation  ·  score ${sum.score.toLocaleString()}`
-      : `${world.nameAt(player.x, player.z)} ${free}/${list.length} ${opsWord()}s  ·  `
-        + `${sum.done}/${sum.districts} districts  ·  score ${sum.score.toLocaleString()}`;
+      : campaign.mode === 'slayer'
+        ? `${world.nameAt(player.x, player.z)} presence ${Math.round(slayer.presence(here) * 100)}%  ·  `
+          + (fight ? `wave ${Math.min(fight.wave + 1, fight.waves.length)}/${fight.waves.length}, ${slayer.left(fight)} left  ·  `
+            : `${free}/${list.length} nests  ·  `)
+          + `score ${sum.score.toLocaleString()}`
+        : `${world.nameAt(player.x, player.z)} ${free}/${list.length} ${opsWord()}s  ·  `
+          + `${sum.done}/${sum.districts} districts  ·  score ${sum.score.toLocaleString()}`;
     let alert = '';
     if (campaign.mode === 'tactics') {
       for (const r of tactics.live.values()) {
@@ -5108,6 +5170,7 @@ async function main() {
   el.opsClose.addEventListener('click', () => toggleOpsPanel(false));
   const giveBack = (harder) => {
     tactics.clear();
+    slayer.clear();
     const n = campaign.reset({ harder });
     toast(harder ? `${n} ${opsWord()}s back, at level ${campaign.book.level + 1}` : `${n} ${opsWord()}s back`);
     showOpsPanel();
@@ -6109,6 +6172,7 @@ async function main() {
       renderer.actors.updateVehicles([...vehicles.active, ...trains.cars]);
       renderer.actors.updateMechs(mechs.active);
       renderer.actors.updateCamps(tactics.enabled ? tactics.drawList(player.x, player.z) : []);
+      renderer.actors.updateNests(slayer.enabled ? slayer.drawList(player.x, player.z) : []);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -6128,6 +6192,8 @@ async function main() {
       renderer.actors.updateMechs(live ? mechs.active : []);
       renderer.actors.updateCamps(live && tactics.enabled
         ? tactics.drawList(camera.position[0], camera.position[2], 1600) : []);
+      renderer.actors.updateNests(live && slayer.enabled
+        ? slayer.drawList(camera.position[0], camera.position[2], 1600) : []);
       renderer.drawActors = live;
     }
 
@@ -6307,6 +6373,7 @@ async function main() {
       if (s) makeDemon(s, kind, level);
       return s;
     },
+    slayer, slayerSpec: SLAYER,
     campaign, tactics, tacticsSpec: TACTICS, opsStep: (dt) => opsStep(dt), opsPanel: (on) => toggleOpsPanel(on),
     showOps: () => showOps(),
     startOps: () => startOps(),
