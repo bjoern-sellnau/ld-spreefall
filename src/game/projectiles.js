@@ -73,6 +73,12 @@ export const PROJECTILE = {
     radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 9,
     detonateOnContact: true, trail: 'void', light: true, spin: 3,
   },
+  arrow: {
+    // An arrow: it drops, it goes into whatever it meets and stays there, and
+    // the harm it does is its own rather than a blast's.
+    radius: 0.03, gravity: 6.5, drag: 0.01, bounce: 0, armTime: 0.0, maxAge: 25,
+    detonateOnContact: false, sticks: true, arrow: true, trail: 'none', light: false, spin: 0,
+  },
   voidMaw: {
     // The mech's void arm: the cannon's ball nearly twice across, a little
     // quicker, and with the range a forty tonne gun ought to have.
@@ -116,6 +122,7 @@ export class Projectiles {
     for (let i = 0; i < MAX; i++) this.pool.push(new Body());
     this.active = [];
     this.onBounce = null;
+    this.onArrow = null;     // fn(body, hit) when an arrow goes into somebody
     // Set by the game layer: the same raycast the bullets use against drones
     // and soldiers. Without it a rocket flies through the man it was aimed at
     // and goes off on the wall behind him, which is exactly what the first
@@ -179,6 +186,7 @@ export class Projectiles {
     // And the charge that is looking for a parked car to be.
     b.carbomb = o.carbomb || 0;
     b.spin = 0;
+    b.fx = undefined;
     b.seed = Math.random();
     this.active.push(b);
     return b;
@@ -242,7 +250,7 @@ export class Projectiles {
       if (b.stuck) {
         // A stuck charge still ages out, so a forgotten banana does not live
         // forever in a city you have walked away from.
-        if (b.age > 240) this._remove(b);
+        if (b.age > (b.spec.arrow ? 25 : 240)) this._remove(b);
         continue;
       }
 
@@ -303,6 +311,7 @@ export class Projectiles {
           if (actor && (!hit || actor.t < hit.t)) {
             hit = {
               t: actor.t, kind: 'actor', target: actor.target,
+              actorKind: actor.kind, core: !!actor.core,
               x: b.x + dx * actor.t, y: b.y + dy * actor.t, z: b.z + dz * actor.t,
               nx: -dx, ny: -dy, nz: -dz,
             };
@@ -321,6 +330,23 @@ export class Projectiles {
         b.x += dx * t; b.y += dy * t; b.z += dz * t;
         const used = t / speed;
         remaining = Math.max(0, remaining - used);
+
+        // An arrow goes into a body and is done, or into a wall and stays.
+        if (b.spec.arrow) {
+          if (hit.kind === 'actor') {
+            if (this.onArrow) this.onArrow(b, hit);
+            this._remove(b);
+            remaining = 0;
+            break;
+          }
+          b.stuck = true;
+          b.fx = b.vx; b.fy = b.vy; b.fz = b.vz;
+          b.vx = b.vy = b.vz = 0;
+          // Into the surface by a third of its length.
+          b.x += dx * 0.22; b.y += dy * 0.22; b.z += dz * 0.22;
+          remaining = 0;
+          break;
+        }
 
         // A bolt with bounces left rebounds; one without goes off.
         if (b.bouncesLeft !== undefined && b.bouncesLeft !== Infinity && b.age > b.spec.armTime) {

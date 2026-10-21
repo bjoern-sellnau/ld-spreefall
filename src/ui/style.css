@@ -1600,3 +1600,14 @@ html, body {
   #ops { top: 8px; font-size: 9.5px; gap: 8px; letter-spacing: 0.06em; }
 }
 #ops i[data-level="wary"] { color: #ffc24a; }
+
+/* A scope: everything outside the glass is black, a thin crosshair across it. */
+#scope {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, transparent 0 34vmin, rgba(0, 0, 0, 0.6) 34.4vmin,
+    #000 35.5vmin);
+}
+#scope.hidden { display: none; }
+#scope i { position: absolute; background: rgba(0, 0, 0, 0.85); }
+#scope i:nth-child(1) { left: 50%; top: 15vh; bottom: 15vh; width: 1px; }
+#scope i:nth-child(2) { top: 50%; left: 15vw; right: 15vw; height: 1px; }

@@ -94,7 +94,7 @@ const el = {
   vehicleRockStat: $('vehiclerockstat'), vehicleRock: $('vehiclerock'),
   vehicleDashStat: $('vehicledashstat'), vehicleDash: $('vehicledash'),
   vehicleWarn: $('vehiclewarn'),
-  rideHint: $('ridehint'), rideHintName: $('ridehintname'),
+  rideHint: $('ridehint'), rideHintName: $('ridehintname'), scope: $('scope'),
   titanfall: $('titanfall'), titanfallSub: $('titanfallsub'),
   mechHud: $('mechhud'), mechArms: $('mecharms'), mechCharge: $('mechcharge'),
   mechName: $('mechname'),
@@ -4829,6 +4829,69 @@ async function main() {
     }
   }
 
+  // An arrow going into somebody: its own harm, three times over in the head,
+  // and no noise at all.
+  projectiles.onArrow = (b, hit) => {
+    const row = WEAPONS[b.weapon] || WEAPONS.bow;
+    const t = hit.target;
+    const core = !!hit.core;
+    const dmg = (row.damage || 100) * (core ? (row.coreMultiplier || 1) : 1) * (weapon.damageScale || 1);
+    const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
+    const dir = { x: b.vx / sp, y: 0, z: b.vz / sp };
+    let killed = false;
+    let kind = hit.actorKind;
+    if (kind === 'soldier') {
+      killed = soldiers.damage(t, dmg, dir);
+      effects.blood(hit.x, hit.y, hit.z, dir.x, 0.3, dir.z, cheats.goreScale * (core ? 1.6 : 1));
+    } else if (kind === 'drone') killed = drones.damage(t, dmg);
+    else if (kind === 'jet') killed = jets.damage(t, dmg);
+    else if (kind === 'mech') killed = mechs.damage(t, dmg * 0.25);
+    else if (kind === 'vehicle') { vehicles.damage(t, dmg * 0.25); kind = null; }
+    if (!kind) return;
+    audio.hitMarker(core);
+    showHitmarker(killed ? 'kill' : (core ? 'core' : ''));
+    if (killed) creditTarget(t, core, kind);
+  };
+
+  /**
+   * Somebody you can take down without a sound: a soldier within arm's reach,
+   * in front of you, who has not been told about you and is not fighting.
+   */
+  function takedownTarget() {
+    let best = null, bestD = 2.6;
+    const fx = camera.forward[0], fz = camera.forward[2];
+    const fl = Math.hypot(fx, fz) || 1;
+    for (const s of soldiers.active) {
+      if (!s.alive || s.civilian || s.health <= 0 || s.state === 5 || s.rise > 0) continue;
+      if (s.state !== 0) continue;
+      if (s.post && s.post.alert) continue;
+      const dx = s.x - player.x, dz = s.z - player.z;
+      const d = Math.hypot(dx, dz);
+      if (d > bestD) continue;
+      if ((dx * fx + dz * fz) / (fl * (d || 1)) < 0.55) continue;
+      best = s; bestD = d;
+    }
+    return best;
+  }
+
+  /** The takedown itself. @returns {boolean} whether there was one to do */
+  function takedown() {
+    if (state.mode !== 'walk' || state.inVehicle || state.inMech) return false;
+    const s = takedownTarget();
+    if (!s) return false;
+    const dx = s.x - player.x, dz = s.z - player.z;
+    const d = Math.hypot(dx, dz) || 1;
+    // Silent: nobody hears it, but anybody who can see the body will find it.
+    const killed = soldiers.damage(s, 9999, { x: dx / d, y: 0, z: dz / d });
+    effects.blood(s.x, s.y + 1.3, s.z, dx / d, 0.2, dz / d, cheats.goreScale * 0.7);
+    effects.shake = Math.min(1, effects.shake + 0.12);
+    audio.gunshot('bow');
+    feed('<b>takedown</b>');
+    if (killed) creditTarget(s, true, 'soldier');
+    state.takedowns = (state.takedowns || 0) + 1;
+    return true;
+  }
+
   soldiers.onSpot = (s, how) => { if (tactics.enabled) tactics.spot(s, how); };
   soldiers.onDown = (s) => { if (tactics.enabled) tactics.guardDown(s); };
   tactics.onSpotted = (site, run, guard, how) => {
@@ -4968,6 +5031,8 @@ async function main() {
     combat.reset();
     drones.reset();
     weapon.reset();
+    // Tactics has a number row of its own: the quiet three first.
+    weapon.setKit(campaign.mode === 'tactics' ? 'tactics' : null);
     pickups.reset();
     gibs.clear();
     demolition.reset();
@@ -5257,7 +5322,7 @@ async function main() {
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
-      case 'KeyF': toggleVehicle(); break;
+      case 'KeyF': if (!takedown()) toggleVehicle(); break;
       case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(true); else openTravel(); break;
@@ -5990,6 +6055,8 @@ async function main() {
     renderer.setCollapses(demolition.sites);
     renderer.setFires(fires.sites);
     if (renderer.updateDynamicScale(loop.stats.intervalMs)) resize();
+    // Through a scope there is no rifle in the way of the picture.
+    if (renderer.viewmodel && weapon.spec.scope && weapon.aimBlend > 0.85) renderer.viewmodel = null;
     renderer.render(camera, state.time, w, h);
 
     if (photo.pendingShot) {
@@ -6049,8 +6116,14 @@ async function main() {
       // them not working.
       const near = (state.inVehicle || state.inMech) ? null
         : (mechs.nearest(player.x, player.z, 9) || vehicles.nearest(player.x, player.z, 7));
-      el.rideHint.classList.toggle('hidden', !near);
-      if (near) el.rideHintName.textContent = near.spec.name;
+      // A man who has not seen you, within arm's reach, comes before any car.
+      const quietKill = (state.inVehicle || state.inMech) ? null : takedownTarget();
+      el.rideHint.classList.toggle('hidden', !near && !quietKill);
+      if (quietKill) el.rideHintName.textContent = 'Takedown';
+      else if (near) el.rideHintName.textContent = near.spec.name;
+      // The scope: a picture of one, and no rifle in the way of it.
+      const scoped = !!weapon.spec.scope && weapon.aimBlend > 0.85 && !weapon.holstered;
+      el.scope.classList.toggle('hidden', !scoped);
       rideHud();
       mechHud();
     }
@@ -6130,6 +6203,7 @@ async function main() {
     ion, ionSpec: ION, ionState: ION_STATE,
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
     storm, stormSpec: VOID_STORM,
+    takedown: () => takedown(), takedownTarget: () => takedownTarget(),
     campaign, tactics, tacticsSpec: TACTICS, opsStep: (dt) => opsStep(dt), opsPanel: (on) => toggleOpsPanel(on),
     showOps: () => showOps(),
     startOps: () => startOps(),
@@ -6216,6 +6290,7 @@ async function main() {
     // Holding the trigger, for whatever pours rather than fires. The input
     // layer sets the same flag when a mouse button is down.
     holdFire(on) { input.fire = !!on; },
+    setAim(on) { input.secondary = !!on; },
     fireWalls,
     /**
      * The height of the ground as it is actually drawn at a point: the tile's

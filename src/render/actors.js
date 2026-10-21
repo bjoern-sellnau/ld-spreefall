@@ -378,6 +378,16 @@ export function buildProjectileMesh(kind) {
     // The mech's: the same ball, nearly twice across, so it reads as the
     // bigger thing before it lands.
     m.icosphere(0, 0, 0, 1.3, 14, 7, 30);
+  } else if (kind === 'arrow') {
+    // Seventy centimetres of shaft, a steel head at the front, which is -z
+    // like everything else that flies here, and three vanes at the back.
+    m.cylinder(0, 0, 0.36, 0.0045, 0.0045, -0.70, 6, 2, 'z');
+    m.cylinder(0, 0, -0.34, 0.012, 0.0, -0.07, 6, 44, 'z');
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.014, Math.sin(a) * 0.014, 0.30, 0.002 + Math.abs(Math.cos(a)) * 0.022,
+        0.002 + Math.abs(Math.sin(a)) * 0.022, 0.09, 12);
+    }
   } else if (kind === 'splinter') {
     m.box(0, 0, 0.06, 0.030, 0.030, 0.22, 11);
     m.box(0, 0, -0.10, 0.012, 0.012, 0.10, 8);
@@ -469,6 +479,63 @@ export function buildFlakMesh() {
   m.box(0, -0.048, -0.470, 0.044, 0.070, 0.100, 2);      // pump
   m.box(0, 0.058, -0.300, 0.026, 0.024, 0.090, 3);       // sight
   muzzleFlash(m, 0, 0.010, -0.902, 0.220, 0.110);
+  return m;
+}
+
+/** A pistol with a suppressor on it: slide, frame, grip, the can, sights. */
+export function buildPistolMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.020, -0.300, 0.030, 0.034, 0.190, 0);       // slide
+  m.box(0, -0.008, -0.290, 0.028, 0.022, 0.170, 2);      // frame
+  m.box(0, -0.070, -0.230, 0.030, 0.110, 0.052, 2, 0);   // grip
+  m.box(0, -0.030, -0.250, 0.008, 0.026, 0.040, 0);      // trigger guard
+  m.cylinder(0, 0.020, -0.395, 0.017, 0.017, -0.150, 12, 1, 'z');   // suppressor
+  m.box(0, 0.042, -0.380, 0.004, 0.010, 0.006, 3);       // front sight
+  m.box(0, 0.042, -0.220, 0.018, 0.010, 0.008, 3);       // rear sight
+  muzzleFlash(m, 0, 0.020, -0.545, 0.05, 0.025);
+  return m;
+}
+
+/**
+ * A recurve bow held across the body: the riser in the hand, two limbs that
+ * sweep back, the string, and an arrow on the rest pointing down range.
+ */
+export function buildBowMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.000, -0.400, 0.026, 0.150, 0.032, 0);       // riser
+  m.box(0, -0.008, -0.396, 0.030, 0.060, 0.038, 2);      // the grip in it
+  for (const sgn of [1, -1]) {
+    // Each limb in three pieces, swept back towards you.
+    m.box(0, sgn * 0.110, -0.394, 0.036, 0.080, 0.016, 2);
+    m.box(0, sgn * 0.180, -0.378, 0.030, 0.070, 0.014, 2);
+    m.box(0, sgn * 0.240, -0.356, 0.024, 0.060, 0.012, 2);
+  }
+  // The string, from tip to tip, pulled back a little to the nock.
+  m.box(0, 0.135, -0.300, 0.0025, 0.230, 0.0025, 3);
+  m.box(0, -0.135, -0.300, 0.0025, 0.230, 0.0025, 3);
+  // The arrow on the rest, nocked on the string.
+  m.cylinder(0.010, 0.008, -0.210, 0.0035, 0.0035, -0.560, 6, 1, 'z');
+  m.cylinder(0.010, 0.008, -0.770, 0.009, 0.0, -0.050, 6, 3, 'z');
+  m.box(0.010, 0.018, -0.240, 0.002, 0.018, 0.060, 2);
+  return m;
+}
+
+/** A marksman's rifle: a long receiver, a suppressor as long again, a scope. */
+export function buildMarksmanMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.170, 0.050, 0.080, 0.170, 2);      // stock
+  m.box(0, 0.004, -0.360, 0.054, 0.070, 0.240, 0);       // receiver
+  m.box(0, -0.004, -0.560, 0.044, 0.050, 0.180, 2);      // fore end
+  m.cylinder(0, 0.010, -0.480, 0.012, 0.012, -0.280, 10, 1, 'z');   // barrel
+  m.cylinder(0, 0.010, -0.760, 0.024, 0.024, -0.220, 12, 1, 'z');   // suppressor
+  m.box(0, -0.090, -0.290, 0.040, 0.110, 0.058, 2);      // grip
+  m.box(0, -0.060, -0.380, 0.034, 0.080, 0.070, 0);      // magazine
+  m.cylinder(0, 0.072, -0.250, 0.022, 0.022, -0.260, 12, 3, 'z');   // scope tube
+  m.cylinder(0, 0.072, -0.230, 0.028, 0.022, -0.030, 12, 3, 'z');   // eyepiece
+  m.cylinder(0, 0.072, -0.500, 0.022, 0.032, -0.040, 12, 3, 'z');   // objective
+  m.box(0, 0.046, -0.330, 0.020, 0.020, 0.030, 3);       // mount
+  m.box(0, 0.046, -0.440, 0.020, 0.020, 0.030, 3);
+  muzzleFlash(m, 0, 0.010, -0.980, 0.07, 0.03);
   return m;
 }
 
@@ -1128,6 +1195,9 @@ export class Actors {
       plasma: this._uploadMesh(buildPlasmaMesh(), 0, 0),
       flak: this._uploadMesh(buildFlakMesh(), 0, 0),
       splinter: this._uploadMesh(buildSplinterMesh(), 0, 0),
+      sdpistol: this._uploadMesh(buildPistolMesh(), 0, 0),
+      bow: this._uploadMesh(buildBowMesh(), 0, 0),
+      marksman: this._uploadMesh(buildMarksmanMesh(), 0, 0),
       void: this._uploadMesh(buildVoidMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
@@ -1159,6 +1229,7 @@ export class Actors {
       ultra: this._uploadMesh(buildProjectileMesh('ultra'), MAX_ULTRA, 2),
       blast: this._uploadMesh(buildProjectileMesh('blast'), MAX_PROPS, 2),
       ultraBlast: this._uploadMesh(buildProjectileMesh('ultraBlast'), MAX_ULTRA, 2),
+      arrow: this._uploadMesh(buildProjectileMesh('arrow'), MAX_PROPS, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -1266,7 +1337,7 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
@@ -1278,10 +1349,14 @@ export class Actors {
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
       const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke'
-        || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast';
-      const yaw = flying ? Math.atan2(-b.vx, -b.vz) : b.spin * 0.7;
-      const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, b.vy
-        / (Math.hypot(b.vx, b.vy, b.vz) || 1)))) : b.spin;
+        || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast' || b.kind === 'arrow';
+      // An arrow that has gone in keeps pointing the way it was going.
+      const vx = b.stuck && b.fx !== undefined ? b.fx : b.vx;
+      const vy = b.stuck && b.fx !== undefined ? b.fy : b.vy;
+      const vz = b.stuck && b.fx !== undefined ? b.fz : b.vz;
+      const yaw = flying ? Math.atan2(-vx, -vz) : b.spin * 0.7;
+      const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, vy
+        / (Math.hypot(vx, vy, vz) || 1)))) : b.spin;
       // Negated for the shader, as the vehicles are: a rocket flying west was
       // drawn with its nose to the east.
       d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z; d[o + 3] = -yaw;

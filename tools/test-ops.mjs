@@ -344,6 +344,134 @@ async function run() {
     loud.state === 1 && loud.paid === 1000 + 400 * loud.level && !loud.siren,
     `+${loud.paid}`);
 
+  // --- the quiet three, and a takedown ---------------------------------------
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    // Through the real button: the kit is set where a run starts.
+    document.getElementById('playbtn').click();
+    s.skipToWalk();
+    s.state.opsTravel = false;
+  });
+  const kit = {};
+  for (const k of ['Digit1', 'Digit2', 'Digit3', 'Digit4']) {
+    await page.keyboard.press(k);
+    kit[k] = await page.evaluate(() => window.spreefall.weapon.id);
+  }
+  check('in Tactics the number row starts with the quiet three',
+    kit.Digit1 === 'sdpistol' && kit.Digit2 === 'bow' && kit.Digit3 === 'marksman' && kit.Digit4 === 'm16',
+    JSON.stringify(kit));
+
+  await fresh();
+  const quiet = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 50, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    const heardBy = (id) => {
+      s.weapon.select(id);
+      s.weapon.cooldown = 0;
+      s.look(0, 50);
+      s.shoot();
+      for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+      return run.spotters.size;
+    };
+    const pistol = heardBy('sdpistol');
+    const bow = heardBy('bow');
+    const marksman = heardBy('marksman');
+    s.projectiles.clear();
+    const rifle = heardBy('m16');
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+    return { pistol, bow, marksman, rifle };
+  });
+  check('the pistol, the bow and the marksman rifle are not heard from fifty metres; a rifle is',
+    quiet.pistol === 0 && quiet.bow === 0 && quiet.marksman === 0 && quiet.rifle >= 2, JSON.stringify(quiet));
+
+  await fresh();
+  const arrow = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 60, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    const g = run.guards[0];
+    // An arrow from six metres at his head.
+    const from = { x: g.x + 6, y: g.y + 1.62, z: g.z };
+    s.projectiles.launch('arrow', { x: from.x, y: from.y, z: from.z, vx: -74, vy: 0.6, vz: 0, weapon: 'bow' });
+    for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
+    const dead = g.state === 5 || !g.alive;
+    // And one into the ground, which stays there.
+    s.projectiles.launch('arrow', { x: g.x + 3, y: g.y + 2, z: g.z + 3, vx: 0, vy: -40, vz: 0, weapon: 'bow' });
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const stuck = s.projectiles.active.filter((b) => b.kind === 'arrow' && b.stuck).length;
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+    return { dead, alarm: run.alarm, heard: run.spotters.size, stuck };
+  });
+  check('an arrow in the head kills a guard without a sound', arrow.dead && !arrow.alarm && arrow.heard === 0);
+  check('and an arrow that misses stays where it went in', arrow.stuck === 1);
+
+  await fresh();
+  const knife = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 60, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    // Everybody else out of the way, so nobody sees it.
+    const g = run.guards[0];
+    for (const o of run.guards) if (o !== g) s.soldiers._retire(o);
+    run.guards = [g];
+    g.sentry = true;
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    // Behind him, a metre and a half back, looking at him.
+    const fx = -Math.sin(g.yaw), fz = -Math.cos(g.yaw);
+    s.teleport(g.x - fx * 1.5, g.z - fz * 1.5);
+    s.look(Math.atan2(-fx, -fz) * 180 / Math.PI, -10);
+    s.camera.update(16 / 10);
+    const offered = s.takedownTarget() === g;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const hint = document.getElementById('ridehintname').textContent;
+    window.T = { g, run };
+    return { offered, hint };
+  });
+  await page.keyboard.press('KeyF');
+  Object.assign(knife, await page.evaluate(() => {
+    const s = window.spreefall;
+    const { g, run } = window.T;
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+    return { dead: g.state === 5 || !g.alive, alarm: run.alarm, spotted: run.spotted };
+  }));
+  check('behind an unaware guard, F is a takedown', knife.offered && knife.hint === 'Takedown', knife.hint);
+  check('and it is silent: no alarm, nobody spotted you', knife.dead && !knife.alarm && !knife.spotted);
+
+  const scope = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.weapon.select('marksman');
+    s.setAim(true);
+    for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const on = !document.getElementById('scope').classList.contains('hidden');
+    s.setAim(false);
+    for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const off = document.getElementById('scope').classList.contains('hidden');
+    return { on, off };
+  });
+  check('the marksman rifle aims through a scope', scope.on && scope.off);
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[2] || s.campaign.allSites()[0];
+    s.teleport(site.x + 30, site.z + 8);
+    s.look(70, -2);
+    s.weapon.select('bow');
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-04-bow.png') });
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

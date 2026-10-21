@@ -3563,3 +3563,35 @@ So there are two cities now, and a profile picks which:
   the radio working, the radio shot to pieces in two rounds and no wave
   after it, and the loud camp paying no bonus with the siren stopping.
   ops-03-alarm.png.
+
+## 82. Tactics: the quiet three, and a takedown
+
+- Three weapons in arsenal.js, each with a noise: how far a camp guard hears
+  the shot (anything without one is heard 130 m off). A suppressed pistol
+  (46, three times that in the head, heard at 10 m), a bow (an arrow that
+  drops, 125 and three times that in the head, heard at 4 m) and a marksman
+  rifle, suppressed, with a scope (165, heard at 20 m). Their own voices in
+  the shot synth: a cough and a click, a heavier cough, and a string.
+- The arrow is a projectile of its own: it falls, and what it meets it goes
+  into. A body takes the arrow's own harm (projectiles.onArrow, with the
+  head counted from the actor raycast, which the projectile layer now passes
+  on), a wall or the ground keeps it, pointing the way it was going, for 25
+  seconds.
+- The marksman rifle aims through a scope: an eleven degree field, a black
+  surround with a thin cross, and no rifle drawn in the way of it.
+- A takedown: F, within 2.6 m of a soldier in front of you who is not
+  fighting and whose camp has not been told. Silent, so nobody hears it,
+  but a body is still a body and anybody who can see it will go and look.
+  The hint by the crosshair says Takedown instead of the nearest vehicle.
+- A mode can give the number row a kit of its own (KITS in arsenal.js,
+  weapon.setKit): in Tactics 1 to 0 are the pistol, the bow, the marksman
+  rifle, the M16, the shotgun, the rocket launcher, the grenade, C4, the
+  banana and the railgun, and the wheel goes through the same ten. There
+  were two cycle methods in weapon.js and the second one won; it is the one
+  left, and it reads the kit.
+- Checks (ops, 28 now): the kit through the real play button and the real
+  number keys, none of the three heard from 50 m where an M16 is heard by
+  six, an arrow in the head without a sound, an arrow that misses staying
+  put, the takedown offered behind a guard and done with the real F key with
+  no alarm and nobody spotted, and the scope coming up and going again.
+  ops-04-bow.png.

@@ -266,6 +266,18 @@ export class Audio {
     void: { crackHz: 600, sweepHz: 1800, crackGain: 0.2, tail: 1.2,
       bodyHz: 60, bodyEnd: 220, bodyGain: 0.55, bodyTail: 1.0, hp: 120,
       snap: 0.1, boom: 0.4, drive: 1.6, echo: 0.3 },
+    // The quiet three. A suppressed pistol is a hard cough and a click, a
+    // suppressed rifle a heavier one with a little of the crack left in it,
+    // and a bow is the string and nothing else: no snap, no boom, no echo.
+    pistol: { crackHz: 3600, sweepHz: 1500, crackGain: 0.10, tail: 0.09,
+      bodyHz: 260, bodyEnd: 120, bodyGain: 0.07, bodyTail: 0.06, hp: 1300,
+      snap: 0.22, boom: 0.04, drive: 1.2, echo: 0.04 },
+    suppressed: { crackHz: 2400, sweepHz: 900, crackGain: 0.16, tail: 0.16,
+      bodyHz: 180, bodyEnd: 70, bodyGain: 0.12, bodyTail: 0.1, hp: 700,
+      snap: 0.35, boom: 0.08, drive: 1.4, echo: 0.08 },
+    bow: { crackHz: 900, sweepHz: 420, crackGain: 0.07, tail: 0.18,
+      bodyHz: 140, bodyEnd: 95, bodyGain: 0.14, bodyTail: 0.16, hp: 200,
+      snap: 0, boom: 0, drive: 1, echo: 0 },
     // Forty tonnes firing. Everything here is lower and longer than the hand
     // weapons, because that is the whole difference a listener hears between
     // a rifle and a gun bolted to eight metres of armour: not loudness, which

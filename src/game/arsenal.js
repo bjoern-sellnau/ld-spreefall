@@ -124,6 +124,41 @@ export const WEAPONS = {
     splash: { radius: 2.2, damage: 26, force: 4 },
   },
 
+  // Tactics: the quiet three, in the tradition of the outpost games. A
+  // pistol with a suppressor on it, a bow, and a marksman's rifle that is
+  // suppressed too. noise is how far, in metres, a camp guard hears the shot;
+  // anything without a noise is heard a long way off.
+  sdpistol: {
+    name: 'Suppressed pistol', short: 'SD PISTOL', kind: KIND.HITSCAN, slot: null,
+    magazine: 12, reserve: 84, reloadTime: 1.4, fireInterval: 0.2, auto: false,
+    damage: 46, coreMultiplier: 3.2, range: 140, pellets: 1,
+    spreadHip: 0.012, spreadAim: 0.003, spreadPerShot: 0.006, spreadMax: 0.03,
+    spreadRecover: 0.07,
+    recoilKick: 0.007, recoilSide: 0.002, recoilRetain: 0.15,
+    aimFov: 50, sound: 'pistol', noise: 10,
+  },
+  bow: {
+    name: 'Bow', short: 'BOW', kind: KIND.LAUNCH, slot: null,
+    magazine: 1, reserve: 30, reloadTime: 0.55, fireInterval: 0.75, auto: false,
+    projectile: 'arrow', muzzleSpeed: 74, range: 240,
+    // What the arrow does to whoever it goes into, and how much more to a head.
+    damage: 125, coreMultiplier: 3,
+    spreadHip: 0.01, spreadAim: 0.0015, spreadPerShot: 0, spreadMax: 0.01,
+    spreadRecover: 0.2,
+    recoilKick: 0.006, recoilSide: 0.001, recoilRetain: 0.05,
+    aimFov: 46, sound: 'bow', noise: 4,
+  },
+  marksman: {
+    name: 'Marksman rifle', short: 'MARKSMAN', kind: KIND.HITSCAN, slot: null,
+    magazine: 5, reserve: 35, reloadTime: 2.4, fireInterval: 1.05, auto: false,
+    damage: 165, coreMultiplier: 2.6, range: 750, pellets: 1, pierce: 1,
+    spreadHip: 0.03, spreadAim: 0, spreadPerShot: 0, spreadMax: 0.03,
+    spreadRecover: 0.25,
+    recoilKick: 0.02, recoilSide: 0.003, recoilRetain: 0.25,
+    // A scope: aiming goes to a tight field and a scope picture.
+    aimFov: 11, scope: true, sound: 'suppressed', noise: 20,
+  },
+
   banana: {
     name: 'Banana', short: 'BANANA', kind: KIND.THROW, slot: 6,
     magazine: 1, reserve: 14, reloadTime: 0.5, fireInterval: 0.7, auto: false,
@@ -263,11 +298,24 @@ WEAPONS.plasma.hold = { x: 0.220, y: -0.146, z: -0.430, pitch: -0.014, yaw: 0.13
 WEAPONS.flak.hold = { x: 0.225, y: -0.150, z: -0.440, pitch: -0.010, yaw: 0.128, roll: 0.05 };
 WEAPONS.void.hold = { x: 0.220, y: -0.150, z: -0.430, pitch: -0.014, yaw: 0.126, roll: 0.05 };
 WEAPONS.splinter.hold = { x: 0.215, y: -0.140, z: -0.420, pitch: -0.012, yaw: 0.135, roll: 0.06 };
+WEAPONS.sdpistol.hold = { x: 0.180, y: -0.125, z: -0.300, pitch: -0.010, yaw: 0.150, roll: 0.05 };
+WEAPONS.bow.hold = { x: 0.170, y: -0.070, z: -0.330, pitch: 0.000, yaw: 0.180, roll: 0.30 };
+WEAPONS.marksman.hold = { x: 0.220, y: -0.150, z: -0.480, pitch: -0.016, yaw: 0.120, roll: 0.04 };
 
 export const LOADOUT = [
   'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'flamer', 'incendiary',
   'emp', 'mechkiller', 'railgun', 'plasma', 'flak', 'splinter', 'void',
+  'sdpistol', 'bow', 'marksman',
 ];
+
+/**
+ * What the number row picks in a mode that has a kit of its own: one to nine
+ * and then nought. Everything else is still on its own key and the wheel
+ * goes through the kit.
+ */
+export const KITS = {
+  tactics: ['sdpistol', 'bow', 'marksman', 'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'railgun'],
+};
 
 export function weaponBySlot(slot) {
   for (const id of LOADOUT) if (WEAPONS[id].slot === slot) return id;

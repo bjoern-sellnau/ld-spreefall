@@ -12,11 +12,11 @@
 // gets it back as it decays, minus the small share each weapon is allowed to
 // keep. That share is what makes a burst walk, rather than a stuck aim.
 
-import { WEAPONS, LOADOUT, KIND, weaponBySlot } from './arsenal.js';
+import { WEAPONS, LOADOUT, KIND, KITS, weaponBySlot } from './arsenal.js';
 
 const STATE = { READY: 0, FIRING: 1, RELOADING: 2, HOLSTERED: 3 };
 export const WEAPON_STATE = STATE;
-export { WEAPONS, LOADOUT, KIND, weaponBySlot };
+export { WEAPONS, LOADOUT, KIND, KITS, weaponBySlot };
 
 // Kept so older callers and tests that import SPEC still read the rifle.
 export const SPEC = WEAPONS.m16;
@@ -36,6 +36,8 @@ export class Weapon {
       this.carried[id] = { ammo: WEAPONS[id].magazine, reserve: WEAPONS[id].reserve };
     }
     this.id = 'm16';
+    // A mode's own kit, or null for the ordinary number row.
+    this.kit = null;
 
     this.state = STATE.READY;
     this.cooldown = 0;
@@ -177,14 +179,14 @@ export class Weapon {
   }
 
   selectSlot(slot) {
-    const id = weaponBySlot(slot);
+    const id = this.kit ? this.kit[(slot + 9) % 10] : weaponBySlot(slot);
     return id ? this.select(id) : false;
   }
 
-  cycle(dir) {
-    const i = LOADOUT.indexOf(this.id);
-    const n = LOADOUT.length;
-    return this.select(LOADOUT[(i + (dir > 0 ? 1 : n - 1)) % n]);
+  /** Give the number row a mode's kit, or null for the ordinary one. */
+  setKit(name) {
+    this.kit = name && KITS[name] ? KITS[name] : null;
+    if (this.kit && !this.kit.includes(this.id)) this.select(this.kit[0]);
   }
 
   setHolstered(on) {
@@ -345,8 +347,10 @@ export class Weapon {
 
   /** Where in the loadout list this weapon is, for cycling with the wheel. */
   cycle(step) {
-    const at = LOADOUT.indexOf(this.id);
-    const next = LOADOUT[(at + step + LOADOUT.length * 2) % LOADOUT.length];
+    // The wheel goes through a mode's kit when it has one.
+    const list = this.kit || LOADOUT;
+    const at = Math.max(0, list.indexOf(this.id));
+    const next = list[(at + step + list.length * 2) % list.length];
     return this.select(next);
   }
 
