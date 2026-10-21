@@ -1552,6 +1552,18 @@ async function main() {
       return;
     }
 
+    if (arm.kind === 'void') {
+      // The ball carries its own reach, so the tendrils on the way and the
+      // burst where it lands are the arm's and not the hand cannon's.
+      const d = spread(arm.spread);
+      projectiles.launch('voidMaw', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
+        splash: arm.splash, void: arm.void, weapon: 'mech',
+      });
+      return;
+    }
+
     if (arm.kind === 'empbomb') {
       const d = spread(arm.spread);
       projectiles.launch('rocket', {

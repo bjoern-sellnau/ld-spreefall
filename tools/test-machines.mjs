@@ -1109,11 +1109,12 @@ async function run() {
       named: document.querySelector('#mecharms .marm.on span').textContent,
     };
   });
-  // The Warden's own three, and the readout has a row for each. Every
-  // chassis used to carry all ten, which made ten bodies and one mech.
+  // The Warden's own three and the Void Maw every chassis carries, and the
+  // readout has a row for each. Every chassis used to carry all ten, which
+  // made ten bodies and one mech.
   check('a mech of your own carries its chassis\' loadout',
-    !got.skip && got.arms === 3 && got.rows === got.arms && got.hud
-      && got.ids === 'chaingun, cannon, empbomb',
+    !got.skip && got.arms === 4 && got.rows === got.arms && got.hud
+      && got.ids === 'chaingun, cannon, empbomb, voidmaw',
     got.skip ? got.why : `${got.ids}, holding the ${got.named}`);
 
   // The number row and the wheel, through the real keyboard and the real
@@ -1983,6 +1984,53 @@ async function run() {
   check('and a stinger on a lock slows the world down while it runs it down',
     loadout.skip || loadout.slow > 0,
     loadout.skip ? loadout.why : `${loadout.slow} s of it`);
+
+  // The Void Maw against the hand cannon: the same kind of ball, reaching
+  // further. A man sixty metres from where each one lands, in the open, is
+  // past the cannon's reach and inside the Maw's.
+  const maw = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.mechs.reset(); s.soldiers.reset(); s.drones.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false; s.drones.enabled = false;
+    s.setCheat('godmode', true);
+    s.teleport(81, 0);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const arm = s.mechArms.find((a) => a.id === 'voidmaw');
+    const hand = s.weapons.void;
+    const px = s.player.x, pz = s.player.z;
+    // Somewhere sixty metres off with nothing in between, at chest height.
+    let spot = null;
+    for (let a = 0; a < 360 && !spot; a += 10) {
+      const r = a * Math.PI / 180;
+      const dx = Math.cos(r) * 60, dz = Math.sin(r) * 60;
+      const y0 = s.world.groundHeight(px, pz) + 2, y1 = s.world.groundHeight(px + dx, pz + dz) + 1.1;
+      if (s.world.lineOfSight(px, y0, pz, px + dx, y1, pz + dz)) spot = { dx, dz };
+    }
+    if (!spot) return { skip: true, why: 'no open line of sixty metres' };
+    const land = (kind, splash, voidSpec) => {
+      s.soldiers.reset();
+      const man = s.spawnSoldier(spot.dx, spot.dz);
+      const b = s.projectiles.launch(kind, { x: px, y: s.world.groundHeight(px, pz) + 1, z: pz,
+        vx: 0, vy: 0, vz: 0, splash: { ...splash, punch: false }, void: voidSpec, weapon: 'mech' });
+      s.projectiles.explode(b);
+      const dead = man.state === 5 || man.health <= 0;
+      s.soldiers.reset(); s.projectiles.clear();
+      return dead;
+    };
+    const byHand = land('void', hand.splash, hand.void);
+    const byMaw = land('voidMaw', arm.splash, arm.void);
+    s.setCheat('godmode', false);
+    return { skip: false, byHand, byMaw, reach: [hand.void.reach, arm.void.reach],
+      blast: [hand.splash.radius, arm.splash.radius], damage: [hand.splash.damage, arm.splash.damage],
+      magazine: arm.magazine };
+  });
+  check('every mech of yours carries a Void Maw, stronger than the hand cannon',
+    maw.skip || (maw.reach[1] > maw.reach[0] && maw.blast[1] > maw.blast[0] && maw.damage[1] > maw.damage[0]),
+    maw.skip ? maw.why : `reach ${maw.reach[0]} to ${maw.reach[1]} m, blast ${maw.blast[0]} to ${maw.blast[1]} m, `
+      + `${maw.damage[0]} to ${maw.damage[1]} damage`);
+  check('and it takes a man sixty metres off that the hand cannon leaves standing',
+    maw.skip || (maw.byMaw && !maw.byHand),
+    maw.skip ? maw.why : `hand cannon ${maw.byHand ? 'took him' : 'missed'}, Maw ${maw.byMaw ? 'took him' : 'missed'}`);
 
   // And theirs: each chassis fires its own gun rather than the Reaper's
   // chaingun in ten bodies, and every one of those guns can reach you.

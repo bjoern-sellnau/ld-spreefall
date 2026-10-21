@@ -73,6 +73,12 @@ export const PROJECTILE = {
     radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 9,
     detonateOnContact: true, trail: 'void', light: true, spin: 3,
   },
+  voidMaw: {
+    // The mech's void arm: the cannon's ball nearly twice across, a little
+    // quicker, and with the range a forty tonne gun ought to have.
+    radius: 1.3, gravity: 0, drag: 0, bounce: 0, armTime: 0.08, maxAge: 14,
+    detonateOnContact: true, trail: 'void', light: true, spin: 2,
+  },
   voidStorm: {
     // The same ball out of orbit: faster, because four hundred metres at the
     // cannon's walking pace is a quarter of a minute, and given long enough

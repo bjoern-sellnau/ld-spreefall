@@ -690,6 +690,13 @@ rocket pod:
 | Ram | 40 mm cannon, Leadwall | twin shells |
 | Wraith | power laser, plasma railgun, EMP bomb | a beam held on you |
 
+And every one of yours carries a Void Maw after its own arms: the void
+cannon's ball nearly twice across, two in the magazine and six seconds to
+reload, which reaches out at whoever it passes from 26 m rather than 16,
+lands with a 34 m blast for 1200 rather than 24 m for 700, and sends a
+tendril for 900 to everybody within 70 m who can be seen from where it went
+off.
+
 Each one is a row of numbers in `src/game/chassis.js` (size, where its hips
 are, speed, turn, armour, shield, jump, dash, the landing, where its guns
 are and which arm weapon it arrives holding) and a shape in

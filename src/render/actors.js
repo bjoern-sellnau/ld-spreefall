@@ -347,6 +347,10 @@ export function buildProjectileMesh(kind) {
     // One green ball the size of a man's chest. The glow round it is sparks,
     // drawn by the game layer while it flies.
     m.icosphere(0, 0, 0, 0.7, 12, 6, 30);
+  } else if (kind === 'voidMaw') {
+    // The mech's: the same ball, nearly twice across, so it reads as the
+    // bigger thing before it lands.
+    m.icosphere(0, 0, 0, 1.3, 14, 7, 30);
   } else if (kind === 'splinter') {
     m.box(0, 0, 0.06, 0.030, 0.030, 0.22, 11);
     m.box(0, 0, -0.10, 0.012, 0.012, 0.10, 8);
@@ -1054,6 +1058,7 @@ export class Actors {
       nuke: this._uploadMesh(buildProjectileMesh('nuke'), 8, 2),
       void: this._uploadMesh(buildProjectileMesh('void'), 8, 2),
       voidStorm: this._uploadMesh(buildProjectileMesh('void'), MAX_STORM, 2),
+      voidMaw: this._uploadMesh(buildProjectileMesh('voidMaw'), 8, 2),
       ultra: this._uploadMesh(buildProjectileMesh('ultra'), MAX_ULTRA, 2),
       blast: this._uploadMesh(buildProjectileMesh('blast'), MAX_PROPS, 2),
       ultraBlast: this._uploadMesh(buildProjectileMesh('ultraBlast'), MAX_ULTRA, 2),
@@ -1164,11 +1169,11 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
-      const cap = b.kind === 'nuke' || b.kind === 'void' ? 8
+      const cap = b.kind === 'nuke' || b.kind === 'void' || b.kind === 'voidMaw' ? 8
         : b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA
           : b.kind === 'voidStorm' ? MAX_STORM : MAX_PROPS;
       if (counts[b.kind] >= cap) continue;

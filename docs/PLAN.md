@@ -3406,3 +3406,26 @@ So there are two cities now, and a profile picks which:
   soldiers under it are taken, never more than 48 up. storm-01-map.png,
   storm-02-rain.png. The blast rain check now switches blast off again so
   later checks are not run with it on.
+
+## 77. The Void Maw: every mech of yours carries a void cannon of its own
+
+- 2026-10-21: asked for: give the mechs an even stronger void weapon too.
+- An arm, voidmaw, appended to every chassis' own loadout in mechs.js rather
+  than written into ten rows, so a chassis added later carries it as well;
+  the sets stay distinct. It fires a projectile of its own kind, voidMaw:
+  the void ball's mesh at 1.3 m rather than 0.7, 34 m/s, fourteen seconds.
+  The ball carries the arm's void spec (the field from phase 76), so the
+  tendrils on the way and the burst where it lands are the arm's.
+- Numbers against the hand cannon: aura 26 m for 140 against 16 for 70,
+  reach 70 m for 900 against 48 for 450, blast 34 m for 1200 against 24 for
+  700, a 12 m hole against 9. Two in the magazine, six seconds to reload.
+- Checks (machines): the Warden carries chaingun, cannon, EMP bomb and the
+  Maw, with a row for each; every arm of every chassis fires; and a man in
+  the open sixty metres from where each lands is taken by the Maw and left
+  standing by the hand cannon. mech-voidmaw.png from the cockpit.
+- Seen once and not again: on the first run the EMP launcher check (rocket
+  gone at age 0, 2 m up) and the Reaper hurting check (0) failed together;
+  the rerun passed both, 64 of 64. Both spawn at random spots; noted here in
+  case it comes back.
+- The cockpit hint and the help row said 1 to 5 and named five arms, which
+  has not been true since phase 68; they now say the number row.
