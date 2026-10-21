@@ -25,7 +25,7 @@ export const OVERKILL_SCALE = 12;
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'everyWeapon', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
-  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill'];
+  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -59,6 +59,10 @@ export const GORE = [
   // apart, the skeleton leaves the body, pieces go up and rain down for a
   // second or two, and a fountain stands where they were.
   { id: 'overkill', label: 'Overkill', note: 'every kill an execution: the skeleton leaves the body, pieces rain down, a fountain stands where they were and a word goes across the screen' },
+  // And past that, on purpose a cartoon: blood the red of a comic book,
+  // gushing from every hit and raining after every kill, heads that pop, a
+  // splash on the screen when it happens close, and the word in yellow.
+  { id: 'comicGore', label: 'Comic carnage', note: 'overkill drawn as a comic book: bright red blood by the bucket from every hit, heads that pop, blood rain, splashes on the screen and the word in yellow' },
 ];
 
 /**
@@ -177,7 +181,7 @@ export class Cheats {
    * run out: past this there is nothing left to spend.
    */
   get goreScale() {
-    if (this.overkill) return OVERKILL_SCALE;
+    if (this.overkill || this.comicGore) return OVERKILL_SCALE;
     if (this.maxGore) return 7.5;
     return this.ultraGore ? 4.2 : 1;
   }
@@ -189,9 +193,11 @@ export class Cheats {
   // tearing switch as well and you get both, with every piece the pool has.
   // Overkill takes all three: it is the one switch where nobody is left
   // lying in the street in one piece.
-  get gibbing() { return this.gib || this.ultraGore || this.overkill; }
-  get bleeding() { return this.blood || this.ultraGore || this.maxGore || this.overkill; }
-  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore || this.overkill; }
+  get gibbing() { return this.gib || this.ultraGore || this.overkill || this.comicGore; }
+  get bleeding() { return this.blood || this.ultraGore || this.maxGore || this.overkill || this.comicGore; }
+  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore || this.overkill || this.comicGore; }
+  /** Every kill an execution: overkill, or the comic book version of it. */
+  get excess() { return this.overkill || this.comicGore; }
 
   set(id, on) {
     if (!(id in this) || typeof this[id] !== 'boolean') return false;

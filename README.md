@@ -293,6 +293,7 @@ visits.
 | Ultra gore | the three above, considerably more of it |
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
 | Overkill | every kill an execution: the skeleton out of the body, pieces raining down, a fountain, a word across the screen |
+| Comic carnage | overkill drawn as a comic book: bright red blood by the bucket from every hit, heads that pop, blood rain, splashes on the screen, the word in yellow |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 | Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
 
@@ -307,7 +308,7 @@ it brings the block down onto a street that stays level. Both are honoured by
 the picture, by the collision and by the ruin that is written into the city
 afterwards, so what you walk on is always what you can see.
 
-What the six gore switches actually are:
+What the seven gore switches actually are:
 
 - **Tearing apart** replaces the death animation with its absence. There is no
   body to fall, so the soldier leaves the fight at once and a dozen chunks
@@ -346,6 +347,11 @@ What the six gore switches actually are:
   they were for nearly three seconds, the walls round them are sprayed, and
   the clock stops for half a second while a word is stamped across the
   screen, counting a run of kills inside three seconds.
+- **Comic carnage** is overkill drawn as a comic book. The blood is a
+  bright comic red in drops twice the size, every hit gushes, a head shot
+  that kills takes the head, every kill brings a red rain down over the
+  street round it and a taller, longer fountain, the word is yellow with a
+  red outline, and a kill close to you throws splashes on the screen.
 
 And the last kill:
 

@@ -3902,3 +3902,24 @@ So there are two cities now, and a profile picks which:
   and both buttons; a real click on New operation hides it, puts every nest
   back and the score at nought, still in Slayer. ops-13-end.png.
 
+## 92. Comic carnage, past overkill
+
+- A gore switch past overkill, Comic carnage: everything overkill does,
+  drawn as a comic book. The blood is a bright comic red instead of the near
+  black of the others, in drops nearly twice the size, thrown further and
+  hanging longer, and the pools it leaves are red too and a quarter larger.
+- Every hit gushes from the far side for most of a second. A head shot that
+  kills takes the head with it in a burst of pieces and four sprays.
+- Every kill: the overkill burst, a second burst of twenty two pieces, a
+  fountain five seconds long and twice as tall, a red rain over everything
+  within seven metres for two seconds that leaves pools where it lands, and
+  the word in yellow with a thick red outline from its own list (SPLAT!,
+  KA-SPLAT!, GUTS!, SQUELCH! and the rest). A kill within twelve metres
+  throws a splash or a few on the lens: a blob with drops round it and a
+  run down from it, gone in a couple of seconds, never more than seven up.
+- Every weapon the gore switches already affected is affected by this one,
+  since it is overkill underneath.
+- Checks (cheats, 119 now): the switch is in the menu; a kill with nothing
+  else on comes apart with the word in yellow, a blood rain and splashes on
+  the lens; the blood is comic red. cheat-07-comic.png.
+

@@ -686,6 +686,14 @@ export class Effects {
       s.life = s.maxLife;
       s.r = 0.095; s.g = 0.009; s.b = 0.008;
       s.size = 0.03 + Math.random() * 0.06 * k;
+      // The comic book: a red you could paint a fire engine with, in drops
+      // the size of coins, thrown further and hanging longer.
+      if (this.comic) {
+        s.r = 0.62; s.g = 0.012; s.b = 0.01;
+        s.size *= 1.9;
+        s.vx *= 1.25; s.vy = s.vy * 1.3 + 1.5; s.vz *= 1.25;
+        s.maxLife *= 1.5; s.life = s.maxLife;
+      }
       s.bx = 0; s.by = 0; s.bz = 0;
     }
     // The mist, which is what reads at twenty metres when the drops do not.
@@ -705,6 +713,7 @@ export class Effects {
       s.life = s.maxLife;
       s.r = 0.085; s.g = 0.011; s.b = 0.010;
       s.size = (0.18 + Math.random() * 0.26) * k;
+      if (this.comic) { s.r = 0.5; s.g = 0.01; s.b = 0.01; s.size *= 1.4; }
       s.bx = 0; s.by = 0; s.bz = 0;
     }
   }
@@ -742,6 +751,7 @@ export class Effects {
     s.life = seconds;
     s.r = 0.048; s.g = 0.0055; s.b = 0.005;
     s.size = size;
+    if (this.comic) { s.r = 0.3; s.g = 0.008; s.b = 0.006; s.size = size * 1.25; }
     // The spread, in bx, and the seed that gives it an edge, in bz. A pool
     // opens out over the first second or so and then stops.
     s.bx = 0;
@@ -763,6 +773,7 @@ export class Effects {
     s.maxLife = 0.5 + Math.random() * 0.5;
     s.life = s.maxLife;
     s.r = 0.09; s.g = 0.009; s.b = 0.008;
+    if (this.comic) { s.r = 0.6; s.g = 0.012; s.b = 0.01; s.size = (s.size || 0.05) * 1.8; }
     s.size = 0.026 + Math.random() * 0.022;
     s.bx = 0; s.by = 0; s.bz = 0;
   }

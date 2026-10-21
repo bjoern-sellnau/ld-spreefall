@@ -64,7 +64,7 @@ async function run() {
   check('every switch the brief asked for is in it',
     ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic', 'slowBlast',
       'wreckBuildings', 'wreckGround', 'lastKill',
-      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill']
+      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore', 'everyWeapon']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
   check('and every button',
@@ -456,6 +456,47 @@ async function run() {
   check('and a fountain keeps going where they stood', over.high > 30,
     `${over.high} drops going up a few frames on`);
   check('and a second kill straight after is counted as a run', / x2$/.test(over.streak), over.streak);
+
+  // --- comic carnage: overkill drawn as a comic book --------------------------
+  const comic = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
+    s.setCheat('comicGore', true);
+    const v = s.spawnSoldier(-6, 1);
+    s.soldiers.damage(v, 9999, { x: -1, y: 0, z: 0.2 });
+    const word = document.getElementById('overkill');
+    const out = { gibbed: !!v.gibbed, chunks: s.gibs.count, comicWord: word.classList.contains('comic'),
+      text: word.textContent, rain: s.bloodRain.length,
+      splashes: document.querySelectorAll('#splatter i').length };
+    // The blood is the red of a comic book, not the near black of the rest.
+    s.effects.clear();
+    s.effects.blood(0, 2, 0, 0, 1, 0, 1);
+    const drops = s.effects.list.filter((p) => p.alive && p.kind === 3);
+    out.red = drops.length ? +Math.max(...drops.map((p) => p.r)).toFixed(2) : 0;
+    s.effects.clear();
+    s.soldiers.reset(); s.gibs.clear();
+    return out;
+  });
+  check('comic carnage takes them apart with the word in yellow, red rain and blood on the lens',
+    comic.gibbed && comic.comicWord && comic.rain >= 1 && comic.splashes >= 2 && /!/.test(comic.text),
+    JSON.stringify(comic));
+  check('and its blood is a comic book red', comic.red > 0.4, `${comic.red}`);
+  // The picture: three in front of you, gone at once.
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset(); s.setCheat('comicGore', true); s.setCheat('godmode', true);
+    s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
+    s.look(90, -4); s.camera.update(16 / 10);
+    const fx = s.camera.forward[0], fz = s.camera.forward[2];
+    for (const [a, b] of [[7, -2], [9, 1.5], [6, 2.5]]) {
+      const v = s.spawnSoldier(fx * a - fz * b, fz * a + fx * b);
+      v.rise = 0;
+      s.soldiers.damage(v, 9999, { x: fx, y: 0.2, z: fz });
+    }
+  });
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-07-comic.png') });
+  await page.evaluate(() => { const s = window.spreefall; s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); });
 
   // --- what is left of somebody who burned ---------------------------------
   const bones = await page.evaluate(async () => {

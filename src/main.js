@@ -59,6 +59,7 @@ const el = {
   found: $('found'), total: $('total'), district: $('district'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
+  splatter: $('splatter'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
   opsEnd: $('opsend'), opsEndTitle: $('opsendtitle'), opsEndText: $('opsendtext'), opsEndStats: $('opsendstats'),
   opsEndAgain: $('opsendagain'), opsEndMenu: $('opsendmenu'),
@@ -632,6 +633,19 @@ async function main() {
         effects.blood(shot.end.x, shot.end.y, shot.end.z,
           -shot.end.nx, Math.abs(shot.end.ny) * 0.4 + 0.3, -shot.end.nz,
           cheats.goreScale * (shot.core ? 1.8 : 1));
+        if (cheats.comicGore) {
+          // Every hit gushes for a moment, out of the far side.
+          gushes.push({ x: shot.end.x, y: shot.end.y, z: shot.end.z, nx: -shot.end.nx, nz: -shot.end.nz, life: 0.7 });
+          // And a head shot that kills takes the head with it.
+          if (shot.core && shot.killed) {
+            gibs.burst(shot.end.x, shot.end.y, shot.end.z, { x: -shot.end.nx, y: 0.6, z: -shot.end.nz }, 3, 10);
+            for (let k = 0; k < 4; k++) {
+              effects.blood(shot.end.x, shot.end.y + 0.1, shot.end.z, (Math.random() - 0.5) * 2, 1.4,
+                (Math.random() - 0.5) * 2, cheats.goreScale);
+            }
+            state.headPops = (state.headPops || 0) + 1;
+          }
+        }
         if (Math.random() < 0.5 || shot.core) {
           const px = shot.end.x - shot.end.nx * (0.6 + Math.random() * 1.6);
           const pz = shot.end.z - shot.end.nz * (0.6 + Math.random() * 1.6);
@@ -3318,7 +3332,7 @@ async function main() {
       }
     }
     effects.shake = Math.min(1, effects.shake + 0.12);
-    if (cheats.overkill) overkill(s, dir);
+    if (cheats.excess) overkill(s, dir);
     // The kill itself is credited by whoever made it, the same as any other,
     // because a gib is still one dead soldier and not two.
     return n;
@@ -3331,6 +3345,27 @@ async function main() {
   // burst the ordinary switches already made.
   const fountains = [];
   const OVERKILL_WORDS = ['OVERKILL', 'SPLATTER', 'TOTAL CARNAGE', 'NO MERCY', 'EXCESSIVE', 'MESSY'];
+  const COMIC_WORDS = ['SPLAT!', 'KA-SPLAT!', 'GUTS!', 'SQUELCH!', 'OBLITERATED!', 'SPLATTERED!', 'GIBBED!',
+    'CARNAGE!', 'MESSY!!'];
+  // Blood falling out of the sky after a comic kill, and short gushes from
+  // every wound: on the render clock, beside the fountains.
+  const bloodRain = [];
+  const gushes = [];
+  /** Splashes on the lens, for a comic kill close enough to reach you. */
+  function splashLens(n) {
+    const box = el.splatter;
+    if (!box) return;
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('i');
+      const size = 110 + Math.random() * 150;
+      d.style.width = `${size}px`; d.style.height = `${size * (0.8 + Math.random() * 0.4)}px`;
+      d.style.left = `${Math.random() * 90}%`; d.style.top = `${Math.random() * 80}%`;
+      d.style.animationDelay = `${(Math.random() * 0.15).toFixed(2)}s`;
+      box.appendChild(d);
+      setTimeout(() => d.remove(), 2900);
+    }
+    while (box.childElementCount > 7) box.firstChild.remove();
+  }
   const overkillRun = { streak: 0, at: -10, shown: 0 };
   function overkill(s, dir) {
     const floor = world.groundHeight(s.x, s.z);
@@ -3341,7 +3376,16 @@ async function main() {
     // everyone standing near for a second or two after the kill.
     gibs.burst(s.x, s.y, s.z, { x: 0, y: 0, z: 0 }, 4, 16);
     // And a fountain where they stood, on the render clock below.
-    fountains.push({ x: s.x, y: floor, z: s.z, life: 2.8, max: 2.8, next: 0 });
+    const comic = cheats.comicGore;
+    fountains.push({ x: s.x, y: floor, z: s.z, life: comic ? 5 : 2.8, max: comic ? 5 : 2.8, next: 0, comic });
+    if (comic) {
+      // It comes back down: a red rain over everything for a few metres
+      // round, for a couple of seconds.
+      bloodRain.push({ x: s.x, y: floor, z: s.z, life: 2.2, next: 0 });
+      gibs.burst(s.x, s.y + 1.2, s.z, dir, 6, 22);
+      const away = Math.hypot(player.x - s.x, player.z - s.z);
+      if (away < 12) splashLens(Math.round(1 + (12 - away) * 0.22));
+    }
     effects.stain(s.x, floor, s.z, 2.8, 60);
     for (let i = 0; i < 12; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -3364,7 +3408,9 @@ async function main() {
     overkillRun.streak = now - overkillRun.at < 3 ? overkillRun.streak + 1 : 1;
     overkillRun.at = now;
     overkillRun.shown++;
-    const word = OVERKILL_WORDS[(Math.random() * OVERKILL_WORDS.length) | 0];
+    const words = cheats.comicGore ? COMIC_WORDS : OVERKILL_WORDS;
+    const word = words[(Math.random() * words.length) | 0];
+    el.overkill.classList.toggle('comic', !!cheats.comicGore);
     el.overkill.textContent = overkillRun.streak > 1 ? `${word} x${overkillRun.streak}` : word;
     el.overkill.classList.remove('show');
     // Read the layout once so the animation starts again from its first frame.
@@ -3385,8 +3431,29 @@ async function main() {
       // Strongest at the start and dying away, the way a pulse does.
       const k = f.life / f.max;
       const pulse = 0.75 + 0.25 * Math.sin(f.life * 18);
+      const tall = f.comic ? 2.2 : 1;
       effects.blood(f.x, f.y + 0.3, f.z, (Math.random() - 0.5) * 0.25,
-        (1.2 + 1.4 * k) * pulse, (Math.random() - 0.5) * 0.25, 1.2 + 2.2 * k);
+        (1.2 + 1.4 * k) * pulse * tall, (Math.random() - 0.5) * 0.25, (1.2 + 2.2 * k) * (f.comic ? 1.6 : 1));
+    }
+    for (let i = bloodRain.length - 1; i >= 0; i--) {
+      const r = bloodRain[i];
+      r.life -= dt;
+      if (r.life <= 0 || !cheats.bleeding) { bloodRain.splice(i, 1); continue; }
+      r.next -= dt;
+      if (r.next > 0) continue;
+      r.next = 0.05;
+      for (let k = 0; k < 3; k++) {
+        const a = Math.random() * Math.PI * 2, d = Math.random() * 7;
+        const x = r.x + Math.cos(a) * d, z = r.z + Math.sin(a) * d;
+        effects.blood(x, r.y + 6 + Math.random() * 3, z, 0, -1, 0, 0.6);
+        if (Math.random() < 0.15) effects.stain(x, world.groundHeight(x, z), z, 0.25 + Math.random() * 0.4, 50);
+      }
+    }
+    for (let i = gushes.length - 1; i >= 0; i--) {
+      const g = gushes[i];
+      g.life -= dt;
+      if (g.life <= 0) { gushes.splice(i, 1); continue; }
+      effects.blood(g.x, g.y, g.z, g.nx, 0.5 + Math.random() * 0.4, g.nz, 1.4 * (g.life / 0.7));
     }
   }
   soldiers.onDeath = (s) => {
@@ -3500,6 +3567,8 @@ async function main() {
     soldiers.gore.gib = cheats.gibbing;
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;
+    // The comic book draws its blood in a red you can see from orbit.
+    effects.comic = !!cheats.comicGore;
     soldiers.boneTime = cheats.value('boneTime');
     el.cheatMark.classList.toggle('hidden', !cheats.used);
     for (const sw of cheatRows) sw.el.classList.toggle('on', !!cheats[sw.id]);
@@ -7088,6 +7157,7 @@ async function main() {
     compassBar, setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
+    bloodRain, gushes,
     poisonClouds, burningCount: () => burning.length,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
