@@ -71,7 +71,66 @@ function raptorLeg(m, x, hip, P, w = 1.0) {
   m.box(x, 0.2, 1.0 * s, 0.24 * w, 0.3, 0.7, FOOT);                // the spur behind
 }
 
+// The Warlord's own parts: 80 hide with fire in its cracks, 81 horn and hoof,
+// 82 the heart and the eyes, 83 the iron grown into it.
+const HIDE = 80, HORN = 81, HEART = 82, IRON = 83;
+
 export const MECH_BUILDERS = {
+  // Slayer's great boss. Goat legs with hooves, a barrel of a chest under
+  // iron plates with the heart showing between them, a horned head, a
+  // clawed left hand and a rocket launcher for a right forearm.
+  warlord(m, c) {
+    const hip = c.hip;
+    for (const side of [-1, 1]) {
+      const x = side * 1.45;
+      // Thigh, forward; shin, back; a long pastern down to a split hoof.
+      m.plate([[x - 0.55, hip - 0.1, 0.1], [x + 0.55, hip - 0.1, 0.1],
+        [x + 0.5, 2.6, -0.85], [x - 0.5, 2.6, -0.85]], 1.0, HIDE);
+      m.box(x, 2.6, -0.8, 0.95, 0.7, 0.8, HORN);
+      m.plate([[x - 0.38, 2.6, -0.8], [x + 0.38, 2.6, -0.8],
+        [x + 0.32, 0.95, 0.55], [x - 0.32, 0.95, 0.55]], 0.65, HIDE);
+      m.plate([[x - 0.28, 0.95, 0.55], [x + 0.28, 0.95, 0.55],
+        [x + 0.3, 0.3, 0.2], [x - 0.3, 0.3, 0.2]], 0.5, HIDE);
+      m.box(x - 0.24, 0.18, -0.05, 0.42, 0.36, 0.95, HORN);
+      m.box(x + 0.24, 0.18, -0.05, 0.42, 0.36, 0.95, HORN);
+    }
+    // Hips and belly.
+    m.box(0, hip + 0.5, 0.1, 3.4, 1.0, 2.2, HIDE);
+    // The chest, the plates over it, and the heart between them.
+    m.box(0, hip + 2.2, 0.0, 4.2, 2.6, 2.7, HIDE);
+    for (const side of [-1, 1]) {
+      m.box(side * 1.2, hip + 2.3, -1.38, 1.55, 2.1, 0.22, IRON);
+      m.box(side * 2.35, hip + 3.25, 0.0, 1.5, 0.9, 2.2, IRON);    // pauldron
+    }
+    m.icosphere(0, c.heart[1], c.heart[2], c.heart[3], 12, 8, HEART);
+    // Shoulders, neck and head with its horns.
+    m.box(0, hip + 3.7, 0.25, 3.6, 0.8, 2.2, HIDE);
+    m.box(0, hip + 4.35, -0.35, 1.3, 1.0, 1.3, HIDE);
+    m.box(0, hip + 4.45, -1.05, 0.9, 0.3, 0.2, HEART);              // eyes
+    m.box(0, hip + 4.0, -1.0, 0.8, 0.35, 0.4, HORN);                // jaw
+    for (const side of [-1, 1]) {
+      m.box(side * 0.75, hip + 5.0, -0.2, 0.32, 0.9, 0.32, HORN, side * 0.4);
+      m.box(side * 1.0, hip + 5.65, 0.15, 0.24, 0.7, 0.24, HORN, side * 0.6);
+      m.box(side * 1.15, hip + 6.15, 0.55, 0.16, 0.5, 0.16, HORN, side * 0.8);
+    }
+    // Left arm, down and forward, with a hand of claws.
+    m.box(-2.55, hip + 2.6, 0.0, 1.0, 1.9, 1.1, HIDE);
+    // Nothing of it may hang below the hip line, or the shader walks it.
+    m.box(-2.6, hip + 1.55, -0.6, 0.9, 1.5, 0.95, HIDE);
+    m.box(-2.6, hip + 0.7, -1.1, 1.0, 0.55, 1.0, HIDE);
+    for (const dx of [-0.32, 0, 0.32]) m.box(-2.6 + dx, hip + 0.3, -1.5, 0.16, 0.5, 0.16, HORN);
+    // Right arm: the upper arm in hide, and iron from the elbow down, ending
+    // in the launcher's muzzle where the chaingun's would be.
+    m.box(2.55, hip + 2.6, 0.0, 1.0, 1.9, 1.1, HIDE);
+    const [mx, my, mz] = c.muzzle.chaingun;
+    m.cylinder(mx, my, mz + 2.4, 0.62, 0.62, -2.6, 12, IRON, 'z');
+    m.cylinder(mx, my, mz + 0.3, 0.48, 0.55, -0.4, 12, GUN, 'z');
+    m.box(mx, my + 0.62, mz + 1.6, 0.35, 0.3, 1.2, IRON);
+    // And the pod of rockets on the left shoulder.
+    pod(m, c.muzzle.rockets, 3, 2, IRON, 1.4);
+  },
+
+
   // The one the game always had, in its own paint now rather than in a
   // drone's black, with a trim stripe down the chest.
   warden(m, c) {

@@ -45,7 +45,7 @@ import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
-import { DEMON, GAZER, makeDemon, makeGazer } from './game/demons.js';
+import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
 import { Slayer, SLAYER } from './game/slayer.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
@@ -82,6 +82,7 @@ const el = {
   opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
   opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
   opsProgress: $('opsprogress'), opsWipe: $('opswipe'),
+  bossbar: $('bossbar'), bossName: $('bossname'), bossFill: $('bossfill'),
   ops: $('ops'), opsTitle: $('opstitle'), opsLine: $('opsline'), opsAlert: $('opsalert'),
   opsPanel: $('opspanel'), opsPanelTitle: $('opspaneltitle'), opsPanelLine: $('opspanelline'),
   opsList: $('opslist'), opsReset: $('opsreset'), opsHarder: $('opsharder'), opsClose: $('opsclose'),
@@ -899,7 +900,14 @@ async function main() {
       const dmg = splash.damage * (1 - r / (splash.radius * 1.3));
       // Its own salvo does not take its own legs off.
       if (mk === state.inMech && body && body.weapon === 'mech') continue;
-      if (mechs.damage(mk, dmg)) { creditTarget(mk, false, 'mech'); killed++; }
+      // Nor the Warlord's its own.
+      if (mk.spec.boss && body && body.weapon === 'warlord') continue;
+      // One with a heart takes a blast in full only when it goes off at the heart.
+      const atHeart = !mk.spec.heart || (() => {
+        const h = mechs.heart(mk);
+        return Math.hypot(h.x - x, h.y - by, h.z - z) < Math.max(3, splash.radius * 0.4);
+      })();
+      if (mechs.damage(mk, dmg, atHeart)) { creditTarget(mk, false, 'mech'); killed++; }
     }
     for (const v of [...vehicles.active]) {
       if (v.health <= 0) continue;
@@ -1320,7 +1328,7 @@ async function main() {
       projectiles.launch('rocket', {
         x: from.x, y: from.y, z: from.z,
         vx: d.x * gun.speed, vy: d.y * gun.speed, vz: d.z * gun.speed,
-        splash: gun.splash, weapon: 'reaper',
+        splash: gun.splash, weapon: m.spec.boss ? 'warlord' : 'reaper',
       });
       effects.flash(from.x, from.y, from.z, 2.8, 1.0, 0.6, 0.3, 0.08);
     },
@@ -1642,7 +1650,7 @@ async function main() {
     projectiles.launch('rocket', {
       x: from.x, y: from.y, z: from.z,
       vx: dir.x * rockets.speed, vy: dir.y * rockets.speed, vz: dir.z * rockets.speed,
-      splash: rockets.splash, weapon: m.mine ? 'mech' : 'reaper',
+      splash: rockets.splash, weapon: m.mine ? 'mech' : (m.spec.boss ? 'warlord' : 'reaper'),
     });
     audio.gunshot('mechcannon');
     if (m.mine) effects.shake = Math.min(1.1, effects.shake + 0.12);
@@ -1798,6 +1806,7 @@ async function main() {
   const reactors = mechs.reactors;
 
   mechs.onDestroyed = (m) => {
+    if (m.demon === 'warlord') { warlordDown(m); return; }
     // The machine is dead; the reactor in it is not, yet. A small blast and
     // a shower of parts now, so a kill still reads as a kill, and the real
     // one when the containment goes.
@@ -1937,7 +1946,7 @@ async function main() {
     let killed = false;
     if (best.kind === 'soldier') killed = soldiers.damage(best.target, damage, d);
     else if (best.kind === 'jet') killed = jets.damage(best.target, damage);
-    else if (best.kind === 'mech') killed = mechs.damage(best.target, damage);
+    else if (best.kind === 'mech') killed = mechs.damage(best.target, damage, best.core);
     else killed = drones.damage(best.target, damage);
     if (killed) creditTarget(best.target, best.core, best.kind);
     return best;
@@ -2404,7 +2413,32 @@ async function main() {
    * jets and their mechs. Passers by and anything of yours get none.
    */
   const hostiles = [];
+  /** The nearest boss within reach, Warlord or tyrant, on the long bar. */
+  function placeBossBar() {
+    let best = null, bestD = 260;
+    for (const mk of mechs.active) {
+      if (!mk.alive || mk.demon !== 'warlord' || mk.health <= 0) continue;
+      const d = Math.hypot(mk.x - player.x, mk.z - player.z);
+      if (d < bestD) { bestD = d; best = mk; }
+    }
+    if (!best) {
+      for (const sd of soldiers.active) {
+        if (!sd.alive || sd.demon !== 'tyrant' || sd.health <= 0 || sd.state === 5) continue;
+        const d = Math.hypot(sd.x - player.x, sd.z - player.z);
+        if (d < bestD) { bestD = d; best = sd; }
+      }
+    }
+    const show = !!best && state.mode === 'walk' && !photo.active;
+    el.bossbar.classList.toggle('hidden', !show);
+    if (!show) return;
+    const warlord = best.demon === 'warlord';
+    el.bossbar.classList.toggle('tyrant', !warlord);
+    el.bossName.textContent = warlord ? 'The Warlord' : 'Tyrant';
+    el.bossFill.style.transform = `scaleX(${Math.max(0, best.health / best.maxHealth).toFixed(4)})`;
+  }
+
   function placeHealthBars() {
+    placeBossBar();
     const wall = performance.now() / 1000;
     const dt = Math.min(0.1, Math.max(0, wall - (state.hbWall || wall)));
     state.hbWall = wall;
@@ -2413,7 +2447,9 @@ async function main() {
     for (const sd of soldiers.active) {
       if (!sd.alive || sd.civilian || sd.health <= 0 || sd.state === 5) continue;
       const sc = sd.scale || 1;
-      const kind = sd.demon === 'tyrant' ? 'mech' : sd.demon === 'brute' ? 'jet' : sd.machine ? 'machine' : 'soldier';
+      // A boss has the long bar at the top of the screen instead.
+      if (sd.demon === 'tyrant') continue;
+      const kind = sd.demon === 'brute' ? 'jet' : sd.machine ? 'machine' : 'soldier';
       hostiles.push({ body: sd, kind,
         x: sd.x, y: sd.y + 2.15 * sc + (sd.demon ? 0.25 * sc : 0), z: sd.z, health: sd.health, max: sd.maxHealth });
     }
@@ -2428,7 +2464,7 @@ async function main() {
         health: j.health, max: j.maxHealth });
     }
     for (const mk of mechs.active) {
-      if (mk.mine || mk.health <= 0) continue;
+      if (mk.mine || mk.health <= 0 || mk.demon) continue;
       hostiles.push({ body: mk, kind: 'mech', x: mk.x, y: mk.y + mk.spec.height + 0.8, z: mk.z,
         health: mk.health, max: mk.maxHealth });
     }
@@ -2925,7 +2961,7 @@ async function main() {
    * @param {number} away how far out to look
    * @returns {{x,z,a}|null}
    */
-  function mechSpot(away = 14) {
+  function mechSpot(away = 14, cx = player.x, cz = player.z) {
     // Several rings rather than one. A single ring at a fixed distance is a
     // coin toss in a street with anything in it: the first version of this
     // answered no about one call in three from a cratered square, and a
@@ -2943,8 +2979,8 @@ async function main() {
         for (let i = 0; i < 28; i++) {
           const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
           const r = away * scale * (0.9 + Math.random() * 0.2);
-          const x = player.x + Math.cos(a) * r;
-          const z = player.z + Math.sin(a) * r;
+          const x = cx + Math.cos(a) * r;
+          const z = cz + Math.sin(a) * r;
           if (!placeable(x, z)) continue;
           let boxed = false;
           for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -3655,6 +3691,8 @@ async function main() {
         // A pack: mostly ghouls, a brute, and something overhead.
         const which = i === 0 ? 'brute' : i === 1 ? 'gazer' : 'ghoul';
         if (spawnDemonNear(which, player.x, player.z, 24, 70)) made++;
+      } else if (kind === 'warlord') {
+        if (spawnWarlord(player.x, player.z, 40, 60)) made++;
       }
     }
     // The soldier layer's budget counts everybody in it, the people walking
@@ -4870,7 +4908,7 @@ async function main() {
       effects.blood(hit.x, hit.y, hit.z, dir.x, 0.3, dir.z, cheats.goreScale * (core ? 1.6 : 1));
     } else if (kind === 'drone') killed = drones.damage(t, dmg);
     else if (kind === 'jet') killed = jets.damage(t, dmg);
-    else if (kind === 'mech') killed = mechs.damage(t, dmg * 0.25);
+    else if (kind === 'mech') killed = mechs.damage(t, dmg * 0.25, core);
     else if (kind === 'vehicle') { vehicles.damage(t, dmg * 0.25); kind = null; }
     if (!kind) return;
     audio.hitMarker(core);
@@ -5043,6 +5081,7 @@ async function main() {
    */
   const HELL = [1.0, 0.28, 0.06];
   function spawnDemonNear(kind, x, z, minR, maxR, level = 0) {
+    if (kind === 'warlord') return spawnWarlord(x, z, minR, maxR, level);
     if (kind === 'gazer') {
       const d = drones.spawnNear(x, z, minR, maxR);
       if (d) {
@@ -5064,10 +5103,11 @@ async function main() {
   const slayer = new Slayer(campaign, world,
     (kind, x, z, min, max, level) => spawnDemonNear(kind, x, z, min, max, level),
     (b) => {
-      if (b.demon === 'gazer') {
+      if (b.demon === 'gazer' || b.demon === 'warlord') {
         b.alive = false;
-        const i = drones.active.indexOf(b);
-        if (i >= 0) drones.active.splice(i, 1);
+        const pool = b.demon === 'gazer' ? drones.active : mechs.active;
+        const i = pool.indexOf(b);
+        if (i >= 0) pool.splice(i, 1);
       } else {
         soldiers._retire(b);
       }
@@ -5079,9 +5119,19 @@ async function main() {
   };
   slayer.onWave = (site, run) => {
     const last = run.wave === run.waves.length - 1;
-    toast(run.boss && last ? 'something very large is coming' : `wave ${run.wave + 1} of ${run.waves.length}`);
+    const word = run.final && last ? 'the ground is shaking. The Warlord comes'
+      : run.boss && run.waves[run.wave].tyrant ? 'something very large is coming'
+        : `wave ${run.wave + 1} of ${run.waves.length}`;
+    toast(word);
+  };
+  // The last nest of the whole operation keeps the Warlord for the end.
+  slayer.isFinal = (site) => {
+    if (campaign.settings.scope !== 'all') return true;
+    const sum = campaign.summary(builtDistricts().map((d) => d.id));
+    return !!sum && sum.done >= sum.districts - 1;
   };
   slayer.onHeavy = (site, run, kind, b) => {
+    if (kind === 'warlord') return;
     feed(`<b>${DEMON[kind] ? DEMON[kind].name : 'Gazer'}</b> inbound`);
     if (kind === 'tyrant') { audio.roar(Math.hypot(player.x - b.x, player.z - b.z), 3.5); effects.shake = 1.2; }
   };
@@ -5099,6 +5149,126 @@ async function main() {
       feed(`<b>${world.nameAt(site.x, site.z)}</b> is free of them`);
     }
   };
+
+  // --- the Warlord ---------------------------------------------------------------
+  //
+  // Slayer's great boss walks on a mech's legs and is hit like one, so the
+  // mech layer does its walking, aiming and firing. What is its own is here:
+  // the way it arrives, the two times it calls its own when it is hurt, the
+  // ring along the ground when both hooves come down, and how it dies.
+  const WARLORD_PHASES = [
+    { at: 0.66, summon: { ghoul: 4, gazer: 1 }, faster: 1.2, say: 'the Warlord calls its own' },
+    { at: 0.33, summon: { ghoul: 3, brute: 2, gazer: 1 }, faster: 1.45, say: 'the Warlord is enraged' },
+  ];
+  const WARLORD_POINTS = 25000;
+  const quakes = [];
+
+  function spawnWarlord(x, z, minR, maxR, level = 0) {
+    // Out of a ring round the point, or, asked for none, on the point.
+    const spot = maxR > 0 ? mechSpot((minR + maxR) / 2, x, z) : { x, z };
+    if (!spot) return null;
+    const yaw = Math.atan2(-(player.x - spot.x), -(player.z - spot.z));
+    const m = mechs.spawn('warlord', spot.x, spot.z, yaw);
+    if (!m) return null;
+    m.demon = 'warlord';
+    m.health = m.maxHealth = MECH.warlord.health * (1 + DEMON_LEVEL * level);
+    m.bossPhase = 0;
+    m.quakeLeft = MECH.warlord.quake.every;
+    m.rage = 0;
+    arriveAt(m.x, m.z, 7.5, 3, HELL);
+    audio.roar(Math.hypot(player.x - m.x, player.z - m.z), 4);
+    effects.shake = Math.min(1.8, effects.shake + 1.2);
+    feed('<b>Warlord</b> has come');
+    return m;
+  }
+
+  /** The heavier half of a mech's step, for the Warlord: its phases and its quake. */
+  function warlordStep(dt) {
+    for (const m of mechs.active) {
+      if (!m.alive || m.demon !== 'warlord' || m.health <= 0) continue;
+      const left = m.health / m.maxHealth;
+      const next = WARLORD_PHASES[m.bossPhase];
+      if (next && left < next.at) {
+        m.bossPhase++;
+        m.rage = m.bossPhase / WARLORD_PHASES.length;
+        // Faster on its feet and quicker between bursts, on a spec of its own.
+        const base = MECH.warlord;
+        m.spec = { ...m.spec, walk: base.walk * next.faster, torsoTurn: base.torsoTurn * next.faster,
+          chaingun: { ...m.spec.chaingun, rest: base.chaingun.rest / next.faster },
+          rockets: { ...m.spec.rockets, interval: base.rockets.interval / next.faster } };
+        toast(next.say);
+        audio.roar(Math.hypot(player.x - m.x, player.z - m.z), 4);
+        effects.shake = Math.min(1.8, effects.shake + 0.9);
+        effects.flash(m.x, m.y + 6, m.z, 14, 1.0, 0.3, 0.05, 0.5);
+        for (const [kind, n] of Object.entries(next.summon)) {
+          for (let i = 0; i < n; i++) {
+            const b = spawnDemonNear(kind, m.x, m.z, 8, 26, 0);
+            // Counted with the nest it came out of, if there is one.
+            if (b && m.nest) {
+              const r = slayer.live.get(m.nest);
+              if (r) { r.demons.add(b); r.total++; b.nest = m.nest; }
+            }
+          }
+        }
+      }
+      // Both hooves down: a ring along the ground, which a jump clears.
+      const q = m.spec.quake;
+      const away = Math.hypot(player.x - m.x, player.z - m.z);
+      m.quakeLeft -= dt;
+      if (m.quakeLeft <= 0 && away < q.near && m.stun <= 0) {
+        m.quakeLeft = q.every / (1 + 0.3 * m.bossPhase);
+        quakes.push({ x: m.x, y: m.y, z: m.z, r: m.spec.radius, spec: q, hit: false, puff: 0 });
+        audio.explosion();
+        effects.shake = Math.min(1.8, effects.shake + 0.7);
+        effects.dust(m.x, m.y, m.z, 6);
+        renderer.addScar(m.x, m.y, m.z, 5, 0.5);
+      }
+    }
+    for (let i = quakes.length - 1; i >= 0; i--) {
+      const w = quakes[i];
+      w.r += w.spec.speed * dt;
+      // Grit and sparks thrown up along the front of it.
+      w.puff -= dt;
+      if (w.puff <= 0) {
+        w.puff = 0.05;
+        const n = Math.round(10 + w.r * 0.8);
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2 + Math.random() * 0.2;
+          const px = w.x + Math.cos(a) * w.r, pz = w.z + Math.sin(a) * w.r;
+          effects.spark(px, world.groundHeight(px, pz) + 0.3, pz, 1.0, 0.45, 0.08);
+        }
+      }
+      const d = Math.hypot(player.x - w.x, player.z - w.z);
+      if (!w.hit && Math.abs(d - w.r) < 1.4 && player.onGround && combat.health > 0
+        && !state.inMech && !state.inVehicle) {
+        w.hit = true;
+        combat.hurt(w.spec.damage, w.x, w.z, player.x, player.z);
+        effects.shake = Math.min(1.8, effects.shake + 0.6);
+      }
+      if (w.r > w.spec.reach) quakes.splice(i, 1);
+    }
+  }
+
+  /** And how it goes: in fire rather than in a reactor. */
+  function warlordDown(m) {
+    const g = world.groundHeight(m.x, m.z);
+    explode(m.x, g + 4, m.z, { radius: 14, damage: 160, crater: true }, { weapon: 'warlord' });
+    effects.flash(m.x, g + 6, m.z, 30, 1.0, 0.3, 0.05, 1.2);
+    effects.arrival(m.x, g, m.z, 9, 3, HELL);
+    gibs.rubble(m.x, g + 3, m.z, 12, 20, 2.6);
+    fires.ignite(m.x, g, m.z, 14, 1);
+    audio.roar(Math.hypot(player.x - m.x, player.z - m.z), 5);
+    effects.shake = Math.min(2.0, effects.shake + 1.4);
+    state.flash = Math.max(state.flash, 0.5);
+    combat.score += WARLORD_POINTS;
+    if (campaign.mode === 'slayer') {
+      campaign.book.score += WARLORD_POINTS;
+      campaign.save();
+    }
+    toast(`the Warlord is dead  +${WARLORD_POINTS}`);
+    feed(`<b>Warlord down</b> +${WARLORD_POINTS}`);
+    state.warlordKills = (state.warlordKills || 0) + 1;
+  }
 
   // --- the Slayer weapons -------------------------------------------------------
   /** Everything hostile within reach of you, in front, that a wall does not hide. */
@@ -5175,7 +5345,7 @@ async function main() {
     let killed = false;
     if (hit.actorKind === 'soldier') killed = soldiers.damage(t, amount, { x: b.vx / sp, y: 0, z: b.vz / sp });
     else if (hit.actorKind === 'drone') killed = drones.damage(t, amount);
-    else if (hit.actorKind === 'mech') killed = mechs.damage(t, amount * 0.3);
+    else if (hit.actorKind === 'mech') killed = mechs.damage(t, amount * 0.3, false);
     else if (hit.actorKind === 'jet') killed = jets.damage(t, amount);
     for (let i = 0; i < 10; i++) effects.spark(hit.x, hit.y, hit.z, 1.0, 0.8, 0.4);
     effects.blood(hit.x, hit.y, hit.z, b.vx / sp, 0.2, b.vz / sp, cheats.goreScale);
@@ -5795,6 +5965,7 @@ async function main() {
       fireWalls.update(worldDt);
       updateBurning(worldDt);
       updateReactors(worldDt);
+      warlordStep(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -5985,6 +6156,7 @@ async function main() {
     fireWalls.update(worldDt);
     updateBurning(worldDt);
     updateReactors(worldDt);
+    warlordStep(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -6522,6 +6694,10 @@ async function main() {
     takedown: () => takedown(), takedownTarget: () => takedownTarget(),
     demonSpec: DEMON, gazerSpec: GAZER,
     spawnDemon(kind, dx, dz, level = 0) {
+      // Put down exactly where it was asked for, for a test that needs it there.
+      if (kind === 'warlord') {
+        return spawnWarlord(player.x + dx, player.z + dz, 0, 0, level);
+      }
       if (kind === 'gazer') {
         const d = this.spawnDrone(dx, 8, dz);
         if (d) makeGazer(d, level);
@@ -6532,6 +6708,8 @@ async function main() {
       return s;
     },
     slayer, slayerSpec: SLAYER,
+    warlordPhases: WARLORD_PHASES, quakes, warlordPoints: WARLORD_POINTS,
+    placeHealthBars: () => placeHealthBars(),
     campaign, tactics, tacticsSpec: TACTICS, opsStep: (dt) => opsStep(dt), opsPanel: (on) => toggleOpsPanel(on),
     showOps: () => showOps(),
     startOps: () => startOps(),

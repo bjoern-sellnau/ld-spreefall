@@ -3,7 +3,7 @@
 // project ships no models.
 
 import { createProgram } from '../engine/gl.js';
-import { CHASSIS } from '../game/chassis.js';
+import { CHASSIS, WARLORD } from '../game/chassis.js';
 import { MECH_BUILDERS } from './mechmeshes.js';
 import { mat4 } from '../engine/math.js';
 import {
@@ -1283,7 +1283,7 @@ export class Actors {
     // it has gone.
     // A mesh per chassis, each with room for every mech there can be, since
     // nothing stops all eight on the street being the same one.
-    this.mechMeshes = CHASSIS.map((c) => ({ chassis: c, mesh: this._uploadMesh(buildChassisMesh(c), MAX_MECHS, 3) }));
+    this.mechMeshes = [...CHASSIS, WARLORD].map((c) => ({ chassis: c, mesh: this._uploadMesh(buildChassisMesh(c), MAX_MECHS, 3) }));
     this.mech = this.mechMeshes[0].mesh;
     // What you can get into. The fighter you can fly is the same mesh as the
     // ones that come after you, because it is the same aircraft.
@@ -1726,7 +1726,8 @@ export class Actors {
         data[o + 8] = m.mine ? 1 : 0;
         data[o + 9] = m.health > 0 ? 0 : Math.min(1, (m.dying || 0) / 1.6);
         data[o + 10] = m.dashLeft > 0 ? 1 : 0;
-        data[o + 11] = 0;
+        // How angry the Warlord is, for the glow of its heart and eyes.
+        data[o + 11] = m.rage || 0;
         n++;
       }
       mesh.instanceCount = n;

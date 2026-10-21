@@ -1601,6 +1601,28 @@ html, body {
 }
 #ops i[data-level="wary"] { color: #ffc24a; }
 
+/* The boss: its name and one long bar across the top of the screen. */
+#bossbar {
+  position: absolute; left: 50%; top: 36px; transform: translateX(-50%);
+  width: min(560px, 80vw); pointer-events: none; text-align: center;
+  font: 600 12px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.32em; text-transform: uppercase;
+  color: #ffb07a; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.95);
+}
+#bossbar.hidden { display: none; }
+#bossbar .track {
+  position: relative; margin-top: 6px; height: 9px;
+  background: rgba(10, 6, 6, 0.8); border: 1px solid rgba(255, 90, 40, 0.45);
+  box-shadow: 0 0 10px rgba(255, 60, 20, 0.25);
+}
+#bossfill {
+  height: 100%; width: 100%; transform-origin: left center;
+  background: linear-gradient(90deg, #8a1206, #ff4a12 70%, #ffb03a);
+}
+#bossbar .notch { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgba(0, 0, 0, 0.75); }
+#bossbar.tyrant .notch { display: none; }
+@media (max-width: 640px) { #bossbar { top: 26px; font-size: 10px; letter-spacing: 0.18em; } }
+
 /* A scope: everything outside the glass is black, a thin crosshair across it. */
 #scope {
   position: absolute; inset: 0; pointer-events: none;

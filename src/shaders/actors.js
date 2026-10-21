@@ -391,6 +391,33 @@ void main() {
     }
     // Reeling: it glows from inside, which is the cue to finish it.
     emissive += vec3(1.4, 0.55, 0.08) * vStun * (0.6 + 0.4 * sin(uCamPos.w * 12.0));
+  } else if (vPart > 79.5 && vPart < 84.5) {
+    // The Warlord: near black hide with fire in its cracks, horn, the iron
+    // bolted to it, and the heart and eyes, which are what to shoot.
+    int k = int(vPart + 0.5);
+    float v = vnoise(vWorld.xz * 1.6 + vWorld.y * 1.3);
+    float crack = smoothstep(0.72, 0.76, vnoise(vec2(vWorld.x + vWorld.z, vWorld.y) * 7.0))
+      * smoothstep(0.45, 0.7, vnoise(vec2(vWorld.x - vWorld.z, vWorld.y) * 1.3));
+    rough = 0.72;
+    metal = 0.05;
+    if (k == 80) {
+      albedo = vec3(0.075, 0.045, 0.038) * (0.7 + 0.5 * v);
+      emissive = vec3(1.7, 0.3, 0.03) * crack * (0.75 + 0.25 * sin(uCamPos.w * 1.7 + vWorld.y));
+    } else if (k == 81) {
+      albedo = vec3(0.16, 0.13, 0.10) * (0.8 + 0.3 * v);
+      rough = 0.45;
+    } else if (k == 83) {
+      float band = smoothstep(0.0, 0.03, abs(fract(vWorld.y * 2.5) - 0.5) * 0.3);
+      albedo = vec3(0.06, 0.058, 0.055) * (0.75 + 0.35 * band + 0.2 * v);
+      rough = 0.5;
+      metal = 0.8;
+    } else {
+      albedo = vec3(0.08, 0.01, 0.005);
+      float rate = k == 84 ? 9.0 : 4.0;
+      float pulse = 0.6 + 0.4 * sin(uCamPos.w * rate);
+      emissive = (k == 84 ? vec3(5.4, 0.55, 0.04) : vec3(4.0, 0.45, 0.04)) * pulse;
+      rough = 0.2;
+    }
   } else if (vPart > 74.5 && vPart < 79.5) {
     // A nest: flesh with red running in it, bone, and the heart.
     int k = int(vPart + 0.5);
@@ -858,6 +885,8 @@ void main() {
   // yours carries its own colour, and red where yours has its trim.
   if (iExtra.x < 0.5 && aInfo.x > 49.5 && aInfo.x < 59.5) vPart = 60.0;
   if (iExtra.x < 0.5 && aInfo.x > 60.5 && aInfo.x < 61.5) vPart = 62.0;
+  // The Warlord's heart and eyes burn hotter once it is angry.
+  if (aInfo.x > 81.5 && aInfo.x < 82.5 && iExtra.w > 0.5) vPart = 84.0;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);

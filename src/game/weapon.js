@@ -428,7 +428,7 @@ export class Weapon {
   _damage(hit, amount, dir) {
     if (hit.kind === 'soldier') return this.soldiers.damage(hit.target, amount, dir);
     if (hit.kind === 'jet') return this.jets.damage(hit.target, amount);
-    if (hit.kind === 'mech') return this.mechs.damage(hit.target, amount);
+    if (hit.kind === 'mech') return this.mechs.damage(hit.target, amount, hit.core);
     return this.drones.damage(hit.target, amount);
   }
 

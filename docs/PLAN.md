@@ -3699,3 +3699,47 @@ So there are two cities now, and a profile picks which:
   double barrel at four metres, the shield saw through two in a line and
   home again, and a fireball blocked and one parried.
   ops-07-doublebarrel.png.
+
+## 86. The Warlord, Slayer's great boss
+
+- A boss in addition to the tyrant, not in place of it: the tyrant still
+  ends every district, and the Warlord ends the operation. The last nest of
+  the whole operation (with one district in scope, that district's last
+  nest; with all of them, the last nest of the last district not yet done)
+  keeps a fifth wave after the tyrant's: four ghouls, two gazers and the
+  Warlord. Bosses off, neither comes.
+- Built on a mech's legs: the mech layer walks it, turns its torso, aims and
+  fires for it, so it is drawn by the mech shader with its own chassis row
+  (hip 4.4, 9.2 m tall) and its own mesh (goat legs on hooves, an armoured
+  chest with iron plates and pauldrons, horns, claws on the left arm, an
+  iron launcher for the right, a pod on the shoulder). Parts 80 to 84 in the
+  body shader: near black hide with fire in thin cracks, horn, banded iron,
+  and the heart and eyes, which burn faster once it is angry.
+- The heart is a sphere on its chest turned with the torso. A hit there is
+  the core and counts in full; anywhere else is hide and iron and counts a
+  third. A blast counts in full only when it goes off at the heart. 24000
+  health, more at higher levels like any demon.
+- Its arm fires rockets in threes with real splash, slow enough to step out
+  of; the pod fires a salvo of six past 36 m. Its own rockets do not hurt it.
+- Both hooves down every 5.5 s when you are within 18 m: a ring runs out
+  along the ground at 20 m/s to 28 m, sparks along its front, and takes 55
+  from you if you are standing on the ground when it passes. A jump clears
+  it.
+- Two phases: below two thirds it roars, calls four ghouls and a gazer and
+  walks and fires faster; below a third it calls three ghouls, two brutes
+  and a gazer, faster again, and its heart and eyes burn hotter. What it
+  calls is counted with its nest.
+- It dies in fire rather than in a reactor: a blast and a crater, a red
+  portal, rubble and fire, and 25000 points to the score and the campaign.
+- A long bar across the top of the screen with the boss's name, for the
+  Warlord (with notches at the two phases) or a tyrant within 260 m; bosses
+  get no small bar of their own.
+- The cheat menu brings one out (Warlord, under the spawns).
+- Checks (ops, 59 now): the last nest of the operation keeps the Warlord;
+  it comes 9.2 m tall with the long bar; the heart is the core and the legs
+  are not; the hide takes a third; the quake hurts where you stand and a
+  jump clears it; both phases call their own, faster and hotter; it dies for
+  the points and the bar goes. Unit (88 now): the plan of a nest, the tyrant
+  and the Warlord for the last nest, the game layer deciding the last nest
+  when every district is in scope, and none of it with bosses off.
+  ops-08-warlord.png.

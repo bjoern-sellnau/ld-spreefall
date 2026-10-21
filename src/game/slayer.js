@@ -9,7 +9,8 @@
 // the fight and the nest calls its demons back and waits for you.
 //
 // With bosses on, the last nest still standing in a district keeps a tyrant
-// for its last wave.
+// for its last wave, and the last nest of the whole operation keeps one more
+// wave after that: the Warlord.
 
 import { SITE } from './campaign.js';
 
@@ -31,6 +32,8 @@ export const SLAYER = {
   perLevel: 0.35,
   // The boss wave, when there is one.
   boss: { ghoul: 4, tyrant: 1 },
+  // And the end of the operation.
+  final: { ghoul: 4, gazer: 2, warlord: 1 },
   // Seconds between waves, and between one portal and the next.
   between: 3,
   spawnGap: 0.4,
@@ -38,7 +41,7 @@ export const SLAYER = {
 
 // Heavy ones come out last in a wave, which is how the genre paces it: the
 // floor fills with fodder and then something large arrives.
-const ORDER = { ghoul: 0, gazer: 1, brute: 2, tyrant: 3 };
+const ORDER = { ghoul: 0, gazer: 1, brute: 2, tyrant: 3, warlord: 4 };
 
 const gone = (b) => !b.alive || b.health <= 0 || b.state === 5;
 
@@ -60,6 +63,9 @@ export class Slayer {
     this.onHeavy = null;        // fn(site, run, kind, body) a brute or worse arrives
     this.onFree = null;         // fn(site, points, run)
     this.onReset = null;        // fn(site, run) you ran and it waits
+    // Whether a nest is the last of the operation, which the game layer knows
+    // better than the book: it knows which districts there are.
+    this.isFinal = () => this.campaign.settings.scope !== 'all';
   }
 
   get enabled() { return this.campaign.mode === 'slayer'; }
@@ -68,7 +74,7 @@ export class Slayer {
     let r = this.live.get(site.id);
     if (!r) {
       r = { site, phase: 'idle', wave: 0, waves: [], queue: [], demons: new Set(),
-        spawnLeft: 0, betweenLeft: 0, killed: 0, total: 0, boss: false };
+        spawnLeft: 0, betweenLeft: 0, killed: 0, total: 0, boss: false, final: false };
       this.live.set(site.id, r);
     }
     return r;
@@ -80,7 +86,7 @@ export class Slayer {
   }
 
   /** The waves a nest at this level holds, with the boss if it is owed one. */
-  plan(site, withBoss) {
+  plan(site, withBoss, final = false) {
     const k = 1 + SLAYER.perLevel * (site.level || 0);
     const waves = SLAYER.waves.map((w) => {
       const out = {};
@@ -88,6 +94,7 @@ export class Slayer {
       return out;
     });
     if (withBoss) waves.push({ ...SLAYER.boss });
+    if (withBoss && final) waves.push({ ...SLAYER.final });
     return waves;
   }
 
@@ -107,7 +114,8 @@ export class Slayer {
     const site = r.site;
     const others = (this.campaign.sitesIn(site.d) || []).filter((x) => x !== site && x.state !== SITE.FREE);
     r.boss = this.campaign.settings.bosses && others.length === 0;
-    r.waves = this.plan(site, r.boss);
+    r.final = r.boss && !!this.isFinal(site);
+    r.waves = this.plan(site, r.boss, r.final);
     r.total = r.waves.reduce((n, w) => n + Object.values(w).reduce((a, b) => a + b, 0), 0);
     r.killed = 0;
     r.wave = 0;
@@ -192,7 +200,7 @@ export class Slayer {
       r.spawnLeft -= dt;
       if (r.queue.length && r.demons.size < cap && r.spawnLeft <= 0) {
         const kind = r.queue[0];
-        const far = kind === 'tyrant' ? [22, 40] : SLAYER.ring;
+        const far = kind === 'warlord' ? [32, 46] : kind === 'tyrant' ? [22, 40] : SLAYER.ring;
         const b = this.spawn(kind, site.x, site.z, far[0], far[1], site.level || 0);
         if (b) {
           r.queue.shift();

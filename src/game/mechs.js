@@ -15,7 +15,7 @@
 // project: the ground height field under the feet and the collision segments
 // in front of the hull, out of the raycast the bullets use.
 
-import { CHASSIS, mechKey } from './chassis.js';
+import { CHASSIS, WARLORD, mechKey } from './chassis.js';
 
 export const MECH = {
   // Theirs. Slower than you, hits hard at range, and does not give ground.
@@ -129,6 +129,36 @@ for (const c of CHASSIS) {
   MECH[mechKey(c.id, true)] = mine;
   MECH[mechKey(c.id, false)] = foe;
 }
+
+// Slayer's great boss, built on a mech's legs: it walks, turns its torso and
+// is hit like one. The heart is the only place a hit counts in full; the rest
+// of it is hide and iron and takes a third. A rocket from the launcher arm
+// every so often in threes, slow enough to see and to step out of, and a
+// salvo from the shoulder pod for the far half of the street.
+MECH.warlord = {
+  name: 'Warlord',
+  mine: false,
+  boss: true,
+  chassis: 'warlord',
+  height: WARLORD.height, radius: WARLORD.radius, eye: WARLORD.eye,
+  chase: WARLORD.chase, chaseUp: WARLORD.chaseUp,
+  health: 24000,
+  walk: 5.2, turn: 1.1, torsoTurn: 2.2, climb: 1.8, gravity: 22,
+  engage: 280, keep: 24,
+  heart: WARLORD.heart,
+  armour: 0.33,
+  chaingun: {
+    kind: 'shell', interval: 0.6, burst: 3, rest: 2.6, spread: 0.035, range: 280,
+    speed: 62, splash: { radius: 7.5, damage: 75, force: 18 },
+    muzzle: WARLORD.muzzle.chaingun,
+  },
+  rockets: {
+    salvo: 6, gap: 0.14, interval: 9.0, speed: 95, minRange: 36,
+    splash: { radius: 8, damage: 70, force: 14 }, muzzle: WARLORD.muzzle.rockets,
+  },
+  // Both hooves down: a ring along the ground that you jump.
+  quake: { every: 5.5, near: 18, speed: 20, reach: 28, damage: 55 },
+};
 
 /**
  * Calling one down.
@@ -389,6 +419,11 @@ export class Mechs {
     // rocket that chases reads the height off whatever it is chasing and a
     // mech without one gets chased at the ankles.
     m.height = spec.height;
+    // What a Slayer boss hangs on one, cleared for whatever is spawned next
+    // out of the same slot in the pool.
+    m.demon = null;
+    m.nest = null;
+    m.rage = 0;
     this.active.push(m);
     return m;
   }
@@ -517,9 +552,11 @@ export class Mechs {
     return true;
   }
 
-  damage(m, amount) {
+  damage(m, amount, core = true) {
     if (!m.alive || m.health <= 0) return false;
     m.hitFlash = 1;
+    // Hide and iron take a share; the heart takes it all.
+    if (m.spec.armour && !core) amount *= m.spec.armour;
     if (m.shieldMax) {
       m.shieldWait = m.spec.shield.wait;
       if (m.shield > 0) {
@@ -556,7 +593,39 @@ export class Mechs {
     return best;
   }
 
+  /** Where the heart of one that has one is in the world, turned with its torso. */
+  heart(m) {
+    const [hx, hy, hz] = m.spec.heart;
+    const c = Math.cos(m.torso), sn = Math.sin(m.torso);
+    return { x: m.x + c * hx + sn * hz, y: m.y + hy, z: m.z - sn * hx + c * hz };
+  }
+
   _hitBody(m, ox, oy, oz, dx, dy, dz, maxT) {
+    // The Warlord's heart: a sphere on its chest, turned with its torso. A
+    // hit there is the core; a hit anywhere else is armour.
+    if (m.spec.heart) {
+      const hr = m.spec.heart[3];
+      const h = this.heart(m);
+      const ex = h.x - ox, ey = h.y - oy, ez = h.z - oz;
+      const proj = ex * dx + ey * dy + ez * dz;
+      if (proj > 0 && proj < maxT) {
+        const perp2 = ex * ex + ey * ey + ez * ez - proj * proj;
+        if (perp2 <= hr * hr) {
+          const t = proj - Math.sqrt(Math.max(0, hr * hr - perp2));
+          const body = this._hitBox(m, ox, oy, oz, dx, dy, dz, maxT,
+            m.spec.radius * 1.15, m.spec.height * 0.55, m.spec.height);
+          // Only if nothing of the body is in front of it by more than the
+          // plates are thick.
+          if (!body || t < body + 1.2) return { t: Math.max(0, t), core: true };
+        }
+      }
+      const legs = this._hitBox(m, ox, oy, oz, dx, dy, dz, maxT,
+        m.spec.radius * 0.8, 0, m.spec.height * 0.5);
+      const torso = this._hitBox(m, ox, oy, oz, dx, dy, dz, maxT,
+        m.spec.radius * 1.15, m.spec.height * 0.5, m.spec.height);
+      const t = Math.min(legs ?? Infinity, torso ?? Infinity);
+      return t < Infinity ? { t, core: false } : null;
+    }
     const legs = this._hitBox(m, ox, oy, oz, dx, dy, dz, maxT,
       m.spec.radius * 0.8, 0, m.spec.height * 0.55);
     const torso = this._hitBox(m, ox, oy, oz, dx, dy, dz, maxT,

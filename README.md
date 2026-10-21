@@ -487,6 +487,13 @@ all of them, a start district, how many nests, and bosses on or off.
   them back and waits.
 - Ghouls throw fire and claw, brutes charge, gazers float and spit fire,
   and the tyrant is three and a half times a man and throws fire in volleys.
+- The last nest of the whole operation keeps one more wave after the
+  tyrant's: the Warlord, nine metres of hide and iron on goat legs with a
+  rocket arm. Only its heart takes a hit in full; the rest takes a third.
+  Close in, it brings both hooves down and a ring runs out along the ground:
+  jump it. Hurt past two thirds and past a third it calls its own and gets
+  faster. Its name and a long bar sit at the top of the screen while it is
+  near, and the cheat menu can bring one out any time.
 - The number row: a double barrel, the M16, the plasma rifle, rockets, the
   railgun, a shield saw you throw (it cuts through and comes back; held up
   on the second trigger it stops fire, and raised just in time it sends it

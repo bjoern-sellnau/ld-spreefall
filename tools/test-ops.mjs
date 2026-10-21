@@ -600,14 +600,16 @@ async function run() {
         if (killAll) {
           for (const b of [...run.demons]) {
             if (b.rise > 0) continue;
-            if (b.demon === 'gazer') s.drones.damage(b, 1e6); else s.soldiers.damage(b, 1e6, { x: 1, y: 0, z: 0 });
+            if (b.demon === 'gazer') s.drones.damage(b, 1e6);
+            else if (b.demon === 'warlord') s.mechs.damage(b, 1e6);
+            else s.soldiers.damage(b, 1e6, { x: 1, y: 0, z: 0 });
           }
         }
       }
     }
     s.combat.hurt = hurt;
     return { woke, free: site.state === 1, most, kinds: Object.keys(kinds), presenceMid: +presenceMid.toFixed(2),
-      waves, boss: run.boss, killed: run.killed, total: run.total, presence: +s.slayer.presence(site.d).toFixed(2) };
+      waves, boss: run.boss, final: run.final, killed: run.killed, total: run.total, presence: +s.slayer.presence(site.d).toFixed(2) };
   }, [index, killAll]);
 
   const first = await fightNest(0, true);
@@ -652,7 +654,153 @@ async function run() {
   const last = await fightNest(slay.n - 1, true);
   check('with bosses on, the last nest in a district keeps a tyrant', last.boss && last.kinds.includes('tyrant'),
     last.kinds.join(', '));
+  check('and the last nest of the operation keeps the Warlord after it', last.final && last.kinds.includes('warlord'),
+    last.kinds.join(', '));
   check('and when it falls the district is free of them', last.free && last.presence === 0, `presence ${last.presence}`);
+
+  // --- the Warlord -------------------------------------------------------------
+  const lord = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear();
+    s.teleport(81, 0);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const m = s.spawnDemon('warlord', -45, 0);
+    const out = { spawned: !!m };
+    if (!m) return out;
+    out.height = m.spec.height;
+    out.boss = !!m.spec.boss;
+    // Held still and its guns quiet while it is measured.
+    m.spec = { ...m.spec, engage: 0, walk: 0 };
+    for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
+    s.placeHealthBars();
+    out.bar = !document.getElementById('bossbar').classList.contains('hidden');
+    out.barName = document.getElementById('bossname').textContent;
+    // A shot at the heart is the core, a shot at a leg is not.
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const ray = (p) => {
+      const dx = p.x - eye.x, dy = p.y - eye.y, dz = p.z - eye.z;
+      const l = Math.hypot(dx, dy, dz);
+      return s.mechs.raycast(eye.x, eye.y, eye.z, dx / l, dy / l, dz / l, 200);
+    };
+    const h = s.mechs.heart(m);
+    const atHeart = ray(h);
+    const atLeg = ray({ x: m.x, y: m.y + 1.5, z: m.z });
+    out.heart = !!atHeart && atHeart.core;
+    out.leg = !!atLeg && !atLeg.core;
+    // And what that is worth.
+    const before = m.health;
+    s.mechs.damage(m, 300, true);
+    out.heartHit = before - m.health;
+    const mid = m.health;
+    s.mechs.damage(m, 300, false);
+    out.hideHit = mid - m.health;
+    m.health = m.maxHealth;
+    return out;
+  });
+  check('the Warlord comes, nine metres of it, with the long bar at the top of the screen',
+    lord.spawned && lord.boss && lord.height >= 9 && lord.bar && /warlord/i.test(lord.barName),
+    `${lord.height} m, ${lord.barName}`);
+  check('its heart is where a shot counts, its legs are hide', lord.heart && lord.leg);
+  check('and the hide takes a third of what the heart takes', lord.heartHit === 300 && Math.abs(lord.hideHit - 99) < 1,
+    `${lord.heartHit} at the heart, ${lord.hideHit} on the hide`);
+
+  // The quake: stood still it hurts, jumped it does not.
+  const quake = await page.evaluate(() => {
+    const s = window.spreefall;
+    const m = s.mechs.active.find((x) => x.demon === 'warlord' && x.health > 0);
+    const out = {};
+    const hurt = s.combat.hurt;
+    const ring = (jump) => {
+      s.quakes.length = 0;
+      s.teleport(m.x + 11, m.z);
+      for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
+      let taken = 0, rings = 0, ground = 0;
+      const away = Math.round(Math.hypot(s.player.x - m.x, s.player.z - m.z));
+      s.combat.hurt = (amount) => { taken += amount; return false; };
+      m.quakeLeft = 0.05;
+      for (let i = 0; i < 60 * 3; i++) {
+        if (jump) {
+          for (const w of s.quakes) {
+            const d = Math.hypot(s.player.x - w.x, s.player.z - w.z);
+            if (Math.abs(d - w.r) < 6 && s.player.onGround) { s.player.vy = 7; s.player.onGround = false; }
+          }
+        }
+        rings = Math.max(rings, s.quakes.length);
+        if (s.player.onGround) ground++;
+        s.fixedForTest(1 / 60);
+      }
+      return { taken, rings, away, ground, health: s.combat.health, mode: s.state.mode };
+    };
+    out.stood = ring(false);
+    out.jumped = ring(true);
+    s.combat.hurt = hurt;
+    return out;
+  });
+  check('both hooves down send a ring along the ground that hurts where you stand',
+    quake.stood.rings >= 1 && quake.stood.taken >= 55, JSON.stringify(quake.stood));
+  check('and a jump clears it', quake.jumped.rings >= 1 && quake.jumped.taken === 0, JSON.stringify(quake.jumped));
+
+  // Its phases: hurt it past two thirds and it calls its own, past a third
+  // and it is angry; then down, for the points.
+  const phases = await page.evaluate(() => {
+    const s = window.spreefall;
+    const m = s.mechs.active.find((x) => x.demon === 'warlord' && x.health > 0);
+    const out = {};
+    const hurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    const demons = () => s.soldiers.active.filter((x) => x.demon && x.health > 0).length
+      + s.drones.active.filter((x) => x.demon && x.health > 0).length;
+    const base = s.mechSpec.warlord.walk;
+    const d0 = demons();
+    m.health = m.maxHealth * 0.6;
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    out.one = { phase: m.bossPhase, called: demons() - d0, faster: m.spec.walk > base };
+    const d1 = demons();
+    m.health = m.maxHealth * 0.3;
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    out.two = { phase: m.bossPhase, called: demons() - d1, rage: m.rage };
+    const score = s.campaign.book.score;
+    const kills = s.state.warlordKills || 0;
+    s.mechs.damage(m, 1e7);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    out.dead = m.health <= 0 && (s.state.warlordKills || 0) === kills + 1;
+    out.points = s.campaign.book.score - score;
+    s.placeHealthBars();
+    out.barGone = document.getElementById('bossbar').classList.contains('hidden');
+    s.combat.hurt = hurt;
+    return out;
+  });
+  check('hurt past two thirds it calls its own and walks faster', phases.one.phase === 1 && phases.one.called >= 4
+    && phases.one.faster, `${phases.one.called} called`);
+  check('past a third it calls more and burns hotter', phases.two.phase === 2 && phases.two.called >= 5
+    && phases.two.rage === 1, `${phases.two.called} called`);
+  check('and it dies, for the points, and the bar goes', phases.dead && phases.points >= 25000 && phases.barGone,
+    `+${phases.points}`);
+
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear();
+    s.soldiers.enabled = false; s.drones.enabled = false;
+    s.weapon.select('doublebarrel');
+    s.teleport(81, 0);
+    s.look(90, 8); s.camera.update(16 / 10);
+    const fwd = { x: s.camera.forward[0], z: s.camera.forward[2] };
+    const m = s.spawnDemon('warlord', fwd.x * 34, fwd.z * 34);
+    m.spec = { ...m.spec, engage: 0, walk: 0 };
+    m.health = m.maxHealth * 0.3;
+    m.rage = 1;
+    s.state.hurtOff = s.combat.hurt;
+    s.combat.hurt = () => false;
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-08-warlord.png') });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.combat.hurt = s.state.hurtOff;
+    s.soldiers.enabled = true; s.drones.enabled = true;
+    for (const m of [...s.mechs.active]) if (m.demon === 'warlord') { m.alive = false; }
+    s.mechs.active.length = 0;
+  });
 
   // --- the Slayer weapons -----------------------------------------------------
   await page.evaluate(() => {
