@@ -108,6 +108,10 @@ class Soldier {
     // and whether he stands still looking out instead of walking at all.
     this.post = null;
     this.sentry = false;
+    // How sure a guard is that somebody is there, nought to one. At one he
+    // has seen you, and the camp's business takes it from there.
+    this.suspicion = 0;
+    this.lookX = x; this.lookZ = z;
     return this;
   }
 }
@@ -174,6 +178,62 @@ export class Soldiers {
     this.hazards = () => [];
     // Scaled by the difficulty: how often their aimed shot is actually aimed.
     this.accuracyScale = 1;
+    // Tactics. How a camp guard who has not been told about you notices you:
+    // the numbers, how fast you are moving, and who to tell when he has.
+    this.stealth = null;          // {range, cone, near, fill, decay, run}
+    this.playerSpeed = 0;
+    this.onSpot = null;           // fn(soldier, how) 'seen', 'heard' or 'hit'
+    this.onDown = null;           // fn(soldier) the moment one is killed
+  }
+
+  /**
+   * A guard who has not been told: he sees you only inside his cone of
+   * vision, and only slowly, faster the nearer you are and the faster you
+   * are moving; close enough, he notices you whichever way he faces.
+   *
+   * @returns {boolean} true the moment he is sure
+   */
+  _notice(s, dt, player, dist, dx, dz) {
+    const st = this.stealth;
+    if (!st) return true;
+    const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
+    const facing = (fx * dx + fz * dz) / (dist || 1);
+    const inCone = facing > st.cone;
+    let rate = 0;
+    if (inCone && dist < st.range) {
+      const k = 1 - dist / st.range;
+      rate = st.fill * (0.08 + k * k * 1.6);
+    } else if (dist < st.near) {
+      rate = st.fill * 0.55;
+    }
+    if (this.playerSpeed > 4) rate *= st.run;
+    else if (this.playerSpeed < 0.5) rate *= 0.6;
+    s.suspicion = Math.min(1, s.suspicion + rate * dt);
+    if (rate > 0) { s.lookX = player.x; s.lookZ = player.z; }
+    return s.suspicion >= 1;
+  }
+
+  /**
+   * A noise: every camp guard within the radius who has not been told is
+   * told, and goes to see.
+   *
+   * @returns {number} how many heard it
+   */
+  hear(x, z, radius) {
+    let n = 0;
+    for (const s of this.active) {
+      if (!s.post || s.post.alert || s.civilian || s.health <= 0 || s.state === STATE.DYING) continue;
+      if (Math.hypot(s.x - x, s.z - z) > radius) continue;
+      s.suspicion = 1;
+      s.sentry = false;
+      s.lookX = x; s.lookZ = z;
+      s.targetX = x; s.targetZ = z;
+      s.state = STATE.ADVANCE;
+      s.stateTime = 0;
+      if (this.onSpot) this.onSpot(s, 'heard');
+      n++;
+    }
+    return n;
   }
 
   reset() {
@@ -347,6 +407,11 @@ export class Soldiers {
     // Being shot at from somewhere you had not looked is what turns a patrol
     // into a fight.
     if (s.state === STATE.PATROL) { s.state = STATE.ADVANCE; s.stateTime = 0; }
+    if (s.health > 0 && s.post && !s.post.alert && this.onSpot) {
+      s.suspicion = 1;
+      this.onSpot(s, 'hit');
+    }
+    if (s.health <= 0 && this.onDown) this.onDown(s);
     if (s.health <= 0) {
       // Whatever he was in the middle of, he is not doing it now. Without
       // this a man killed while he was still coming up out of the street
@@ -633,7 +698,18 @@ export class Soldiers {
             }
             speed = SPEC.walkSpeed * (s.post ? 0.6 : 1);
           }
-          if (s.canSee && dist < SPEC.sight) { s.state = STATE.ADVANCE; s.stateTime = 0; }
+          if (s.post && !s.post.alert) {
+            // A guard nobody has told: he has to notice you first, and while
+            // he is making up his mind he stops and looks.
+            if (s.canSee && dist < SPEC.sight && this._notice(s, dt, player, dist, dx, dz)) {
+              s.state = STATE.ADVANCE; s.stateTime = 0;
+              s.sentry = false;
+              if (this.onSpot) this.onSpot(s, 'seen');
+            } else if (!s.canSee) {
+              s.suspicion = Math.max(0, s.suspicion - dt * (this.stealth ? this.stealth.decay : 0.25));
+            }
+            if (s.suspicion > 0.3) speed = 0;
+          } else if (s.canSee && dist < SPEC.sight) { s.state = STATE.ADVANCE; s.stateTime = 0; }
           break;
         }
         case STATE.ADVANCE: {
@@ -669,8 +745,12 @@ export class Soldiers {
       this._move(s, dt, speed);
       // Face the way it matters: at you in a fight, where they are going
       // otherwise.
-      const fx = (s.state === STATE.FIGHT || s.state === STATE.ADVANCE) ? dx : (s.targetX - s.x);
-      const fz = (s.state === STATE.FIGHT || s.state === STATE.ADVANCE) ? dz : (s.targetZ - s.z);
+      // A guard making up his mind turns to where he thinks he saw you.
+      const wary = s.state === STATE.PATROL && s.post && s.suspicion > 0.3;
+      const fx = (s.state === STATE.FIGHT || s.state === STATE.ADVANCE) ? dx
+        : wary ? (s.lookX - s.x) : (s.targetX - s.x);
+      const fz = (s.state === STATE.FIGHT || s.state === STATE.ADVANCE) ? dz
+        : wary ? (s.lookZ - s.z) : (s.targetZ - s.z);
       if (Math.abs(fx) + Math.abs(fz) > 0.01) {
         const want = Math.atan2(-fx, -fz);
         let d = want - s.yaw;

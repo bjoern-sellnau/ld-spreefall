@@ -1599,3 +1599,4 @@ html, body {
 @media (max-width: 640px) {
   #ops { top: 8px; font-size: 9.5px; gap: 8px; letter-spacing: 0.06em; }
 }
+#ops i[data-level="wary"] { color: #ffc24a; }

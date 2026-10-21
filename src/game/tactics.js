@@ -11,6 +11,7 @@
 
 import { SITE } from './campaign.js';
 import { makeMachine } from './machines.js';
+import { CAMP_RADIO } from '../render/actors.js';
 
 export const TACTICS = {
   // Manned within this of you, stood down past this.
@@ -28,6 +29,26 @@ export const TACTICS = {
   post: 15,
   // How much of a camp's ring a guard can still be in and count as in it.
   radius: 16,
+  // How a guard who has not been told notices you: out to this range, inside
+  // this cone (the cosine of half its angle), anywhere within near, at this
+  // rate, slower to forget, and faster if you are running.
+  stealth: { range: 80, cone: 0.5, near: 3.2, fill: 1.0, decay: 0.2, run: 1.7 },
+  // Between a guard being sure and the siren going: kill him in that time and
+  // nobody else finds out.
+  spotDelay: 2.6,
+  // What makes a noise, and how far it carries to a guard.
+  noise: { shot: 130, explosion: 240 },
+  // A body is found by anybody within this who can see it.
+  bodySight: 30,
+  // The radio: how much it takes, how long after the alarm it calls for help,
+  // how many waves, how far apart, and how many in each.
+  radioHealth: 40,
+  callDelay: 9,
+  waves: 2,
+  waveGap: 38,
+  waveSize: 3,
+  // Walked away from with the alarm on: it stands down after this long.
+  forget: 40,
 };
 
 /**
@@ -68,6 +89,123 @@ export class Tactics {
     this.live = new Map();      // site id -> runtime state
     this.onFree = null;         // fn(site, points, run)
     this.onManned = null;       // fn(site, run)
+    this.onAlarm = null;        // fn(site, run) the siren starts
+    this.onSpotted = null;      // fn(site, run, guard, how) somebody is sure
+    this.onCall = null;         // fn(site, run, count) a wave of help is sent
+    this.onRadio = null;        // fn(site, run) the radio is in pieces
+    this.onBody = null;         // fn(site, run, finder) a body is found
+    soldiers.stealth = TACTICS.stealth;
+  }
+
+  /** The camp a guard belongs to, as its runtime record. */
+  campOf(s) {
+    if (!s || !s.post) return null;
+    return this.live.get(s.post.camp) || null;
+  }
+
+  /** A guard is sure: the camp starts counting down to its alarm. */
+  spot(s, how) {
+    const r = this.campOf(s);
+    if (!r || r.alarm || r.site.state === SITE.FREE) return;
+    if (!r.spotted) r.spotTimer = TACTICS.spotDelay;
+    r.spotted = true;
+    r.spotters.add(s);
+    if (this.onSpotted) this.onSpotted(r.site, r, s, how);
+  }
+
+  /**
+   * A guard is down. His mates who can see where he fell go to look, and
+   * that makes them more than halfway sure already.
+   */
+  guardDown(s) {
+    const r = this.campOf(s);
+    if (!r) return;
+    r.spotters.delete(s);
+    if (r.alarm) return;
+    let found = null;
+    for (const g of this.standing(r)) {
+      if (g === s || g.post.alert) continue;
+      const d = Math.hypot(g.x - s.x, g.z - s.z);
+      if (d > TACTICS.bodySight) continue;
+      if (!this.world.lineOfSight(g.x, g.y + 1.6, g.z, s.x, s.y + 0.6, s.z)) continue;
+      g.suspicion = Math.max(g.suspicion, 0.6);
+      g.sentry = false;
+      g.targetX = s.x; g.targetZ = s.z;
+      g.lookX = s.x; g.lookZ = s.z;
+      found = g;
+    }
+    if (found) { r.bodies++; if (this.onBody) this.onBody(r.site, r, found); }
+  }
+
+  /** The siren. Everybody in the camp knows, and the radio calls for help. */
+  raiseAlarm(r) {
+    if (r.alarm) return;
+    r.alarm = true;
+    r.alarmed = true;
+    r.alarmTime = 0;
+    r.waves = 0;
+    r.nextWave = TACTICS.callDelay;
+    for (const g of r.guards) {
+      if (!g.post) continue;
+      g.post.alert = true;
+      g.sentry = false;
+      g.suspicion = 1;
+      if (g.alive && g.health > 0 && g.state === 0) { g.state = 1; g.stateTime = 0; }
+    }
+    if (this.onAlarm) this.onAlarm(r.site, r);
+  }
+
+  /** Where a camp's radio is in the world, from its yaw. */
+  radioAt(site) {
+    const c = Math.cos(site.yaw), sn = Math.sin(site.yaw);
+    // The body shader turns a camp by rotY of the heading (it is handed the
+    // heading negated and negates it again), and rotY(a) takes (x, z) to
+    // (cos a x + sin a z, cos a z - sin a x).
+    const x = site.x + c * CAMP_RADIO.x + sn * CAMP_RADIO.z;
+    const z = site.z - sn * CAMP_RADIO.x + c * CAMP_RADIO.z;
+    return { x, y: this.world.groundHeight(site.x, site.z) + CAMP_RADIO.y, z };
+  }
+
+  /** Damage to whichever radio is within reach of a point. */
+  hitRadio(x, y, z, amount, reach = 0.6) {
+    for (const r of this.live.values()) {
+      if (!r.radioUp || r.site.state === SITE.FREE) continue;
+      const p = this.radioAt(r.site);
+      if (Math.hypot(p.x - x, p.y - y, p.z - z) > reach) continue;
+      r.radioHealth -= amount;
+      r.radioFlash = 1;
+      if (r.radioHealth <= 0) {
+        r.radioUp = false;
+        if (this.onRadio) this.onRadio(r.site, r);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** A shot along a segment: does it pass through a radio on the way? */
+  shotRadio(a, b, amount) {
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+    const len2 = dx * dx + dy * dy + dz * dz || 1;
+    for (const r of this.live.values()) {
+      if (!r.radioUp || r.site.state === SITE.FREE) continue;
+      const p = this.radioAt(r.site);
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy + (p.z - a.z) * dz) / len2));
+      const q = { x: a.x + dx * t, y: a.y + dy * t, z: a.z + dz * t };
+      if (Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) < 0.45) return this.hitRadio(p.x, p.y, p.z, amount, 0.01);
+    }
+    return false;
+  }
+
+  /** The most sure any guard in a camp within reach is, for the interface. */
+  wariest(px, pz, reach = 160) {
+    let most = 0;
+    for (const r of this.live.values()) {
+      if (!r.manned || r.alarm) continue;
+      if (Math.hypot(r.site.x - px, r.site.z - pz) > reach) continue;
+      for (const g of this.standing(r)) if (!g.post.alert) most = Math.max(most, g.suspicion || 0);
+    }
+    return most;
   }
 
   get enabled() { return this.campaign.mode === 'tactics'; }
@@ -76,8 +214,9 @@ export class Tactics {
   run(site) {
     let r = this.live.get(site.id);
     if (!r) {
-      r = { site, guards: [], manned: false, alarm: false, radioUp: true, radioFlash: 0,
-        spotted: false, alarmTime: 0, called: false };
+      r = { site, guards: [], manned: false, alarm: false, alarmed: false, radioUp: true,
+        radioHealth: TACTICS.radioHealth, radioFlash: 0, spotted: false, spotTimer: 0,
+        spotters: new Set(), alarmTime: 0, waves: 0, nextWave: 0, away: 0, bodies: 0 };
       this.live.set(site.id, r);
     }
     return r;
@@ -120,6 +259,12 @@ export class Tactics {
     }
     r.manned = true;
     r.spotted = false;
+    r.alarmed = false;
+    r.bodies = 0;
+    r.spotters.clear();
+    // A camp manned afresh has a working radio again.
+    r.radioUp = true;
+    r.radioHealth = TACTICS.radioHealth;
     if (this.onManned) this.onManned(s0, r);
   }
 
@@ -129,6 +274,10 @@ export class Tactics {
     }
     r.guards = [];
     r.manned = false;
+    r.alarm = false;
+    r.spotted = false;
+    r.spotters.clear();
+    r.away = 0;
   }
 
   /** The guards of a camp still standing. */
@@ -149,16 +298,46 @@ export class Tactics {
         if (d < TACTICS.populate && this.world.isLoaded(site.x, site.z)) this._man(r);
         continue;
       }
+      r.radioFlash = Math.max(0, r.radioFlash - dt * 4);
       // Walked away from before anybody knew you were there: it stands down
-      // and is manned in full when you come back.
-      if (d > TACTICS.depopulate && !r.alarm) {
-        this._standDown(r);
-        continue;
+      // and is manned in full when you come back. With the alarm on it waits
+      // a while first, in case you are coming straight back.
+      if (d > TACTICS.depopulate) {
+        r.away += dt;
+        if (!r.alarm || r.away > TACTICS.forget) { this._standDown(r); continue; }
+      } else {
+        r.away = 0;
       }
       if (r.guards.length && this.standing(r).length === 0) {
-        const pts = this.campaign.free(site, { quiet: !r.spotted && !r.alarm });
+        // No alarm ever sounded: that is the bonus. Seen but silenced in
+        // time still counts; the siren is what it is about.
+        const pts = this.campaign.free(site, { quiet: !r.alarmed });
         r.alarm = false;
         if (this.onFree) this.onFree(site, pts, r);
+        continue;
+      }
+      // Somebody is sure: unless every one who is sure goes down first, the
+      // siren goes.
+      if (r.spotted && !r.alarm) {
+        for (const g of [...r.spotters]) if (!g.alive || g.health <= 0 || g.state === 5) r.spotters.delete(g);
+        if (r.spotters.size === 0) {
+          r.spotted = false;
+        } else {
+          r.spotTimer -= dt;
+          if (r.spotTimer <= 0) this.raiseAlarm(r);
+        }
+      }
+      // The alarm is on and the radio works: help is called, in waves.
+      if (r.alarm) {
+        r.alarmTime += dt;
+        if (r.radioUp && r.waves < TACTICS.waves) {
+          r.nextWave -= dt;
+          if (r.nextWave <= 0) {
+            r.waves++;
+            r.nextWave = TACTICS.waveGap;
+            if (this.onCall) this.onCall(site, r, TACTICS.waveSize + (site.level || 0));
+          }
+        }
       }
     }
   }

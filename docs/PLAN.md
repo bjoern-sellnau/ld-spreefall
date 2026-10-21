@@ -3525,3 +3525,41 @@ So there are two cities now, and a profile picks which:
   highlight.
 - Checks: tools/test-ops.mjs (12), in CI after the interface suite.
   ops-01-camp.png, ops-02-camp-taken.png.
+
+## 81. Tactics: being seen, the alarm, the radio and the help it calls
+
+- A guard nobody has told has to notice you. Soldiers learnt suspicion, nought
+  to one: it fills only inside his cone of vision (60 degrees either side of
+  where he faces, out to 80 m), faster the nearer you are (squared), half as
+  fast standing still and 1.7 times as fast running, and within 3.2 m it
+  fills whichever way he faces; it drains while he cannot see you. Past 0.3
+  he stops and turns to where he thinks you are; at one he is sure. Measured:
+  behind a sentry at 12 m, nothing in five seconds; in front of him at 40 m,
+  half sure after 1.7 s and sure after 3.5 s.
+- Sure is not yet the alarm. The camp counts 2.6 s from the first guard who
+  is sure, and if every guard who is sure is dead by then nobody else finds
+  out. A guard who is shot and lives is sure at once. A rifle shot is heard
+  130 m off and an explosion 240 m (a suppressed weapon will carry a few
+  metres, phase 82): everybody who hears it is sure and comes to look. A
+  guard killed where his mates can see him (30 m, line of sight) leaves them
+  more than half sure and walking to the body.
+- The alarm: every guard in the camp is told, the siren on its pole turns
+  red and the siren is heard (two triangle tones a fourth apart, wailing up
+  and down, louder the nearer you are), and if the radio works, a wave of
+  help 9 s later and another 38 s after that, three men and one more a
+  level, coming up out of the street 45 to 95 m off and knowing where you
+  are; machines among them from level 2.
+- The radio: 40 points of it, on the table in the camp, hit by any shot whose
+  line passes within 0.45 m of it and by any blast that reaches it. Down, it
+  goes from the mesh and its shadow, sparks, and no more help is called.
+  A camp manned afresh has a working radio again.
+- The bonus is for no alarm, which is what was asked: seen and silenced in
+  time still counts. A camp taken after the alarm pays the base and its level.
+  A camp walked away from with the alarm on stands down after 40 s away.
+- The line at the top of the screen shows how seen you are (amber, the
+  wariest guard within 160 m), spotted, alarm, and whether the radio is down.
+- Checks (ops, 21 now): behind a sentry, in front of one, the alarm left to
+  run, the spotter killed in time, a rifle shot heard at 100 m, help with
+  the radio working, the radio shot to pieces in two rounds and no wave
+  after it, and the loud camp paying no bonus with the siren stopping.
+  ops-03-alarm.png.

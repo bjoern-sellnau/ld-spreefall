@@ -116,6 +116,8 @@ async function run() {
   // --- manned, stood down, taken ---------------------------------------------
   const manned = await page.evaluate(() => {
     const s = window.spreefall;
+    // Blind for now: this is about where they stand, not what they see.
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
     const site = s.campaign.allSites()[0];
     s.teleport(site.x + 40, site.z);
     for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
@@ -159,8 +161,14 @@ async function run() {
     const site = s.campaign.allSites()[0];
     const run = s.tactics.live.get(site.id);
     const before = s.campaign.book.score;
+    // Taken from out of sight in one go: the deaths are not seen by anybody.
+    for (const g of run.guards) { g.health = 1; }
+    const down = s.soldiers.onDown;
+    s.soldiers.onDown = null;
     for (const g of run.guards) s.soldiers.damage(g, 9999, { x: 1, y: 0, z: 0 });
+    s.soldiers.onDown = down;
     for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.soldiers.stealth = s.tacticsSpec.stealth;
     return { state: site.state, paid: s.campaign.book.score - before, quiet: s.campaign.book.quiet };
   });
   check('the last guard down takes the camp, and a quiet one pays the bonus',
@@ -189,6 +197,152 @@ async function run() {
   check('J opens the journal, with a row for the district', journal.open && journal.rows >= 1, journal.line);
   check('and it gives the camps back, harder', journal.back && journal.guards === manned.guards + 1,
     `${journal.guards} guards at level two`);
+
+  // --- being seen -------------------------------------------------------------
+  // A fresh camp at level one, nobody alerted, and you a long way off.
+  const fresh = () => page.evaluate(() => {
+    const s = window.spreefall;
+    s.tactics.clear();
+    s.campaign.reset({});
+    s.soldiers.reset();
+    s.projectiles.clear();
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 30, site.z + 30);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    return site.id;
+  });
+
+  const seen = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.tactics.clear();
+    s.campaign.reset({});
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 60, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    const g = run.guards.find((x) => x.sentry) || run.guards[0];
+    for (const o of run.guards) if (o !== g) s.soldiers._retire(o);
+    run.guards = [g];
+    g.sentry = true;
+    const hurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    // Behind him, twelve metres back, standing still: nothing.
+    const fx = -Math.sin(g.yaw), fz = -Math.cos(g.yaw);
+    const stand = (d) => {
+      const x = g.x + fx * d, z = g.z + fz * d;
+      s.teleport(x, z);
+      s.player.vx = 0; s.player.vz = 0;
+    };
+    stand(-12);
+    for (let i = 0; i < 300; i++) s.fixedForTest(1 / 60);
+    const behind = g.suspicion;
+    // In front of him, forty metres out: it builds, he stops, and then he is sure.
+    stand(40);
+    let half = -1, sure = -1;
+    for (let i = 0; i < 60 * 12 && sure < 0; i++) {
+      s.fixedForTest(1 / 60);
+      if (half < 0 && g.suspicion >= 0.5) half = i / 60;
+      if (run.spotted) sure = i / 60;
+    }
+    // Then, if he is not stopped, the alarm.
+    let alarm = -1;
+    for (let i = 0; i < 60 * 5 && alarm < 0; i++) {
+      s.fixedForTest(1 / 60);
+      if (run.alarm) alarm = i / 60;
+    }
+    s.combat.hurt = hurt;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return { behind: +behind.toFixed(2), half: +half.toFixed(1), sure: +sure.toFixed(1), alarm: +alarm.toFixed(1),
+      alertAll: run.guards.every((x) => x.post.alert), hud: document.getElementById('opsalert').textContent,
+      siren: s.tactics.drawList(s.player.x, s.player.z).some((c) => c.alarm) };
+  });
+  check('a sentry does not see you behind him', seen.behind === 0, `${seen.behind}`);
+  check('in front of him he takes a moment to be sure, then he is', seen.half > 0.3 && seen.sure > seen.half,
+    `half sure after ${seen.half} s, sure after ${seen.sure} s`);
+  check('and a guard left to it sounds the alarm', seen.alarm >= 0 && seen.alertAll && seen.siren,
+    `${seen.alarm} s later, ${seen.hud}`);
+
+  await fresh();
+  const silenced = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 60, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    const g = run.guards[0];
+    s.tactics.spot(g, 'seen');
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    s.soldiers.damage(g, 9999, { x: 1, y: 0, z: 0 });
+    for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    return { alarm: run.alarm, spotted: run.spotted };
+  });
+  check('kill the one who saw you before he gets to it and there is no alarm',
+    !silenced.alarm && !silenced.spotted);
+
+  await fresh();
+  const heard = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 100, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    s.weapon.select('m16');
+    s.weapon.cooldown = 0;
+    s.look(0, 40);
+    s.shoot();
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    return { spotted: run.spotted, heard: run.spotters.size };
+  });
+  check('a rifle shot a hundred metres off is heard in the camp', heard.spotted && heard.heard >= 2,
+    `${heard.heard} of them heard it`);
+
+  await fresh();
+  const radio = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 60, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    // The alarm with the radio working: help after the call delay.
+    s.tactics.raiseAlarm(run);
+    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 1); i++) s.fixedForTest(1 / 60);
+    const came = s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before;
+    // A shot straight through the radio, from three metres.
+    const p = s.tactics.radioAt(site);
+    const from = { x: p.x + 3, y: p.y, z: p.z };
+    let shots = 0;
+    while (run.radioUp && shots < 10) { s.tactics.shotRadio(from, { x: p.x - 3, y: p.y, z: p.z }, 34); shots++; }
+    const waves = run.waves;
+    for (let i = 0; i < 60 * (s.tacticsSpec.waveGap + 2); i++) s.fixedForTest(1 / 60);
+    return { came, down: !run.radioUp, shots, wavesAfter: run.waves, waves,
+      drawn: s.tactics.drawList(s.player.x, s.player.z).find((c) => Math.abs(c.x - site.x) < 1) };
+  });
+  check('with the alarm on and the radio working, help comes', radio.came >= 3, `${radio.came} reinforcements`);
+  check('the radio can be shot to pieces', radio.down && radio.shots === 2 && radio.drawn && radio.drawn.radioDown,
+    `${radio.shots} rounds`);
+  check('and once it is down nobody else is called', radio.wavesAfter === radio.waves, `${radio.waves} wave`);
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 30, site.z + 8);
+    s.look(70, -4);
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-03-alarm.png') });
+
+  const loud = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    const before = s.campaign.book.score;
+    for (const g of run.guards) s.soldiers.damage(g, 9999, { x: 1, y: 0, z: 0 });
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    return { state: site.state, paid: s.campaign.book.score - before, siren: run.alarm, level: site.level };
+  });
+  check('a camp taken after the alarm pays no bonus, and the siren stops',
+    loud.state === 1 && loud.paid === 1000 + 400 * loud.level && !loud.siren,
+    `+${loud.paid}`);
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

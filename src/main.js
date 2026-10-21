@@ -44,7 +44,7 @@ import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
-import { Tactics, campSpot } from './game/tactics.js';
+import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -597,7 +597,11 @@ async function main() {
       state.muzzle = 1;
       // Everybody within earshot who is not in this fight gets out of it.
       soldiers.scare(player.x, player.z, 70);
+      // And a camp guard within earshot comes to see. A suppressed weapon
+      // carries a few metres; everything else carries a long way.
+      if (tactics.enabled) soldiers.hear(player.x, player.z, spec.noise ?? TACTICS.noise.shot);
     }
+    if (tactics.enabled && shot.end && shot.from) tactics.shotRadio(shot.from, shot.end, spec.damage || 20);
     const m = muzzlePoint(shot.from);
     if (shot.end) {
       effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
@@ -639,6 +643,10 @@ async function main() {
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
     // Heard a great deal further than a rifle, and run from accordingly.
     soldiers.scare(x, z, Math.max(90, splash.radius * 3));
+    if (tactics.enabled) {
+      soldiers.hear(x, z, TACTICS.noise.explosion);
+      tactics.hitRadio(x, y, z, splash.damage || 50, splash.radius * 0.8 + 1);
+    }
     strikeField(x, y, z, splash.radius);
     if (splash.fusion) {
       // A mech's reactor: the warhead's code path at a fiftieth of the
@@ -1411,6 +1419,7 @@ async function main() {
    */
   mechs.onArmFire = (m, from, dir, arm, extra) => {
     audio.gunshot(arm.sound);
+    if (tactics.enabled && m.mine) soldiers.hear(from.x, from.z, TACTICS.noise.explosion);
     if (m === state.inMech) {
       effects.shake = Math.min(2.0, effects.shake + arm.shake);
       state.mechFlash = 1;
@@ -2270,6 +2279,7 @@ async function main() {
   // your face.
   vehicles.onFire = (v, gun) => {
     const m = vehicles.muzzle(v);
+    if (tactics.enabled) soldiers.hear(m.x, m.z, TACTICS.noise.explosion);
     // A tank fires where its gun is pointing, which is where the turret has
     // got to rather than where you are looking.
     const dir = v.spec.turret ? vehicles.gunDirection(v, camera.pitch) : {
@@ -4803,8 +4813,63 @@ async function main() {
         break;
       }
     }
-    if (campaign.mode === 'tactics') tactics.update(dt, player);
+    if (campaign.mode === 'tactics') {
+      soldiers.playerSpeed = Math.hypot(player.vx || 0, player.vz || 0);
+      tactics.update(dt, player);
+      // The siren, as loud as the nearest one that is going.
+      let level = 0;
+      for (const r of tactics.live.values()) {
+        if (!r.alarm) continue;
+        const d = Math.hypot(r.site.x - player.x, r.site.z - player.z);
+        level = Math.max(level, Math.max(0, 1 - d / 500));
+      }
+      audio.siren(level);
+    } else {
+      audio.siren(0);
+    }
   }
+
+  soldiers.onSpot = (s, how) => { if (tactics.enabled) tactics.spot(s, how); };
+  soldiers.onDown = (s) => { if (tactics.enabled) tactics.guardDown(s); };
+  tactics.onSpotted = (site, run, guard, how) => {
+    if (run.spotters.size === 1) {
+      audio.spotted();
+      feed(how === 'heard' ? '<i>they heard that</i>' : how === 'hit' ? '<i>he knows you are there</i>' : '<b>spotted</b>');
+    }
+  };
+  tactics.onBody = () => { feed('<i>they found a body</i>'); };
+  tactics.onAlarm = (site, run) => {
+    toast(run.radioUp ? 'alarm: they are calling for help' : 'alarm, but the radio is down');
+    feed(`<b>alarm</b> ${world.nameAt(site.x, site.z)}`);
+  };
+  tactics.onRadio = (site, run) => {
+    const p = tactics.radioAt(site);
+    effects.flash(p.x, p.y, p.z, 1.6, 1.0, 0.7, 0.4, 0.2);
+    for (let i = 0; i < 24; i++) {
+      effects.spark(p.x + (Math.random() - 0.5) * 0.6, p.y + Math.random() * 0.5,
+        p.z + (Math.random() - 0.5) * 0.6, 1.0, 0.75, 0.35);
+    }
+    audio.hitMarker(true);
+    feed(run.alarm ? '<b>radio down</b> nobody else is coming' : '<b>radio down</b>');
+    toast('radio destroyed');
+  };
+  tactics.onCall = (site, run, count) => {
+    // Help comes the way everybody arrives in this game: out of the street,
+    // in a sphere, from a little way off, and it knows where you are.
+    let n = 0;
+    for (let i = 0; i < count; i++) {
+      const s = soldiers.spawnNear(site.x, site.z, 45, 95);
+      if (!s) break;
+      s.state = 1;
+      s.reinforcement = site.id;
+      if ((site.level || 0) >= TACTICS.machinesFrom && i % 2 === 1) makeMachine(s);
+      n++;
+    }
+    if (n) {
+      feed(`<b>reinforcements</b> ${n} inbound`);
+      toast(`${n} reinforcements inbound`);
+    }
+  };
 
   tactics.onFree = (site, pts, run) => {
     const quiet = !run.spotted && !run.alarm;
@@ -4835,10 +4900,17 @@ async function main() {
     let alert = '';
     if (campaign.mode === 'tactics') {
       for (const r of tactics.live.values()) {
-        if (r.alarm && r.manned) { alert = r.radioUp ? 'alarm' : 'alarm, radio down'; break; }
+        if (!r.manned) continue;
+        if (r.alarm) { alert = r.radioUp ? 'alarm' : 'alarm, radio down'; break; }
+        if (r.spotted) alert = 'spotted';
+      }
+      if (!alert) {
+        const w = tactics.wariest(player.x, player.z);
+        if (w > 0.05) alert = `seen ${Math.round(w * 100)}%`;
       }
     }
     el.opsAlert.textContent = alert;
+    el.opsAlert.dataset.level = alert.startsWith('seen') ? 'wary' : alert ? 'alarm' : '';
   }
 
   /** The journal on J: every district in the operation and how it stands. */
@@ -6058,7 +6130,7 @@ async function main() {
     ion, ionSpec: ION, ionState: ION_STATE,
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
     storm, stormSpec: VOID_STORM,
-    campaign, tactics, opsStep: (dt) => opsStep(dt), opsPanel: (on) => toggleOpsPanel(on),
+    campaign, tactics, tacticsSpec: TACTICS, opsStep: (dt) => opsStep(dt), opsPanel: (on) => toggleOpsPanel(on),
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,

@@ -595,6 +595,75 @@ export class Audio {
    * faded when it comes up, because a flamethrower is a continuous sound and
    * retriggering a one shot sixty times a second is a buzz, not a roar.
    */
+  /**
+   * A camp's siren: two tones a fourth apart, wailing up and down over two
+   * seconds, the way a wind up siren on a pole sounds from a street away.
+   * Level is nought to one by distance; nought stops it.
+   */
+  siren(level) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    if (level > 0.001 && !this._siren) {
+      const out = ctx.createGain();
+      out.gain.value = 0.0001;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 2600;
+      lp.connect(out).connect(this.master);
+      const wail = ctx.createOscillator();
+      wail.type = 'sine';
+      wail.frequency.value = 0.5;
+      const oscs = [];
+      for (const [base, depth] of [[560, 260], [747, 346]]) {
+        const o = ctx.createOscillator();
+        o.type = 'triangle';
+        o.frequency.value = base;
+        const d = ctx.createGain();
+        d.gain.value = depth;
+        wail.connect(d).connect(o.frequency);
+        const g = ctx.createGain();
+        g.gain.value = 0.5;
+        o.connect(g).connect(lp);
+        o.start();
+        oscs.push(o);
+      }
+      wail.start();
+      this._siren = { out, wail, oscs };
+    }
+    if (!this._siren) return;
+    const t = ctx.currentTime;
+    this._siren.out.gain.setTargetAtTime(Math.max(0.0001, level * 0.16), t, 0.25);
+    if (level <= 0.001) {
+      const s = this._siren;
+      this._siren = null;
+      setTimeout(() => {
+        try { s.wail.stop(); for (const o of s.oscs) o.stop(); s.out.disconnect(); } catch { /* gone */ }
+      }, 1500);
+    }
+  }
+
+  /** Somebody in a camp is sure of you: a short rising sting, high and thin. */
+  spotted() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(420, t);
+    o.frequency.exponentialRampToValueAtTime(1300, t + 0.35);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 1100;
+    f.Q.value = 2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    o.connect(f).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.55);
+  }
+
   flameLoop(on) {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) {
