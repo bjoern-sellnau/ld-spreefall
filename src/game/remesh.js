@@ -90,10 +90,23 @@ export function holeInWall(world, x, y, z, radius) {
  *
  * @returns {number[]} the tiles that changed
  */
-export function fineWalls(world, x, z, radius, edge = 3.5) {
+export function fineWalls(world, x, z, radius, edge = 3.5, inner = 0) {
   return overTiles(world, x, z, radius, (index) => reworkTile(world, index, {
-    cx: x, cy: 0, cz: z, radius, edge, ground: false, drop: false, tall: true,
+    cx: x, cy: 0, cz: z, radius, edge, ground: false, drop: false, tall: true, inner,
   }));
+}
+
+/**
+ * The same, a tile at a time, for a site too big to cut in one frame: the
+ * tiles it reaches, and a function that cuts one of them.
+ *
+ * @returns {{tiles: number[], cut: (index:number) => boolean}}
+ */
+export function fineWallsByTile(world, x, z, radius, edge = 3.5, inner = 0) {
+  const tiles = [];
+  overTiles(world, x, z, radius, (index) => { tiles.push(index); return false; });
+  const o = { cx: x, cy: 0, cz: z, radius, edge, ground: false, drop: false, tall: true, inner };
+  return { tiles, cut: (index) => reworkTile(world, index, o) };
 }
 
 /** The width of a column, which src/shaders/world.js breaks a building by. */
@@ -155,8 +168,12 @@ function columnCut(o, kept, pos, verts, isGround) {
     // the circle was left whole while the corners of it inside came down,
     // and that piece was a spike from the ground to the roof: one in ten of
     // the walls round a frontage hit by six shells.
+    const from = Math.hypot(mx - cx, mz - cz);
+    // And a piece well inside a ring that has already been cut, or that the
+    // middle of a warhead takes down whole whatever it is cut into, is left
+    // as it is: see `inner`.
     if (isGround(a) || isGround(b) || isGround(c)
-      || Math.hypot(mx - cx, mz - cz) > radius + COLUMN * 2) {
+      || from > radius + COLUMN * 2 || (o.inner > 0 && from < o.inner - COLUMN * 2)) {
       out.push(a, b, c);
       continue;
     }
@@ -362,6 +379,11 @@ function reworkTile(world, index, o) {
     if (!mine || !overlaps(a, b, c)) {
       kept.push(a, b, c);
       continue;
+    }
+    // Wholly inside a ring that is not to be worked again.
+    if (o.inner > 0) {
+      const far = Math.max(...[a, b, c].map((v) => Math.hypot(pos[v][0] - cx, pos[v][2] - cz)));
+      if (far < o.inner - COLUMN * 2) { kept.push(a, b, c); continue; }
     }
     split(a, b, c, 0);
   }

@@ -3935,3 +3935,34 @@ So there are two cities now, and a profile picks which:
   forty per cent; back, the shield is in the hand and the world at full
   speed.
 
+## 96. Nothing left hanging in the air after a collapse
+
+- A building comes down by four metre columns of the world, and a piece of
+  it whose corners stand in different columns, where one column came down
+  and the next stood, is pulled between them: a slab of roof or wall hanging
+  in the air. The pieces are cut on the column lines before anything moves
+  (remesh.js), and two kinds of site were not being cut where they needed to
+  be:
+  - A site grows when the next shell lands beside it, and it was cut only
+    the first time. The ring it grew into was left in whole pieces. Now each
+    time it grows the new ring is cut as well (`finedRadius`).
+  - A site over seventy metres, a warhead's, was never cut at all, for the
+    cost, and even its middle does not come down whole: some columns stand a
+    storey or two while their neighbours go. Now it is cut too, coarser, and
+    a few tiles a frame within eight milliseconds, so the third of a second
+    it takes is spread over a few frames while it falls over seconds.
+- And the cornice and the string course on a frontage stand up to 26 cm
+  proud of the wall, which near a column line put them in the next column:
+  the wall came down and the band stayed. A band now stands out only as far
+  as its wall's column goes at each end (tools/geometry.mjs, `inColumn`).
+  Mitte is rebuilt with it; the others are rebuilt by the pages workflow.
+- Measured from the tile bytes before and after, counting a piece with one
+  corner that barely moved and still stands more than two metres up while
+  another fell more than three: a warhead left 75 of them before and none
+  now; shells landing beside each other left one before and none now.
+- Checks (city, 89 now): both of those, the warhead cut over more than one
+  frame. Unit (91 now): a point moves out only as far as its own column goes,
+  and every corner of a band is in the column of the wall behind it, for
+  four hundred buildings at random places and turns. The wall hole check now
+  clears the scorch mark ring first, since it reads the first mark in it.
+

@@ -32,7 +32,7 @@ import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
 import { bakeCrush } from './game/bake.js';
-import { fineGround, fineWalls, holeInWall } from './game/remesh.js';
+import { fineGround, fineWalls, fineWallsByTile, holeInWall } from './game/remesh.js';
 import { Demolition, DEMO, bite, craterAt } from './game/demolition.js';
 import { Travel, TRAVEL } from './game/travel.js';
 import { Cinema, CINEMA } from './game/cinema.js';
@@ -2096,11 +2096,52 @@ async function main() {
    * district that size into storeys is a second's work for nothing.
    */
   function refineSite(site) {
-    if (site.fined || site.walls === false) return;
-    site.fined = true;
-    if (site.radius > 70) return;
+    if (site.walls === false) return;
+    // Cut as far out as the site now reaches. A site grows when the next
+    // shell lands beside it, and it used to be cut only the first time: the
+    // ring it grew into was left in whole pieces, a roof or a wall whose
+    // corners stood in different columns, and where one column came down
+    // and the next stood the piece hung between them as a slab in the air.
+    // So each time it grows, the new ring is cut as well.
+    const want = site.radius * 1.05;
+    const done = site.finedRadius || 0;
+    if (want <= done + 0.5) return;
     const edge = Math.max(2.5, Math.min(4.5, site.radius / 7));
-    const changed = fineWalls(world, site.x, site.z, site.radius * 1.05, edge);
+    // A warhead's site is cut as well, coarser. It was never cut at all, for
+    // the cost, and even its middle does not come down whole: some columns
+    // stand to a storey or two while their neighbours go, and an uncut roof
+    // across them hung from the ones still standing. A third of a second
+    // once, against the warhead itself.
+    const inner = done > 0 ? done : 0;
+    site.finedRadius = want;
+    if (site.radius > 70) {
+      // A warhead's worth is cut a tile at a time over the next frames, so
+      // the third of a second it takes does not land in one of them. It
+      // falls over seconds, so the cut is done well before much has moved.
+      const job = fineWallsByTile(world, site.x, site.z, want, 4.5, inner);
+      refineJobs.push({ ...job, at: 0 });
+      return;
+    }
+    const t0 = performance.now();
+    const changed = fineWalls(world, site.x, site.z, want, edge, inner);
+    state.refineMs = performance.now() - t0;
+    if (changed.length) tiles.refresh(changed);
+  }
+
+  // The big cuts in progress, and a few milliseconds of them a frame.
+  const refineJobs = [];
+  const REFINE_BUDGET_MS = 8;
+  function refineStep() {
+    if (!refineJobs.length) return;
+    const t0 = performance.now();
+    const changed = [];
+    while (refineJobs.length && performance.now() - t0 < REFINE_BUDGET_MS) {
+      const job = refineJobs[0];
+      if (job.at >= job.tiles.length) { refineJobs.shift(); continue; }
+      const index = job.tiles[job.at++];
+      if (job.cut(index)) changed.push(index);
+    }
+    state.refineMs = (state.refineMs || 0) + (performance.now() - t0);
     if (changed.length) tiles.refresh(changed);
   }
 
@@ -6412,6 +6453,7 @@ async function main() {
       updateReactors(worldDt);
       warlordStep(worldDt);
       memorialStep();
+      refineStep();
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -6606,6 +6648,7 @@ async function main() {
     updateReactors(worldDt);
     warlordStep(worldDt);
     memorialStep();
+    refineStep();
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -7171,6 +7214,7 @@ async function main() {
     compassBar, setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
+    refineJobs, refineStep: () => refineStep(),
     bloodRain, gushes,
     poisonClouds, burningCount: () => burning.length,
     vehicles, vehicleSpec: VEHICLE,
