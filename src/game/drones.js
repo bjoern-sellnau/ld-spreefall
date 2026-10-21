@@ -40,12 +40,14 @@ export class Drone {
     this.deathTime = 0;
     this.hitFlash = 0;
     this.tier = tier;
+    // Slayer's floating demon is a drone with this set.
+    this.demon = null;
     return this;
   }
 
-  get radius() { return 0.85; }
-  /** The small bright core. Hitting it counts double. */
-  get coreRadius() { return 0.34; }
+  get radius() { return this.demon ? 1.5 : 0.85; }
+  /** The small bright core, or the gazer's eye. Hitting it counts double. */
+  get coreRadius() { return this.demon ? 0.55 : 0.34; }
 }
 
 export class Drones {

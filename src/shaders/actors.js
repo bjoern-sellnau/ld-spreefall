@@ -63,6 +63,24 @@ void main() {
     nrm = t * nrm;
     part = part < 45.5 ? 31.0 : (part < 46.5 ? 8.0 : 2.0);
   }
+  // A camp's three switches, in the rotor channel: taken, radio down, alarm.
+  if (part > 63.5 && part < 72.5) {
+    int st = int(iState.w + 0.5);
+    if ((st & 2) != 0 && part > 66.5 && part < 69.5) p = vec3(6.5, -0.5, -5.0);
+    if ((st & 1) != 0 && part > 70.5 && part < 71.5) part = 73.0;
+    if ((st & 4) != 0 && part > 71.5) part = 74.0;
+  }
+  // A nest: dead, it slumps and its heart goes dark; awake, the heart beats.
+  if (part > 74.5 && part < 77.5) {
+    int st = int(iState.w + 0.5);
+    if ((st & 1) != 0) {
+      p.y *= 0.3;
+      if (part > 76.5) part = 78.0;
+    } else if ((st & 2) != 0 && part > 76.5) {
+      part = 79.0;
+      p *= 1.0 + 0.08 * max(0.0, sin(uCamPos.w * 7.0));
+    }
+  }
   mat3 body = rotY(-iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
@@ -345,6 +363,122 @@ void main() {
     albedo = vec3(0.12, 0.125, 0.13);
     rough = 0.5;
     metal = 0.5;
+  } else if (vPart > 39.5 && vPart < 42.5) {
+    // A demon: hide, horn and eyes. Which demon is in the machine channel:
+    // nought for the floating one, two the ghoul, three the brute, four the
+    // tyrant, whose cracks have fire in them.
+    int kind = int(vMachine + 0.5);
+    float v = vnoise(vWorld.xz * 4.0 + vWorld.y * 3.0);
+    float vein = smoothstep(0.66, 0.71, vnoise(vec2(vWorld.x + vWorld.z, vWorld.y) * 9.0))
+      * smoothstep(0.35, 0.6, vnoise(vec2(vWorld.x - vWorld.z, vWorld.y) * 2.0));
+    rough = 0.7;
+    metal = 0.05;
+    if (vPart < 40.5) {
+      vec3 hide = kind == 3 ? vec3(0.50, 0.16, 0.14)
+        : (kind == 4 ? vec3(0.07, 0.05, 0.045)
+        : (kind == 2 ? vec3(0.30, 0.17, 0.09) : vec3(0.42, 0.10, 0.07)));
+      albedo = hide * (0.75 + 0.45 * v);
+      if (kind == 4) emissive = vec3(2.6, 0.55, 0.05) * vein;
+      else albedo *= 1.0 - 0.35 * vein;
+    } else if (vPart < 41.5) {
+      albedo = vec3(0.10, 0.085, 0.07) * (0.8 + 0.3 * v);
+      rough = 0.4;
+      metal = 0.1;
+    } else {
+      albedo = vec3(0.05);
+      emissive = kind == 0 ? vec3(3.2, 1.6, 0.1) : vec3(3.4, 1.2, 0.05);
+      rough = 0.2;
+    }
+    // Reeling: it glows from inside, which is the cue to finish it.
+    emissive += vec3(1.4, 0.55, 0.08) * vStun * (0.6 + 0.4 * sin(uCamPos.w * 12.0));
+  } else if (vPart > 79.5 && vPart < 84.5) {
+    // The Warlord: near black hide with fire in its cracks, horn, the iron
+    // bolted to it, and the heart and eyes, which are what to shoot.
+    int k = int(vPart + 0.5);
+    float v = vnoise(vWorld.xz * 1.6 + vWorld.y * 1.3);
+    float crack = smoothstep(0.72, 0.76, vnoise(vec2(vWorld.x + vWorld.z, vWorld.y) * 7.0))
+      * smoothstep(0.45, 0.7, vnoise(vec2(vWorld.x - vWorld.z, vWorld.y) * 1.3));
+    rough = 0.72;
+    metal = 0.05;
+    if (k == 80) {
+      albedo = vec3(0.075, 0.045, 0.038) * (0.7 + 0.5 * v);
+      emissive = vec3(1.7, 0.3, 0.03) * crack * (0.75 + 0.25 * sin(uCamPos.w * 1.7 + vWorld.y));
+    } else if (k == 81) {
+      albedo = vec3(0.16, 0.13, 0.10) * (0.8 + 0.3 * v);
+      rough = 0.45;
+    } else if (k == 83) {
+      float band = smoothstep(0.0, 0.03, abs(fract(vWorld.y * 2.5) - 0.5) * 0.3);
+      albedo = vec3(0.06, 0.058, 0.055) * (0.75 + 0.35 * band + 0.2 * v);
+      rough = 0.5;
+      metal = 0.8;
+    } else {
+      albedo = vec3(0.08, 0.01, 0.005);
+      float rate = k == 84 ? 9.0 : 4.0;
+      float pulse = 0.6 + 0.4 * sin(uCamPos.w * rate);
+      emissive = (k == 84 ? vec3(5.4, 0.55, 0.04) : vec3(4.0, 0.45, 0.04)) * pulse;
+      rough = 0.2;
+    }
+  } else if (vPart > 74.5 && vPart < 79.5) {
+    // A nest: flesh with red running in it, bone, and the heart.
+    int k = int(vPart + 0.5);
+    float v = vnoise(vWorld.xz * 2.3 + vWorld.y * 1.9);
+    float vein = smoothstep(0.62, 0.7, vnoise(vWorld.xz * 6.0 + vWorld.y * 4.0));
+    rough = 0.55;
+    metal = 0.02;
+    if (k == 75) {
+      albedo = vec3(0.30, 0.06, 0.05) * (0.7 + 0.5 * v);
+      emissive = vec3(1.4, 0.08, 0.02) * vein * (0.6 + 0.4 * sin(uCamPos.w * 2.0));
+    } else if (k == 76) {
+      albedo = vec3(0.58, 0.52, 0.42) * (0.8 + 0.3 * v);
+      rough = 0.6;
+    } else if (k == 77) {
+      albedo = vec3(0.1, 0.01, 0.01);
+      emissive = vec3(2.6, 0.32, 0.04) * (0.7 + 0.3 * sin(uCamPos.w * 2.5));
+    } else if (k == 78) {
+      albedo = vec3(0.07, 0.03, 0.025);
+      rough = 0.9;
+    } else {
+      albedo = vec3(0.1, 0.01, 0.01);
+      emissive = vec3(4.2, 0.5, 0.05) * (0.55 + 0.45 * sin(uCamPos.w * 7.0));
+    }
+  } else if (vPart > 63.5 && vPart < 74.5) {
+    // A camp. Sandbags, canvas, crates, the radio and its mast, poles, the
+    // flag in their red or, once the camp is yours, in blue, and the siren.
+    int k = int(vPart + 0.5);
+    float v = vnoise(vWorld.xz * 3.1 + vWorld.y * 2.3);
+    rough = 0.9;
+    metal = 0.02;
+    if (k == 64) albedo = vec3(0.40, 0.35, 0.24) * (0.8 + 0.35 * v);
+    else if (k == 65) albedo = vec3(0.20, 0.22, 0.14) * (0.85 + 0.3 * v);
+    else if (k == 66) {
+      float plank = smoothstep(0.42, 0.5, abs(fract(vWorld.y * 3.0 + vWorld.x * 0.2) - 0.5));
+      albedo = vec3(0.34, 0.23, 0.12) * (0.75 + 0.3 * v) * (1.0 - 0.35 * plank);
+    } else if (k == 67) {
+      albedo = vec3(0.10, 0.12, 0.085);
+      emissive = vec3(0.1, 0.9, 0.25) * 0.5 * step(0.55, fract(vWorld.y * 9.0));
+      rough = 0.6; metal = 0.3;
+    } else if (k == 68 || k == 70) {
+      albedo = vec3(0.30, 0.31, 0.32);
+      rough = 0.45; metal = 0.7;
+    } else if (k == 69) {
+      albedo = vec3(0.05);
+      emissive = vec3(3.0, 0.08, 0.04) * step(0.5, fract(uCamPos.w * 0.9));
+    } else if (k == 71) {
+      albedo = vec3(0.55, 0.05, 0.04) * (0.85 + 0.3 * v);
+    } else if (k == 73) {
+      albedo = vec3(0.06, 0.20, 0.62) * (0.85 + 0.3 * v);
+    } else if (k == 72) {
+      albedo = vec3(0.30, 0.20, 0.05);
+      emissive = vec3(0.35, 0.18, 0.02);
+      rough = 0.4;
+    } else {
+      // The siren while the alarm is on: a red that turns, which is what a
+      // rotating beacon looks like from a hundred metres.
+      albedo = vec3(0.1, 0.01, 0.01);
+      float turn = 0.5 + 0.5 * sin(uCamPos.w * 9.0 + atan(vNormal.z, vNormal.x) * 1.0);
+      emissive = vec3(4.0, 0.12, 0.04) * (0.25 + 0.75 * turn);
+      rough = 0.3;
+    }
   } else if (vPart > 47.5 && vPart < 48.5) {
     // Blast plasma: the hard kind, which does not bounce and does ten times
     // the harm, and burns a very bright orange rather than cyan so you know
@@ -409,7 +543,7 @@ void main() {
   // A machine is the same skeleton in steel: cold, a little shiny along the
   // bones, with one red eye in the skull. Stunned, the eye goes out and the
   // steel picks up the blue of whatever hit it.
-  if (vMachine > 0.5) {
+  if (vMachine > 0.5 && vMachine < 1.5) {
     float sheen = pow(clamp(dot(normalize(vNormal), normalize(vec3(0.3, 0.9, 0.2))), 0.0, 1.0), 3.0);
     colour = mix(vec3(0.085, 0.092, 0.105), vec3(0.42, 0.46, 0.52), sheen);
     // The skull, part 23, carries the eye: a red that is bright from the
@@ -588,7 +722,12 @@ void main() {
   // Parts 26 and 27 are the beam rifle, and only a machine carries one. A
   // soldier burnt to the skeleton by the ion cannon is still a dead man, not
   // a machine, and does not stand there holding a gun he never had.
-  if (aInfo.x > 25.5) keep = iExtra.y;
+  float kind = iExtra.y;
+  bool demon = kind > 1.5;
+  if (aInfo.x > 25.5 && aInfo.x < 27.5) keep = (kind > 0.5 && kind < 1.5) ? 1.0 : 0.0;
+  // A demon's horns, and no rifle in its hands.
+  if (aInfo.x > 28.5 && aInfo.x < 29.5) keep = demon ? 1.0 - charred : 0.0;
+  if (demon && aInfo.x > 6.5 && aInfo.x < 7.5) keep = 0.0;
   // Somebody on his way to work carries no rifle and wears no helmet. Both
   // shrink into the figure the same way the cloth does on a man who burns,
   // which costs nothing: the parts are in the mesh either way.
@@ -622,6 +761,11 @@ void main() {
     n = r * n;
   }
 
+  // A demon is drawn bigger than a man: a ghoul a little, a brute by two
+  // thirds, the tyrant three and a half times over.
+  float size = kind > 3.5 ? 3.5 : (kind > 2.5 ? 1.65 : (kind > 1.5 ? 1.08 : 1.0));
+  p *= size;
+
   // The fall: rotate the whole body about the feet. This is death, and it is
   // also what a banana does to you. The roll is zero unless the ragdoll cheat
   // is on, and then it carries whichever way the hit turned them, which is the
@@ -634,7 +778,17 @@ void main() {
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
   vNormal = normalize(body * n);
-  vPart = aInfo.x;
+  // A demon is the same body in hide and horn: cloth and webbing become
+  // hide, the helmet horn, and the visor a pair of eyes.
+  float part = aInfo.x;
+  if (demon) {
+    if ((part > 3.5 && part < 4.5) || (part > 5.5 && part < 6.5)) part = 40.0;
+    else if (part > 4.5 && part < 5.5) {
+      bool visor = aPos.z < -0.11 && abs(aPos.x) < 0.125 && aPos.y < 1.64;
+      part = visor ? 42.0 : 41.0;
+    } else if (part > 28.5 && part < 29.5) part = 41.0;
+  }
+  vPart = part;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);
@@ -731,6 +885,8 @@ void main() {
   // yours carries its own colour, and red where yours has its trim.
   if (iExtra.x < 0.5 && aInfo.x > 49.5 && aInfo.x < 59.5) vPart = 60.0;
   if (iExtra.x < 0.5 && aInfo.x > 60.5 && aInfo.x < 61.5) vPart = 62.0;
+  // The Warlord's heart and eyes burn hotter once it is angry.
+  if (aInfo.x > 81.5 && aInfo.x < 82.5 && iExtra.w > 0.5) vPart = 84.0;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);
@@ -752,6 +908,8 @@ void main() {
     vec3 ring = vec3(0.0, 0.0, 0.3);
     p = ring + mat3(tc, 0.0, -ts, 0.0, 1.0, 0.0, ts, 0.0, tc) * (p - ring);
   }
+  // A camp's radio, once it is in pieces, casts nothing.
+  if (aInfo.x > 66.5 && aInfo.x < 69.5 && (int(iState.w + 0.5) & 2) != 0) p = vec3(6.5, -0.5, -5.0);
   float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
   gl_Position = uLightViewProj * vec4(rot * p + iPosYaw.xyz, 1.0);
@@ -770,6 +928,7 @@ precision highp float;
 layout(location = 0) in vec3 aPos;
 layout(location = 5) in vec4 iPosYaw;
 layout(location = 6) in vec4 iState;
+layout(location = 7) in vec4 iExtra;
 uniform mat4 uLightViewProj;
 void main() {
   float fc = cos(-iState.x), fs = sin(-iState.x);
@@ -778,7 +937,10 @@ void main() {
   mat3 fall = mat3(rc, rs, 0.0, -rs, rc, 0.0, 0.0, 0.0, 1.0) * pitch;
   float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
-  gl_Position = uLightViewProj * vec4(rot * (fall * aPos) + iPosYaw.xyz, 1.0);
+  // A demon's shadow is as big as the demon.
+  float kind = iExtra.y;
+  float size = kind > 3.5 ? 3.5 : (kind > 2.5 ? 1.65 : (kind > 1.5 ? 1.08 : 1.0));
+  gl_Position = uLightViewProj * vec4(rot * (fall * (aPos * size)) + iPosYaw.xyz, 1.0);
 }
 `;
 

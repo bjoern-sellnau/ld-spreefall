@@ -170,6 +170,23 @@ export const CHASSIS = [
   },
 ];
 
+/**
+ * Slayer's great boss, the Warlord, as a chassis: it walks and turns and is
+ * hit like a mech, so it is built like one, but it is nobody's to choose and
+ * it is not in the list above. Nine metres of goat legged demon with a rocket
+ * launcher where its right forearm should be, a pod of rockets on its left
+ * shoulder, and its heart behind a gap in the plates on its chest.
+ */
+export const WARLORD = {
+  id: 'warlord', name: 'Warlord', role: 'the end of the operation',
+  hip: 4.4, gait: 'biped', hipZ: 0,
+  height: 9.2, radius: 2.7, eye: 8.2, cockpit: 2, chase: 20, chaseUp: 11,
+  muzzle: { chaingun: [2.55, 6.2, -3.4], rockets: [-2.0, 8.4, -0.6] },
+  paint: 0, arm: 'chaingun', loadout: ['chaingun'],
+  // In the body's own coordinates: where the heart is and how big.
+  heart: [0, 6.5, -1.45, 0.75],
+};
+
 /** The chassis by id, or the first one for anything it does not know. */
 export function chassisById(id) {
   return CHASSIS.find((c) => c.id === id) || CHASSIS[0];

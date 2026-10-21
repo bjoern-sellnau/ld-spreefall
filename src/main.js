@@ -43,6 +43,10 @@ import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
+import { Campaign, OPS, SITE } from './game/campaign.js';
+import { Tactics, TACTICS, campSpot } from './game/tactics.js';
+import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
+import { Slayer, SLAYER } from './game/slayer.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -75,6 +79,13 @@ const el = {
   crossFill: $('crossfill'), crossHint: $('crosshint'),
   crossSightLine: $('crosssightline'), crossSight: $('crosssight'),
   modeNote: $('modenote'), timePick: $('timepick'),
+  opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
+  opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
+  opsProgress: $('opsprogress'), opsWipe: $('opswipe'),
+  bossbar: $('bossbar'), bossName: $('bossname'), bossFill: $('bossfill'),
+  ops: $('ops'), opsTitle: $('opstitle'), opsLine: $('opsline'), opsAlert: $('opsalert'),
+  opsPanel: $('opspanel'), opsPanelTitle: $('opspaneltitle'), opsPanelLine: $('opspanelline'),
+  opsList: $('opslist'), opsReset: $('opsreset'), opsHarder: $('opsharder'), opsClose: $('opsclose'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
   cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'),
@@ -86,7 +97,7 @@ const el = {
   vehicleRockStat: $('vehiclerockstat'), vehicleRock: $('vehiclerock'),
   vehicleDashStat: $('vehicledashstat'), vehicleDash: $('vehicledash'),
   vehicleWarn: $('vehiclewarn'),
-  rideHint: $('ridehint'), rideHintName: $('ridehintname'),
+  rideHint: $('ridehint'), rideHintName: $('ridehintname'), scope: $('scope'),
   titanfall: $('titanfall'), titanfallSub: $('titanfallsub'),
   mechHud: $('mechhud'), mechArms: $('mecharms'), mechCharge: $('mechcharge'),
   mechName: $('mechname'),
@@ -328,6 +339,10 @@ async function main() {
   const ion = new Ion(world);
   const ultra = new Ultra(world);
   const healthBars = new HealthBars(document.getElementById('healthbars'));
+  // Operations: the campaign book that Tactics and Slayer keep, and the part
+  // of Tactics that runs, which mans the camps near you out of the soldiers.
+  const campaign = new Campaign();
+  const tactics = new Tactics(campaign, world, soldiers);
   const storm = new Ultra(world, null, VOID_STORM);
   const vehicles = new Vehicles(world);
   const mechs = new Mechs(world);
@@ -585,7 +600,11 @@ async function main() {
       state.muzzle = 1;
       // Everybody within earshot who is not in this fight gets out of it.
       soldiers.scare(player.x, player.z, 70);
+      // And a camp guard within earshot comes to see. A suppressed weapon
+      // carries a few metres; everything else carries a long way.
+      if (tactics.enabled) soldiers.hear(player.x, player.z, spec.noise ?? TACTICS.noise.shot);
     }
+    if (tactics.enabled && shot.end && shot.from) tactics.shotRadio(shot.from, shot.end, spec.damage || 20);
     const m = muzzlePoint(shot.from);
     if (shot.end) {
       effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
@@ -627,6 +646,10 @@ async function main() {
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
     // Heard a great deal further than a rifle, and run from accordingly.
     soldiers.scare(x, z, Math.max(90, splash.radius * 3));
+    if (tactics.enabled) {
+      soldiers.hear(x, z, TACTICS.noise.explosion);
+      tactics.hitRadio(x, y, z, splash.damage || 50, splash.radius * 0.8 + 1);
+    }
     strikeField(x, y, z, splash.radius);
     if (splash.fusion) {
       // A mech's reactor: the warhead's code path at a fiftieth of the
@@ -877,7 +900,14 @@ async function main() {
       const dmg = splash.damage * (1 - r / (splash.radius * 1.3));
       // Its own salvo does not take its own legs off.
       if (mk === state.inMech && body && body.weapon === 'mech') continue;
-      if (mechs.damage(mk, dmg)) { creditTarget(mk, false, 'mech'); killed++; }
+      // Nor the Warlord's its own.
+      if (mk.spec.boss && body && body.weapon === 'warlord') continue;
+      // One with a heart takes a blast in full only when it goes off at the heart.
+      const atHeart = !mk.spec.heart || (() => {
+        const h = mechs.heart(mk);
+        return Math.hypot(h.x - x, h.y - by, h.z - z) < Math.max(3, splash.radius * 0.4);
+      })();
+      if (mechs.damage(mk, dmg, atHeart)) { creditTarget(mk, false, 'mech'); killed++; }
     }
     for (const v of [...vehicles.active]) {
       if (v.health <= 0) continue;
@@ -1172,7 +1202,13 @@ async function main() {
     // A body that came apart does not also catch fire.
     if (!target.gibbed) effects.explode(target.x, target.y, target.z);
     audio.droneDown();
-    const name = kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
+    const name = target.demon ? (DEMON[target.demon] ? DEMON[target.demon].name : GAZER.name).toLowerCase()
+      : kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
+    // In Slayer every demon is worth its points in the campaign as well.
+    if (target.demon && campaign.mode === 'slayer') {
+      campaign.book.score += DEMON[target.demon] ? DEMON[target.demon].points : GAZER.points;
+      campaign.save();
+    }
     feed(`<b>${name} down</b> ${Math.round(dist)} m${core ? ' <i>core</i>' : ''}`);
     // The last kill, in slow motion. It fires on the kill that emptied the
     // ground around you, and on no other: a flourish on every kill is not a
@@ -1292,7 +1328,7 @@ async function main() {
       projectiles.launch('rocket', {
         x: from.x, y: from.y, z: from.z,
         vx: d.x * gun.speed, vy: d.y * gun.speed, vz: d.z * gun.speed,
-        splash: gun.splash, weapon: 'reaper',
+        splash: gun.splash, weapon: m.spec.boss ? 'warlord' : 'reaper',
       });
       effects.flash(from.x, from.y, from.z, 2.8, 1.0, 0.6, 0.3, 0.08);
     },
@@ -1399,6 +1435,7 @@ async function main() {
    */
   mechs.onArmFire = (m, from, dir, arm, extra) => {
     audio.gunshot(arm.sound);
+    if (tactics.enabled && m.mine) soldiers.hear(from.x, from.z, TACTICS.noise.explosion);
     if (m === state.inMech) {
       effects.shake = Math.min(2.0, effects.shake + arm.shake);
       state.mechFlash = 1;
@@ -1613,7 +1650,7 @@ async function main() {
     projectiles.launch('rocket', {
       x: from.x, y: from.y, z: from.z,
       vx: dir.x * rockets.speed, vy: dir.y * rockets.speed, vz: dir.z * rockets.speed,
-      splash: rockets.splash, weapon: m.mine ? 'mech' : 'reaper',
+      splash: rockets.splash, weapon: m.mine ? 'mech' : (m.spec.boss ? 'warlord' : 'reaper'),
     });
     audio.gunshot('mechcannon');
     if (m.mine) effects.shake = Math.min(1.1, effects.shake + 0.12);
@@ -1769,6 +1806,7 @@ async function main() {
   const reactors = mechs.reactors;
 
   mechs.onDestroyed = (m) => {
+    if (m.demon === 'warlord') { warlordDown(m); return; }
     // The machine is dead; the reactor in it is not, yet. A small blast and
     // a shower of parts now, so a kill still reads as a kill, and the real
     // one when the containment goes.
@@ -1908,7 +1946,7 @@ async function main() {
     let killed = false;
     if (best.kind === 'soldier') killed = soldiers.damage(best.target, damage, d);
     else if (best.kind === 'jet') killed = jets.damage(best.target, damage);
-    else if (best.kind === 'mech') killed = mechs.damage(best.target, damage);
+    else if (best.kind === 'mech') killed = mechs.damage(best.target, damage, best.core);
     else killed = drones.damage(best.target, damage);
     if (killed) creditTarget(best.target, best.core, best.kind);
     return best;
@@ -2258,6 +2296,7 @@ async function main() {
   // your face.
   vehicles.onFire = (v, gun) => {
     const m = vehicles.muzzle(v);
+    if (tactics.enabled) soldiers.hear(m.x, m.z, TACTICS.noise.explosion);
     // A tank fires where its gun is pointing, which is where the turret has
     // got to rather than where you are looking.
     const dir = v.spec.turret ? vehicles.gunDirection(v, camera.pitch) : {
@@ -2374,7 +2413,32 @@ async function main() {
    * jets and their mechs. Passers by and anything of yours get none.
    */
   const hostiles = [];
+  /** The nearest boss within reach, Warlord or tyrant, on the long bar. */
+  function placeBossBar() {
+    let best = null, bestD = 260;
+    for (const mk of mechs.active) {
+      if (!mk.alive || mk.demon !== 'warlord' || mk.health <= 0) continue;
+      const d = Math.hypot(mk.x - player.x, mk.z - player.z);
+      if (d < bestD) { bestD = d; best = mk; }
+    }
+    if (!best) {
+      for (const sd of soldiers.active) {
+        if (!sd.alive || sd.demon !== 'tyrant' || sd.health <= 0 || sd.state === 5) continue;
+        const d = Math.hypot(sd.x - player.x, sd.z - player.z);
+        if (d < bestD) { bestD = d; best = sd; }
+      }
+    }
+    const show = !!best && state.mode === 'walk' && !photo.active;
+    el.bossbar.classList.toggle('hidden', !show);
+    if (!show) return;
+    const warlord = best.demon === 'warlord';
+    el.bossbar.classList.toggle('tyrant', !warlord);
+    el.bossName.textContent = warlord ? 'The Warlord' : 'Tyrant';
+    el.bossFill.style.transform = `scaleX(${Math.max(0, best.health / best.maxHealth).toFixed(4)})`;
+  }
+
   function placeHealthBars() {
+    placeBossBar();
     const wall = performance.now() / 1000;
     const dt = Math.min(0.1, Math.max(0, wall - (state.hbWall || wall)));
     state.hbWall = wall;
@@ -2382,12 +2446,16 @@ async function main() {
     hostiles.length = 0;
     for (const sd of soldiers.active) {
       if (!sd.alive || sd.civilian || sd.health <= 0 || sd.state === 5) continue;
-      hostiles.push({ body: sd, kind: sd.machine ? 'machine' : 'soldier',
-        x: sd.x, y: sd.y + 2.15, z: sd.z, health: sd.health, max: sd.maxHealth });
+      const sc = sd.scale || 1;
+      // A boss has the long bar at the top of the screen instead.
+      if (sd.demon === 'tyrant') continue;
+      const kind = sd.demon === 'brute' ? 'jet' : sd.machine ? 'machine' : 'soldier';
+      hostiles.push({ body: sd, kind,
+        x: sd.x, y: sd.y + 2.15 * sc + (sd.demon ? 0.25 * sc : 0), z: sd.z, health: sd.health, max: sd.maxHealth });
     }
     for (const d of drones.active) {
       if (d.health <= 0) continue;
-      hostiles.push({ body: d, kind: 'drone', x: d.x, y: d.y + 0.9, z: d.z,
+      hostiles.push({ body: d, kind: 'drone', x: d.x, y: d.y + (d.demon ? 1.8 : 0.9), z: d.z,
         health: d.health, max: d.maxHealth });
     }
     for (const j of jets.active) {
@@ -2396,7 +2464,7 @@ async function main() {
         health: j.health, max: j.maxHealth });
     }
     for (const mk of mechs.active) {
-      if (mk.mine || mk.health <= 0) continue;
+      if (mk.mine || mk.health <= 0 || mk.demon) continue;
       hostiles.push({ body: mk, kind: 'mech', x: mk.x, y: mk.y + mk.spec.height + 0.8, z: mk.z,
         health: mk.health, max: mk.maxHealth });
     }
@@ -2874,12 +2942,12 @@ async function main() {
    * @param {number} radius how big the sphere is
    * @param {number} scale how much of everything, for a machine over a man
    */
-  function arriveAt(x, z, radius, scale = 1) {
+  function arriveAt(x, z, radius, scale = 1, tint = null) {
     const y = world.groundHeight(x, z);
     // Whatever just appeared on the street, the people on it do not wait to
     // find out what it is.
     soldiers.scare(x, z, 20 + radius * 9);
-    effects.arrival(x, y, z, radius, scale);
+    effects.arrival(x, y, z, radius, scale, tint);
     renderer.addScar(x, y, z, radius * 1.1, 0.45);
     const away = Math.hypot(player.x - x, player.z - z);
     if (away < 140) audio.emp(away);
@@ -2893,7 +2961,7 @@ async function main() {
    * @param {number} away how far out to look
    * @returns {{x,z,a}|null}
    */
-  function mechSpot(away = 14) {
+  function mechSpot(away = 14, cx = player.x, cz = player.z) {
     // Several rings rather than one. A single ring at a fixed distance is a
     // coin toss in a street with anything in it: the first version of this
     // answered no about one call in three from a cratered square, and a
@@ -2911,8 +2979,8 @@ async function main() {
         for (let i = 0; i < 28; i++) {
           const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
           const r = away * scale * (0.9 + Math.random() * 0.2);
-          const x = player.x + Math.cos(a) * r;
-          const z = player.z + Math.sin(a) * r;
+          const x = cx + Math.cos(a) * r;
+          const z = cz + Math.sin(a) * r;
           if (!placeable(x, z)) continue;
           let boxed = false;
           for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -3219,6 +3287,8 @@ async function main() {
 
   drones.onShot = (d, damage) => {
     if (combat.health <= 0) return;
+    // A gazer does not shoot: it spits fire, which you can see coming.
+    if (d.demon) { demonFire(d.x, d.y - 0.2, d.z, GAZER.fire, 1, 1.5); return; }
     effects.tracer(d.x, d.y - 0.2, d.z, camera.position[0], camera.position[1], camera.position[2], false);
     combat.hurt(damage, d.x, d.z, player.x, player.z);
   };
@@ -3617,12 +3687,18 @@ async function main() {
         // Nearer than the soldiers come in, because they are walking past
         // rather than arriving, and you asked to see them.
         if (soldiers.spawnCivilianNear(player.x, player.z, 12, 60)) made++;
+      } else if (kind === 'demons') {
+        // A pack: mostly ghouls, a brute, and something overhead.
+        const which = i === 0 ? 'brute' : i === 1 ? 'gazer' : 'ghoul';
+        if (spawnDemonNear(which, player.x, player.z, 24, 70)) made++;
+      } else if (kind === 'warlord') {
+        if (spawnWarlord(player.x, player.z, 40, 60)) made++;
       }
     }
     // The soldier layer's budget counts everybody in it, the people walking
     // past and the machines included, so it goes up with what was asked for
     // or the next squad is held back to make room for a passer by.
-    if (kind === 'soldiers' || kind === 'machines' || kind === 'civilians') {
+    if (kind === 'soldiers' || kind === 'machines' || kind === 'civilians' || kind === 'demons') {
       soldiers.budget = Math.max(soldiers.budget, soldiers.active.length);
     }
     if (kind === 'drones') drones.budget = Math.max(drones.budget, drones.active.length);
@@ -4605,7 +4681,7 @@ async function main() {
     // jets a budget of two, and a flight took off before the next step could
     // put the budget back. Which is what was reported: soldiers by hand in
     // Just a Walk, and then jets nobody asked for.
-    if (state.peaceful) {
+    if (state.peaceful || campaign.active) {
       drones.budget = 0;
       soldiers.budget = 0;
       jets.budget = 0;
@@ -4677,13 +4753,769 @@ async function main() {
     if (!locked && state.mode === 'walk' && !photo.active) toast('click to look around again');
   };
 
+  // --- operations: Tactics and Slayer ---------------------------------------
+  const builtDistricts = () => world.catalogue.filter((d) => world.isBuilt(d));
+  const opsWord = () => (campaign.mode === 'slayer' ? 'nest' : 'camp');
+
+  /** The setup under the mode buttons on the title card. */
+  function showOps() {
+    el.opsSetup.classList.toggle('hidden', !campaign.active);
+    if (!campaign.active) return;
+    const set = campaign.settings;
+    for (const b of el.opsSetup.querySelectorAll('[data-scope]')) {
+      b.classList.toggle('on', b.dataset.scope === set.scope);
+    }
+    const list = builtDistricts();
+    if (el.opsStart.options.length !== list.length) {
+      el.opsStart.textContent = '';
+      for (const d of list) {
+        const o = document.createElement('option');
+        o.value = d.id;
+        o.textContent = d.name;
+        el.opsStart.appendChild(o);
+      }
+    }
+    el.opsStart.value = set.start && list.some((d) => d.id === set.start) ? set.start
+      : (world.idAt(player.x, player.z) || world.home);
+    const [lo, hi] = OPS[campaign.mode].perDistrictRange;
+    el.opsCount.min = String(lo);
+    el.opsCount.max = String(hi);
+    el.opsCount.value = String(set.perDistrict[campaign.mode]);
+    el.opsCountNum.textContent = String(set.perDistrict[campaign.mode]);
+    el.opsCountLabel.textContent = `${opsWord() === 'nest' ? 'Nests' : 'Camps'} per district`;
+    el.opsQuiet.checked = set.quietBonus;
+    el.opsBosses.checked = set.bosses;
+    for (const r of el.opsSetup.querySelectorAll('.opstactics')) r.classList.toggle('hidden', campaign.mode !== 'tactics');
+    for (const r of el.opsSetup.querySelectorAll('.opsslayer')) r.classList.toggle('hidden', campaign.mode !== 'slayer');
+    const sum = campaign.summary(list.map((d) => d.id));
+    el.opsProgress.textContent = sum.total
+      ? `${sum.free} of ${sum.total} ${opsWord()}s taken so far, ${sum.done} of ${sum.districts} `
+        + `district${sum.districts === 1 ? '' : 's'} done, score ${sum.score.toLocaleString()}`
+        + (sum.level ? `, level ${sum.level + 1}` : '')
+      : `Nothing taken yet. The ${opsWord()}s are put down the first time you are in a district.`;
+    el.opsWipe.textContent = 'start this campaign again';
+  }
+  for (const b of el.opsSetup.querySelectorAll('[data-scope]')) {
+    b.addEventListener('click', () => { campaign.set('scope', b.dataset.scope); showOps(); });
+  }
+  el.opsStart.addEventListener('change', () => { campaign.set('start', el.opsStart.value); showOps(); });
+  el.opsCount.addEventListener('input', () => { campaign.set('perDistrict', el.opsCount.value); showOps(); });
+  el.opsQuiet.addEventListener('change', () => { campaign.set('quietBonus', el.opsQuiet.checked); });
+  el.opsBosses.addEventListener('change', () => { campaign.set('bosses', el.opsBosses.checked); });
+  el.opsWipe.addEventListener('click', () => {
+    // Twice, so a stray click does not throw a campaign away.
+    if (el.opsWipe.dataset.armed !== '1') {
+      el.opsWipe.dataset.armed = '1';
+      el.opsWipe.textContent = 'click again to wipe it';
+      setTimeout(() => { el.opsWipe.dataset.armed = ''; showOps(); }, 3000);
+      return;
+    }
+    el.opsWipe.dataset.armed = '';
+    campaign.wipe();
+    tactics.clear();
+    slayer.clear();
+    showOps();
+  });
+
+  /** A run starting: the start district, if one is set, is flown to once the intro is over. */
+  function startOps() {
+    tactics.clear();
+    slayer.clear();
+    if (!campaign.active) { el.ops.classList.add('hidden'); return; }
+    if (!campaign.settings.start) campaign.set('start', el.opsStart.value || world.idAt(player.x, player.z) || world.home);
+    state.opsTravel = true;
+    state.opsPlaceAt = 0;
+  }
+
+  /** Somewhere on a road near the middle of a district, to land on. */
+  function districtLanding(entry) {
+    const b = entry.bounds;
+    const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+    let best = null, bestD = Infinity;
+    for (const r of (entry.sketch && entry.sketch.roads) || []) {
+      for (let i = 0; i + 1 < r.length; i += 2) {
+        const d = Math.hypot(r[i] - cx, r[i + 1] - cz);
+        if (d < bestD) { bestD = d; best = { x: r[i], z: r[i + 1] }; }
+      }
+    }
+    return best || { x: cx, z: cz };
+  }
+
+  /** Every step of a run in Tactics or Slayer. */
+  function opsStep(dt) {
+    // The shield coming up, for the parry, and the saw's fuel: these are the
+    // Slayer weapons' and work in any mode that hands them out.
+    const blocking = weapon.id === 'shieldsaw' && weapon.aiming;
+    if (blocking && !state.blocking) state.blockAt = state.time;
+    state.blocking = blocking;
+    sawFuel(dt);
+    if (!campaign.active) return;
+    if (state.mode !== 'walk') return;
+    if (state.opsTravel) {
+      state.opsTravel = false;
+      const e = world.entryFor(campaign.settings.start);
+      if (e && world.isBuilt(e) && world.idAt(player.x, player.z) !== e.id) {
+        const at = districtLanding(e);
+        beginTravel(at.x, at.z);
+        return;
+      }
+    }
+    // Put the sites down in any district in scope that is in memory and has
+    // none yet. One district a second at most: the search is a few hundred
+    // raycasts.
+    state.opsPlaceAt = (state.opsPlaceAt || 0) - dt;
+    if (state.opsPlaceAt <= 0) {
+      state.opsPlaceAt = 1;
+      for (const id of world.loadedIds) {
+        if (!campaign.inScope(id) || campaign.sitesIn(id) || world.isOverflight(id)) continue;
+        const entry = world.entryFor(id);
+        if (!entry) continue;
+        const placed = campaign.place(id, (rand, clear) => campSpot(world, entry, rand, clear, shielded));
+        if (placed.length) feed(`<i>${entry.name}</i> ${placed.length} ${opsWord()}${placed.length === 1 ? '' : 's'}`);
+        break;
+      }
+    }
+    if (campaign.mode === 'slayer') slayer.update(dt, player);
+    if (campaign.mode === 'tactics') {
+      soldiers.playerSpeed = Math.hypot(player.vx || 0, player.vz || 0);
+      tactics.update(dt, player);
+      // The siren, as loud as the nearest one that is going.
+      let level = 0;
+      for (const r of tactics.live.values()) {
+        if (!r.alarm) continue;
+        const d = Math.hypot(r.site.x - player.x, r.site.z - player.z);
+        level = Math.max(level, Math.max(0, 1 - d / 500));
+      }
+      audio.siren(level);
+    } else {
+      audio.siren(0);
+    }
+  }
+
+  // An arrow going into somebody: its own harm, three times over in the head,
+  // and no noise at all.
+  projectiles.onArrow = (b, hit) => {
+    const row = WEAPONS[b.weapon] || WEAPONS.bow;
+    const t = hit.target;
+    const core = !!hit.core;
+    const dmg = (row.damage || 100) * (core ? (row.coreMultiplier || 1) : 1) * (weapon.damageScale || 1);
+    const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
+    const dir = { x: b.vx / sp, y: 0, z: b.vz / sp };
+    let killed = false;
+    let kind = hit.actorKind;
+    if (kind === 'soldier') {
+      killed = soldiers.damage(t, dmg, dir);
+      effects.blood(hit.x, hit.y, hit.z, dir.x, 0.3, dir.z, cheats.goreScale * (core ? 1.6 : 1));
+    } else if (kind === 'drone') killed = drones.damage(t, dmg);
+    else if (kind === 'jet') killed = jets.damage(t, dmg);
+    else if (kind === 'mech') killed = mechs.damage(t, dmg * 0.25, core);
+    else if (kind === 'vehicle') { vehicles.damage(t, dmg * 0.25); kind = null; }
+    if (!kind) return;
+    audio.hitMarker(core);
+    showHitmarker(killed ? 'kill' : (core ? 'core' : ''));
+    if (killed) creditTarget(t, core, kind);
+  };
+
+  /**
+   * Somebody you can take down without a sound: a soldier within arm's reach,
+   * in front of you, who has not been told about you and is not fighting.
+   */
+  function takedownTarget() {
+    let best = null, bestD = 2.6;
+    const fx = camera.forward[0], fz = camera.forward[2];
+    const fl = Math.hypot(fx, fz) || 1;
+    for (const s of soldiers.active) {
+      if (!s.alive || s.civilian || s.health <= 0 || s.state === 5 || s.rise > 0) continue;
+      // A demon reeling is a finisher, from further off and whatever it was doing.
+      if (s.demon) {
+        if (!(s.staggered > 0)) continue;
+        const dx = s.x - player.x, dz = s.z - player.z;
+        const d = Math.hypot(dx, dz) - 0.42 * (s.scale || 1);
+        if (d > 3.2 || d > bestD + 0.6) continue;
+        if ((dx * fx + dz * fz) / (fl * (Math.hypot(dx, dz) || 1)) < 0.4) continue;
+        best = s; bestD = d;
+        continue;
+      }
+      if (s.state !== 0) continue;
+      if (s.post && s.post.alert) continue;
+      const dx = s.x - player.x, dz = s.z - player.z;
+      const d = Math.hypot(dx, dz);
+      if (d > bestD) continue;
+      if ((dx * fx + dz * fz) / (fl * (d || 1)) < 0.55) continue;
+      best = s; bestD = d;
+    }
+    return best;
+  }
+
+  /** The takedown itself. @returns {boolean} whether there was one to do */
+  function takedown() {
+    if (state.mode !== 'walk' || state.inVehicle || state.inMech) return false;
+    const s = takedownTarget();
+    if (!s) return false;
+    const dx = s.x - player.x, dz = s.z - player.z;
+    const d = Math.hypot(dx, dz) || 1;
+    if (s.demon) {
+      // A finisher: the demon goes, in pieces, and gives you health for it.
+      soldiers.damage(s, 1e6, { x: dx / d, y: 0.3, z: dz / d });
+      for (let i = 0; i < 3; i++) effects.blood(s.x, s.y + 1.2 * (s.scale || 1), s.z, dx / d, 0.6, dz / d, cheats.goreScale * 2);
+      const got = Math.round(combat.heal(30));
+      effects.shake = Math.min(1.2, effects.shake + 0.35);
+      audio.roar(1, s.scale || 1);
+      audio.hitMarker(true);
+      feed(`<b>finisher</b> +${got} health`);
+      creditTarget(s, true, 'soldier');
+      state.finishers = (state.finishers || 0) + 1;
+      return true;
+    }
+    // Silent: nobody hears it, but anybody who can see the body will find it.
+    const killed = soldiers.damage(s, 9999, { x: dx / d, y: 0, z: dz / d });
+    effects.blood(s.x, s.y + 1.3, s.z, dx / d, 0.2, dz / d, cheats.goreScale * 0.7);
+    effects.shake = Math.min(1, effects.shake + 0.12);
+    audio.gunshot('bow');
+    feed('<b>takedown</b>');
+    if (killed) creditTarget(s, true, 'soldier');
+    state.takedowns = (state.takedowns || 0) + 1;
+    return true;
+  }
+
+  // --- demons ----------------------------------------------------------------
+  // Their fire is looking for you and nothing else, so the projectile layer
+  // is told where you are.
+  projectiles.player = player;
+
+  /**
+   * Fire from a demon at you: one ball or a volley, led a little to where you
+   * are going, spread across a volley so it is a wall rather than a line.
+   */
+  function demonFire(x, y, z, fire, volley = 1, size = 1) {
+    const chest = { x: player.x, y: player.y + 1.2, z: player.z };
+    const d0 = Math.hypot(chest.x - x, chest.y - y, chest.z - z) || 1;
+    const t = d0 / fire.speed;
+    const aim = { x: chest.x + (player.vx || 0) * t * 0.6, y: chest.y, z: chest.z + (player.vz || 0) * t * 0.6 };
+    for (let i = 0; i < volley; i++) {
+      const off = volley > 1 ? (i - (volley - 1) / 2) * 1.6 : 0;
+      const ax = aim.x + off * Math.cos(Math.atan2(aim.z - z, aim.x - x) + Math.PI / 2);
+      const az = aim.z + off * Math.sin(Math.atan2(aim.z - z, aim.x - x) + Math.PI / 2);
+      const dx = ax - x, dy = aim.y - y, dz = az - z;
+      const l = Math.hypot(dx, dy, dz) || 1;
+      projectiles.launch('fireball', {
+        x, y, z,
+        vx: dx / l * fire.speed, vy: dy / l * fire.speed + 0.6 * t, vz: dz / l * fire.speed,
+        splash: { radius: fire.radius, damage: fire.damage }, weapon: 'demon',
+      });
+    }
+    audio.whoomp(Math.hypot(player.x - x, player.z - z) / size);
+  }
+
+  projectiles.onHostile = (b, x, y, z, direct) => {
+    // The shield saw held up: fire from in front is stopped, and fire that
+    // arrives just as the shield comes up goes back the way it came.
+    if (direct && weapon.id === 'shieldsaw' && weapon.aimBlend > 0.5 && !state.inMech && !state.inVehicle) {
+      const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
+      const f = camera.forward;
+      const facing = (b.vx * f[0] + b.vy * f[1] + b.vz * f[2]) / sp;
+      const block = WEAPONS.shieldsaw.block;
+      if (facing < block.cone) {
+        for (let i = 0; i < 12; i++) effects.spark(x, y, z, 1.0, 0.75, 0.3);
+        audio.hitMarker(true);
+        if (state.time - (state.blockAt ?? -9) < block.parry) {
+          const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+          projectiles.launch('blast', {
+            x: eye.x + f[0] * 0.8, y: eye.y + f[1] * 0.8, z: eye.z + f[2] * 0.8,
+            vx: f[0] * 70, vy: f[1] * 70, vz: f[2] * 70,
+            splash: { radius: 2.4, damage: block.parryDamage, force: 6 }, weapon: 'shieldsaw',
+          });
+          feed('<b>parry</b>');
+          state.parries = (state.parries || 0) + 1;
+        } else {
+          state.blocks = (state.blocks || 0) + 1;
+        }
+        return;
+      }
+    }
+    const r = b.splash ? b.splash.radius : 2;
+    effects.flash(x, y, z, r * 0.9, 1.0, 0.45, 0.08, 0.25);
+    for (let i = 0; i < 14; i++) {
+      effects.spark(x + (Math.random() - 0.5) * r, y + Math.random() * r * 0.6,
+        z + (Math.random() - 0.5) * r, 1.0, 0.45 + Math.random() * 0.3, 0.05);
+    }
+    renderer.addScar(x, world.groundHeight(x, z), z, r * 0.45, 0.35);
+    const toPlayer = Math.hypot(player.x - x, player.y + 1.0 - y, player.z - z);
+    if (!direct && toPlayer > r) return;
+    const dmg = (b.splash ? b.splash.damage : 15) * (direct ? 1 : 1 - toPlayer / r);
+    if (state.inMech) mechs.damage(state.inMech, dmg * 2);
+    else if (state.inVehicle) vehicles.damage(state.inVehicle, dmg * 2);
+    else if (combat.health > 0) combat.hurt(dmg, x, z, player.x, player.z);
+  };
+
+  soldiers.onFireball = (s, fire) => {
+    const sc = s.scale || 1;
+    const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
+    demonFire(s.x + fx * 0.6 * sc, s.y + 1.35 * sc, s.z + fz * 0.6 * sc, fire, fire.volley || 1, sc);
+  };
+
+  soldiers.onMelee = (s, melee) => {
+    const d = Math.hypot(player.x - s.x, player.z - s.z);
+    effects.shake = Math.min(1.4, effects.shake + 0.2 + (melee.slam ? 0.6 : 0));
+    audio.roar(d, s.scale || 1);
+    if (melee.slam) {
+      // The tyrant brings both fists down: a ring of dust and whoever is
+      // inside it takes the blow.
+      effects.flash(s.x, s.y + 0.5, s.z, melee.slam, 1.0, 0.5, 0.15, 0.3);
+      renderer.addScar(s.x, s.y, s.z, melee.slam * 0.5, 0.7);
+      state.flash = Math.max(state.flash, 0.2);
+    }
+    if (state.inMech) { mechs.damage(state.inMech, melee.damage * 2); return; }
+    if (state.inVehicle) { vehicles.damage(state.inVehicle, melee.damage * 2); return; }
+    if (combat.health > 0) combat.hurt(melee.damage, s.x, s.z, player.x, player.z);
+  };
+
+  soldiers.onCharge = (s) => {
+    audio.roar(Math.hypot(player.x - s.x, player.z - s.z), s.scale || 1);
+  };
+
+  /**
+   * A demon out of the street near a point: a soldier, made one, coming up
+   * through a portal of red and orange instead of the blue sphere; or a
+   * drone, made the floating one, out of the same portal in the air.
+   */
+  const HELL = [1.0, 0.28, 0.06];
+  function spawnDemonNear(kind, x, z, minR, maxR, level = 0) {
+    if (kind === 'warlord') return spawnWarlord(x, z, minR, maxR, level);
+    if (kind === 'gazer') {
+      const d = drones.spawnNear(x, z, minR, maxR);
+      if (d) {
+        makeGazer(d, level);
+        effects.arrival(d.x, d.y - 1.5, d.z, 2.4, 1.2, HELL);
+      }
+      return d;
+    }
+    const was = soldiers.onArrive;
+    const big = kind === 'tyrant' ? 5.5 : kind === 'brute' ? 2.6 : 1.8;
+    soldiers.onArrive = (s) => arriveAt(s.x, s.z, big, kind === 'tyrant' ? 2 : 1, HELL);
+    const s = soldiers.spawnNear(x, z, minR, maxR);
+    soldiers.onArrive = was;
+    if (s) makeDemon(s, kind, level);
+    return s;
+  }
+
+  // Slayer's nests in play.
+  const slayer = new Slayer(campaign, world,
+    (kind, x, z, min, max, level) => spawnDemonNear(kind, x, z, min, max, level),
+    (b) => {
+      if (b.demon === 'gazer' || b.demon === 'warlord') {
+        b.alive = false;
+        const pool = b.demon === 'gazer' ? drones.active : mechs.active;
+        const i = pool.indexOf(b);
+        if (i >= 0) pool.splice(i, 1);
+      } else {
+        soldiers._retire(b);
+      }
+    });
+  slayer.onWake = (site) => {
+    toast('the nest wakes');
+    feed(`<b>nest</b> ${world.nameAt(site.x, site.z)} wakes`);
+    audio.roar(Math.hypot(player.x - site.x, player.z - site.z), 2.5);
+  };
+  slayer.onWave = (site, run) => {
+    const last = run.wave === run.waves.length - 1;
+    const word = run.final && last ? 'the ground is shaking. The Warlord comes'
+      : run.boss && run.waves[run.wave].tyrant ? 'something very large is coming'
+        : `wave ${run.wave + 1} of ${run.waves.length}`;
+    toast(word);
+  };
+  // The last nest of the whole operation keeps the Warlord for the end.
+  slayer.isFinal = (site) => {
+    if (campaign.settings.scope !== 'all') return true;
+    const sum = campaign.summary(builtDistricts().map((d) => d.id));
+    return !!sum && sum.done >= sum.districts - 1;
+  };
+  slayer.onHeavy = (site, run, kind, b) => {
+    if (kind === 'warlord') return;
+    feed(`<b>${DEMON[kind] ? DEMON[kind].name : 'Gazer'}</b> inbound`);
+    if (kind === 'tyrant') { audio.roar(Math.hypot(player.x - b.x, player.z - b.z), 3.5); effects.shake = 1.2; }
+  };
+  slayer.onReset = () => { toast('the nest calls them back'); };
+  slayer.onFree = (site, pts) => {
+    toast(`nest destroyed  +${pts}`);
+    feed(`<b>nest destroyed</b> ${world.nameAt(site.x, site.z)} +${pts}`);
+    combat.score += pts;
+    audio.explosion();
+    effects.flash(site.x, world.groundHeight(site.x, site.z) + 2, site.z, 8, 1.0, 0.4, 0.1, 0.6);
+    state.flash = Math.max(state.flash, 0.3);
+    const list = campaign.sitesIn(site.d) || [];
+    if (list.length && list.every((x) => x.state === SITE.FREE)) {
+      toast(`${world.nameAt(site.x, site.z)}: the presence is broken`);
+      feed(`<b>${world.nameAt(site.x, site.z)}</b> is free of them`);
+    }
+  };
+
+  // --- the Warlord ---------------------------------------------------------------
+  //
+  // Slayer's great boss walks on a mech's legs and is hit like one, so the
+  // mech layer does its walking, aiming and firing. What is its own is here:
+  // the way it arrives, the two times it calls its own when it is hurt, the
+  // ring along the ground when both hooves come down, and how it dies.
+  const WARLORD_PHASES = [
+    { at: 0.66, summon: { ghoul: 4, gazer: 1 }, faster: 1.2, say: 'the Warlord calls its own' },
+    { at: 0.33, summon: { ghoul: 3, brute: 2, gazer: 1 }, faster: 1.45, say: 'the Warlord is enraged' },
+  ];
+  const WARLORD_POINTS = 25000;
+  const quakes = [];
+
+  function spawnWarlord(x, z, minR, maxR, level = 0) {
+    // Out of a ring round the point, or, asked for none, on the point.
+    const spot = maxR > 0 ? mechSpot((minR + maxR) / 2, x, z) : { x, z };
+    if (!spot) return null;
+    const yaw = Math.atan2(-(player.x - spot.x), -(player.z - spot.z));
+    const m = mechs.spawn('warlord', spot.x, spot.z, yaw);
+    if (!m) return null;
+    m.demon = 'warlord';
+    m.health = m.maxHealth = MECH.warlord.health * (1 + DEMON_LEVEL * level);
+    m.bossPhase = 0;
+    m.quakeLeft = MECH.warlord.quake.every;
+    m.rage = 0;
+    arriveAt(m.x, m.z, 7.5, 3, HELL);
+    audio.roar(Math.hypot(player.x - m.x, player.z - m.z), 4);
+    effects.shake = Math.min(1.8, effects.shake + 1.2);
+    feed('<b>Warlord</b> has come');
+    return m;
+  }
+
+  /** The heavier half of a mech's step, for the Warlord: its phases and its quake. */
+  function warlordStep(dt) {
+    for (const m of mechs.active) {
+      if (!m.alive || m.demon !== 'warlord' || m.health <= 0) continue;
+      const left = m.health / m.maxHealth;
+      const next = WARLORD_PHASES[m.bossPhase];
+      if (next && left < next.at) {
+        m.bossPhase++;
+        m.rage = m.bossPhase / WARLORD_PHASES.length;
+        // Faster on its feet and quicker between bursts, on a spec of its own.
+        const base = MECH.warlord;
+        m.spec = { ...m.spec, walk: base.walk * next.faster, torsoTurn: base.torsoTurn * next.faster,
+          chaingun: { ...m.spec.chaingun, rest: base.chaingun.rest / next.faster },
+          rockets: { ...m.spec.rockets, interval: base.rockets.interval / next.faster } };
+        toast(next.say);
+        audio.roar(Math.hypot(player.x - m.x, player.z - m.z), 4);
+        effects.shake = Math.min(1.8, effects.shake + 0.9);
+        effects.flash(m.x, m.y + 6, m.z, 14, 1.0, 0.3, 0.05, 0.5);
+        for (const [kind, n] of Object.entries(next.summon)) {
+          for (let i = 0; i < n; i++) {
+            const b = spawnDemonNear(kind, m.x, m.z, 8, 26, 0);
+            // Counted with the nest it came out of, if there is one.
+            if (b && m.nest) {
+              const r = slayer.live.get(m.nest);
+              if (r) { r.demons.add(b); r.total++; b.nest = m.nest; }
+            }
+          }
+        }
+      }
+      // Both hooves down: a ring along the ground, which a jump clears.
+      const q = m.spec.quake;
+      const away = Math.hypot(player.x - m.x, player.z - m.z);
+      m.quakeLeft -= dt;
+      if (m.quakeLeft <= 0 && away < q.near && m.stun <= 0) {
+        m.quakeLeft = q.every / (1 + 0.3 * m.bossPhase);
+        quakes.push({ x: m.x, y: m.y, z: m.z, r: m.spec.radius, spec: q, hit: false, puff: 0 });
+        audio.explosion();
+        effects.shake = Math.min(1.8, effects.shake + 0.7);
+        effects.dust(m.x, m.y, m.z, 6);
+        renderer.addScar(m.x, m.y, m.z, 5, 0.5);
+      }
+    }
+    for (let i = quakes.length - 1; i >= 0; i--) {
+      const w = quakes[i];
+      w.r += w.spec.speed * dt;
+      // Grit and sparks thrown up along the front of it.
+      w.puff -= dt;
+      if (w.puff <= 0) {
+        w.puff = 0.05;
+        const n = Math.round(10 + w.r * 0.8);
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2 + Math.random() * 0.2;
+          const px = w.x + Math.cos(a) * w.r, pz = w.z + Math.sin(a) * w.r;
+          effects.spark(px, world.groundHeight(px, pz) + 0.3, pz, 1.0, 0.45, 0.08);
+        }
+      }
+      const d = Math.hypot(player.x - w.x, player.z - w.z);
+      if (!w.hit && Math.abs(d - w.r) < 1.4 && player.onGround && combat.health > 0
+        && !state.inMech && !state.inVehicle) {
+        w.hit = true;
+        combat.hurt(w.spec.damage, w.x, w.z, player.x, player.z);
+        effects.shake = Math.min(1.8, effects.shake + 0.6);
+      }
+      if (w.r > w.spec.reach) quakes.splice(i, 1);
+    }
+  }
+
+  /** And how it goes: in fire rather than in a reactor. */
+  function warlordDown(m) {
+    const g = world.groundHeight(m.x, m.z);
+    explode(m.x, g + 4, m.z, { radius: 14, damage: 160, crater: true }, { weapon: 'warlord' });
+    effects.flash(m.x, g + 6, m.z, 30, 1.0, 0.3, 0.05, 1.2);
+    effects.arrival(m.x, g, m.z, 9, 3, HELL);
+    gibs.rubble(m.x, g + 3, m.z, 12, 20, 2.6);
+    fires.ignite(m.x, g, m.z, 14, 1);
+    audio.roar(Math.hypot(player.x - m.x, player.z - m.z), 5);
+    effects.shake = Math.min(2.0, effects.shake + 1.4);
+    state.flash = Math.max(state.flash, 0.5);
+    combat.score += WARLORD_POINTS;
+    if (campaign.mode === 'slayer') {
+      campaign.book.score += WARLORD_POINTS;
+      campaign.save();
+    }
+    toast(`the Warlord is dead  +${WARLORD_POINTS}`);
+    feed(`<b>Warlord down</b> +${WARLORD_POINTS}`);
+    state.warlordKills = (state.warlordKills || 0) + 1;
+  }
+
+  // --- the Slayer weapons -------------------------------------------------------
+  /** Everything hostile within reach of you, in front, that a wall does not hide. */
+  function inReach(reach, arc) {
+    const fx = camera.forward[0], fz = camera.forward[2];
+    const fl = Math.hypot(fx, fz) || 1;
+    const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    const out = [];
+    for (const s of soldiers.active) {
+      if (!s.alive || s.civilian || s.health <= 0 || s.state === 5 || s.rise > 0) continue;
+      const dx = s.x - player.x, dz = s.z - player.z;
+      const d = Math.hypot(dx, dz) - 0.42 * (s.scale || 1);
+      if (d > reach) continue;
+      if ((dx * fx + dz * fz) / (fl * (Math.hypot(dx, dz) || 1)) < arc) continue;
+      if (!world.lineOfSight(eye.x, eye.y, eye.z, s.x, s.y + 1.0, s.z)) continue;
+      out.push({ kind: 'soldier', t: s, d });
+    }
+    for (const g of drones.active) {
+      if (!g.alive || g.health <= 0) continue;
+      const dx = g.x - player.x, dz = g.z - player.z;
+      const d = Math.hypot(dx, g.y - eye.y, dz) - g.radius;
+      if (d > reach) continue;
+      if ((dx * fx + dz * fz) / (fl * (Math.hypot(dx, dz) || 1)) < arc) continue;
+      out.push({ kind: 'drone', t: g, d });
+    }
+    out.sort((a, b) => a.d - b.d);
+    return out;
+  }
+
+  weapon.onMelee = (spec, eye, dir) => {
+    if (spec.fuel) {
+      // The saw takes the nearest thing in front of you, if it has the fuel
+      // for something that size.
+      const near = inReach(spec.reach, 0.5)[0];
+      if (!near) { audio.saw(0.25); return; }
+      const t = near.t;
+      const size = t.demon === 'tyrant' ? 99 : t.demon === 'brute' ? 2 : 1;
+      if (size > 3) { toast('too big for the saw'); return; }
+      if (weapon.ammo < size) { toast(`the saw needs ${size} fuel`); audio.dryFire(); return; }
+      weapon.ammo -= size;
+      audio.saw(0.8);
+      const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+      const killed = near.kind === 'drone' ? drones.damage(t, 1e6)
+        : soldiers.damage(t, 1e6, { x: dx / dl, y: 0.4, z: dz / dl });
+      for (let i = 0; i < 4; i++) effects.blood(t.x, t.y + 1.1, t.z, dx / dl, 0.5, dz / dl, cheats.goreScale * 2.5);
+      effects.shake = Math.min(1.4, effects.shake + 0.4);
+      // Ammunition everywhere: some of every reserve back.
+      const got = weapon.resupply(0.5, 0.35);
+      feed(`<b>chainsaw</b> +${got} rounds`);
+      if (killed) creditTarget(t, false, near.kind);
+      return;
+    }
+    // The flail: everything in the arc.
+    const hits = inReach(spec.reach, spec.arc);
+    effects.shake = Math.min(1, effects.shake + 0.15);
+    audio.swoosh(0);
+    for (const h of hits) {
+      const t = h.t;
+      const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+      const amount = spec.damage * (weapon.damageScale || 1);
+      const killed = h.kind === 'drone' ? drones.damage(t, amount)
+        : soldiers.damage(t, amount, { x: dx / dl, y: 0.2, z: dz / dl });
+      effects.blood(t.x, t.y + 1.1, t.z, dx / dl, 0.3, dz / dl, cheats.goreScale);
+      audio.hitMarker(false);
+      showHitmarker(killed ? 'kill' : '');
+      if (killed) creditTarget(t, false, h.kind);
+    }
+  };
+
+  projectiles.onSaw = (b, hit) => {
+    const t = hit.target;
+    const amount = (WEAPONS.shieldsaw.damage || 150) * (weapon.damageScale || 1);
+    const sp = Math.hypot(b.vx, b.vz) || 1;
+    let killed = false;
+    if (hit.actorKind === 'soldier') killed = soldiers.damage(t, amount, { x: b.vx / sp, y: 0, z: b.vz / sp });
+    else if (hit.actorKind === 'drone') killed = drones.damage(t, amount);
+    else if (hit.actorKind === 'mech') killed = mechs.damage(t, amount * 0.3, false);
+    else if (hit.actorKind === 'jet') killed = jets.damage(t, amount);
+    for (let i = 0; i < 10; i++) effects.spark(hit.x, hit.y, hit.z, 1.0, 0.8, 0.4);
+    effects.blood(hit.x, hit.y, hit.z, b.vx / sp, 0.2, b.vz / sp, cheats.goreScale);
+    audio.hitMarker(false);
+    showHitmarker(killed ? 'kill' : '');
+    if (killed) creditTarget(t, false, hit.actorKind);
+  };
+  projectiles.onSawBack = () => {
+    weapon.carried.shieldsaw.ammo = 1;
+    audio.hitMarker(true);
+  };
+
+  // Fuel for the saw comes back by itself, one pip at a time, up to one.
+  function sawFuel(dt) {
+    const slot = weapon.carried.chainsaw;
+    if (!slot || slot.ammo >= 1) { state.fuelLeft = 15; return; }
+    state.fuelLeft = (state.fuelLeft ?? 15) - dt;
+    if (state.fuelLeft <= 0) { slot.ammo = 1; state.fuelLeft = 15; }
+  }
+
+  soldiers.onStagger = (s) => { if (Math.hypot(s.x - player.x, s.z - player.z) < 30) audio.roar(20, s.scale || 1); };
+
+  soldiers.onSpot = (s, how) => { if (tactics.enabled) tactics.spot(s, how); };
+  soldiers.onDown = (s) => { if (tactics.enabled) tactics.guardDown(s); };
+  tactics.onSpotted = (site, run, guard, how) => {
+    if (run.spotters.size === 1) {
+      audio.spotted();
+      feed(how === 'heard' ? '<i>they heard that</i>' : how === 'hit' ? '<i>he knows you are there</i>' : '<b>spotted</b>');
+    }
+  };
+  tactics.onBody = () => { feed('<i>they found a body</i>'); };
+  tactics.onAlarm = (site, run) => {
+    toast(run.radioUp ? 'alarm: they are calling for help' : 'alarm, but the radio is down');
+    feed(`<b>alarm</b> ${world.nameAt(site.x, site.z)}`);
+  };
+  tactics.onRadio = (site, run) => {
+    const p = tactics.radioAt(site);
+    effects.flash(p.x, p.y, p.z, 1.6, 1.0, 0.7, 0.4, 0.2);
+    for (let i = 0; i < 24; i++) {
+      effects.spark(p.x + (Math.random() - 0.5) * 0.6, p.y + Math.random() * 0.5,
+        p.z + (Math.random() - 0.5) * 0.6, 1.0, 0.75, 0.35);
+    }
+    audio.hitMarker(true);
+    feed(run.alarm ? '<b>radio down</b> nobody else is coming' : '<b>radio down</b>');
+    toast('radio destroyed');
+  };
+  tactics.onCall = (site, run, count) => {
+    // Help comes the way everybody arrives in this game: out of the street,
+    // in a sphere, from a little way off, and it knows where you are.
+    let n = 0;
+    for (let i = 0; i < count; i++) {
+      const s = soldiers.spawnNear(site.x, site.z, 45, 95);
+      if (!s) break;
+      s.state = 1;
+      s.reinforcement = site.id;
+      if ((site.level || 0) >= TACTICS.machinesFrom && i % 2 === 1) makeMachine(s);
+      n++;
+    }
+    if (n) {
+      feed(`<b>reinforcements</b> ${n} inbound`);
+      toast(`${n} reinforcements inbound`);
+    }
+  };
+
+  tactics.onFree = (site, pts, run) => {
+    const quiet = !run.spotted && !run.alarm;
+    toast(quiet && campaign.settings.quietBonus ? `camp taken, undetected  +${pts}` : `camp taken  +${pts}`);
+    feed(`<b>camp taken</b> ${world.nameAt(site.x, site.z)} +${pts}`);
+    audio.ultraCharge(0.5);
+    combat.score += pts;
+    const list = campaign.sitesIn(site.d) || [];
+    if (list.length && list.every((x) => x.state === SITE.FREE)) {
+      toast(`${world.nameAt(site.x, site.z)} is free`);
+      feed(`<b>${world.nameAt(site.x, site.z)}</b> every camp taken`);
+    }
+  };
+
+  /** The line at the top of the screen. */
+  function opsHud() {
+    if (!campaign.active || state.mode === 'title') { el.ops.classList.add('hidden'); return; }
+    el.ops.classList.remove('hidden');
+    const here = world.idAt(player.x, player.z);
+    const list = (here && campaign.sitesIn(here)) || [];
+    const free = list.filter((x) => x.state === SITE.FREE).length;
+    const sum = campaign.summary(builtDistricts().map((d) => d.id));
+    el.opsTitle.textContent = campaign.mode === 'slayer' ? 'Slayer' : 'Tactics';
+    const fight = campaign.mode === 'slayer' ? slayer.active(player.x, player.z) : null;
+    el.opsLine.textContent = !campaign.inScope(here)
+      ? `outside the operation  ·  score ${sum.score.toLocaleString()}`
+      : campaign.mode === 'slayer'
+        ? `${world.nameAt(player.x, player.z)} presence ${Math.round(slayer.presence(here) * 100)}%  ·  `
+          + (fight ? `wave ${Math.min(fight.wave + 1, fight.waves.length)}/${fight.waves.length}, ${slayer.left(fight)} left  ·  `
+            : `${free}/${list.length} nests  ·  `)
+          + `score ${sum.score.toLocaleString()}`
+        : `${world.nameAt(player.x, player.z)} ${free}/${list.length} ${opsWord()}s  ·  `
+          + `${sum.done}/${sum.districts} districts  ·  score ${sum.score.toLocaleString()}`;
+    let alert = '';
+    if (campaign.mode === 'tactics') {
+      for (const r of tactics.live.values()) {
+        if (!r.manned) continue;
+        if (r.alarm) { alert = r.radioUp ? 'alarm' : 'alarm, radio down'; break; }
+        if (r.spotted) alert = 'spotted';
+      }
+      if (!alert) {
+        const w = tactics.wariest(player.x, player.z);
+        if (w > 0.05) alert = `seen ${Math.round(w * 100)}%`;
+      }
+    }
+    el.opsAlert.textContent = alert;
+    el.opsAlert.dataset.level = alert.startsWith('seen') ? 'wary' : alert ? 'alarm' : '';
+  }
+
+  /** The journal on J: every district in the operation and how it stands. */
+  function showOpsPanel() {
+    const list = builtDistricts();
+    const sum = campaign.summary(list.map((d) => d.id));
+    el.opsPanelTitle.textContent = campaign.mode === 'slayer' ? 'Spree Fall Slayer' : 'Spree Fall Tactics';
+    el.opsPanelLine.textContent = `Score ${sum.score.toLocaleString()}, level ${sum.level + 1}, `
+      + `${sum.free} of ${sum.total} ${opsWord()}s taken`
+      + (campaign.mode === 'tactics' ? `, ${sum.quiet} without an alarm.` : '.');
+    el.opsList.textContent = '';
+    for (const d of list) {
+      if (!campaign.inScope(d.id)) continue;
+      const sites = campaign.sitesIn(d.id);
+      const row = document.createElement('div');
+      const done = sites && sites.length && sites.every((x) => x.state === SITE.FREE);
+      row.className = `opsd${done ? ' done' : ''}`;
+      const name = document.createElement('span');
+      name.textContent = d.name;
+      const n = document.createElement('b');
+      n.textContent = sites ? `${sites.filter((x) => x.state === SITE.FREE).length} / ${sites.length}` : 'not visited';
+      row.append(name, n);
+      el.opsList.appendChild(row);
+    }
+    el.opsReset.textContent = `give the ${opsWord()}s back`;
+    el.opsHarder.textContent = 'give them back, harder';
+  }
+  function toggleOpsPanel(show) {
+    if (!campaign.active || state.mode === 'title') return;
+    const on = show === undefined ? el.opsPanel.classList.contains('hidden') : show;
+    el.opsPanel.classList.toggle('hidden', !on);
+    if (on) {
+      showOpsPanel();
+      state.lockWanted = state.lockWanted || input.pointerLocked;
+      input.exitLock();
+    } else {
+      relock();
+    }
+  }
+  el.opsClose.addEventListener('click', () => toggleOpsPanel(false));
+  const giveBack = (harder) => {
+    tactics.clear();
+    slayer.clear();
+    const n = campaign.reset({ harder });
+    toast(harder ? `${n} ${opsWord()}s back, at level ${campaign.book.level + 1}` : `${n} ${opsWord()}s back`);
+    showOpsPanel();
+  };
+  el.opsReset.addEventListener('click', () => giveBack(false));
+  el.opsHarder.addEventListener('click', () => giveBack(true));
+
   function beginWalk() {
     el.title.classList.add('hidden');
     el.hud.classList.remove('hidden');
+    startOps();
     landmarks.reset();
     combat.reset();
     drones.reset();
     weapon.reset();
+    // Tactics and Slayer have a number row of their own.
+    weapon.setKit(campaign.active ? campaign.mode : null);
     pickups.reset();
     gibs.clear();
     demolition.reset();
@@ -4711,21 +5543,28 @@ async function main() {
   // is the same city after it has gone, and it is picked here rather than in
   // the cheat menu because it is a mode, not a cheat: the score counts.
   const modeButtons = [...document.querySelectorAll('.diff.mode')];
-  const modeNow = () => (state.peaceful ? 'walk' : (machines.active ? 'machines' : 'berlin'));
+  const modeNow = () => (campaign.active ? campaign.mode
+    : state.peaceful ? 'walk' : (machines.active ? 'machines' : 'berlin'));
   const showMode = () => {
     const now = modeNow();
     for (const b of modeButtons) b.classList.toggle('on', b.dataset.mode === now);
-    el.modeNote.textContent = now === 'machines'
+    el.modeNote.textContent = now === 'tactics'
+      ? 'Armed camps across the city, to be taken one at a time. Take one without anybody raising the alarm for the bonus; break the radio and nobody comes to help them.'
+      : now === 'slayer'
+        ? 'The city has been overrun. Every district has nests that fill with demons as you fight; kill them all and the presence there is broken.'
+        : now === 'machines'
       ? 'Warheads come down every few seconds, the sky is gone, and what walks the streets is steel with one red eye. G flame, V an EMP to stop them, then anything you like.'
       : now === 'walk'
         ? 'Nothing is hunting you. The whole of Berlin to walk about in, and the cheat menu to bring anything out by hand if you change your mind.'
         : 'A walk through the real city, with the real fight in it.';
     el.timePick.classList.toggle('hidden', now !== 'machines');
     applyMachineLook();
+    showOps();
   };
   for (const b of modeButtons) {
     b.addEventListener('click', () => {
       state.peaceful = b.dataset.mode === 'walk';
+      campaign.setMode(b.dataset.mode);
       try { localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0'); } catch { /* private mode */ }
       machines.set(b.dataset.mode === 'machines');
       // Picking the mode puts the clock back on the hour it actually is,
@@ -4749,7 +5588,10 @@ async function main() {
   showModeTime();
   showMode();
 
-  const diffButtons = [...document.querySelectorAll('.difficulty .diff')];
+  // The mode buttons sit in a row of the same class. They are not
+  // difficulties, and counting them as such cleared their highlight the
+  // moment one was clicked.
+  const diffButtons = [...document.querySelectorAll('.difficulty .diff:not(.mode)')];
   const showDifficulty = () => {
     for (const b of diffButtons) b.classList.toggle('on', b.dataset.diff === combat.rules.name);
     const r = combat.rules;
@@ -4952,6 +5794,7 @@ async function main() {
         if (!minimap.big && !isTouch && !photo.active) input.requestLock();
         break;
       case 'KeyH': el.help.classList.toggle('hidden'); break;
+      case 'KeyJ': toggleOpsPanel(); break;
       case 'KeyN': {
         const on = audio.toggle();
         el.btnSound.textContent = on ? 'sound on' : 'sound off';
@@ -4962,7 +5805,7 @@ async function main() {
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
-      case 'KeyF': toggleVehicle(); break;
+      case 'KeyF': if (!takedown()) toggleVehicle(); break;
       case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(true); else openTravel(); break;
@@ -5089,7 +5932,10 @@ async function main() {
     // switched off, so that anything the cheat menu brings out by hand is a
     // real enemy with a real fight in it; it simply is not replaced when it
     // goes down, and nothing is sent after you in the first place.
-    if (state.peaceful) {
+    // Tactics and Slayer send nothing after you either: what there is to
+    // fight is in the camps and the nests, and the reinforcements a camp
+    // calls are its own.
+    if (state.peaceful || campaign.active) {
       drones.budget = 0;
       soldiers.budget = 0;
       jets.budget = 0;
@@ -5119,11 +5965,13 @@ async function main() {
       fireWalls.update(worldDt);
       updateBurning(worldDt);
       updateReactors(worldDt);
+      warlordStep(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
       ultra.update(worldDt, ultraLive());
       storm.update(worldDt, stormLive());
+      opsStep(worldDt);
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
@@ -5308,11 +6156,13 @@ async function main() {
     fireWalls.update(worldDt);
     updateBurning(worldDt);
     updateReactors(worldDt);
+    warlordStep(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
     ultra.update(worldDt, ultraLive());
     storm.update(worldDt, stormLive());
+    opsStep(worldDt);
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     // And the ones hunting you keep walking whether or not you are in one.
@@ -5651,6 +6501,8 @@ async function main() {
       renderer.actors.updateGibs(gibs.active);
       renderer.actors.updateVehicles([...vehicles.active, ...trains.cars]);
       renderer.actors.updateMechs(mechs.active);
+      renderer.actors.updateCamps(tactics.enabled ? tactics.drawList(player.x, player.z) : []);
+      renderer.actors.updateNests(slayer.enabled ? slayer.drawList(player.x, player.z) : []);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -5668,6 +6520,10 @@ async function main() {
       renderer.actors.updateGibs(live ? gibs.active : []);
       renderer.actors.updateVehicles(live ? [...vehicles.active, ...trains.cars] : []);
       renderer.actors.updateMechs(live ? mechs.active : []);
+      renderer.actors.updateCamps(live && tactics.enabled
+        ? tactics.drawList(camera.position[0], camera.position[2], 1600) : []);
+      renderer.actors.updateNests(live && slayer.enabled
+        ? slayer.drawList(camera.position[0], camera.position[2], 1600) : []);
       renderer.drawActors = live;
     }
 
@@ -5687,6 +6543,8 @@ async function main() {
     renderer.setCollapses(demolition.sites);
     renderer.setFires(fires.sites);
     if (renderer.updateDynamicScale(loop.stats.intervalMs)) resize();
+    // Through a scope there is no rifle in the way of the picture.
+    if (renderer.viewmodel && weapon.spec.scope && weapon.aimBlend > 0.85) renderer.viewmodel = null;
     renderer.render(camera, state.time, w, h);
 
     if (photo.pendingShot) {
@@ -5728,6 +6586,7 @@ async function main() {
       el.crosshair.classList.toggle('holstered', weapon.holstered);
       placeGunMark();
       placeHealthBars();
+      opsHud();
       // How far a blast plasma charge has got, under the crosshair while it
       // builds, and what it is once it is full.
       const charge = weapon.blastCharge;
@@ -5745,14 +6604,22 @@ async function main() {
       // them not working.
       const near = (state.inVehicle || state.inMech) ? null
         : (mechs.nearest(player.x, player.z, 9) || vehicles.nearest(player.x, player.z, 7));
-      el.rideHint.classList.toggle('hidden', !near);
-      if (near) el.rideHintName.textContent = near.spec.name;
+      // A man who has not seen you, within arm's reach, comes before any car.
+      const quietKill = (state.inVehicle || state.inMech) ? null : takedownTarget();
+      el.rideHint.classList.toggle('hidden', !near && !quietKill);
+      if (quietKill) el.rideHintName.textContent = quietKill.demon ? 'Finish' : 'Takedown';
+      else if (near) el.rideHintName.textContent = near.spec.name;
+      // The scope: a picture of one, and no rifle in the way of it.
+      const scoped = !!weapon.spec.scope && weapon.aimBlend > 0.85 && !weapon.holstered;
+      el.scope.classList.toggle('hidden', !scoped);
       rideHud();
       mechHud();
     }
 
     if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
       || state.mode === 'cinema') {
+      minimap.sites = campaign.active ? campaign.allSites() : null;
+      minimap.siteKind = campaign.mode;
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live,
         vehicles.active.filter((v) => v.alive && !v.occupied && v.health > 0));
@@ -5824,6 +6691,28 @@ async function main() {
     ion, ionSpec: ION, ionState: ION_STATE,
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
     storm, stormSpec: VOID_STORM,
+    takedown: () => takedown(), takedownTarget: () => takedownTarget(),
+    demonSpec: DEMON, gazerSpec: GAZER,
+    spawnDemon(kind, dx, dz, level = 0) {
+      // Put down exactly where it was asked for, for a test that needs it there.
+      if (kind === 'warlord') {
+        return spawnWarlord(player.x + dx, player.z + dz, 0, 0, level);
+      }
+      if (kind === 'gazer') {
+        const d = this.spawnDrone(dx, 8, dz);
+        if (d) makeGazer(d, level);
+        return d;
+      }
+      const s = this.spawnSoldier(dx, dz);
+      if (s) makeDemon(s, kind, level);
+      return s;
+    },
+    slayer, slayerSpec: SLAYER,
+    warlordPhases: WARLORD_PHASES, quakes, warlordPoints: WARLORD_POINTS,
+    placeHealthBars: () => placeHealthBars(),
+    campaign, tactics, tacticsSpec: TACTICS, opsStep: (dt) => opsStep(dt), opsPanel: (on) => toggleOpsPanel(on),
+    showOps: () => showOps(),
+    startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
@@ -5907,6 +6796,7 @@ async function main() {
     // Holding the trigger, for whatever pours rather than fires. The input
     // layer sets the same flag when a mouse button is down.
     holdFire(on) { input.fire = !!on; },
+    setAim(on) { input.secondary = !!on; },
     fireWalls,
     /**
      * The height of the ground as it is actually drawn at a point: the tile's

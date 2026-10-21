@@ -92,7 +92,8 @@ district by hand. A comparison of the same street at either tier is in
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
-| F | get into the nearest vehicle, or out of the one you are in |
+| F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels |
+| J | in Tactics and Slayer, the journal: every district, and the camps or nests given back, or given back harder |
 | driving | W forward, S back, A D steer, Shift brake, left mouse fires |
 | flying | it flies where you look; W S throttle (a fighter holds it), A D turn, Space climbs, right mouse drops |
 | F4 | debug overlay |
@@ -444,6 +445,62 @@ a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
 vertex shader collapses one set of parts or the other to nothing depending on
 how burnt they are, so a person and a skeleton are the same mesh and the same
 draw call.
+
+## Spree Fall Tactics
+
+A mode on the title card, in the manner of the outpost games: armed camps
+across the city, to be taken one at a time. Pick one district or all of
+Berlin, the district you start in (the game flies you there) and how many
+camps a district holds; camps are put down on open ground the first time a
+district is in memory, always in the same places, and the campaign is kept
+in the browser.
+
+- A camp is a ring of sandbags with tents, crates, a flag, a siren and a
+  radio on a table with a mast. Within 280 m it is manned: five guards and
+  one more a level, half of them sentries looking out, machines among them
+  from level three.
+- A guard has to notice you: inside his cone of vision, slowly, faster the
+  nearer and the faster you are; behind him he does not see you at all. The
+  top of the screen says how seen you are. Once one is sure, the siren goes
+  2.6 seconds later unless you kill him first. A rifle shot is heard 130 m
+  off, an explosion 240 m; a guard who sees a body goes to look.
+- With the alarm on and the radio standing, help comes out of the street in
+  two waves. Shoot the radio (or blow it up) and nobody else is called.
+- Take a camp without the siren ever sounding for the bonus (a switch in
+  the setup). The journal on J gives the camps back, or gives them back a
+  level harder, with more men and more points.
+- The number row is the quiet three first: a suppressed pistol, a bow whose
+  arrows drop and stay where they go in, and a suppressed marksman rifle
+  with a scope; then the M16, the shotgun, the rocket launcher, grenade, C4,
+  banana and railgun. F behind a guard who has not seen you is a takedown.
+
+## Spree Fall Slayer
+
+The other new mode, in the manner of the demon shooters: every district has
+nests, and the presence there is broken when they are dead. One district or
+all of them, a start district, how many nests, and bosses on or off.
+
+- Walk up to a nest and it wakes: demons come out of red portals round it
+  in waves, never more than eight at once, fodder first and the heavy ones
+  after, until the wave is spent. Three waves; with bosses on, the last nest
+  in a district keeps a fourth with a tyrant in it. Run and the nest calls
+  them back and waits.
+- Ghouls throw fire and claw, brutes charge, gazers float and spit fire,
+  and the tyrant is three and a half times a man and throws fire in volleys.
+- The last nest of the whole operation keeps one more wave after the
+  tyrant's: the Warlord, nine metres of hide and iron on goat legs with a
+  rocket arm. Only its heart takes a hit in full; the rest takes a third.
+  Close in, it brings both hooves down and a ring runs out along the ground:
+  jump it. Hurt past two thirds and past a third it calls its own and gets
+  faster. Its name and a long bar sit at the top of the screen while it is
+  near, and the cheat menu can bring one out any time.
+- The number row: a double barrel, the M16, the plasma rifle, rockets, the
+  railgun, a shield saw you throw (it cuts through and comes back; held up
+  on the second trigger it stops fire, and raised just in time it sends it
+  back), a flail, a chainsaw (fuel by the size of what it cuts, ammunition
+  everywhere when it does, and the fuel comes back slowly), flak and the
+  void cannon. A demon low on its feet reels and glows; F finishes it, and
+  gives you thirty health.
 
 ## Just a Walk
 

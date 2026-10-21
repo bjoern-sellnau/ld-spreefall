@@ -199,9 +199,12 @@ export class Effects {
    * @param {number} scale how much of everything, for a machine rather than
    *   a man
    */
-  arrival(x, y, z, radius, scale = 1) {
-    this.flash(x, y + radius * 0.5, z, radius * 1.1, 0.72, 0.90, 1.0, 0.20);
-    this.flash(x, y + radius * 0.5, z, radius * 0.45, 1.0, 1.0, 1.0, 0.13);
+  arrival(x, y, z, radius, scale = 1, tint = null) {
+    // The light of it: blue for anybody arriving, or a tint for what comes
+    // up out of a portal of its own (a demon's is red and orange).
+    const c = tint || [0.52, 0.84, 1.0];
+    this.flash(x, y + radius * 0.5, z, radius * 1.1, Math.min(1, c[0] * 1.4), c[1] * 1.07, c[2], 0.20);
+    this.flash(x, y + radius * 0.5, z, radius * 0.45, 1.0, tint ? c[1] * 1.6 : 1.0, tint ? c[2] * 2 : 1.0, 0.13);
     // The shell. Points scattered over a sphere, each of them falling in
     // towards the middle of it and arriving as it dies.
     const n = Math.min(120, Math.round((34 + radius * 10) * scale));
@@ -222,7 +225,7 @@ export class Effects {
       p.gravity = 0;
       p.maxLife = life;
       p.life = life;
-      p.r = 0.52; p.g = 0.84; p.b = 1.0;
+      p.r = c[0]; p.g = c[1]; p.b = c[2];
       p.size = 0.18 + Math.random() * 0.26;
       p.bx = 0; p.by = 0; p.bz = 0;
     }
@@ -231,13 +234,13 @@ export class Effects {
       const r = radius * (0.2 + Math.random() * 0.8);
       this.lance(x + Math.cos(a) * r, y, z + Math.sin(a) * r,
         x + Math.cos(a) * r * 0.3, y + radius * (0.6 + Math.random()), z + Math.sin(a) * r * 0.3,
-        0.62, 0.88, 1.0);
+        Math.min(1, c[0] * 1.2), c[1] * 1.05, c[2]);
     }
     for (let i = 0; i < Math.round(14 * scale); i++) {
       const a = Math.random() * Math.PI * 2;
       const r = radius * Math.sqrt(Math.random());
       this.spark(x + Math.cos(a) * r, y + 0.2 + Math.random() * radius,
-        z + Math.sin(a) * r, 0.58, 0.86, 1.0);
+        z + Math.sin(a) * r, c[0] * 1.1, c[1], c[2]);
     }
   }
 

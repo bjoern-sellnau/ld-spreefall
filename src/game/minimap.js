@@ -225,6 +225,29 @@ export class Minimap {
       ctx.stroke();
     }
 
+    // Tactics' camps and Slayer's nests: a ring the size of the site, red
+    // while it is held and blue once it is yours, with a dot in the middle
+    // that stays readable however far out the map is.
+    if (this.sites && this.sites.length) {
+      const dot = (this.big ? 3.2 : 4.2) / scale * this.dpr * 0.5;
+      for (const st of this.sites) {
+        if (!this.big && Math.hypot(st.x - px, st.z - pz) > reach + 40) continue;
+        const free = st.state === 1;
+        const held = this.siteKind === 'slayer' ? '#d0402a' : '#e2574a';
+        ctx.strokeStyle = free ? 'rgba(110, 170, 255, 0.85)' : held;
+        ctx.fillStyle = free ? 'rgba(110, 170, 255, 0.18)' : 'rgba(226, 87, 74, 0.18)';
+        ctx.lineWidth = 1.6 / scale * this.dpr;
+        ctx.beginPath();
+        ctx.arc(st.x, st.z, Math.max(16, dot * 2.2), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = free ? '#6eaaff' : held;
+        ctx.beginPath();
+        ctx.arc(st.x, st.z, dot, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // Pickup pads, under the landmark pins because a landmark is the thing you
     // came for and a crate is the thing you pass on the way.
     if (pads && pads.length) {

@@ -1533,3 +1533,103 @@ html, body {
     rgba(10, 12, 16, 0) 0%, rgba(10, 12, 16, 0.5) 55%, rgba(10, 12, 16, 0.82) 100%);
   border-top: 1px solid rgba(226, 201, 141, 0.16);
 }
+
+/* Operations: Tactics and Slayer. The setup under the mode buttons, the line
+   at the top of the screen, and the journal on J. */
+#opssetup {
+  width: min(460px, 86vw);
+  margin: 4px auto 10px;
+  font: 400 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+  color: var(--dim);
+  text-align: left;
+}
+#opssetup.hidden, #opssetup .hidden { display: none; }
+.opsrow {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.opsrow b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.opsrow select, .opsrow input[type=range] { accent-color: var(--accent); max-width: 58%; }
+.opsrow select {
+  background: #15181d; color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 6px; font: inherit;
+}
+.opsseg { display: inline-flex; gap: 4px; }
+.opsbtn {
+  font: 600 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--dim); background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 7px 10px; cursor: pointer;
+}
+.opsbtn:hover { color: var(--ink); border-color: rgba(255, 255, 255, 0.35); }
+.opsbtn.on { color: #0b0d10; background: #9fd8ff; border-color: #9fd8ff; }
+.opsbtn.small { margin-top: 8px; padding: 5px 8px; font-size: 9px; }
+.opsline { margin: 8px 0 0; color: var(--ink); }
+
+#ops {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  display: flex; gap: 12px; align-items: baseline;
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--dim); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+#ops b { color: var(--accent); font-weight: 600; }
+#ops i { font-style: normal; color: #ff5a48; font-weight: 700; }
+#ops i:empty { display: none; }
+#ops.hidden { display: none; }
+
+#opspanel .opsbox {
+  width: min(560px, 92vw); max-height: 80vh; overflow: auto;
+  background: rgba(12, 14, 18, 0.94); border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 22px 24px; color: var(--ink);
+  font: 400 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+}
+#opspanel h2 { margin: 0 0 4px; font-size: 15px; letter-spacing: 0.16em; text-transform: uppercase; }
+#opslist { margin: 12px 0; }
+#opslist .opsd {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+#opslist .opsd b { color: var(--accent); font-variant-numeric: tabular-nums; }
+#opslist .opsd.done b { color: #7fd6a0; }
+.opsbuttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+@media (max-width: 640px) {
+  #ops { top: 8px; font-size: 9.5px; gap: 8px; letter-spacing: 0.06em; }
+}
+#ops i[data-level="wary"] { color: #ffc24a; }
+
+/* The boss: its name and one long bar across the top of the screen. */
+#bossbar {
+  position: absolute; left: 50%; top: 36px; transform: translateX(-50%);
+  width: min(560px, 80vw); pointer-events: none; text-align: center;
+  font: 600 12px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.32em; text-transform: uppercase;
+  color: #ffb07a; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.95);
+}
+#bossbar.hidden { display: none; }
+#bossbar .track {
+  position: relative; margin-top: 6px; height: 9px;
+  background: rgba(10, 6, 6, 0.8); border: 1px solid rgba(255, 90, 40, 0.45);
+  box-shadow: 0 0 10px rgba(255, 60, 20, 0.25);
+}
+#bossfill {
+  height: 100%; width: 100%; transform-origin: left center;
+  background: linear-gradient(90deg, #8a1206, #ff4a12 70%, #ffb03a);
+}
+#bossbar .notch { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgba(0, 0, 0, 0.75); }
+#bossbar.tyrant .notch { display: none; }
+@media (max-width: 640px) { #bossbar { top: 26px; font-size: 10px; letter-spacing: 0.18em; } }
+
+/* A scope: everything outside the glass is black, a thin crosshair across it. */
+#scope {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, transparent 0 34vmin, rgba(0, 0, 0, 0.6) 34.4vmin,
+    #000 35.5vmin);
+}
+#scope.hidden { display: none; }
+#scope i { position: absolute; background: rgba(0, 0, 0, 0.85); }
+#scope i:nth-child(1) { left: 50%; top: 15vh; bottom: 15vh; width: 1px; }
+#scope i:nth-child(2) { top: 50%; left: 15vw; right: 15vw; height: 1px; }

@@ -89,6 +89,8 @@ export const SPAWNS = [
   { id: 'reapers', label: 'Enemy mechs', note: 'two, eight metres of walking gun', count: 2 },
   { id: 'machines', label: 'Machines', note: 'six of them, steel under the skin and a beam rifle each', count: 6 },
   { id: 'civilians', label: 'Passers by', note: 'eight people on their way somewhere, who run from a shot', count: 8 },
+  { id: 'demons', label: 'Demons', note: 'a pack: ghouls that throw fire, a brute that charges, a gazer overhead', count: 7 },
+  { id: 'warlord', label: 'Warlord', note: 'Slayer\'s great boss: nine metres, a rocket arm, a heart to aim at', count: 1 },
 ];
 
 /**

@@ -266,6 +266,22 @@ export class Audio {
     void: { crackHz: 600, sweepHz: 1800, crackGain: 0.2, tail: 1.2,
       bodyHz: 60, bodyEnd: 220, bodyGain: 0.55, bodyTail: 1.0, hp: 120,
       snap: 0.1, boom: 0.4, drive: 1.6, echo: 0.3 },
+    // The quiet three. A suppressed pistol is a hard cough and a click, a
+    // suppressed rifle a heavier one with a little of the crack left in it,
+    // and a bow is the string and nothing else: no snap, no boom, no echo.
+    pistol: { crackHz: 3600, sweepHz: 1500, crackGain: 0.10, tail: 0.09,
+      bodyHz: 260, bodyEnd: 120, bodyGain: 0.07, bodyTail: 0.06, hp: 1300,
+      snap: 0.22, boom: 0.04, drive: 1.2, echo: 0.04 },
+    suppressed: { crackHz: 2400, sweepHz: 900, crackGain: 0.16, tail: 0.16,
+      bodyHz: 180, bodyEnd: 70, bodyGain: 0.12, bodyTail: 0.1, hp: 700,
+      snap: 0.35, boom: 0.08, drive: 1.4, echo: 0.08 },
+    bow: { crackHz: 900, sweepHz: 420, crackGain: 0.07, tail: 0.18,
+      bodyHz: 140, bodyEnd: 95, bodyGain: 0.14, bodyTail: 0.16, hp: 200,
+      snap: 0, boom: 0, drive: 1, echo: 0 },
+    // Both barrels: a shotgun's report with more of everything under it.
+    doublebarrel: { crackHz: 1300, sweepHz: 260, crackGain: 0.6, tail: 0.55,
+      bodyHz: 120, bodyEnd: 30, bodyGain: 0.45, bodyTail: 0.32, hp: 300,
+      snap: 1.0, boom: 0.42, drive: 3.0, echo: 0.42 },
     // Forty tonnes firing. Everything here is lower and longer than the hand
     // weapons, because that is the whole difference a listener hears between
     // a rifle and a gun bolted to eight metres of armour: not loudness, which
@@ -438,6 +454,98 @@ export class Audio {
    * and a tail long enough to bounce off the buildings that are not modelled
    * as reflectors. Cheap, and it reads as a long way away from a rifle.
    */
+  /**
+   * A demon's roar: a sawtooth growl that drops, under a band of noise, the
+   * bigger the demon the deeper. Quieter with distance.
+   */
+  roar(distance = 0, size = 1) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = Math.max(0.05, 1 - distance / 160) * 0.22;
+    const base = 120 / Math.sqrt(size);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(base * 1.4, t);
+    o.frequency.exponentialRampToValueAtTime(base * 0.7, t + 0.8);
+    const wob = ctx.createOscillator();
+    wob.frequency.value = 23;
+    const wg = ctx.createGain();
+    wg.gain.value = base * 0.18;
+    wob.connect(wg).connect(o.frequency);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+    o.connect(lp).connect(g).connect(this.master);
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 420 / Math.sqrt(size);
+    bp.Q.value = 1.4;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(level * 0.8, t + 0.05);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    n.connect(bp).connect(ng).connect(this.master);
+    o.start(t); wob.start(t); n.start(t, Math.random() * 3, 1);
+    o.stop(t + 1); wob.stop(t + 1); n.stop(t + 1);
+  }
+
+  /** A chainsaw biting: a buzzing two stroke that rises as it cuts. */
+  saw(seconds = 0.7) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(70, t);
+    o.frequency.exponentialRampToValueAtTime(190, t + seconds * 0.4);
+    o.frequency.exponentialRampToValueAtTime(120, t + seconds);
+    const am = ctx.createOscillator();
+    am.frequency.value = 38;
+    const amg = ctx.createGain();
+    amg.gain.value = 0.5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.05);
+    g.gain.setValueAtTime(0.16, t + seconds * 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    am.connect(amg).connect(g.gain);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900;
+    bp.Q.value = 0.7;
+    o.connect(bp).connect(g).connect(this.master);
+    o.start(t); am.start(t);
+    o.stop(t + seconds + 0.05); am.stop(t + seconds + 0.05);
+  }
+
+  /** Fire leaving a demon's hand, or landing: a short breathy whoomp. */
+  whoomp(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = Math.max(0.03, 1 - distance / 120) * 0.2;
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1800, t);
+    lp.frequency.exponentialRampToValueAtTime(260, t + 0.35);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    n.connect(lp).connect(g).connect(this.master);
+    n.start(t, Math.random() * 3, 0.5);
+    n.stop(t + 0.5);
+  }
+
   explosion() {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;
@@ -595,6 +703,75 @@ export class Audio {
    * faded when it comes up, because a flamethrower is a continuous sound and
    * retriggering a one shot sixty times a second is a buzz, not a roar.
    */
+  /**
+   * A camp's siren: two tones a fourth apart, wailing up and down over two
+   * seconds, the way a wind up siren on a pole sounds from a street away.
+   * Level is nought to one by distance; nought stops it.
+   */
+  siren(level) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    if (level > 0.001 && !this._siren) {
+      const out = ctx.createGain();
+      out.gain.value = 0.0001;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 2600;
+      lp.connect(out).connect(this.master);
+      const wail = ctx.createOscillator();
+      wail.type = 'sine';
+      wail.frequency.value = 0.5;
+      const oscs = [];
+      for (const [base, depth] of [[560, 260], [747, 346]]) {
+        const o = ctx.createOscillator();
+        o.type = 'triangle';
+        o.frequency.value = base;
+        const d = ctx.createGain();
+        d.gain.value = depth;
+        wail.connect(d).connect(o.frequency);
+        const g = ctx.createGain();
+        g.gain.value = 0.5;
+        o.connect(g).connect(lp);
+        o.start();
+        oscs.push(o);
+      }
+      wail.start();
+      this._siren = { out, wail, oscs };
+    }
+    if (!this._siren) return;
+    const t = ctx.currentTime;
+    this._siren.out.gain.setTargetAtTime(Math.max(0.0001, level * 0.16), t, 0.25);
+    if (level <= 0.001) {
+      const s = this._siren;
+      this._siren = null;
+      setTimeout(() => {
+        try { s.wail.stop(); for (const o of s.oscs) o.stop(); s.out.disconnect(); } catch { /* gone */ }
+      }, 1500);
+    }
+  }
+
+  /** Somebody in a camp is sure of you: a short rising sting, high and thin. */
+  spotted() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(420, t);
+    o.frequency.exponentialRampToValueAtTime(1300, t + 0.35);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 1100;
+    f.Q.value = 2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    o.connect(f).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.55);
+  }
+
   flameLoop(on) {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) {

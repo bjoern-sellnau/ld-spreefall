@@ -3,7 +3,7 @@
 // project ships no models.
 
 import { createProgram } from '../engine/gl.js';
-import { CHASSIS } from '../game/chassis.js';
+import { CHASSIS, WARLORD } from '../game/chassis.js';
 import { MECH_BUILDERS } from './mechmeshes.js';
 import { mat4 } from '../engine/math.js';
 import {
@@ -18,6 +18,8 @@ const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
 const MAX_VEHICLES = 8;
+// Camps near enough to draw at once.
+const MAX_CAMPS = 12;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 256;
@@ -376,6 +378,26 @@ export function buildProjectileMesh(kind) {
     // The mech's: the same ball, nearly twice across, so it reads as the
     // bigger thing before it lands.
     m.icosphere(0, 0, 0, 1.3, 14, 7, 30);
+  } else if (kind === 'shieldsaw') {
+    m.cylinder(0, 0, 0, 0.30, 0.30, 0.05, 18, 2, 'y');
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.32, 0.025, Math.sin(a) * 0.32, 0.06, 0.04, 0.06, 44, a);
+    }
+  } else if (kind === 'fireball') {
+    // A demon's fire: a ball of the blast orange.
+    m.icosphere(0, 0, 0, 0.3, 10, 6, 48);
+    m.cylinder(0, 0, 0.2, 0.22, 0.02, 0.6, 8, 48, 'z');
+  } else if (kind === 'arrow') {
+    // Seventy centimetres of shaft, a steel head at the front, which is -z
+    // like everything else that flies here, and three vanes at the back.
+    m.cylinder(0, 0, 0.36, 0.0045, 0.0045, -0.70, 6, 2, 'z');
+    m.cylinder(0, 0, -0.34, 0.012, 0.0, -0.07, 6, 44, 'z');
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.014, Math.sin(a) * 0.014, 0.30, 0.002 + Math.abs(Math.cos(a)) * 0.022,
+        0.002 + Math.abs(Math.sin(a)) * 0.022, 0.09, 12);
+    }
   } else if (kind === 'splinter') {
     m.box(0, 0, 0.06, 0.030, 0.030, 0.22, 11);
     m.box(0, 0, -0.10, 0.012, 0.012, 0.10, 8);
@@ -467,6 +489,118 @@ export function buildFlakMesh() {
   m.box(0, -0.048, -0.470, 0.044, 0.070, 0.100, 2);      // pump
   m.box(0, 0.058, -0.300, 0.026, 0.024, 0.090, 3);       // sight
   muzzleFlash(m, 0, 0.010, -0.902, 0.220, 0.110);
+  return m;
+}
+
+/** A pistol with a suppressor on it: slide, frame, grip, the can, sights. */
+export function buildPistolMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.020, -0.300, 0.030, 0.034, 0.190, 0);       // slide
+  m.box(0, -0.008, -0.290, 0.028, 0.022, 0.170, 2);      // frame
+  m.box(0, -0.070, -0.230, 0.030, 0.110, 0.052, 2, 0);   // grip
+  m.box(0, -0.030, -0.250, 0.008, 0.026, 0.040, 0);      // trigger guard
+  m.cylinder(0, 0.020, -0.395, 0.017, 0.017, -0.150, 12, 1, 'z');   // suppressor
+  m.box(0, 0.042, -0.380, 0.004, 0.010, 0.006, 3);       // front sight
+  m.box(0, 0.042, -0.220, 0.018, 0.010, 0.008, 3);       // rear sight
+  muzzleFlash(m, 0, 0.020, -0.545, 0.05, 0.025);
+  return m;
+}
+
+/**
+ * A recurve bow held across the body: the riser in the hand, two limbs that
+ * sweep back, the string, and an arrow on the rest pointing down range.
+ */
+export function buildBowMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.000, -0.400, 0.026, 0.150, 0.032, 0);       // riser
+  m.box(0, -0.008, -0.396, 0.030, 0.060, 0.038, 2);      // the grip in it
+  for (const sgn of [1, -1]) {
+    // Each limb in three pieces, swept back towards you.
+    m.box(0, sgn * 0.110, -0.394, 0.036, 0.080, 0.016, 2);
+    m.box(0, sgn * 0.180, -0.378, 0.030, 0.070, 0.014, 2);
+    m.box(0, sgn * 0.240, -0.356, 0.024, 0.060, 0.012, 2);
+  }
+  // The string, from tip to tip, pulled back a little to the nock.
+  m.box(0, 0.135, -0.300, 0.0025, 0.230, 0.0025, 3);
+  m.box(0, -0.135, -0.300, 0.0025, 0.230, 0.0025, 3);
+  // The arrow on the rest, nocked on the string.
+  m.cylinder(0.010, 0.008, -0.210, 0.0035, 0.0035, -0.560, 6, 1, 'z');
+  m.cylinder(0.010, 0.008, -0.770, 0.009, 0.0, -0.050, 6, 3, 'z');
+  m.box(0.010, 0.018, -0.240, 0.002, 0.018, 0.060, 2);
+  return m;
+}
+
+/** A marksman's rifle: a long receiver, a suppressor as long again, a scope. */
+export function buildMarksmanMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.170, 0.050, 0.080, 0.170, 2);      // stock
+  m.box(0, 0.004, -0.360, 0.054, 0.070, 0.240, 0);       // receiver
+  m.box(0, -0.004, -0.560, 0.044, 0.050, 0.180, 2);      // fore end
+  m.cylinder(0, 0.010, -0.480, 0.012, 0.012, -0.280, 10, 1, 'z');   // barrel
+  m.cylinder(0, 0.010, -0.760, 0.024, 0.024, -0.220, 12, 1, 'z');   // suppressor
+  m.box(0, -0.090, -0.290, 0.040, 0.110, 0.058, 2);      // grip
+  m.box(0, -0.060, -0.380, 0.034, 0.080, 0.070, 0);      // magazine
+  m.cylinder(0, 0.072, -0.250, 0.022, 0.022, -0.260, 12, 3, 'z');   // scope tube
+  m.cylinder(0, 0.072, -0.230, 0.028, 0.022, -0.030, 12, 3, 'z');   // eyepiece
+  m.cylinder(0, 0.072, -0.500, 0.022, 0.032, -0.040, 12, 3, 'z');   // objective
+  m.box(0, 0.046, -0.330, 0.020, 0.020, 0.030, 3);       // mount
+  m.box(0, 0.046, -0.440, 0.020, 0.020, 0.030, 3);
+  muzzleFlash(m, 0, 0.010, -0.980, 0.07, 0.03);
+  return m;
+}
+
+/** Two barrels side by side, a short stock and a fat fore end. */
+export function buildDoubleBarrelMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.180, 0.058, 0.085, 0.170, 2);      // stock
+  m.box(0, -0.004, -0.320, 0.064, 0.070, 0.120, 0);      // breech
+  for (const side of [-1, 1]) {
+    m.cylinder(side * 0.017, 0.012, -0.380, 0.016, 0.016, -0.380, 10, 1, 'z');
+  }
+  m.box(0, -0.020, -0.470, 0.060, 0.040, 0.160, 2);      // fore end
+  m.box(0, -0.090, -0.250, 0.044, 0.110, 0.060, 2);      // grip
+  m.box(0, 0.032, -0.740, 0.008, 0.010, 0.010, 3);       // bead
+  muzzleFlash(m, 0, 0.012, -0.760, 0.20, 0.10);
+  return m;
+}
+
+/** A chainsaw: engine, handles, and a long bar with its teeth. */
+export function buildChainsawMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.280, 0.110, 0.130, 0.220, 0);      // engine
+  m.box(0, 0.070, -0.250, 0.030, 0.050, 0.150, 2);       // top handle
+  m.box(0, -0.100, -0.200, 0.040, 0.080, 0.050, 2);      // rear grip
+  m.box(0, -0.020, -0.600, 0.022, 0.080, 0.460, 1);      // the bar
+  for (let i = 0; i < 12; i++) {
+    const z = -0.40 - i * 0.036;
+    m.box(0, 0.026, z, 0.026, 0.012, 0.014, 3);
+    m.box(0, -0.066, z - 0.018, 0.026, 0.012, 0.014, 3);
+  }
+  return m;
+}
+
+/** A round shield with a ring of teeth, held on the left. */
+export function buildShieldSawMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, -0.330, 0.200, 0.200, -0.030, 20, 0, 'z');
+  m.cylinder(0, 0, -0.362, 0.060, 0.040, -0.020, 12, 3, 'z');   // boss
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    m.box(Math.cos(a) * 0.215, Math.sin(a) * 0.215, -0.345, 0.04, 0.04, 0.02, 3, 0);
+  }
+  m.box(0, 0, -0.300, 0.030, 0.120, 0.030, 2);           // the grip behind it
+  return m;
+}
+
+/** A flail: a haft, a short chain and a spiked head. */
+export function buildFlailMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, -0.080, -0.200, 0.018, 0.020, 0.260, 8, 2, 'y');  // haft
+  for (let i = 0; i < 4; i++) m.box(0.010 * i, 0.190 + i * 0.035, -0.205 - i * 0.02, 0.016, 0.03, 0.016, 1);
+  m.icosphere(0.05, 0.360, -0.290, 0.070, 10, 6, 0);
+  for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1], [0.7, 0.7, 0], [-0.7, 0.7, 0]]) {
+    m.box(0.05 + dx * 0.085, 0.360 + dy * 0.085, -0.290 + dz * 0.085, 0.025, 0.025, 0.025, 3);
+  }
   return m;
 }
 
@@ -688,6 +822,98 @@ export function buildJetMesh() {
  * Parts: 31 the olive it is painted, 2 dark metal, 32 tyres, 39 wheel hubs,
  * 24 glass, 6 the seats, 8 the gun, 34 the headlights.
  */
+/**
+ * A camp, for Tactics: a ring of sandbags with gaps to walk in through, two
+ * tents, crates, a radio on a table with its mast, a flagpole in the middle
+ * and a siren on a pole. Sixteen metres across, built round its own middle
+ * with the ground at nought.
+ *
+ * Parts 64 sandbag, 65 canvas, 66 wood, 67 the radio set, 68 its mast, 69 the
+ * light on top of the mast, 70 poles, 71 the flag, 72 the siren. The radio's
+ * three parts vanish when it is shot to pieces, the flag turns blue when the
+ * camp is taken and the siren goes red while the alarm is on: all three are
+ * read off the instance in the vertex shader.
+ */
+export const CAMP_RADIO = { x: 6.5, z: -5.0, y: 1.05 };
+export function buildCampMesh() {
+  const m = new MeshBuild();
+  // The sandbags: four arcs of two courses, with a gap between each pair of
+  // arcs for a way in.
+  const R = 14;
+  for (let k = 0; k < 4; k++) {
+    const a0 = (k * 90 + 16) * Math.PI / 180;
+    const a1 = (k * 90 + 74) * Math.PI / 180;
+    const n = Math.round((a1 - a0) * R / 1.3);
+    for (let row = 0; row < 2; row++) {
+      for (let i = 0; i < n; i++) {
+        const a = a0 + (i + 0.5 + (row ? 0.5 : 0)) / n * (a1 - a0);
+        if (row && i === n - 1) continue;
+        m.box(Math.cos(a) * R, 0.24 + row * 0.44, Math.sin(a) * R, 1.25, 0.44, 0.62, 64, a + Math.PI / 2);
+      }
+    }
+  }
+  // A tent: a ridge along its length, two pitched sides and two ends.
+  const tent = (cx, cz, rot, w, l, h) => {
+    const c = Math.cos(rot), sn = Math.sin(rot);
+    const P = (x, y, z) => [cx + x * c - z * sn, y, cz + x * sn + z * c];
+    const N = (x, y, z) => [x * c - z * sn, y, x * sn + z * c];
+    const hw = w / 2, hl = l / 2;
+    const slope = Math.hypot(hw, h);
+    m.quad([P(-hw, 0, -hl), P(-hw, 0, hl), P(0, h, hl), P(0, h, -hl)], N(-h / slope, hw / slope, 0), 65);
+    m.quad([P(hw, 0, hl), P(hw, 0, -hl), P(0, h, -hl), P(0, h, hl)], N(h / slope, hw / slope, 0), 65);
+    m.tri([P(-hw, 0, -hl), P(0, h, -hl), P(hw, 0, -hl)], N(0, 0, -1), 65);
+    m.tri([P(hw, 0, hl), P(0, h, hl), P(-hw, 0, hl)], N(0, 0, 1), 65);
+  };
+  tent(-5.2, 3.6, 0.35, 3.2, 4.6, 2.4);
+  tent(4.6, 5.4, -0.5, 3.0, 4.2, 2.2);
+  // Crates.
+  m.box(-2.2, 0.5, -6.4, 1.0, 1.0, 1.0, 66, 0.2);
+  m.box(-1.1, 0.5, -6.2, 1.0, 1.0, 1.0, 66, 0.05);
+  m.box(-1.7, 1.5, -6.3, 1.0, 1.0, 1.0, 66, 0.4);
+  m.box(-8.2, 0.4, -1.5, 2.0, 0.8, 0.9, 66, 1.2);
+  // The radio: a table, the set on it, a mast and the light on the mast.
+  const r = CAMP_RADIO;
+  m.box(r.x, 0.38, r.z, 1.5, 0.08, 0.8, 66);
+  for (const [dx, dz] of [[-0.65, -0.32], [0.65, -0.32], [-0.65, 0.32], [0.65, 0.32]]) {
+    m.box(r.x + dx, 0.18, r.z + dz, 0.08, 0.36, 0.08, 66);
+  }
+  m.box(r.x, 0.62, r.z, 0.62, 0.42, 0.42, 67);
+  m.box(r.x + 0.2, 0.9, r.z, 0.08, 0.16, 0.08, 67);
+  m.cylinder(r.x + 0.55, 0.4, r.z - 0.1, 0.05, 0.03, 6.2, 6, 68);
+  m.box(r.x + 0.55, 6.65, r.z - 0.1, 0.16, 0.16, 0.16, 69);
+  // The flagpole in the middle, and the flag.
+  m.cylinder(0, 0, 0, 0.07, 0.05, 7.4, 8, 70);
+  m.box(0.85, 6.75, 0, 1.6, 1.0, 0.05, 71);
+  // The siren on its pole.
+  m.cylinder(-6.2, 0, -3.6, 0.06, 0.05, 4.2, 6, 70);
+  m.cylinder(-6.2, 4.2, -3.6, 0.22, 0.32, 0.45, 10, 72);
+  return m;
+}
+
+/**
+ * A nest, for Slayer: a mound of flesh with a heart in the top of it, bone
+ * spikes round it and roots across the street. Parts 75 flesh, 76 bone, 77
+ * the heart. Dead, it slumps and the heart goes dark; awake, the heart
+ * beats hard. Both are read off the instance in the vertex shader.
+ */
+export function buildNestMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, 0, 3.4, 2.2, 1.4, 16, 75);
+  m.cylinder(0, 1.4, 0, 2.2, 1.0, 1.1, 14, 75);
+  m.icosphere(0, 2.75, 0, 1.0, 14, 8, 77);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + 0.2;
+    const r = 3.2 + (i % 3) * 0.5;
+    m.cylinder(Math.cos(a) * r, 0, Math.sin(a) * r, 0.22, 0.02, 2.6 + (i % 4) * 0.9, 6, 76);
+  }
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const len = 4 + (i % 3) * 2;
+    m.box(Math.cos(a) * (3 + len / 2), 0.18, Math.sin(a) * (3 + len / 2), len, 0.36, 0.5, 75, -a);
+  }
+  return m;
+}
+
 export function buildJeepMesh() {
   const m = new MeshBuild();
   const P = 31;
@@ -942,6 +1168,32 @@ export function buildSoldierMesh() {
   m.box(0.20, 1.06, -0.12, 0.06, 0.16, 0.12, 26);           // grip
   m.box(0.20, 1.16, 0.18, 0.13, 0.15, 0.16, 26);            // power pack
   m.box(0.20, 1.16, -0.80, 0.055, 0.055, 0.14, 27);         // emitter
+
+  // Horns, which only a demon has: two that sweep up and back from the
+  // brow, collapsed to nothing on anybody else.
+  for (const side of [-1, 1]) {
+    m.box(side * 0.12, 1.76, 0.00, 0.06, 0.16, 0.06, 29, side * 0.3);
+    m.box(side * 0.17, 1.88, 0.05, 0.045, 0.12, 0.045, 29, side * 0.5);
+    m.box(side * 0.20, 1.97, 0.11, 0.03, 0.09, 0.03, 29, side * 0.6);
+  }
+  return m;
+}
+
+/**
+ * Slayer's floating demon: a fat sphere of hide with one great eye in the
+ * front, a mouth under it and two horns. Built facing -z like a drone, and
+ * drawn through the same body shader. Parts 40 hide, 41 horn and mouth, 42
+ * the eye.
+ */
+export function buildGazerMesh() {
+  const m = new MeshBuild();
+  m.icosphere(0, 0, 0, 1.15, 16, 10, 40);
+  m.icosphere(0, 0.18, -0.95, 0.40, 12, 8, 42);
+  m.box(0, -0.42, -0.95, 0.85, 0.16, 0.32, 41);
+  for (const side of [-1, 1]) {
+    m.box(side * 0.55, 0.95, -0.1, 0.16, 0.42, 0.16, 41, side * 0.4);
+    m.box(side * 0.68, 1.25, 0.05, 0.10, 0.28, 0.10, 41, side * 0.6);
+  }
   return m;
 }
 
@@ -1021,6 +1273,7 @@ export class Actors {
     this.progGib.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
+    this.gazer = this._uploadMesh(buildGazerMesh(), MAX_DRONES, 2);
     // Three vec4s rather than two: the third carries how burnt they are,
     // which the walk and the fall had no room left for.
     this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 3);
@@ -1030,10 +1283,14 @@ export class Actors {
     // it has gone.
     // A mesh per chassis, each with room for every mech there can be, since
     // nothing stops all eight on the street being the same one.
-    this.mechMeshes = CHASSIS.map((c) => ({ chassis: c, mesh: this._uploadMesh(buildChassisMesh(c), MAX_MECHS, 3) }));
+    this.mechMeshes = [...CHASSIS, WARLORD].map((c) => ({ chassis: c, mesh: this._uploadMesh(buildChassisMesh(c), MAX_MECHS, 3) }));
     this.mech = this.mechMeshes[0].mesh;
     // What you can get into. The fighter you can fly is the same mesh as the
     // ones that come after you, because it is the same aircraft.
+    // Tactics camps, drawn through the same body shader as the vehicles.
+    this.camp = this._uploadMesh(buildCampMesh(), MAX_CAMPS, 2);
+    // Slayer's nests, through the same shader.
+    this.nest = this._uploadMesh(buildNestMesh(), MAX_CAMPS, 2);
     this.vehicles = {
       jeep: this._uploadMesh(buildJeepMesh(), MAX_VEHICLES, 2),
       tank: this._uploadMesh(buildTankMesh(), MAX_VEHICLES, 2),
@@ -1056,6 +1313,13 @@ export class Actors {
       plasma: this._uploadMesh(buildPlasmaMesh(), 0, 0),
       flak: this._uploadMesh(buildFlakMesh(), 0, 0),
       splinter: this._uploadMesh(buildSplinterMesh(), 0, 0),
+      sdpistol: this._uploadMesh(buildPistolMesh(), 0, 0),
+      bow: this._uploadMesh(buildBowMesh(), 0, 0),
+      marksman: this._uploadMesh(buildMarksmanMesh(), 0, 0),
+      doublebarrel: this._uploadMesh(buildDoubleBarrelMesh(), 0, 0),
+      chainsaw: this._uploadMesh(buildChainsawMesh(), 0, 0),
+      shieldsaw: this._uploadMesh(buildShieldSawMesh(), 0, 0),
+      flail: this._uploadMesh(buildFlailMesh(), 0, 0),
       void: this._uploadMesh(buildVoidMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
@@ -1087,6 +1351,9 @@ export class Actors {
       ultra: this._uploadMesh(buildProjectileMesh('ultra'), MAX_ULTRA, 2),
       blast: this._uploadMesh(buildProjectileMesh('blast'), MAX_PROPS, 2),
       ultraBlast: this._uploadMesh(buildProjectileMesh('ultraBlast'), MAX_ULTRA, 2),
+      arrow: this._uploadMesh(buildProjectileMesh('arrow'), MAX_PROPS, 2),
+      fireball: this._uploadMesh(buildProjectileMesh('fireball'), MAX_PROPS * 2, 2),
+      shieldsaw: this._uploadMesh(buildProjectileMesh('shieldsaw'), 4, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -1173,20 +1440,24 @@ export class Actors {
   /** Pack the live drones into the instance buffer. */
   updateDrones(list) {
     const gl = this.gl;
-    const data = this.drone.instData;
-    let n = 0;
-    for (const d of list) {
-      if (!d.alive || n >= MAX_DRONES) continue;
-      const o = n * 8;
-      data[o] = d.x; data[o + 1] = d.y; data[o + 2] = d.z; data[o + 3] = d.yaw;
-      data[o + 4] = d.tilt; data[o + 5] = d.roll; data[o + 6] = d.hitFlash; data[o + 7] = d.rotor;
-      n++;
-    }
-    this.drone.instanceCount = n;
-    if (n > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.drone.instVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    // A drone and a gazer are the same thing to the game and two meshes here.
+    for (const mesh of [this.drone, this.gazer]) {
+      const data = mesh.instData;
+      const gazer = mesh === this.gazer;
+      let n = 0;
+      for (const d of list) {
+        if (!d.alive || n >= MAX_DRONES || !!d.demon !== gazer) continue;
+        const o = n * 8;
+        data[o] = d.x; data[o + 1] = d.y; data[o + 2] = d.z; data[o + 3] = d.yaw;
+        data[o + 4] = d.tilt; data[o + 5] = d.roll; data[o + 6] = d.hitFlash; data[o + 7] = d.rotor;
+        n++;
+      }
+      mesh.instanceCount = n;
+      if (n > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
     }
   }
 
@@ -1194,22 +1465,28 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0, fireball: 0, shieldsaw: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
       const cap = b.kind === 'nuke' || b.kind === 'void' || b.kind === 'voidMaw' ? 8
         : b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA
-          : b.kind === 'voidStorm' ? MAX_STORM : MAX_PROPS;
+          : b.kind === 'voidStorm' ? MAX_STORM : b.kind === 'fireball' ? MAX_PROPS * 2
+            : b.kind === 'shieldsaw' ? 4 : MAX_PROPS;
       if (counts[b.kind] >= cap) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
       const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke'
-        || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast';
-      const yaw = flying ? Math.atan2(-b.vx, -b.vz) : b.spin * 0.7;
-      const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, b.vy
-        / (Math.hypot(b.vx, b.vy, b.vz) || 1)))) : b.spin;
+        || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast' || b.kind === 'arrow'
+        || b.kind === 'fireball';
+      // An arrow that has gone in keeps pointing the way it was going.
+      const vx = b.stuck && b.fx !== undefined ? b.fx : b.vx;
+      const vy = b.stuck && b.fx !== undefined ? b.fy : b.vy;
+      const vz = b.stuck && b.fx !== undefined ? b.fz : b.vz;
+      const yaw = flying ? Math.atan2(-vx, -vz) : b.spin * 0.7;
+      const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, vy
+        / (Math.hypot(vx, vy, vz) || 1)))) : b.spin;
       // Negated for the shader, as the vehicles are: a rocket flying west was
       // drawn with its nose to the east.
       d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z; d[o + 3] = -yaw;
@@ -1242,8 +1519,10 @@ export class Actors {
       // x charred, y machine, z stunned: a machine is drawn as steel and its
       // eye goes out while an EMP has hold of it.
       data[o + 8] = s.charred || 0;
-      data[o + 9] = s.machine ? 1 : 0;
-      data[o + 10] = s.machine && s.stunLeft > 0 ? Math.min(1, s.stunLeft / 2) : 0;
+      // One for a machine; a demon sends its kind's code, two and up.
+      data[o + 9] = s.machine ? 1 : (s.demon && s.dspec ? s.dspec.code : 0);
+      data[o + 10] = s.machine && s.stunLeft > 0 ? Math.min(1, s.stunLeft / 2)
+        : (s.demon && s.staggered > 0 ? 1 : 0);
       // Nought for a soldier; for somebody who lives here, one plus which
       // coat he has on, which the shader reads out of the fraction.
       data[o + 11] = s.civilian ? 1 + Math.min(0.99, s.who || 0) : 0;
@@ -1447,7 +1726,8 @@ export class Actors {
         data[o + 8] = m.mine ? 1 : 0;
         data[o + 9] = m.health > 0 ? 0 : Math.min(1, (m.dying || 0) / 1.6);
         data[o + 10] = m.dashLeft > 0 ? 1 : 0;
-        data[o + 11] = 0;
+        // How angry the Warlord is, for the glow of its heart and eyes.
+        data[o + 11] = m.rage || 0;
         n++;
       }
       mesh.instanceCount = n;
@@ -1502,6 +1782,84 @@ export class Actors {
     return draws;
   }
 
+  /**
+   * @param {{x:number,y:number,z:number,yaw:number,free:boolean,
+   *   radioDown:boolean,alarm:boolean,flash:number}[]} list camps to draw
+   */
+  updateCamps(list) {
+    const gl = this.gl;
+    const mesh = this.camp;
+    const d = mesh.instData;
+    let n = 0;
+    for (const c of list) {
+      if (n >= MAX_CAMPS) break;
+      const o = n * 8;
+      d[o] = c.x; d[o + 1] = c.y; d[o + 2] = c.z;
+      // Negated for the shader, as the vehicles are.
+      d[o + 3] = -c.yaw;
+      d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = c.flash || 0;
+      // Three switches in one channel: taken, radio down, alarm on.
+      d[o + 7] = (c.free ? 1 : 0) + (c.radioDown ? 2 : 0) + (c.alarm ? 4 : 0);
+      n++;
+    }
+    mesh.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  /** Slayer's nests: taken slumps them, awake makes the heart beat hard. */
+  updateNests(list) {
+    const gl = this.gl;
+    const mesh = this.nest;
+    const d = mesh.instData;
+    let n = 0;
+    for (const c of list) {
+      if (n >= MAX_CAMPS) break;
+      const o = n * 8;
+      d[o] = c.x; d[o + 1] = c.y; d[o + 2] = c.z; d[o + 3] = -c.yaw;
+      d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = 0;
+      d[o + 7] = (c.free ? 1 : 0) + (c.awake ? 2 : 0);
+      n++;
+    }
+    mesh.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  drawCamps() {
+    const gl = this.gl;
+    let draws = 0;
+    for (const mesh of [this.camp, this.nest]) {
+      if (!mesh.instanceCount) continue;
+      this.progDrone.use();
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
+    gl.bindVertexArray(null);
+    return draws;
+  }
+
+  drawCampShadows(lightViewProj) {
+    const gl = this.gl;
+    let draws = 0;
+    for (const mesh of [this.camp, this.nest]) {
+      if (!mesh.instanceCount) continue;
+      this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
+    gl.bindVertexArray(null);
+    return draws;
+  }
+
   drawVehicles() {
     const gl = this.gl;
     let draws = 0;
@@ -1535,25 +1893,31 @@ export class Actors {
   }
 
   drawDrones() {
-    if (!this.drone.instanceCount) return 0;
     const gl = this.gl;
-    this.progDrone.use();
-    gl.bindVertexArray(this.drone.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.drone.count, this.drone.indexType, 0,
-      this.drone.instanceCount);
+    let draws = 0;
+    for (const mesh of [this.drone, this.gazer]) {
+      if (!mesh.instanceCount) continue;
+      this.progDrone.use();
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawDroneShadows(lightViewProj) {
-    if (!this.drone.instanceCount) return 0;
     const gl = this.gl;
-    this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
-    gl.bindVertexArray(this.drone.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.drone.count, this.drone.indexType, 0,
-      this.drone.instanceCount);
+    let draws = 0;
+    for (const mesh of [this.drone, this.gazer]) {
+      if (!mesh.instanceCount) continue;
+      this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawSoldierShadows(lightViewProj) {

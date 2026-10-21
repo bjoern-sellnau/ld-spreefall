@@ -3480,3 +3480,266 @@ So there are two cities now, and a profile picks which:
   muzzle-02-dusk.png, muzzle-03-shotgun.png.
 - The winding audit in the unit tests skips parts 7 and 8, which are
   two sided on purpose and have no normal to agree with.
+
+## 80. Operations, and Spree Fall Tactics' camps
+
+- 2026-10-21: asked for two new modes. Spree Fall Tactics: in the manner of
+  the outpost game, pick one district or all of them, the game puts camps
+  down to be taken, points for a camp taken without an alarm (a switch), a
+  camp that has you spotted calls for help if its radio is still standing,
+  choose the district you start in, reset the camps or raise the difficulty,
+  weapons of that kind on top of ours. Spree Fall Slayer: in the manner of
+  the demon shooter, break the demonic presence by killing every demon in a
+  district, bosses on request, one district or all, waves that spawn while
+  you fight, weapons of that kind on top of ours. Names and numbers ours.
+- The plan, one phase each: 80 the shared campaign and the camps; 81
+  stealth, alarm, radio, reinforcements; 82 the Tactics weapons and a silent
+  takedown; 83 demons; 84 nests, waves and presence; 85 the Slayer weapons.
+- src/game/campaign.js, shared by both: the settings (scope, start district,
+  how many sites a district, the quiet bonus, bosses), the book per mode
+  (score, level, sites by district) kept in localStorage, sites placed the
+  first time a district is in memory from a generator seeded by mode and
+  district so they land in the same place every time, taking a site (1000,
+  400 a level, 1500 more if quiet and the switch is on), reset and reset
+  harder, and a summary. Unit tests in tools/test/campaign.test.mjs.
+- src/game/tactics.js: a camp within 280 m is manned out of the soldier pool
+  (5 guards, one more a level, machines among them from level 2), every
+  other one a sentry who stands looking out, the rest walking rounds of the
+  camp; a camp you walk 460 m away from before an alarm stands down and is
+  manned in full when you come back; the last guard down takes it. Soldiers
+  learnt a post: rounds inside it, a sentry stands, and the recycling of
+  anybody far behind you leaves guards alone. campSpot puts a camp only on
+  loaded, dry, level ground, out of the memorial's field, with nothing at
+  chest height for 13 m round (less if a district has nowhere that open).
+- The camp itself is one instanced mesh in the body shader (parts 64 to
+  74): a sandbag ring with four ways in, two tents, crates, a radio on a
+  table with a mast and a red light, a flagpole, a siren. Three switches in
+  the rotor channel: taken turns the flag blue, radio down takes the set
+  and mast away (shadow too), alarm turns the siren red and turning.
+- Interface: Tactics and Slayer on the title card with their setup under
+  them; a line at the top of the screen; red rings on the map that turn
+  blue; the journal on J with each district, and buttons to give the camps
+  back or give them back harder. Every spawner is held at nought in both
+  modes. Fixed on the way: the difficulty buttons were picked by a selector
+  that also caught the mode buttons, so clicking a mode cleared its own
+  highlight.
+- Checks: tools/test-ops.mjs (12), in CI after the interface suite.
+  ops-01-camp.png, ops-02-camp-taken.png.
+
+## 81. Tactics: being seen, the alarm, the radio and the help it calls
+
+- A guard nobody has told has to notice you. Soldiers learnt suspicion, nought
+  to one: it fills only inside his cone of vision (60 degrees either side of
+  where he faces, out to 80 m), faster the nearer you are (squared), half as
+  fast standing still and 1.7 times as fast running, and within 3.2 m it
+  fills whichever way he faces; it drains while he cannot see you. Past 0.3
+  he stops and turns to where he thinks you are; at one he is sure. Measured:
+  behind a sentry at 12 m, nothing in five seconds; in front of him at 40 m,
+  half sure after 1.7 s and sure after 3.5 s.
+- Sure is not yet the alarm. The camp counts 2.6 s from the first guard who
+  is sure, and if every guard who is sure is dead by then nobody else finds
+  out. A guard who is shot and lives is sure at once. A rifle shot is heard
+  130 m off and an explosion 240 m (a suppressed weapon will carry a few
+  metres, phase 82): everybody who hears it is sure and comes to look. A
+  guard killed where his mates can see him (30 m, line of sight) leaves them
+  more than half sure and walking to the body.
+- The alarm: every guard in the camp is told, the siren on its pole turns
+  red and the siren is heard (two triangle tones a fourth apart, wailing up
+  and down, louder the nearer you are), and if the radio works, a wave of
+  help 9 s later and another 38 s after that, three men and one more a
+  level, coming up out of the street 45 to 95 m off and knowing where you
+  are; machines among them from level 2.
+- The radio: 40 points of it, on the table in the camp, hit by any shot whose
+  line passes within 0.45 m of it and by any blast that reaches it. Down, it
+  goes from the mesh and its shadow, sparks, and no more help is called.
+  A camp manned afresh has a working radio again.
+- The bonus is for no alarm, which is what was asked: seen and silenced in
+  time still counts. A camp taken after the alarm pays the base and its level.
+  A camp walked away from with the alarm on stands down after 40 s away.
+- The line at the top of the screen shows how seen you are (amber, the
+  wariest guard within 160 m), spotted, alarm, and whether the radio is down.
+- Checks (ops, 21 now): behind a sentry, in front of one, the alarm left to
+  run, the spotter killed in time, a rifle shot heard at 100 m, help with
+  the radio working, the radio shot to pieces in two rounds and no wave
+  after it, and the loud camp paying no bonus with the siren stopping.
+  ops-03-alarm.png.
+
+## 82. Tactics: the quiet three, and a takedown
+
+- Three weapons in arsenal.js, each with a noise: how far a camp guard hears
+  the shot (anything without one is heard 130 m off). A suppressed pistol
+  (46, three times that in the head, heard at 10 m), a bow (an arrow that
+  drops, 125 and three times that in the head, heard at 4 m) and a marksman
+  rifle, suppressed, with a scope (165, heard at 20 m). Their own voices in
+  the shot synth: a cough and a click, a heavier cough, and a string.
+- The arrow is a projectile of its own: it falls, and what it meets it goes
+  into. A body takes the arrow's own harm (projectiles.onArrow, with the
+  head counted from the actor raycast, which the projectile layer now passes
+  on), a wall or the ground keeps it, pointing the way it was going, for 25
+  seconds.
+- The marksman rifle aims through a scope: an eleven degree field, a black
+  surround with a thin cross, and no rifle drawn in the way of it.
+- A takedown: F, within 2.6 m of a soldier in front of you who is not
+  fighting and whose camp has not been told. Silent, so nobody hears it,
+  but a body is still a body and anybody who can see it will go and look.
+  The hint by the crosshair says Takedown instead of the nearest vehicle.
+- A mode can give the number row a kit of its own (KITS in arsenal.js,
+  weapon.setKit): in Tactics 1 to 0 are the pistol, the bow, the marksman
+  rifle, the M16, the shotgun, the rocket launcher, the grenade, C4, the
+  banana and the railgun, and the wheel goes through the same ten. There
+  were two cycle methods in weapon.js and the second one won; it is the one
+  left, and it reads the kit.
+- Checks (ops, 28 now): the kit through the real play button and the real
+  number keys, none of the three heard from 50 m where an M16 is heard by
+  six, an arrow in the head without a sound, an arrow that misses staying
+  put, the takedown offered behind a guard and done with the real F key with
+  no alarm and nobody spotted, and the scope coming up and going again.
+  ops-04-bow.png.
+
+## 83. Slayer's demons
+
+- src/game/demons.js: three that walk and one that floats, as numbers, with
+  their names ours. A ghoul (110, quick, claws at two metres and throws
+  fire), a brute (620, no fire, a roaring charge at 12 m/s across open
+  ground, a blow worth 38), the tyrant (9000, three and a half times a man,
+  fire in volleys of five, both fists down for 60), and the gazer, a sphere
+  of hide with one eye that floats and spits fire (380).
+- Built on the pools there are. A walking demon is a soldier with a kind set
+  on it: the same body, ragdoll, gore and fire, given a step of its own in
+  soldiers.js that hunts (no patrol, no making up its mind), claws in
+  reach, throws fire when it can see you and has the breath, and charges.
+  The floating one is a drone with a flag, whose shot becomes fire.
+- Drawn in their own colours, the kind sent in the machine channel (two
+  and up): cloth and webbing become hide (ochre, raw red, or near black with
+  fire in the cracks for the tyrant), the helmet horn, the visor a pair of
+  eyes, two horns the soldier mesh now carries hidden on everybody else,
+  no rifle, and the whole figure and its shadow scaled. A demon is hit
+  where it is drawn: the capsule and the head scale with it. The gazer is a
+  mesh of its own drawn instead of a drone.
+- Their fire (projectile kind fireball) is hostile: it does not go through
+  the blast that knocks the city down, it does not touch another demon, it
+  looks for you and goes off on the street or on you, and what it does is
+  its own (projectiles.onHostile). A roar and a whoomp in the synth.
+- Fixed on the way: the body cylinder of a soldier ran to the top of his
+  head, and being the nearer surface it took every level shot at a head, so
+  a head shot only counted from above or below. It stops at the neck now.
+- Demons in the cheat menu's spawn row (a pack of seven), on the health
+  bars at their own height and size, and in the ops checks (33 now): the
+  four kinds and their sizes, a head shot at three and a half times a
+  man's height, closing, clawing and burning, the brute's charge, and fire
+  that does not touch another demon. ops-05-demons.png.
+
+## 84. Slayer: nests, waves out of portals, presence, and a boss
+
+- src/game/slayer.js. A nest is a site in the campaign book, placed like a
+  camp (three a district by default, 220 m apart, 16 m of open ground),
+  drawn as a mound of flesh with a heart in the top, bone spikes and roots
+  across the street (parts 75 to 79: slumped with a dark heart once it is
+  dead, the heart beating hard while it is awake).
+- Within 75 m a nest wakes and the fight is the nest's: three waves (five
+  ghouls; four ghouls, a gazer and a brute; five ghouls, two gazers, two
+  brutes), more of everything a level. They come out of portals 12 to 34 m
+  round it, one every 0.4 s while fewer than eight (two more a level) are
+  up, fodder first and the heavy ones after, the way the genre paces it;
+  three seconds' breath between waves. Spend the last wave and the nest is
+  dead (1500, 600 a level). Run 240 m from a fight and the nest calls its
+  demons back and waits for you.
+- With bosses on, the last nest still standing in a district keeps a fourth
+  wave for itself: four ghouls and a tyrant, out of a portal of its own
+  size 22 to 40 m off.
+- Presence, per district: each nest standing is its share, and a nest in a
+  fight counts by what is left of it. The line at the top says the presence
+  where you are, and in a fight the wave and how many are left.
+- A demon's arrival is the blue sphere every arrival in the game is, in red
+  and orange (effects.arrival takes a tint now), the size of what is
+  coming; a gazer's opens in the air. Roars for a wake, a brute and a
+  tyrant.
+- Checks (ops, 41 now): Slayer and its setup, the nests and a whole
+  presence, a nest woken and fought through all its waves with never more
+  than eight up, the presence falling, running and the nest resetting, and
+  with every other nest taken the last one bringing a tyrant and the
+  presence going to nought. A Tactics check that let the other guards see
+  the tester on their own was made to check only what it says.
+  ops-06-nest.png.
+
+## 85. Slayer's weapons, the finisher, and both modes written up
+
+- A melee kind in the arsenal (KIND.MELEE): no round and no trace, the
+  game layer finds what was in reach (in front, within the reach, not
+  behind a wall) and decides what happened to it.
+- A double barrel (two in it, eighteen pellets at 19, 60 m), a chainsaw, a
+  shield saw and a flail, with names and numbers ours, and a Slayer kit for
+  the number row: double barrel, M16, plasma rifle, rockets, railgun,
+  shield saw, flail, chainsaw, flak, void cannon.
+- The chainsaw runs on three pips of fuel. It takes the nearest thing in
+  front of you, for one pip (a man, a ghoul, a gazer) or two (a brute), and
+  will not take a tyrant; it gives ammunition back all over (half of a
+  reserve for the gun in your hand and a third for the rest) and the fuel
+  comes back by itself, one pip every fifteen seconds when there is none.
+- The flail takes everything in a 3.8 m arc in front of you for 150. A ghoul
+  goes in one.
+- The shield saw is thrown flat and spinning: it cuts through whatever it
+  meets (150 each, each once), turns round after 0.6 s or off a wall, and
+  comes back to the hand whatever is in the way, cutting on the way back.
+  Held up on the second trigger it stops fire coming at you from in front,
+  and raised within 0.35 s of the fire arriving it sends a bolt of blast
+  plasma back along your sight for 160.
+- A demon brought below a fifth of itself (never the tyrant) reels for
+  three seconds and glows from inside. F within 3.2 m of one in front of you
+  is a finisher: it goes, and you get thirty health. The hint by the
+  crosshair says Finish.
+- The kill feed names demons, and in Slayer each one is worth its points in
+  the campaign as well (100 a ghoul, 250 a gazer, 400 a brute, 5000 the
+  tyrant).
+- README: Spree Fall Tactics and Spree Fall Slayer, and F and J in the
+  controls and the help panel.
+- Checks (ops, 50 now): the kit through the real keys, the flail's arc, a
+  reeling ghoul finished for health, the saw's fuel by size and the
+  ammunition it gives back, no saw for the tyrant, fuel coming back, the
+  double barrel at four metres, the shield saw through two in a line and
+  home again, and a fireball blocked and one parried.
+  ops-07-doublebarrel.png.
+
+## 86. The Warlord, Slayer's great boss
+
+- A boss in addition to the tyrant, not in place of it: the tyrant still
+  ends every district, and the Warlord ends the operation. The last nest of
+  the whole operation (with one district in scope, that district's last
+  nest; with all of them, the last nest of the last district not yet done)
+  keeps a fifth wave after the tyrant's: four ghouls, two gazers and the
+  Warlord. Bosses off, neither comes.
+- Built on a mech's legs: the mech layer walks it, turns its torso, aims and
+  fires for it, so it is drawn by the mech shader with its own chassis row
+  (hip 4.4, 9.2 m tall) and its own mesh (goat legs on hooves, an armoured
+  chest with iron plates and pauldrons, horns, claws on the left arm, an
+  iron launcher for the right, a pod on the shoulder). Parts 80 to 84 in the
+  body shader: near black hide with fire in thin cracks, horn, banded iron,
+  and the heart and eyes, which burn faster once it is angry.
+- The heart is a sphere on its chest turned with the torso. A hit there is
+  the core and counts in full; anywhere else is hide and iron and counts a
+  third. A blast counts in full only when it goes off at the heart. 24000
+  health, more at higher levels like any demon.
+- Its arm fires rockets in threes with real splash, slow enough to step out
+  of; the pod fires a salvo of six past 36 m. Its own rockets do not hurt it.
+- Both hooves down every 5.5 s when you are within 18 m: a ring runs out
+  along the ground at 20 m/s to 28 m, sparks along its front, and takes 55
+  from you if you are standing on the ground when it passes. A jump clears
+  it.
+- Two phases: below two thirds it roars, calls four ghouls and a gazer and
+  walks and fires faster; below a third it calls three ghouls, two brutes
+  and a gazer, faster again, and its heart and eyes burn hotter. What it
+  calls is counted with its nest.
+- It dies in fire rather than in a reactor: a blast and a crater, a red
+  portal, rubble and fire, and 25000 points to the score and the campaign.
+- A long bar across the top of the screen with the boss's name, for the
+  Warlord (with notches at the two phases) or a tyrant within 260 m; bosses
+  get no small bar of their own.
+- The cheat menu brings one out (Warlord, under the spawns).
+- Checks (ops, 59 now): the last nest of the operation keeps the Warlord;
+  it comes 9.2 m tall with the long bar; the heart is the core and the legs
+  are not; the hide takes a third; the quake hurts where you stand and a
+  jump clears it; both phases call their own, faster and hotter; it dies for
+  the points and the bar goes. Unit (88 now): the plan of a nest, the tyrant
+  and the Warlord for the last nest, the game layer deciding the last nest
+  when every district is in scope, and none of it with bosses off.
+  ops-08-warlord.png.

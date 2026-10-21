@@ -73,6 +73,25 @@ export const PROJECTILE = {
     radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 9,
     detonateOnContact: true, trail: 'void', light: true, spin: 3,
   },
+  shieldsaw: {
+    // Thrown flat and spinning: it cuts through what it meets, turns round
+    // after a moment or off a wall, and comes back to your hand.
+    radius: 0.32, gravity: 0, drag: 0, bounce: 0, armTime: 0.0, maxAge: 4,
+    detonateOnContact: false, saw: true, out: 0.6, back: 42, trail: 'spark', light: true, spin: 30,
+  },
+  fireball: {
+    // A demon's fire. It is not ours: it does not go through the blast that
+    // knocks the city down, it does not hurt other demons, and the only
+    // thing it is looking for is you.
+    radius: 0.3, gravity: 1.2, drag: 0, bounce: 0, armTime: 0.05, maxAge: 6,
+    detonateOnContact: true, hostile: true, trail: 'glow', light: true, spin: 6,
+  },
+  arrow: {
+    // An arrow: it drops, it goes into whatever it meets and stays there, and
+    // the harm it does is its own rather than a blast's.
+    radius: 0.03, gravity: 6.5, drag: 0.01, bounce: 0, armTime: 0.0, maxAge: 25,
+    detonateOnContact: false, sticks: true, arrow: true, trail: 'none', light: false, spin: 0,
+  },
   voidMaw: {
     // The mech's void arm: the cannon's ball nearly twice across, a little
     // quicker, and with the range a forty tonne gun ought to have.
@@ -116,6 +135,12 @@ export class Projectiles {
     for (let i = 0; i < MAX; i++) this.pool.push(new Body());
     this.active = [];
     this.onBounce = null;
+    this.onArrow = null;     // fn(body, hit) when an arrow goes into somebody
+    // Hostile fire: where the player is, and what to do when it arrives.
+    this.player = null;      // {x, y, z} at the feet
+    this.onHostile = null;   // fn(body, x, y, z, direct) when it goes off
+    this.onSaw = null;       // fn(body, hit) the shield saw goes through somebody
+    this.onSawBack = null;   // fn(body) and comes back to the hand
     // Set by the game layer: the same raycast the bullets use against drones
     // and soldiers. Without it a rocket flies through the man it was aimed at
     // and goes off on the wall behind him, which is exactly what the first
@@ -179,6 +204,9 @@ export class Projectiles {
     // And the charge that is looking for a parked car to be.
     b.carbomb = o.carbomb || 0;
     b.spin = 0;
+    b.fx = undefined;
+    b.returning = false;
+    b.hitSet = null;
     b.seed = Math.random();
     this.active.push(b);
     return b;
@@ -242,7 +270,7 @@ export class Projectiles {
       if (b.stuck) {
         // A stuck charge still ages out, so a forgotten banana does not live
         // forever in a city you have walked away from.
-        if (b.age > 240) this._remove(b);
+        if (b.age > (b.spec.arrow ? 25 : 240)) this._remove(b);
         continue;
       }
 
@@ -279,6 +307,46 @@ export class Projectiles {
         }
       }
 
+      // The shield saw: out for a moment, then back to the hand, which it
+      // reaches whatever is in the way, because a weapon that can be lost
+      // round a corner is a weapon you stop throwing.
+      if (b.spec.saw && this.player) {
+        const p = this.player;
+        const hx = p.x - b.x, hy = p.y + 1.3 - b.y, hz = p.z - b.z;
+        const hd = Math.hypot(hx, hy, hz) || 1;
+        if (b.age > b.spec.out) b.returning = true;
+        if (b.returning) {
+          if (hd < 1.4 || b.age > b.spec.maxAge - 0.1) {
+            if (this.onSawBack) this.onSawBack(b);
+            this._remove(b);
+            continue;
+          }
+          b.vx = hx / hd * b.spec.back; b.vy = hy / hd * b.spec.back; b.vz = hz / hd * b.spec.back;
+          b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+          // On the way back it still cuts.
+          if (this.hitActors) {
+            const a = this.hitActors(b.x, b.y, b.z, hx / hd, hy / hd, hz / hd, 1.2);
+            if (a && a.kind !== 'vehicle' && !(b.hitSet && b.hitSet.has(a.target))) {
+              (b.hitSet || (b.hitSet = new Set())).add(a.target);
+              if (this.onSaw) this.onSaw(b, { kind: 'actor', actorKind: a.kind, target: a.target, core: false,
+                x: b.x, y: b.y, z: b.z });
+            }
+          }
+          continue;
+        }
+      }
+
+      // Hostile fire looks for you and for nothing else.
+      if (b.spec.hostile && this.player && b.age > b.spec.armTime) {
+        const p = this.player;
+        const cy = Math.max(p.y + 0.2, Math.min(p.y + 1.6, b.y));
+        if (Math.hypot(b.x - p.x, b.y - cy, b.z - p.z) < 0.55 + b.spec.radius) {
+          if (this.onHostile) this.onHostile(b, b.x, b.y, b.z, true);
+          this._remove(b);
+          continue;
+        }
+      }
+
       if (b.spec.gravity) b.vy -= b.spec.gravity * dt;
       if (b.spec.drag) {
         const k = Math.max(0, 1 - b.spec.drag * dt);
@@ -298,11 +366,12 @@ export class Projectiles {
         const dist = speed * remaining + b.spec.radius;
         let hit = w.raycast(b.x, b.y, b.z, dx, dy, dz, dist);
         // Whoever is in the way counts too, and the nearer of the two wins.
-        if (this.hitActors) {
+        if (this.hitActors && !b.spec.hostile) {
           const actor = this.hitActors(b.x, b.y, b.z, dx, dy, dz, hit ? hit.t : dist);
           if (actor && (!hit || actor.t < hit.t)) {
             hit = {
               t: actor.t, kind: 'actor', target: actor.target,
+              actorKind: actor.kind, core: !!actor.core,
               x: b.x + dx * actor.t, y: b.y + dy * actor.t, z: b.z + dz * actor.t,
               nx: -dx, ny: -dy, nz: -dz,
             };
@@ -321,6 +390,48 @@ export class Projectiles {
         b.x += dx * t; b.y += dy * t; b.z += dz * t;
         const used = t / speed;
         remaining = Math.max(0, remaining - used);
+
+        if (b.spec.hostile) {
+          if (this.onHostile) this.onHostile(b, b.x, b.y, b.z, false);
+          this._remove(b);
+          remaining = 0;
+          break;
+        }
+
+        // The saw goes through a body and on, and off a wall it turns home.
+        if (b.spec.saw) {
+          if (hit.kind === 'actor') {
+            if (!(b.hitSet && b.hitSet.has(hit.target))) {
+              (b.hitSet || (b.hitSet = new Set())).add(hit.target);
+              if (this.onSaw) this.onSaw(b, hit);
+            }
+            b.x += dx * Math.min(remaining * speed, 1.2);
+            b.y += dy * Math.min(remaining * speed, 1.2);
+            b.z += dz * Math.min(remaining * speed, 1.2);
+            remaining = 0;
+            break;
+          }
+          b.returning = true;
+          remaining = 0;
+          break;
+        }
+
+        // An arrow goes into a body and is done, or into a wall and stays.
+        if (b.spec.arrow) {
+          if (hit.kind === 'actor') {
+            if (this.onArrow) this.onArrow(b, hit);
+            this._remove(b);
+            remaining = 0;
+            break;
+          }
+          b.stuck = true;
+          b.fx = b.vx; b.fy = b.vy; b.fz = b.vz;
+          b.vx = b.vy = b.vz = 0;
+          // Into the surface by a third of its length.
+          b.x += dx * 0.22; b.y += dy * 0.22; b.z += dz * 0.22;
+          remaining = 0;
+          break;
+        }
 
         // A bolt with bounces left rebounds; one without goes off.
         if (b.bouncesLeft !== undefined && b.bouncesLeft !== Infinity && b.age > b.spec.armTime) {

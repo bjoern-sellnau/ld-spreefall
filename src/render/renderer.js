@@ -528,6 +528,7 @@ export class Renderer {
         draws += this.actors.drawDroneShadows(this.lightVp[i]);
         draws += this.actors.drawSoldierShadows(this.lightVp[i]);
         draws += this.actors.drawMechShadows(this.lightVp[i]);
+        draws += this.actors.drawCampShadows(this.lightVp[i]);
       }
 
       if (i === 0) {
@@ -683,7 +684,8 @@ export class Renderer {
     if (this.drawActors) {
       gl.enable(gl.CULL_FACE);
       draws += this.actors.drawDrones();
-      tris += this.actors.drone.instanceCount * (this.actors.drone.count / 3);
+      tris += this.actors.drone.instanceCount * (this.actors.drone.count / 3)
+        + this.actors.gazer.instanceCount * (this.actors.gazer.count / 3);
       draws += this.actors.drawJets();
       tris += this.actors.jet.instanceCount * (this.actors.jet.count / 3);
       draws += this.actors.drawSoldiers();
@@ -696,6 +698,9 @@ export class Renderer {
         tris += mesh.instanceCount * (mesh.count / 3);
       }
       draws += this.actors.drawVehicles();
+      draws += this.actors.drawCamps();
+      tris += this.actors.camp.instanceCount * (this.actors.camp.count / 3)
+        + this.actors.nest.instanceCount * (this.actors.nest.count / 3);
       for (const type in this.actors.vehicles) {
         const mesh = this.actors.vehicles[type];
         tris += mesh.instanceCount * (mesh.count / 3);

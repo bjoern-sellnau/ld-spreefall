@@ -104,6 +104,23 @@ class Soldier {
     this.y = y - RISE_DEPTH;
     this.charred = 0;
     this.seed = Math.random();
+    // A camp guard keeps to his post: where it is, how far he walks from it,
+    // and whether he stands still looking out instead of walking at all.
+    this.post = null;
+    this.sentry = false;
+    // How sure a guard is that somebody is there, nought to one. At one he
+    // has seen you, and the camp's business takes it from there.
+    this.suspicion = 0;
+    this.lookX = x; this.lookZ = z;
+    // Slayer: what kind of demon this is, if any, its numbers, and how much
+    // bigger than a man it is drawn and hit.
+    this.demon = null;
+    this.dspec = null;
+    this.scale = 1;
+    this.charging = 0;
+    this.staggered = 0;
+    this.reeled = false;
+    this.nest = null;
     return this;
   }
 }
@@ -170,6 +187,120 @@ export class Soldiers {
     this.hazards = () => [];
     // Scaled by the difficulty: how often their aimed shot is actually aimed.
     this.accuracyScale = 1;
+    // Tactics. How a camp guard who has not been told about you notices you:
+    // the numbers, how fast you are moving, and who to tell when he has.
+    this.stealth = null;          // {range, cone, near, fill, decay, run}
+    this.playerSpeed = 0;
+    this.onSpot = null;           // fn(soldier, how) 'seen', 'heard' or 'hit'
+    this.onDown = null;           // fn(soldier) the moment one is killed
+    // Slayer: a demon's claws, its fire and its charge, which the game layer
+    // turns into harm, projectiles and sound.
+    this.onMelee = null;          // fn(soldier, melee)
+    this.onFireball = null;       // fn(soldier, fire)
+    this.onCharge = null;         // fn(soldier)
+    this.onStagger = null;        // fn(soldier) one starts to reel
+  }
+
+  /**
+   * A demon's step. It does not patrol and it does not make up its mind: it
+   * comes for you, claws when it is close, throws fire when it can see you
+   * and has the breath, and the heavy one charges across open ground.
+   */
+  _demonStep(s, dt, player, dist, dx, dz) {
+    const sp = s.dspec;
+    s.lean += (0 - s.lean) * Math.min(1, dt * 5);
+    s.meleeLeft -= dt;
+    s.fireLeft -= dt;
+    s.chargeLeft -= dt;
+    if (s.staggered > 0) {
+      // Reeling: it stands there, which is the moment to finish it.
+      s.staggered -= dt;
+      s.walk += dt * 0.5;
+      return;
+    }
+    let speed = sp.run;
+    const reach = sp.melee.range + SPEC.radius * s.scale;
+    if (sp.charge) {
+      if (s.charging > 0) {
+        s.charging -= dt;
+        speed = sp.charge.speed;
+      } else if (s.chargeLeft <= 0 && s.canSee && dist > sp.charge.from && dist < sp.charge.to) {
+        s.charging = sp.charge.seconds;
+        s.chargeLeft = sp.charge.every;
+        if (this.onCharge) this.onCharge(s);
+      }
+    }
+    if (dist <= reach) {
+      speed = 0;
+      s.charging = 0;
+      if (s.meleeLeft <= 0) {
+        s.meleeLeft = sp.melee.interval;
+        if (this.onMelee) this.onMelee(s, sp.melee);
+      }
+    } else if (sp.fire && s.canSee && dist < sp.fire.range && s.fireLeft <= 0 && s.charging <= 0) {
+      s.fireLeft = rand(sp.fire.interval[0], sp.fire.interval[1]);
+      if (this.onFireball) this.onFireball(s, sp.fire);
+    }
+    s.targetX = player.x;
+    s.targetZ = player.z;
+    this._move(s, dt, speed);
+    if (Math.abs(dx) + Math.abs(dz) > 0.01) {
+      const want = Math.atan2(-dx, -dz);
+      let d = want - s.yaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      s.yaw += d * Math.min(1, dt * 8);
+    }
+  }
+
+  /**
+   * A guard who has not been told: he sees you only inside his cone of
+   * vision, and only slowly, faster the nearer you are and the faster you
+   * are moving; close enough, he notices you whichever way he faces.
+   *
+   * @returns {boolean} true the moment he is sure
+   */
+  _notice(s, dt, player, dist, dx, dz) {
+    const st = this.stealth;
+    if (!st) return true;
+    const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
+    const facing = (fx * dx + fz * dz) / (dist || 1);
+    const inCone = facing > st.cone;
+    let rate = 0;
+    if (inCone && dist < st.range) {
+      const k = 1 - dist / st.range;
+      rate = st.fill * (0.08 + k * k * 1.6);
+    } else if (dist < st.near) {
+      rate = st.fill * 0.55;
+    }
+    if (this.playerSpeed > 4) rate *= st.run;
+    else if (this.playerSpeed < 0.5) rate *= 0.6;
+    s.suspicion = Math.min(1, s.suspicion + rate * dt);
+    if (rate > 0) { s.lookX = player.x; s.lookZ = player.z; }
+    return s.suspicion >= 1;
+  }
+
+  /**
+   * A noise: every camp guard within the radius who has not been told is
+   * told, and goes to see.
+   *
+   * @returns {number} how many heard it
+   */
+  hear(x, z, radius) {
+    let n = 0;
+    for (const s of this.active) {
+      if (!s.post || s.post.alert || s.civilian || s.health <= 0 || s.state === STATE.DYING) continue;
+      if (Math.hypot(s.x - x, s.z - z) > radius) continue;
+      s.suspicion = 1;
+      s.sentry = false;
+      s.lookX = x; s.lookZ = z;
+      s.targetX = x; s.targetZ = z;
+      s.state = STATE.ADVANCE;
+      s.stateTime = 0;
+      if (this.onSpot) this.onSpot(s, 'heard');
+      n++;
+    }
+    return n;
   }
 
   reset() {
@@ -343,6 +474,18 @@ export class Soldiers {
     // Being shot at from somewhere you had not looked is what turns a patrol
     // into a fight.
     if (s.state === STATE.PATROL) { s.state = STATE.ADVANCE; s.stateTime = 0; }
+    if (s.health > 0 && s.post && !s.post.alert && this.onSpot) {
+      s.suspicion = 1;
+      this.onSpot(s, 'hit');
+    }
+    // A demon low on its feet reels for a moment, which is the moment to
+    // finish it. Once each, and never the tyrant.
+    if (s.demon && s.health > 0 && !s.dspec.boss && !s.reeled && s.health < s.maxHealth * 0.22) {
+      s.reeled = true;
+      s.staggered = 3;
+      if (this.onStagger) this.onStagger(s);
+    }
+    if (s.health <= 0 && this.onDown) this.onDown(s);
     if (s.health <= 0) {
       // Whatever he was in the middle of, he is not doing it now. Without
       // this a man killed while he was still coming up out of the street
@@ -403,12 +546,15 @@ export class Soldiers {
       if (s.state === STATE.DYING && !this.isBones(s)) continue;
       // The head first, because it is worth more and sits inside the capsule's
       // own span at the top.
-      const hx = s.x - ox, hy = s.y + SPEC.headY - oy, hz = s.z - oz;
+      // A demon is drawn bigger than a man, and is hit bigger too.
+      const sc = s.scale || 1;
+      const headR = SPEC.headRadius * sc;
+      const hx = s.x - ox, hy = s.y + SPEC.headY * sc - oy, hz = s.z - oz;
       const hproj = hx * dx + hy * dy + hz * dz;
       if (hproj > 0 && hproj < best) {
         const perp2 = (hx * hx + hy * hy + hz * hz) - hproj * hproj;
-        if (perp2 <= SPEC.headRadius * SPEC.headRadius) {
-          const back = Math.sqrt(Math.max(0, SPEC.headRadius * SPEC.headRadius - perp2));
+        if (perp2 <= headR * headR) {
+          const back = Math.sqrt(Math.max(0, headR * headR - perp2));
           const t = hproj - back;
           if (t >= 0 && t < best) { best = t; hit = { soldier: s, t, core: true }; }
         }
@@ -418,13 +564,15 @@ export class Soldiers {
       const a = dx * dx + dz * dz;
       if (a > 1e-6) {
         const b = ex * dx + ez * dz;
-        const c = ex * ex + ez * ez - SPEC.radius * SPEC.radius;
+        const c = ex * ex + ez * ez - SPEC.radius * sc * SPEC.radius * sc;
         const disc = b * b - a * c;
         if (disc >= 0) {
           const t = (b - Math.sqrt(disc)) / a;
           if (t >= 0 && t < best) {
             const y = oy + dy * t;
-            if (y >= s.y && y <= s.y + SPEC.height) {
+            // The body stops at the neck. It ran to the top of the head and,
+            // being the nearer surface, took every level shot at a head.
+            if (y >= s.y && y <= s.y + (SPEC.headY - SPEC.headRadius) * sc) {
               best = t;
               hit = { soldier: s, t, core: false };
             }
@@ -608,6 +756,8 @@ export class Soldiers {
         continue;
       }
 
+      if (s.demon) { this._demonStep(s, dt, player, dist, dx, dz); continue; }
+
       s.lean += (0 - s.lean) * Math.min(1, dt * 5);
 
       if (playerSafe || dist > SPEC.sight * 1.4) {
@@ -617,12 +767,30 @@ export class Soldiers {
       let speed = 0;
       switch (s.state) {
         case STATE.PATROL: {
-          if (s.stateTime > 5 || Math.hypot(s.targetX - s.x, s.targetZ - s.z) < 4) {
-            this._pickPatrol(s, player.x, player.z);
-            s.stateTime = 0;
+          if (s.post && s.sentry) {
+            // A sentry holds his spot and looks out; he only moves once he
+            // has a reason to.
+            s.targetX = s.x; s.targetZ = s.z;
+            speed = 0;
+          } else {
+            if (s.stateTime > 5 || Math.hypot(s.targetX - s.x, s.targetZ - s.z) < (s.post ? 1.5 : 4)) {
+              this._pickPatrol(s, player.x, player.z);
+              s.stateTime = 0;
+            }
+            speed = SPEC.walkSpeed * (s.post ? 0.6 : 1);
           }
-          speed = SPEC.walkSpeed;
-          if (s.canSee && dist < SPEC.sight) { s.state = STATE.ADVANCE; s.stateTime = 0; }
+          if (s.post && !s.post.alert) {
+            // A guard nobody has told: he has to notice you first, and while
+            // he is making up his mind he stops and looks.
+            if (s.canSee && dist < SPEC.sight && this._notice(s, dt, player, dist, dx, dz)) {
+              s.state = STATE.ADVANCE; s.stateTime = 0;
+              s.sentry = false;
+              if (this.onSpot) this.onSpot(s, 'seen');
+            } else if (!s.canSee) {
+              s.suspicion = Math.max(0, s.suspicion - dt * (this.stealth ? this.stealth.decay : 0.25));
+            }
+            if (s.suspicion > 0.3) speed = 0;
+          } else if (s.canSee && dist < SPEC.sight) { s.state = STATE.ADVANCE; s.stateTime = 0; }
           break;
         }
         case STATE.ADVANCE: {
@@ -658,8 +826,12 @@ export class Soldiers {
       this._move(s, dt, speed);
       // Face the way it matters: at you in a fight, where they are going
       // otherwise.
-      const fx = (s.state === STATE.FIGHT || s.state === STATE.ADVANCE) ? dx : (s.targetX - s.x);
-      const fz = (s.state === STATE.FIGHT || s.state === STATE.ADVANCE) ? dz : (s.targetZ - s.z);
+      // A guard making up his mind turns to where he thinks he saw you.
+      const wary = s.state === STATE.PATROL && s.post && s.suspicion > 0.3;
+      const fx = (s.state === STATE.FIGHT || s.state === STATE.ADVANCE) ? dx
+        : wary ? (s.lookX - s.x) : (s.targetX - s.x);
+      const fz = (s.state === STATE.FIGHT || s.state === STATE.ADVANCE) ? dz
+        : wary ? (s.lookZ - s.z) : (s.targetZ - s.z);
       if (Math.abs(fx) + Math.abs(fz) > 0.01) {
         const want = Math.atan2(-fx, -fz);
         let d = want - s.yaw;
@@ -668,8 +840,9 @@ export class Soldiers {
         s.yaw += d * Math.min(1, dt * 6);
       }
 
-      // Too far behind you and not engaged: recycle rather than simulate.
-      if (dist > 320 && !s.canSee) { this._retire(s); }
+      // Too far behind you and not engaged: recycle rather than simulate. A
+      // camp guard is the camp's to stand down, not this.
+      if (dist > 320 && !s.canSee && !s.post) { this._retire(s); }
     }
   }
 
@@ -682,6 +855,14 @@ export class Soldiers {
 
   _pickPatrol(s, px, pz) {
     const w = this.world;
+    if (s.post) {
+      // A round of the camp, never further out than the post allows.
+      const a = Math.random() * Math.PI * 2;
+      const r = rand(3, s.post.r);
+      s.targetX = s.post.x + Math.cos(a) * r;
+      s.targetZ = s.post.z + Math.sin(a) * r;
+      return;
+    }
     const a = Math.random() * Math.PI * 2;
     const r = rand(25, 90);
     let x = s.x + Math.cos(a) * r + (px - s.x) * 0.3;
