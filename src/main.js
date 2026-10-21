@@ -3420,6 +3420,10 @@ async function main() {
     combat.godmode = cheats.godmode;
     combat.cheated = cheats.used;
     weapon.infiniteAmmo = cheats.infiniteAmmo;
+    // Every weapon, whatever the mode hands out: the wheel goes through all of
+    // them, and switching it on loads them.
+    if (cheats.everyWeapon && !weapon.everyWeapon) weapon.giveAll();
+    weapon.everyWeapon = cheats.everyWeapon;
     // Switching the drones off stops them coming and takes down whatever is
     // already up, because an enemy frozen in the air is worse than no enemy.
     if (drones.enabled === cheats.noDrones) {

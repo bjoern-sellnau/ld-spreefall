@@ -985,6 +985,28 @@ async function run() {
     skit.Digit1 === 'doublebarrel' && skit.Digit6 === 'shieldsaw' && skit.Digit7 === 'flail' && skit.Digit8 === 'chainsaw',
     JSON.stringify(skit));
 
+  // The cheat: every weapon in every mode, through the wheel.
+  const every = await page.evaluate(() => {
+    const s = window.spreefall;
+    const reach = () => {
+      const seen = new Set();
+      s.weapon.select('doublebarrel');
+      for (let i = 0; i < 40; i++) { s.weapon.cycle(1); seen.add(s.weapon.id); }
+      return seen;
+    };
+    const before = reach();
+    s.setCheat('everyWeapon', true);
+    const after = reach();
+    s.setCheat('everyWeapon', false);
+    const off = reach();
+    return { before: before.size, after: after.size, all: s.loadout.length,
+      bow: after.has('bow'), flamer: after.has('flamer'), offBow: off.has('bow') };
+  });
+  check('the every weapon cheat puts the whole arsenal on the wheel in Slayer, and off it is the kit again',
+    every.after === every.all && every.bow && every.flamer && every.before < every.all && !every.offBow,
+    JSON.stringify(every));
+  await page.evaluate(() => window.spreefall.weapon.select('doublebarrel'));
+
   const melee = await page.evaluate(() => {
     const s = window.spreefall;
     const out = {};

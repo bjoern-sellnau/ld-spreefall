@@ -23,7 +23,7 @@ const KEY = 'spreefall.cheats';
 export const OVERKILL_SCALE = 12;
 
 /** Every switch, in one list, so saving and clearing cannot miss one. */
-const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
+const KEYS = ['godmode', 'infiniteAmmo', 'everyWeapon', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
   'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill'];
 
@@ -31,6 +31,7 @@ const KEYS = ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic',
 export const SWITCHES = [
   { id: 'godmode', label: 'God mode', note: 'nothing can hurt you' },
   { id: 'infiniteAmmo', label: 'Infinite ammunition', note: 'no magazine ever empties' },
+  { id: 'everyWeapon', label: 'Every weapon in every mode', note: 'Tactics and Slayer keep their number row, and the wheel goes through every weapon the game has, loaded' },
   { id: 'nukeRain', label: 'Nuke rain', note: 'one falls on the city every few seconds' },
   { id: 'noDrones', label: 'No drones', note: 'they stop coming and the ones up leave' },
   { id: 'cinematic', label: 'Cinematic warheads', note: 'the camera follows one down and circles what is left' },

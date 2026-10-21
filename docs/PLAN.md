@@ -3831,3 +3831,15 @@ So there are two cities now, and a profile picks which:
   which; a fire arrow at a man's feet leaves the ground burning and burns
   him; a poison arrow leaves a cloud that hurts him; a blast arrow goes off.
 
+## 93. Every weapon in every mode, from the cheat menu
+
+- A switch in the cheat menu, Every weapon in every mode. Tactics and Slayer
+  hand out a kit of ten on the number row and the wheel used to go through
+  only those; with the switch on the wheel goes through all twenty two the
+  game has, from the M16 to the flail, and switching it on loads them all.
+  The number row keeps the mode's kit. Off, the wheel is the kit again. In
+  Berlin the wheel already went through everything.
+- Checks (ops, 74 now): in Slayer the wheel reaches ten weapons, with the
+  switch on all twenty two (the bow and the flamethrower among them), and
+  with it off the kit again.
+

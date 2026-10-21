@@ -41,6 +41,8 @@ export class Weapon {
     this.id = 'm16';
     // A mode's own kit, or null for the ordinary number row.
     this.kit = null;
+    // The cheat that lets the wheel reach every weapon whatever the mode.
+    this.everyWeapon = false;
 
     this.state = STATE.READY;
     this.cooldown = 0;
@@ -367,7 +369,7 @@ export class Weapon {
   /** Where in the loadout list this weapon is, for cycling with the wheel. */
   cycle(step) {
     // The wheel goes through a mode's kit when it has one.
-    const list = this.kit || LOADOUT;
+    const list = this.everyWeapon ? LOADOUT : (this.kit || LOADOUT);
     const at = Math.max(0, list.indexOf(this.id));
     const next = list[(at + step + list.length * 2) % list.length];
     return this.select(next);
