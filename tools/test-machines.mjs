@@ -880,8 +880,13 @@ async function run() {
     // lie every way up and are lit like the rest of the heap, which can be
     // brighter than the shadow behind it. A hole showing sky is a
     // different thing and would be thousands of pixels.
+    // Since the Gate's passages were opened (phase 87) the line from the
+    // middle of it runs on down the street to a frontage further off, and
+    // more of the heap is in the sun: three per cent of the changed pixels
+    // come out brighter where it used to be under two. A hole showing sky is
+    // thousands of them, which this still catches.
     seeThrough.armed > 0 && seeThrough.changed > 80
-      && seeThrough.darker >= seeThrough.changed * 0.97,
+      && seeThrough.darker >= seeThrough.changed * 0.95,
     `${seeThrough.changed} pixels filled, all ${seeThrough.darker} of them darker`);
 
   // --- mechs ---------------------------------------------------------------
@@ -2048,7 +2053,17 @@ async function run() {
       for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
       let taken = 0;
       s.combat.hurt = (d) => { taken += d; return false; };
-      const m = s.spawnMech(key, 34);
+      // Somewhere it can see you from: a mech put down behind a frontage
+      // never fires, which says nothing about whether its gun can hurt.
+      let m = null;
+      for (let tries = 0; tries < 8; tries++) {
+        m = s.spawnMech(key, 34);
+        if (!m) break;
+        const ey = s.player.y + 1.5;
+        if (s.world.lineOfSight(m.x, m.y + m.spec.eye, m.z, s.player.x, ey, s.player.z)) break;
+        s.mechs.reset();
+        m = null;
+      }
       if (!m) { s.combat.hurt = hurt; out.push({ key, skip: true }); continue; }
       for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
       s.combat.hurt = hurt;
