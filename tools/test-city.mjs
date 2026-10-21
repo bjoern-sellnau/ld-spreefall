@@ -852,8 +852,16 @@ async function run() {
       s.input.keys.delete('KeyD');
       const moved = { x: t.x - was.x, z: t.z - was.z };
       const len = Math.hypot(moved.x, moved.z) || 1;
+      // And which way the hull is drawn, from what the renderer hands the
+      // shader: rotY(-w) puts a nose built along -z at (sin w, -cos w). A tank
+      // driving west used to be drawn facing east.
+      s.renderer.actors.updateVehicles(s.vehicles.active);
+      const w = s.renderer.actors.vehicles.tank.instData[3];
+      const nose = [Math.sin(w), -Math.cos(w)];
+      const heading = [-Math.sin(t.yaw), -Math.cos(t.yaw)];
       out.push({
         towardsView: +((moved.x / len) * f[0] + (moved.z / len) * f[1]).toFixed(2),
+        drawnAlong: +(nose[0] * heading[0] + nose[1] * heading[1]).toFixed(2),
         hullTurn: +(t.yaw - hullWas).toFixed(2),
         camTurn: +(s.camera.yaw - camWas).toFixed(2),
       });
@@ -1046,9 +1054,55 @@ async function run() {
   check('forward drives where you are looking, however it was parked',
     facing.every((f) => f.towardsView > 0.97),
     facing.map((f) => f.towardsView).join(', '));
-  check('and steering turns the view with the hull',
-    facing.every((f) => Math.abs(f.hullTurn) > 0.2 && Math.abs(f.hullTurn - f.camTurn) < 0.01),
+  check('and the hull is drawn pointing the way it drives',
+    facing.every((f) => f.drawnAlong > 0.99),
+    facing.map((f) => f.drawnAlong).join(', '));
+  // A tank's view is the turret's, laid with the mouse, so the hull turns
+  // under it and the view stays where you put it.
+  check('and steering turns the hull under a view that stays where you put it',
+    facing.every((f) => Math.abs(f.hullTurn) > 0.2 && Math.abs(f.camTurn) < 0.01),
     `hull ${facing[0].hullTurn} rad, view ${facing[0].camTurn} rad`);
+
+  const turret = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.look(0, 0);
+    const t = s.vehicles.spawn('tank', s.player.x + 3, s.player.z, 0.4);
+    s.teleport(t.x + 1.5, t.z);
+    s.toggleVehicle();
+    // Look well round to the left and see how far the turret has got.
+    s.camera.yaw = t.yaw + 1.2;
+    s.camera.pitch = 0.05;
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const half = t.turret;
+    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
+    const laid = t.turret;
+    // And fire it: the shell leaves the muzzle along the turret.
+    const before = s.projectiles.active.length;
+    t.cooldown = 0;
+    s.input.fire = true;
+    s.fixedForTest(1 / 60);
+    s.input.fire = false;
+    const shell = s.projectiles.active[s.projectiles.active.length - 1];
+    const turretYaw = t.yaw + t.turret;
+    const want = [-Math.sin(turretYaw), -Math.cos(turretYaw)];
+    const sp = shell ? Math.hypot(shell.vx, shell.vz) || 1 : 1;
+    const out = {
+      half: +half.toFixed(2),
+      laid: +laid.toFixed(2),
+      fired: s.projectiles.active.length > before,
+      along: shell ? +((shell.vx / sp) * want[0] + (shell.vz / sp) * want[1]).toFixed(3) : 0,
+      ahead: shell ? +(((shell.x - t.x) * want[0] + (shell.z - t.z) * want[1])).toFixed(1) : 0,
+    };
+    s.toggleVehicle();
+    return out;
+  });
+  check('a tank turret comes round to where you look, not at once',
+    turret.half > 0.15 && turret.half < 0.6 && Math.abs(turret.laid - 1.2) < 0.02,
+    `${turret.half} rad after half a second, ${turret.laid} of 1.2 after three and a half`);
+  check('and the shell leaves the muzzle along the turret',
+    turret.fired && turret.along > 0.99 && turret.ahead > 4,
+    `along ${turret.along}, ${turret.ahead} m out in front of the hull`);
 
   // --- the pictures ---------------------------------------------------------
   await page.evaluate(() => {

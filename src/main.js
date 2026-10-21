@@ -57,7 +57,7 @@ const el = {
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   btnTravel: $('btntravel'),
-  crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
+  crosshair: $('crosshair'), gunmark: $('gunmark'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
   combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
   ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
@@ -2220,7 +2220,9 @@ async function main() {
   // your face.
   vehicles.onFire = (v, gun) => {
     const m = vehicles.muzzle(v);
-    const dir = {
+    // A tank fires where its gun is pointing, which is where the turret has
+    // got to rather than where you are looking.
+    const dir = v.spec.turret ? vehicles.gunDirection(v, camera.pitch) : {
       x: camera.forward[0], y: camera.forward[1], z: camera.forward[2],
     };
     if (gun.kind === 'shell') {
@@ -2299,6 +2301,36 @@ async function main() {
     }
   };
 
+  /**
+   * The ring that shows where a tank's gun is pointing: the end of its line
+   * of fire, put on the screen. It turns green once the turret has caught up
+   * with the view.
+   */
+  function placeGunMark() {
+    const v = state.inVehicle;
+    if (!v || !v.spec.turret || v.health <= 0) {
+      el.gunmark.classList.add('hidden');
+      return;
+    }
+    const m = vehicles.muzzle(v);
+    const d = vehicles.gunDirection(v, camera.pitch);
+    const hit = world.raycast(m.x, m.y, m.z, d.x, d.y, d.z, 400, {});
+    const t = hit ? hit.t : 400;
+    const p = [m.x + d.x * t, m.y + d.y * t, m.z + d.z * t];
+    const vp = camera.viewProj;
+    const cx = vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12];
+    const cy = vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13];
+    const cw = vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15];
+    if (cw <= 0.01) { el.gunmark.classList.add('hidden'); return; }
+    el.gunmark.classList.remove('hidden');
+    el.gunmark.style.left = `${((cx / cw) * 0.5 + 0.5) * window.innerWidth}px`;
+    el.gunmark.style.top = `${(0.5 - (cy / cw) * 0.5) * window.innerHeight}px`;
+    let off = (camera.yaw - (v.yaw + v.turret)) % (Math.PI * 2);
+    if (off > Math.PI) off -= Math.PI * 2;
+    if (off < -Math.PI) off += Math.PI * 2;
+    el.gunmark.classList.toggle('laid', Math.abs(off) < 0.02);
+  }
+
   /** Into the nearest one, or out of the one you are in. */
   function toggleVehicle() {
     if (state.mode !== 'walk') return;
@@ -2317,12 +2349,14 @@ async function main() {
     el.vehicleName.textContent = near.spec.name;
     el.vehicleKeys.textContent = near.spec.kind === 'air'
       ? 'it flies where you look; W S throttle, A D turn, Space up, right mouse down, left mouse fires'
-      : 'W forward, S back, A D steer, Shift brake, left mouse fires';
+      : (near.spec.turret
+        ? 'W forward, S back, A D steer, mouse lays the turret, Shift brake, left mouse fires'
+        : 'W forward, S back, A D steer, Shift brake, left mouse fires');
     // You look where it is pointing. Before this the camera kept the heading
     // you had on foot, so a tank parked across your line of sight drove off
     // sideways or straight past you when you pressed forward, which reads as
     // reverse however the hull is actually moving.
-    camera.yaw = near.yaw;
+    camera.yaw = near.yaw + (near.turret || 0);
     camera.pitch = Math.min(camera.pitch, -0.05);
     audio.swap();
     toast(`${near.spec.name}. F to get out.`);
@@ -4994,8 +5028,10 @@ async function main() {
       const controls = {
         throttle: photo.active ? 0 : input.moveZ,
         steer: photo.active ? 0 : (air ? 0 : -input.moveX),
-        // Where you are looking, which is where an aircraft goes.
+        // Where you are looking, which is where an aircraft goes, and where a
+        // tank lays its turret.
         aimYaw: air && !photo.active ? camera.yaw : undefined,
+        turretAim: v.spec.turret && !photo.active ? camera.yaw : undefined,
         aimPitch: air && !photo.active ? camera.pitch : undefined,
         pitch: 0,
         roll: 0,
@@ -5011,7 +5047,10 @@ async function main() {
       // with the mouse rather than taking the mouse away.
       const hullWas = v.yaw;
       vehicles.update(selfDt, controls, state.time);
-      if (!air) camera.yaw += v.yaw - hullWas;
+      // Except on a tank, where the mouse lays the turret: the view stays
+      // where you put it while the hull turns under it, and the turret works
+      // its way round to it.
+      if (!air && !v.spec.turret) camera.yaw += v.yaw - hullWas;
       // Dead or alive, you are where it is.
       player.teleport(v.x, v.z);
       state.curr.x = v.x; state.curr.y = v.y; state.curr.z = v.z;
@@ -5527,6 +5566,7 @@ async function main() {
       el.crosshair.style.setProperty('--gap', `${px}px`);
       el.crosshair.classList.toggle('aiming', weapon.aimBlend > 0.6);
       el.crosshair.classList.toggle('holstered', weapon.holstered);
+      placeGunMark();
       showBuildingDamage();
       // Aiming narrows the field of view, which is most of what aiming is.
       camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;

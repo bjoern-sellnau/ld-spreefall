@@ -128,6 +128,18 @@ html, body {
 
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
 
+/* Where a tank's gun is pointing, which is not where you are looking while
+   the turret is still coming round. */
+#gunmark {
+  position: absolute;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 2px solid rgba(255, 214, 120, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9), inset 0 0 3px rgba(0, 0, 0, 0.6);
+}
+#gunmark.laid { border-color: rgba(140, 255, 150, 0.95); }
+
 /* Four ticks that open with the spread cone, plus a centre dot. */
 #crosshair {
   position: absolute;

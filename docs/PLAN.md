@@ -3279,3 +3279,28 @@ So there are two cities now, and a profile picks which:
   tags this time and would have been 961.20 MB, so it was built back too. The
   live site is Mitte and Hansaviertel at tier 0, 941.71 MB of 1000. The checks
   on the same commit are green end to end (run 120).
+
+## 72. The tank drives the way it points, and its turret follows the mouse
+
+- 2026-10-21: reported from the live site, a tank on Pariser Platz: W and S
+  swapped, A and D swapped. The driving was right and the drawing was not.
+  Everything that moves goes along (-sin yaw, -cos yaw), and the body shader
+  turns by rotY(-w), which puts a nose built along -z at (sin w, -cos w); the
+  vehicles handed it their heading as w. That is right going north or south
+  and wrong by twice the angle otherwise, so a tank driving west was drawn
+  facing east. Measured before the change: a tank at yaw 0.6 drawn 69 degrees
+  off, at pi/2 drawn backwards; the S-Bahn carriages on a track at yaw 1.07
+  lay across it (0.53 along it, 1.00 after). The vehicles and the enemy jets
+  now hand the shader the heading negated and a train pi less its track
+  angle. The mechs were checked the same way and were already right. The
+  tank's muzzle had the same mistake in its own arithmetic and sat behind a
+  tank driving west; the slope it pitched to was sampled behind it too.
+- 2026-10-21: the turret. The mouse lays it and it traverses at 0.7 rad a
+  second, so it comes round rather than snapping; the view no longer turns
+  with the hull on a tank, the hull turns under it. The turret is parts 45 to
+  47 of the tank mesh, which the shader turns about the ring and draws as the
+  olive, the gun and the dark metal, in the shadow pass as well. A ring on
+  the screen shows where the gun is pointing and turns green once the turret
+  has caught up. Checks: the hull drawn the way it drives at three headings,
+  0.35 rad of turret after half a second and 1.2 of 1.2 after three and a
+  half, the shell along the turret from 8.8 m out in front. City 84 of 84.

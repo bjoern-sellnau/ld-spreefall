@@ -734,7 +734,8 @@ export function buildTrainMesh() {
 
 /**
  * A main battle tank, nine metres with the gun, nose towards -z. Parts: 31
- * the olive, 2 dark metal and the tracks, 39 road wheels, 8 the gun.
+ * the olive, 2 dark metal and the tracks, 39 road wheels, 8 the gun, and the
+ * turret's own 45 olive, 46 gun and 47 dark metal, which turn with it.
  *
  * Tracks with road wheels you can see, a sloped glacis, a turret with angled
  * cheeks and a bustle, and a long gun with an evacuator on it, which is the
@@ -757,23 +758,26 @@ export function buildTankMesh() {
   // The glacis: one sloped plate from the deck down to the nose.
   m.plate([[-1.6, 1.58, -2.55], [1.6, 1.58, -2.55], [1.4, 0.75, -3.35], [-1.4, 0.75, -3.35]], 0.14, P);
   m.box(0, 1.6, 2.95, 3.0, 0.3, 0.5, 2);                    // engine deck grille
-  // Turret.
-  m.box(0, 2.08, 0.45, 2.5, 0.62, 2.7, P);
+  // Turret. Everything from here on turns with it, so it is built in parts
+  // of its own, 45 to 47, which the shader turns about the turret ring and
+  // then draws as the olive, the gun and the dark metal they stand for.
+  const T = 45, G = 46, D = 47;
+  m.box(0, 2.08, 0.45, 2.5, 0.62, 2.7, T);
   for (const side of [-1, 1]) {
-    m.box(side * 0.82, 2.08, -1.15, 0.95, 0.58, 1.0, P, side * 0.42);   // cheeks
+    m.box(side * 0.82, 2.08, -1.15, 0.95, 0.58, 1.0, T, side * 0.42);   // cheeks
     // Smoke dischargers on the cheek.
     for (let k = 0; k < 3; k++) {
-      m.cylinder(side * 1.3, 2.25 + k * 0.1, -0.6, 0.06, 0.06, -0.25, 6, 2, 'z');
+      m.cylinder(side * 1.3, 2.25 + k * 0.1, -0.6, 0.06, 0.06, -0.25, 6, D, 'z');
     }
   }
-  m.box(0, 2.12, 2.15, 2.2, 0.52, 0.9, P);                  // bustle
-  m.cylinder(0.6, 2.38, 0.65, 0.34, 0.3, 0.26, 12, P, 'y'); // commander
-  m.box(-0.55, 2.47, 0.3, 0.6, 0.12, 0.6, 2);               // loader's hatch
-  m.box(0, 2.08, -1.6, 0.66, 0.5, 0.5, P);                  // mantlet
-  m.cylinder(0, 2.1, -1.8, 0.14, 0.12, -4.0, 12, 8, 'z');   // the gun
-  m.cylinder(0, 2.1, -3.2, 0.2, 0.2, -0.6, 12, 8, 'z');     // evacuator
-  m.cylinder(0, 2.1, -5.7, 0.17, 0.17, -0.2, 12, 8, 'z');   // muzzle
-  m.cylinder(0.6, 2.6, 0.5, 0.03, 0.03, -0.7, 6, 8, 'z');   // the roof gun
+  m.box(0, 2.12, 2.15, 2.2, 0.52, 0.9, T);                  // bustle
+  m.cylinder(0.6, 2.38, 0.65, 0.34, 0.3, 0.26, 12, T, 'y'); // commander
+  m.box(-0.55, 2.47, 0.3, 0.6, 0.12, 0.6, D);               // loader's hatch
+  m.box(0, 2.08, -1.6, 0.66, 0.5, 0.5, T);                  // mantlet
+  m.cylinder(0, 2.1, -1.8, 0.14, 0.12, -4.0, 12, G, 'z');   // the gun
+  m.cylinder(0, 2.1, -3.2, 0.2, 0.2, -0.6, 12, G, 'z');     // evacuator
+  m.cylinder(0, 2.1, -5.7, 0.17, 0.17, -0.2, 12, G, 'z');   // muzzle
+  m.cylinder(0.6, 2.6, 0.5, 0.03, 0.03, -0.7, 6, G, 'z');   // the roof gun
   return m;
 }
 
@@ -1223,7 +1227,8 @@ export class Actors {
     for (const j of list) {
       if (!j.alive || n >= MAX_JETS) continue;
       const o = n * 8;
-      data[o] = j.x; data[o + 1] = j.y; data[o + 2] = j.z; data[o + 3] = j.yaw;
+      // Negated for the same reason as the vehicles: see updateVehicles.
+      data[o] = j.x; data[o + 1] = j.y; data[o + 2] = j.z; data[o + 3] = -j.yaw;
       data[o + 4] = j.pitch; data[o + 5] = j.roll; data[o + 6] = j.hitFlash;
       data[o + 7] = j.afterburner;
       n++;
@@ -1343,12 +1348,24 @@ export class Actors {
       if (!v.alive || !mesh || counts[v.type] >= mesh.maxInstances) continue;
       const o = counts[v.type] * 8;
       const d = mesh.instData;
-      d[o] = v.x; d[o + 1] = v.y; d[o + 2] = v.z; d[o + 3] = v.yaw;
+      d[o] = v.x; d[o + 1] = v.y; d[o + 2] = v.z;
+      // A vehicle goes along (-sin yaw, -cos yaw), the same as the camera and
+      // the bullets, and the body shader turns by rotY(-w), which puts a nose
+      // built along -z at (sin w, -cos w). So it is handed the heading
+      // negated. It was handed the heading itself, which is right going
+      // north or south and wrong by everything else: a tank driving west was
+      // drawn facing east, so W looked like reverse and A and D like each
+      // other. A train's yaw is along its track, (sin, cos), and a carriage
+      // is the same either way round, so it takes pi less it.
+      d[o + 3] = v.type === 'train' ? Math.PI - v.yaw : -v.yaw;
       d[o + 4] = v.pitch; d[o + 5] = v.roll; d[o + 6] = v.hitFlash;
       // A fighter has no rotor: the channel says whether its wheels are down,
       // as two or nought, the same way an enemy jet sends its afterburner in
       // nought to one, which leaves the gear of those always up.
-      d[o + 7] = v.type === 'jet' ? (v.gearDown === false ? 0 : 2) : v.rotor;
+      // A tank sends its turret's angle on the hull instead, which the shader
+      // turns the turret's own parts by.
+      d[o + 7] = v.type === 'jet' ? (v.gearDown === false ? 0 : 2)
+        : (v.type === 'tank' ? (v.turret || 0) : v.rotor);
       counts[v.type]++;
     }
     for (const type in this.vehicles) {

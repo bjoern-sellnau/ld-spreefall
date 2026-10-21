@@ -51,11 +51,23 @@ void main() {
   // A fighter's wheels: down while the channel says two, folded up into the
   // belly otherwise.
   if (aInfo.x > 43.5 && aInfo.x < 44.5 && iState.w < 1.5) p = vec3(p.x * 0.5, -0.2, p.z);
+  // A tank's turret, parts 45 to 47: turned about the turret ring by the
+  // angle the instance carries, then drawn as the olive, the gun and the
+  // dark metal it is made of.
+  vec3 nrm = aNormal;
+  float part = aInfo.x;
+  if (part > 44.5 && part < 47.5) {
+    mat3 t = rotY(iState.w);
+    vec3 ring = vec3(0.0, 0.0, 0.3);
+    p = ring + t * (p - ring);
+    nrm = t * nrm;
+    part = part < 45.5 ? 31.0 : (part < 46.5 ? 8.0 : 2.0);
+  }
   mat3 body = rotY(-iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
-  vNormal = normalize(body * aNormal);
-  vPart = aInfo.x;
+  vNormal = normalize(body * nrm);
+  vPart = part;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);
@@ -712,13 +724,21 @@ void main() {
 export const DRONE_SHADOW_VS = `${VERSION}
 precision highp float;
 layout(location = 0) in vec3 aPos;
+layout(location = 2) in vec2 aInfo;
 layout(location = 5) in vec4 iPosYaw;
 layout(location = 6) in vec4 iState;
 uniform mat4 uLightViewProj;
 void main() {
+  vec3 p = aPos;
+  // A tank's turret casts its shadow where it is pointing.
+  if (aInfo.x > 44.5 && aInfo.x < 47.5) {
+    float tc = cos(iState.w), ts = sin(iState.w);
+    vec3 ring = vec3(0.0, 0.0, 0.3);
+    p = ring + mat3(tc, 0.0, -ts, 0.0, 1.0, 0.0, ts, 0.0, tc) * (p - ring);
+  }
   float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
-  gl_Position = uLightViewProj * vec4(rot * aPos + iPosYaw.xyz, 1.0);
+  gl_Position = uLightViewProj * vec4(rot * p + iPosYaw.xyz, 1.0);
 }
 `;
 

@@ -35,6 +35,12 @@ export const VEHICLE = {
     radius: 2.1, length: 7.4,
     gun: { kind: 'shell', damage: 240, interval: 2.6, spread: 0.004, muzzle: [0, 2.1, -5.9],
       speed: 160, splash: { radius: 11, damage: 260 } },
+    // The gun is on a turret, and the turret is laid with the mouse rather
+    // than with the tracks. It does not snap: a real one traverses at
+    // something like forty degrees a second, so you aim ahead of where you
+    // want it and wait for it. The pivot is the turret ring, in the hull's
+    // own metres, and the gun lifts and dips only so far.
+    turret: { pivot: [0, 0.3], rate: 0.7, pitchMin: -0.12, pitchMax: 0.35 },
     climb: 1.4,
   },
   heli: {
@@ -138,6 +144,7 @@ export class Vehicles {
     v.cooldown = 0;
     v.rocketCooldown = 0;
     v.rotor = 0;
+    v.turret = 0;
     v.throttle = 0;
     v.occupied = false;
     v.dying = 0;
@@ -222,6 +229,7 @@ export class Vehicles {
       const c = v === this.driving ? controls : null;
       if (v.spec.kind === KIND.GROUND) this._drive(v, dt, c);
       else this._fly(v, dt, c);
+      if (c && v.spec.turret && c.turretAim !== undefined) this._traverse(v, dt, c.turretAim);
 
       if (v.cooldown > 0) v.cooldown -= dt;
       if (v.rocketCooldown > 0) v.rocketCooldown -= dt;
@@ -284,13 +292,35 @@ export class Vehicles {
 
     // Pitch and roll from the slope, so it leans into a kerb.
     const ahead = this.world.groundHeight(v.x - Math.sin(v.yaw) * 2.5,
-      v.z + Math.cos(v.yaw) * 2.5);
+      v.z - Math.cos(v.yaw) * 2.5);
     const side = this.world.groundHeight(v.x + Math.cos(v.yaw) * 1.5,
       v.z + Math.sin(v.yaw) * 1.5);
     const wantPitch = clamp(Math.atan2(ahead - v.y, 2.5), -0.5, 0.5);
     const wantRoll = clamp(Math.atan2(side - v.y, 1.5), -0.4, 0.4);
     v.pitch += (wantPitch - v.pitch) * Math.min(1, dt * 6);
     v.roll += (wantRoll - v.roll) * Math.min(1, dt * 6);
+  }
+
+  /**
+   * Turns the turret towards a heading in the world, at its own rate. The
+   * turret is held relative to the hull, so a hull that turns carries it
+   * round with it and the turret works its way back.
+   */
+  _traverse(v, dt, aimYaw) {
+    let err = (aimYaw - (v.yaw + v.turret)) % (Math.PI * 2);
+    if (err > Math.PI) err -= Math.PI * 2;
+    if (err < -Math.PI) err += Math.PI * 2;
+    const most = v.spec.turret.rate * dt;
+    v.turret += clamp(err, -most, most);
+    v.turret = Math.atan2(Math.sin(v.turret), Math.cos(v.turret));
+  }
+
+  /** Which way the gun points, as a unit vector, given the view's pitch. */
+  gunDirection(v, pitch) {
+    const t = v.spec.turret;
+    const yaw = v.yaw + (t ? v.turret : 0);
+    const p = t ? clamp(pitch, t.pitchMin, t.pitchMax) : pitch;
+    return { x: -Math.sin(yaw) * Math.cos(p), y: Math.sin(p), z: -Math.cos(yaw) * Math.cos(p) };
   }
 
   // --- a thing with rotors or wings ---------------------------------------
@@ -445,14 +475,28 @@ export class Vehicles {
     }
   }
 
-  /** Where the gun is, in the world. */
+  /**
+   * Where the gun is, in the world: the hull's own metres turned by the
+   * heading the same way the body is drawn, so a nose along -z ends up at
+   * (-sin yaw, -cos yaw). On a tank the muzzle goes round the turret ring
+   * first. This used to turn the other way, which put the muzzle of a tank
+   * driving west behind it.
+   */
   muzzle(v) {
-    const m = v.spec.gun.muzzle;
+    let [mx, my, mz] = v.spec.gun.muzzle;
+    const t = v.spec.turret;
+    if (t) {
+      const [px, pz] = t.pivot;
+      const c = Math.cos(v.turret), sn = Math.sin(v.turret);
+      const lx = mx - px, lz = mz - pz;
+      mx = px + c * lx + sn * lz;
+      mz = pz - sn * lx + c * lz;
+    }
     const c = Math.cos(v.yaw), sn = Math.sin(v.yaw);
     return {
-      x: v.x + m[0] * c - m[2] * sn,
-      y: v.y + m[1],
-      z: v.z + m[0] * sn + m[2] * c,
+      x: v.x + c * mx + sn * mz,
+      y: v.y + my,
+      z: v.z - sn * mx + c * mz,
     };
   }
 
