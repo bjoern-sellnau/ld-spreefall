@@ -505,7 +505,7 @@ all of them, a start district, how many nests, and bosses on or off.
   faster. Its name and a long bar sit at the top of the screen while it is
   near, and the cheat menu can bring one out any time.
 - The number row: a double barrel, the M16, the plasma rifle, rockets, the
-  railgun, a shield saw you throw (it cuts through and comes back; held up
+  railgun, a shield saw you throw (it leaves your hand, the world slows while it flies, it cuts through and comes back; held up
   on the second trigger it stops fire, and raised just in time it sends it
   back), a flail, a chainsaw (fuel by the size of what it cuts, ammunition
   everywhere when it does, and the fuel comes back slowly), flak and the

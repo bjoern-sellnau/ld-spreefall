@@ -3923,3 +3923,15 @@ So there are two cities now, and a profile picks which:
   else on comes apart with the word in yellow, a blood rain and splashes on
   the lens; the blood is comic red. cheat-07-comic.png.
 
+## 95. The thrown shield saw leaves the hand, and the world slows while it flies
+
+- Thrown, the shield saw is not in your hand: the viewmodel goes until it
+  comes back to it, and while it is out there is nothing to block or parry
+  with.
+- And the world slows to forty per cent while it is in the air (you a little
+  less, as with every slow motion here), so you watch it go through a line of
+  them and come back, and it is full speed again the moment it is caught.
+- Checks (ops, 81 now): thrown, the hand is empty and the world is at
+  forty per cent; back, the shield is in the hand and the world at full
+  speed.
+

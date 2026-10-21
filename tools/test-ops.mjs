@@ -1196,7 +1196,7 @@ async function run() {
   check('and the fuel comes back by itself', melee.fuelBack === 1);
   check('the double barrel puts a ghoul down at four metres', melee.double);
 
-  const shield = await page.evaluate(() => {
+  const shield = await page.evaluate(async () => {
     const s = window.spreefall;
     const put = (kind, dx, dz) => {
       const d = s.spawnDemon(kind, dx, dz);
@@ -1214,8 +1214,17 @@ async function run() {
     s.look(90, -4); s.camera.update(16 / 10);
     s.shoot();
     const thrown = s.weapon.carried.shieldsaw.ammo === 0;
-    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
-    const out = { thrown, both: a.health < a.maxHealth && b.health < b.maxHealth, back: s.weapon.carried.shieldsaw.ammo === 1 };
+    // In the air: not in the hand, and the world slowed while it flies.
+    s.fixedForTest(1 / 60);
+    const slowed = s.state.timeScale <= 0.41;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const empty = s.renderer.viewmodel === null;
+    for (let i = 0; i < 60 * 8 && s.weapon.carried.shieldsaw.ammo !== 1; i++) s.fixedForTest(1 / 60);
+    s.fixedForTest(1 / 60);
+    const out = { thrown, slowed, empty, after: +s.state.timeScale.toFixed(2),
+      both: a.health < a.maxHealth && b.health < b.maxHealth, back: s.weapon.carried.shieldsaw.ammo === 1 };
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    out.inHand = !!s.renderer.viewmodel;
     s.soldiers.reset();
     // Held up: fire from in front does nothing to you.
     s.combat.reset();
@@ -1246,6 +1255,8 @@ async function run() {
   });
   check('the shield saw cuts through two in a line and comes back to the hand',
     shield.thrown && shield.both && shield.back, JSON.stringify(shield));
+  check('thrown, it is not in your hand and the world slows until it is back',
+    shield.empty && shield.slowed && shield.inHand && shield.after > 0.9, JSON.stringify(shield));
   check('held up it stops fire from in front, and raised just in time it sends it back',
     shield.blocked && shield.parried);
 

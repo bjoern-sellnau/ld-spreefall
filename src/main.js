@@ -5178,7 +5178,7 @@ async function main() {
   function opsStep(dt) {
     // The shield coming up, for the parry, and the saw's fuel: these are the
     // Slayer weapons' and work in any mode that hands them out.
-    const blocking = weapon.id === 'shieldsaw' && weapon.aiming;
+    const blocking = weapon.id === 'shieldsaw' && weapon.aiming && !sawOut();
     if (blocking && !state.blocking) state.blockAt = state.time;
     state.blocking = blocking;
     sawFuel(dt);
@@ -5347,7 +5347,8 @@ async function main() {
   projectiles.onHostile = (b, x, y, z, direct) => {
     // The shield saw held up: fire from in front is stopped, and fire that
     // arrives just as the shield comes up goes back the way it came.
-    if (direct && weapon.id === 'shieldsaw' && weapon.aimBlend > 0.5 && !state.inMech && !state.inVehicle) {
+    if (direct && weapon.id === 'shieldsaw' && weapon.aimBlend > 0.5 && !state.inMech && !state.inVehicle
+      && !sawOut()) {
       const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
       const f = camera.forward;
       const facing = (b.vx * f[0] + b.vy * f[1] + b.vz * f[2]) / sp;
@@ -5690,6 +5691,14 @@ async function main() {
     showHitmarker(killed ? 'kill' : '');
     if (killed) creditTarget(t, false, hit.actorKind);
   };
+  /** The shield saw is in the air: not in your hand, and nothing to block with. */
+  function sawOut() {
+    for (const b of projectiles.active) if (b.alive && b.spec && b.spec.saw) return true;
+    return false;
+  }
+  // How far the world slows while it flies, the way the shooters it comes
+  // from let you watch it go through a room.
+  const SAW_SLOW = 0.4;
   projectiles.onSawBack = () => {
     weapon.carried.shieldsaw.ammo = 1;
     audio.hitMarker(true);
@@ -6335,6 +6344,9 @@ async function main() {
       state.airSlow = Math.max(0, state.airSlow - dt);
       scale = Math.min(scale, 0.34);
     }
+    // The shield saw in flight: the world slows until it is back in the hand.
+    state.sawFlying = state.mode === 'walk' && sawOut();
+    if (state.sawFlying) scale = Math.min(scale, SAW_SLOW);
     if (state.killRest > 0) state.killRest = Math.max(0, state.killRest - dt);
     if (state.mode === 'cinema') {
       scale = Math.min(scale, cinema.timeScale(performance.now() / 1000));
@@ -6982,6 +6994,8 @@ async function main() {
     if (renderer.updateDynamicScale(loop.stats.intervalMs)) resize();
     // Through a scope there is no rifle in the way of the picture.
     if (renderer.viewmodel && weapon.spec.scope && weapon.aimBlend > 0.85) renderer.viewmodel = null;
+    // Thrown, the shield is not in your hand until it comes back to it.
+    if (renderer.viewmodel && weapon.id === 'shieldsaw' && sawOut()) renderer.viewmodel = null;
     renderer.render(camera, state.time, w, h);
 
     if (photo.pendingShot) {
