@@ -1373,6 +1373,45 @@ async function run() {
   check('never more in the air than the pool can carry', ultra.most <= ultra.maxLive,
     `${ultra.most} at once`);
 
+  // Blast plasma, from the switch on the same panel.
+  const blastRain = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.setCheat('godmode', true);
+    s.projectiles.clear();
+    s.cheatAction('ultra');
+    s.settleMap();
+    const toggle = document.getElementById('ultrablast');
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    const on = s.cheats.ultra.blast;
+    const box = document.querySelector('.urow[data-ultra=count] input[type=number]');
+    box.value = '40';
+    box.dispatchEvent(new Event('change'));
+    const x = s.player.x + 600, z = s.player.z;
+    s.armNuke(x, z);
+    s.releaseNuke();
+    const kinds = {};
+    let damage = 0, bounces = 0;
+    s.projectiles.onBounce = (b) => { if (b.kind === 'ultraBlast') bounces++; };
+    for (let i = 0; i < 60 * 14; i++) {
+      s.fixedForTest(1 / 60);
+      for (const b of s.projectiles.active) {
+        kinds[b.kind] = (kinds[b.kind] || 0) + 1;
+        if (b.kind === 'ultraBlast') damage = b.splash.damage;
+      }
+    }
+    s.projectiles.onBounce = null;
+    s.projectiles.clear();
+    s.cheats.reset();
+    return { on, kinds, damage, bounces };
+  });
+  check('blast plasma is a switch on the ultra plasma map, and it rains orange',
+    blastRain.on && blastRain.kinds.ultraBlast > 0 && !blastRain.kinds.ultra,
+    JSON.stringify(blastRain.kinds));
+  check('at ten times the harm, with no bounce', blastRain.damage === 800 && blastRain.bounces === 0,
+    `${blastRain.damage} damage, ${blastRain.bounces} bounces`);
+
   // --- what nothing switched on looks like ---------------------------------
   const clean = await page.evaluate(() => {
     const s = window.spreefall;

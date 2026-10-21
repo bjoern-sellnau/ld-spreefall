@@ -410,6 +410,13 @@ six seconds, and never more than four hundred and eighty in the air at
 once; the rest wait their turn, so a hundred thousand costs nothing until
 they are falling.
 
+**Blast plasma.** A box under the sliders, and the same thing on the plasma
+rifle: hold the second mouse button for ten seconds and the next bolt is the
+hard kind. It does not bounce, it goes off on the first thing it touches and
+it does ten times the harm, and it burns a very bright orange where the
+ordinary bolt is cyan, so you can tell from the street which one is coming.
+The charge shows under the crosshair and is lost if you let go early.
+
 The skeleton is real geometry rather than a texture. The soldier mesh carries
 a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
 vertex shader collapses one set of parts or the other to nothing depending on

@@ -342,6 +342,19 @@ void main() {
     albedo = vec3(0.12, 0.125, 0.13);
     rough = 0.5;
     metal = 0.5;
+  } else if (vPart > 47.5 && vPart < 48.5) {
+    // Blast plasma: the hard kind, which does not bounce and does ten times
+    // the harm, and burns a very bright orange rather than cyan so you know
+    // which one is coming down on you.
+    albedo = vec3(0.02);
+    // The tonemapper turns anything this bright white unless the green and
+    // blue stay low, so the colour is carried by the ratio rather than the
+    // level: an orange rim and a hotter, yellower heart where it faces you.
+    float pulse = 0.85 + 0.15 * sin(uCamPos.w * 30.0 + vWorld.y * 4.0);
+    float face = abs(dot(n, normalize(uCamPos.xyz - vWorld)));
+    emissive = mix(vec3(3.4, 0.38, 0.0), vec3(5.0, 0.75, 0.0), face * face) * pulse;
+    rough = 0.1;
+    metal = 0.0;
   } else {
     // Glass, in a windscreen or a canopy. Dark and sharp, with the sky in it.
     albedo = vec3(0.022, 0.030, 0.038);

@@ -3361,3 +3361,24 @@ So there are two cities now, and a profile picks which:
   where they were, and the street outside still comes down. The city check
   that a collapse reaches the shader read its site after sixty more blasts
   had merged into it; it reads it first now.
+
+## 75. Blast plasma: harder, orange, ten times the harm
+
+- 2026-10-21: asked for: blast plasma for Ultra Plasma (a toggle on the
+  launch screen) and for the plasma rifle (hold the right mouse button, ten
+  seconds or so). Harder, no bounce, ten times as strong, very bright orange.
+- Two projectile kinds, blast (the rifle) and ultraBlast (the rain), that
+  detonate on contact and never bounce; the rifle's is 340 damage over the
+  same 1.5 m as a 34 damage bolt, the rain's 800 over 8.25 m. Both meshes
+  carry part 48, an emissive orange in the actor shader.
+- The orange came out white the first time: the tonemapper (the ACES fit
+  with its two colour matrices) whitens anything bright whose green and blue
+  are not near nothing. Worked out on the CPU with the same matrices: an
+  emissive of (3.4, 0.38, 0) lands on (1.00, 0.64, 0.22) in sRGB, an orange,
+  where (9, 4, 0.5) landed on (1.00, 0.96, 0.84). blast-01-bolt.png beside an
+  ordinary bolt, blast-02-rain.png from the street.
+- The rifle charge runs while aiming, is lost on release before it is full,
+  and is announced with a toast and a chord when ready; the next shot uses it
+  and the one after is ordinary again. Checks: arsenal (charge, kind, damage,
+  no bounce, next shot ordinary) and cheats (a blast rain sends only the hard
+  kind, at 800, without a bounce).

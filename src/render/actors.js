@@ -322,6 +322,10 @@ export function buildProjectileMesh(kind) {
     m.box(0, 0.052, 0, 0.10, 0.02, 0.07, 7);
   } else if (kind === 'plasma') {
     m.icosphere(0, 0, 0, 0.16, 10, 6, 11);
+  } else if (kind === 'blast') {
+    // Blast plasma out of the rifle: a bigger, harder bolt in orange.
+    m.icosphere(0, 0, 0, 0.24, 10, 6, 48);
+    m.cylinder(0, 0, 0.12, 0.2, 0.02, 1.4, 8, 48, 'z');
   } else if (kind === 'flak') {
     m.box(0, 0, 0, 0.14, 0.10, 0.14, 8);
     m.box(0, 0, 0, 0.08, 0.18, 0.08, 8);
@@ -332,6 +336,11 @@ export function buildProjectileMesh(kind) {
     // tail runs back along +z.
     m.icosphere(0, 0, 0, 0.5, 10, 6, 11);
     m.cylinder(0, 0, 0.25, 0.42, 0.03, 7, 8, 11, 'z');
+  } else if (kind === 'ultraBlast') {
+    // The same comet out of orbit, as blast plasma: orange, and a longer
+    // streak, because it is not slowing down for anything.
+    m.icosphere(0, 0, 0, 0.6, 10, 6, 48);
+    m.cylinder(0, 0, 0.3, 0.5, 0.03, 10, 8, 48, 'z');
   } else if (kind === 'void') {
     // One green ball the size of a man's chest. The glow round it is sparks,
     // drawn by the game layer while it flies.
@@ -1043,6 +1052,8 @@ export class Actors {
       nuke: this._uploadMesh(buildProjectileMesh('nuke'), 8, 2),
       void: this._uploadMesh(buildProjectileMesh('void'), 8, 2),
       ultra: this._uploadMesh(buildProjectileMesh('ultra'), MAX_ULTRA, 2),
+      blast: this._uploadMesh(buildProjectileMesh('blast'), MAX_PROPS, 2),
+      ultraBlast: this._uploadMesh(buildProjectileMesh('ultraBlast'), MAX_ULTRA, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -1150,21 +1161,24 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
-      const cap = b.kind === 'nuke' || b.kind === 'void' ? 8 : (b.kind === 'ultra' ? MAX_ULTRA : MAX_PROPS);
+      const cap = b.kind === 'nuke' || b.kind === 'void' ? 8
+        : (b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA : MAX_PROPS);
       if (counts[b.kind] >= cap) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
       const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke'
-        || b.kind === 'ultra';
+        || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast';
       const yaw = flying ? Math.atan2(-b.vx, -b.vz) : b.spin * 0.7;
       const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, b.vy
         / (Math.hypot(b.vx, b.vy, b.vz) || 1)))) : b.spin;
-      d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z; d[o + 3] = yaw;
+      // Negated for the shader, as the vehicles are: a rocket flying west was
+      // drawn with its nose to the east.
+      d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z; d[o + 3] = -yaw;
       d[o + 4] = pitch; d[o + 5] = flying ? 0 : b.spin * 0.5; d[o + 6] = 0; d[o + 7] = 0;
       counts[b.kind]++;
     }

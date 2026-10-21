@@ -57,7 +57,7 @@ const el = {
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   btnTravel: $('btntravel'),
-  crosshair: $('crosshair'), gunmark: $('gunmark'), hitmarker: $('hitmarker'), damage: $('damage'),
+  crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
   combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
   ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
@@ -1187,6 +1187,12 @@ async function main() {
   }
   weapon.onDryFire = () => audio.dryFire();
   weapon.onReloadStart = (seconds) => audio.reload(seconds);
+  // A full blast plasma charge says so, out loud and on the screen.
+  weapon.onBlastReady = () => {
+    audio.ultraCharge(0.5);
+    toast('blast plasma ready');
+  };
+
   weapon.onSwap = (id, spec) => {
     audio.swap();
     toast(spec.name);
@@ -2957,9 +2963,9 @@ async function main() {
   // Ultra plasma: the balls leave orbit through the ordinary projectile
   // layer, so they bounce off the real streets and go off through the same
   // blast every other weapon uses.
-  ultra.launch = (from, v) => projectiles.launch('ultra', {
+  ultra.launch = (from, v) => projectiles.launch(cheats.ultra.blast ? 'ultraBlast' : 'ultra', {
     x: from.x, y: from.y, z: from.z, vx: v.x, vy: v.y, vz: v.z,
-    splash: ULTRA.splash, weapon: 'ultra',
+    splash: cheats.ultra.blast ? ULTRA.blastSplash : ULTRA.splash, weapon: 'ultra',
   });
   ultra.onCharge = (seconds) => {
     audio.ultraCharge(seconds);
@@ -2974,7 +2980,7 @@ async function main() {
   ultra.onDone = (sent) => { feed(`<i>ultra plasma</i> ${sent} away`); };
   const ultraLive = () => {
     let n = 0;
-    for (const b of projectiles.active) if (b.kind === 'ultra') n++;
+    for (const b of projectiles.active) if (b.kind === 'ultra' || b.kind === 'ultraBlast') n++;
     return n;
   };
 
@@ -4158,6 +4164,8 @@ async function main() {
   const ultraRows = {};
   function showUltra() {
     const u = cheats.ultra;
+    const toggle = document.getElementById('ultrablast');
+    if (toggle) toggle.checked = !!u.blast;
     for (const key of Object.keys(ultraRows)) {
       const row = ultraRows[key];
       row.slider.value = String(Math.min(Number(row.slider.max), u[key]));
@@ -4208,6 +4216,19 @@ async function main() {
     el.ultraPanel.appendChild(row);
     ultraRows[key] = { slider, box, say };
   }
+  // And which kind comes down: the rifle's plasma, or blast plasma.
+  const blastRow = document.createElement('label');
+  blastRow.className = 'urow toggle';
+  const blastName = document.createElement('b');
+  blastName.textContent = 'Blast plasma';
+  const blastSay = document.createElement('span');
+  blastSay.textContent = 'harder, orange, no bounce, ten times the harm';
+  const blastToggle = document.createElement('input');
+  blastToggle.type = 'checkbox';
+  blastToggle.id = 'ultrablast';
+  blastToggle.addEventListener('change', () => setUltra('blast', blastToggle.checked));
+  blastRow.append(blastName, blastSay, blastToggle);
+  el.ultraPanel.appendChild(blastRow);
 
   function aimAt(x, z) {
     const r = aimRadius(state.mapMode);
@@ -5581,6 +5602,15 @@ async function main() {
       el.crosshair.classList.toggle('aiming', weapon.aimBlend > 0.6);
       el.crosshair.classList.toggle('holstered', weapon.holstered);
       placeGunMark();
+      // How far a blast plasma charge has got, under the crosshair while it
+      // builds, and what it is once it is full.
+      const charge = weapon.blastCharge;
+      el.blastCharge.classList.toggle('hidden', !(charge > 0) || weapon.holstered);
+      if (charge > 0) {
+        el.blastCharge.textContent = charge >= 1 ? 'BLAST PLASMA READY'
+          : `BLAST PLASMA ${Math.floor(charge * 100)}%`;
+        el.blastCharge.classList.toggle('ready', charge >= 1);
+      }
       showBuildingDamage();
       // Aiming narrows the field of view, which is most of what aiming is.
       camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;

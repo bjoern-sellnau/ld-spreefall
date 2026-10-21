@@ -141,6 +141,15 @@ export class Weapon {
     this.shotsFired = 0;
     this.hits = 0;
     this.holstered = false;
+    this.blastHeld = 0;
+    this.blastReady = false;
+  }
+
+  /** How far a blast plasma charge has got, 0 to 1, or null on a gun without one. */
+  get blastCharge() {
+    const b = this.spec.blast;
+    if (!b) return null;
+    return this.blastReady ? 1 : Math.min(1, this.blastHeld / b.hold);
   }
 
   /** @returns {number} the permanent recoil climb since the last call, radians */
@@ -160,6 +169,9 @@ export class Weapon {
     this.cooldown = Math.max(this.cooldown, 0.35);   // the time it takes to bring up
     this.spread = this.spec.spreadHip;
     this.swapBlend = 1;
+    // A charge belongs to the gun it was built up in.
+    this.blastHeld = 0;
+    this.blastReady = false;
     if (this.onSwap) this.onSwap(id, this.spec);
     return true;
   }
@@ -202,6 +214,20 @@ export class Weapon {
     this.holsterBlend += ((this.holstered ? 1 : 0) - this.holsterBlend) * Math.min(1, dt * 7);
     this.aimBlend += ((this.aiming && !this.holstered ? 1 : 0) - this.aimBlend) * Math.min(1, dt * 11);
     this.swapBlend += (0 - this.swapBlend) * Math.min(1, dt * 6);
+
+    // Blast plasma builds while the second trigger is held, and is gone if it
+    // is let go before it is full. Once it is full it waits for the shot.
+    if (spec.blast && !this.blastReady) {
+      if (this.aiming && !this.holstered) {
+        this.blastHeld += dt;
+        if (this.blastHeld >= spec.blast.hold) {
+          this.blastReady = true;
+          if (this.onBlastReady) this.onBlastReady();
+        }
+      } else {
+        this.blastHeld = 0;
+      }
+    }
 
     // The view spring. It pulls the whole offset back, so the shot kicks and
     // then returns to where you were pointing.
@@ -632,13 +658,26 @@ export class Weapon {
       homing = { turn: spec.lock.turn, range: spec.lock.range };
       target = this.lockTarget;
     }
-    const launched = this.projectiles.launch(spec.projectile, {
+    // A full blast plasma charge goes out as one hard orange bolt instead.
+    const blast = spec.blast && this.blastReady ? spec.blast : null;
+    if (blast) {
+      this.blastReady = false;
+      this.blastHeld = 0;
+    }
+    const speed = blast ? blast.speed : spec.muzzleSpeed;
+    const splash = blast ? {
+      ...spec.splash,
+      radius: spec.splash.radius * blast.radius,
+      damage: spec.splash.damage * blast.damage,
+      force: spec.splash.force * blast.force,
+    } : spec.splash;
+    const launched = this.projectiles.launch(blast ? blast.projectile : spec.projectile, {
       x: eye.x + d.x * 0.6, y: eye.y + d.y * 0.6 - 0.12, z: eye.z + d.z * 0.6,
-      vx: d.x * spec.muzzleSpeed,
-      vy: d.y * spec.muzzleSpeed + (spec.kind === KIND.THROW ? 3.4 : 0),
-      vz: d.z * spec.muzzleSpeed,
+      vx: d.x * speed,
+      vy: d.y * speed + (spec.kind === KIND.THROW ? 3.4 : 0),
+      vz: d.z * speed,
       fuse: spec.fuse,
-      splash: this._scaledSplash(spec.splash),
+      splash: this._scaledSplash(splash),
       slip: spec.slip,
       weapon: this.id,
       homing, target,

@@ -93,6 +93,11 @@ export const WEAPONS = {
     recoilKick: 0.004, recoilSide: 0.0015, recoilRetain: 0.12,
     aimFov: 50, sound: 'plasma',
     splash: { radius: 2.6, damage: 34, force: 6 },
+    // Blast plasma: hold the second trigger for ten seconds and the next shot
+    // is one bolt of the hard kind, in orange, that does not bounce, goes off
+    // on what it touches and does ten times the harm over half as much again
+    // of the street.
+    blast: { hold: 10, projectile: 'blast', speed: 90, damage: 10, radius: 1.5, force: 3 },
   },
   flak: {
     name: 'Flak cannon', short: 'FLAK', kind: KIND.LAUNCH, slot: 9,

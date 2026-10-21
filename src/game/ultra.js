@@ -29,8 +29,13 @@ export const ULTRA = {
   // a blast cuts its hole into the wall it is against, which is a re-mesh of
   // the tile, and a hundred of those a second is not a frame rate.
   splash: { radius: 5.5, damage: 80, force: 11, quiet: true },
+  // Blast plasma, a switch on the same panel: the hard orange kind, which does
+  // not bounce, goes off on the first thing it touches and does ten times the
+  // harm over half as much again of the street. It cuts no holes in walls one
+  // by one, for the reason above; it brings frontages down by weight instead.
+  blastSplash: { radius: 8.25, damage: 800, force: 33, quiet: true, punch: false },
   // What the menu starts on.
-  defaults: { count: 300, radius: 140, bearing: 225, tilt: 30 },
+  defaults: { count: 300, radius: 140, bearing: 225, tilt: 30, blast: false },
   // The sliders' ends. The count slider stops at the top of the slider and
   // the box beside it takes any number at all.
   limits: {
@@ -43,6 +48,7 @@ export const ULTRA_STATE = STATE;
 
 /** A setting held to what it may be. The count has no top. */
 export function clampUltra(key, v) {
+  if (key === 'blast') return v === true || v === 'true' || v === 1;
   const n = Math.round(Number(v));
   if (!Number.isFinite(n)) return ULTRA.defaults[key];
   const [lo, hi] = ULTRA.limits[key];

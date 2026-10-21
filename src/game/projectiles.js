@@ -47,6 +47,18 @@ export const PROJECTILE = {
     radius: 0.5, gravity: 2.2, drag: 0, bounce: 0.55, armTime: 0.02, maxAge: 16,
     detonateOnContact: false, bounces: 2, trail: 'glow', light: true, spin: 0,
   },
+  blast: {
+    // Blast plasma out of the rifle, after a long hold of the second trigger:
+    // harder than a bolt, so it does not bounce, it goes off on the first
+    // thing it touches.
+    radius: 0.24, gravity: 1.0, drag: 0, bounce: 0, armTime: 0.02, maxAge: 4,
+    detonateOnContact: true, trail: 'glow', light: true, spin: 0,
+  },
+  ultraBlast: {
+    // And out of orbit, the same way.
+    radius: 0.6, gravity: 2.2, drag: 0, bounce: 0, armTime: 0.02, maxAge: 16,
+    detonateOnContact: true, trail: 'glow', light: true, spin: 0,
+  },
   flak: {
     radius: 0.10, gravity: 14, drag: 0.05, bounce: 0.3, armTime: 0.02, maxAge: 2.6,
     detonateOnContact: false, bounces: 1, trail: 'spark', light: false, spin: 22,
