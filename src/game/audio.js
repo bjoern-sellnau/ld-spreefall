@@ -227,45 +227,128 @@ export class Audio {
 
   // --- combat -------------------------------------------------------------
 
-  /** The rifle. A short noise crack over a body thump, then a tail. */
-  // One synth, four voices. A rifle cracks, a shotgun thumps and hisses, a
+  /** The rifle. A snap, a crack, a thump with weight in it, then the street answering. */
+  // One synth, many voices. A rifle cracks, a shotgun thumps and hisses, a
   // launcher is mostly the rush of its own exhaust, and throwing something is
   // just cloth and air.
+  //
+  // What makes a shot hit rather than tick is mostly four things, and each is
+  // a number here: snap, a millisecond and a half of unfiltered noise that is
+  // the leading edge of the report; boom, the low middle under the crack that
+  // a small speaker can still play; a body that starts high and drops fast
+  // and is driven into a soft clip so it has harmonics a laptop can
+  // reproduce; and echo, the slap of the report off the facades across the
+  // street a tenth of a second later.
   static SHOT = {
     rifle: { crackHz: 2600, sweepHz: 700, crackGain: 0.42, tail: 0.30,
-      bodyHz: 190, bodyEnd: 48, bodyGain: 0.26, bodyTail: 0.16, hp: 900 },
+      bodyHz: 190, bodyEnd: 48, bodyGain: 0.26, bodyTail: 0.16, hp: 900,
+      snap: 0.9, boom: 0.22, drive: 2.2, echo: 0.30 },
     shotgun: { crackHz: 1500, sweepHz: 320, crackGain: 0.52, tail: 0.46,
-      bodyHz: 140, bodyEnd: 34, bodyGain: 0.38, bodyTail: 0.26, hp: 420 },
+      bodyHz: 140, bodyEnd: 34, bodyGain: 0.38, bodyTail: 0.26, hp: 420,
+      snap: 1.0, boom: 0.34, drive: 2.8, echo: 0.36 },
     rpg: { crackHz: 900, sweepHz: 220, crackGain: 0.5, tail: 0.85,
-      bodyHz: 110, bodyEnd: 28, bodyGain: 0.34, bodyTail: 0.5, hp: 220 },
+      bodyHz: 110, bodyEnd: 28, bodyGain: 0.34, bodyTail: 0.5, hp: 220,
+      snap: 0.35, boom: 0.5, drive: 2.0, echo: 0.4 },
     throw: { crackHz: 3200, sweepHz: 1400, crackGain: 0.12, tail: 0.14,
-      bodyHz: 260, bodyEnd: 120, bodyGain: 0.05, bodyTail: 0.08, hp: 1400 },
+      bodyHz: 260, bodyEnd: 120, bodyGain: 0.05, bodyTail: 0.08, hp: 1400,
+      snap: 0, boom: 0, drive: 1, echo: 0 },
     // A rail shot is a crack and a long metallic ring after it.
     rail: { crackHz: 5200, sweepHz: 900, crackGain: 0.40, tail: 0.95,
-      bodyHz: 420, bodyEnd: 60, bodyGain: 0.30, bodyTail: 0.7, hp: 600 },
+      bodyHz: 420, bodyEnd: 60, bodyGain: 0.30, bodyTail: 0.7, hp: 600,
+      snap: 0.5, boom: 0.22, drive: 1.8, echo: 0.32 },
     // Plasma is more tone than noise, which is what makes it sound like energy
     // rather than gunpowder.
     plasma: { crackHz: 1800, sweepHz: 2600, crackGain: 0.14, tail: 0.18,
-      bodyHz: 520, bodyEnd: 900, bodyGain: 0.22, bodyTail: 0.14, hp: 700 },
+      bodyHz: 520, bodyEnd: 900, bodyGain: 0.22, bodyTail: 0.14, hp: 700,
+      snap: 0.12, boom: 0.1, drive: 1.4, echo: 0.18 },
     // The void cannon: hardly any crack, a long low rising body, which is
     // the sound of something heavy leaving rather than of a charge going off.
     void: { crackHz: 600, sweepHz: 1800, crackGain: 0.2, tail: 1.2,
-      bodyHz: 60, bodyEnd: 220, bodyGain: 0.55, bodyTail: 1.0, hp: 120 },
+      bodyHz: 60, bodyEnd: 220, bodyGain: 0.55, bodyTail: 1.0, hp: 120,
+      snap: 0.1, boom: 0.4, drive: 1.6, echo: 0.3 },
     // Forty tonnes firing. Everything here is lower and longer than the hand
     // weapons, because that is the whole difference a listener hears between
     // a rifle and a gun bolted to eight metres of armour: not loudness, which
     // a speaker runs out of, but weight down at the bottom of the range.
     mechgun: { crackHz: 1900, sweepHz: 380, crackGain: 0.58, tail: 0.48,
-      bodyHz: 90, bodyEnd: 24, bodyGain: 0.5, bodyTail: 0.40, hp: 300 },
+      bodyHz: 90, bodyEnd: 24, bodyGain: 0.5, bodyTail: 0.40, hp: 300,
+      snap: 0.9, boom: 0.36, drive: 2.6, echo: 0.4 },
     mechcannon: { crackHz: 1100, sweepHz: 170, crackGain: 0.72, tail: 1.05,
-      bodyHz: 62, bodyEnd: 17, bodyGain: 0.62, bodyTail: 0.78, hp: 130 },
+      bodyHz: 62, bodyEnd: 17, bodyGain: 0.62, bodyTail: 0.78, hp: 130,
+      snap: 1.0, boom: 0.45, drive: 3.0, echo: 0.45 },
   };
+
+  /**
+   * The bus every shot goes through: a soft clip for the body, and a send to
+   * two echoes off the street, a near facade and a far one, darker than the
+   * shot.
+   */
+  _shotBus() {
+    if (this._shot) return this._shot;
+    const ctx = this.ctx;
+    // No compressor: the browser's looks ahead by several milliseconds and
+    // turns the leading edge down before it arrives, which was measured to
+    // cost the first ten milliseconds of a rifle shot eight decibels. The
+    // clip on the body is all the density it needs.
+    const input = ctx.createGain();
+    input.connect(this.master);
+    const send = ctx.createGain();
+    send.gain.value = 1;
+    const dark = ctx.createBiquadFilter();
+    dark.type = 'lowpass';
+    dark.frequency.value = 2400;
+    send.connect(dark);
+    const echoes = [];
+    for (const [time, level] of [[0.105, 0.42], [0.26, 0.2]]) {
+      const d = ctx.createDelay(1);
+      d.delayTime.value = time;
+      const g = ctx.createGain();
+      g.gain.value = level;
+      dark.connect(d).connect(g).connect(this.master);
+      echoes.push({ d, g });
+    }
+    // A soft clip for the body: tanh, which rounds the sine into something
+    // with odd harmonics in it.
+    const shaper = ctx.createWaveShaper();
+    const curve = new Float32Array(1024);
+    for (let i = 0; i < curve.length; i++) {
+      const x = (i / (curve.length - 1)) * 2 - 1;
+      curve[i] = Math.tanh(x * 2.5) / Math.tanh(2.5);
+    }
+    shaper.curve = curve;
+    // The clip comes out at full scale whatever goes in, so it is trimmed
+    // back to sit under the crack rather than over it.
+    const trim = ctx.createGain();
+    trim.gain.value = 0.55;
+    shaper.connect(trim).connect(input);
+    this._shot = { input, send, shaper, echoes };
+    return this._shot;
+  }
 
   gunshot(kind = 'rifle') {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;
     const v = Audio.SHOT[kind] || Audio.SHOT.rifle;
     const t = ctx.currentTime;
+    const bus = this._shotBus();
+    // The street changes a little from shot to shot, which is what keeps a
+    // long burst from sounding like one sample on a loop.
+    bus.echoes[0].d.delayTime.setValueAtTime(0.085 + Math.random() * 0.05, t);
+    const echoSend = ctx.createGain();
+    echoSend.gain.value = v.echo || 0;
+    echoSend.connect(bus.send);
+
+    // Snap: the leading edge, a millisecond and a half of raw noise.
+    if (v.snap > 0) {
+      const sn = ctx.createBufferSource();
+      sn.buffer = this._noiseBuffer;
+      const sg = ctx.createGain();
+      sg.gain.setValueAtTime(v.snap, t);
+      sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.012);
+      sn.connect(sg).connect(bus.input);
+      sn.start(t, Math.random() * 3, 0.014);
+      sn.stop(t + 0.014);
+    }
 
     // Crack: filtered noise with a very fast decay.
     const src = ctx.createBufferSource();
@@ -281,25 +364,53 @@ export class Audio {
     bp.Q.value = 0.8;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(v.crackGain, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(v.crackGain, t + 0.002);
     g.gain.exponentialRampToValueAtTime(v.crackGain * 0.05, t + 0.07);
     g.gain.exponentialRampToValueAtTime(0.0001, t + v.tail);
-    src.connect(hp).connect(bp).connect(g).connect(this.master);
+    src.connect(hp).connect(bp).connect(g);
+    g.connect(bus.input);
+    g.connect(echoSend);
     src.start(t, Math.random() * 3, v.tail + 0.06);
     src.stop(t + v.tail + 0.06);
 
-    // Body: a low sine drop, which is what gives it weight on small speakers.
+    // Boom: the low middle under the crack, noise through a low pass.
+    if (v.boom > 0) {
+      const bm = ctx.createBufferSource();
+      bm.buffer = this._noiseBuffer;
+      bm.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(520, t);
+      lp.frequency.exponentialRampToValueAtTime(140, t + 0.18);
+      const bg = ctx.createGain();
+      bg.gain.setValueAtTime(0.0001, t);
+      bg.gain.exponentialRampToValueAtTime(v.boom, t + 0.004);
+      bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.16 + v.bodyTail * 0.5);
+      bm.connect(lp).connect(bg);
+      bg.connect(bus.input);
+      bg.connect(echoSend);
+      const len = 0.2 + v.bodyTail * 0.5;
+      bm.start(t, Math.random() * 3, len);
+      bm.stop(t + len);
+    }
+
+    // Body: a sine that starts high and drops fast, driven into the soft
+    // clip, which is what gives it weight on small speakers.
     const o = ctx.createOscillator();
     o.type = 'sine';
-    o.frequency.setValueAtTime(v.bodyHz, t);
+    o.frequency.setValueAtTime(v.bodyHz * 1.8, t);
+    o.frequency.exponentialRampToValueAtTime(v.bodyHz, t + 0.012);
     o.frequency.exponentialRampToValueAtTime(v.bodyEnd, t + 0.10);
     const og = ctx.createGain();
     og.gain.setValueAtTime(0.0001, t);
-    og.gain.exponentialRampToValueAtTime(v.bodyGain, t + 0.004);
+    og.gain.exponentialRampToValueAtTime(v.bodyGain * (v.drive || 1), t + 0.003);
     og.gain.exponentialRampToValueAtTime(0.0001, t + v.bodyTail);
-    o.connect(og).connect(this.master);
+    o.connect(og).connect(bus.shaper);
     o.start(t);
     o.stop(t + v.bodyTail + 0.02);
+    // The echo send outlives the shot by the length of the echoes.
+    setTimeout(() => { try { echoSend.disconnect(); } catch { /* gone */ } },
+      (v.tail + 0.6) * 1000);
   }
 
   dryFire() {

@@ -206,11 +206,36 @@ export function buildDroneMesh() {
 }
 
 /**
+ * The flash at a muzzle, as two planes crossed along the barrel (part 7) and a
+ * disc across the end of it (part 8), both drawn from either side. Neither
+ * needs a normal, so the normal slot carries where on the flash a vertex is:
+ * across the plume and along it for the planes, a position on the disc for the
+ * disc. The shader cuts the shapes out of that, a different star each shot.
+ */
+function muzzleFlash(m, cx, cy, z0, len, r) {
+  const both = (base) => m.i.push(base, base + 1, base + 2, base, base + 2, base + 3,
+    base + 2, base + 1, base, base + 3, base + 2, base);
+  for (const [ax, ay] of [[1, 0], [0, 1]]) {
+    const base = m.n;
+    for (const [v, u] of [[-1, 0], [1, 0], [1, 1], [-1, 1]]) {
+      m.vertex([cx + ax * v * r * 1.3, cy + ay * v * r * 1.3, z0 - u * len], [v, 0, u], 7);
+    }
+    both(base);
+  }
+  const base = m.n;
+  const d = r * 1.7;
+  for (const [x, y] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    m.vertex([cx + x * d, cy + y * d, z0 - 0.006], [x, y, 0], 8);
+  }
+  both(base);
+}
+
+/**
  * The weapon, in view space: the eye is at the origin and the muzzle points
  * down -z. Laid out so the butt of the stock sits about ten centimetres in
  * front of the eye and the muzzle about ninety, which is what puts a rifle in
  * the lower right of the frame rather than across all of it.
- * Part ids: 0 receiver, 1 barrel, 2 polymer, 3 sight, 4 muzzle flash.
+ * Part ids: 0 receiver, 1 barrel, 2 polymer, 3 sight, 7 and 8 the muzzle flash.
  */
 export function buildWeaponMesh() {
   const m = new MeshBuild();
@@ -227,15 +252,15 @@ export function buildWeaponMesh() {
   m.box(0, 0.082, -0.400, 0.030, 0.038, 0.060, 3);      // sight body
   m.box(0, 0.104, -0.400, 0.036, 0.006, 0.066, 3);      // sight hood
   m.box(0, 0.088, -0.400, 0.006, 0.014, 0.004, 3);      // the post you aim with
-  // Flash cone at the muzzle. Invisible unless the shader is told otherwise.
-  m.cylinder(0, 0.012, -0.894, 0.005, 0.070, -0.170, 10, 7, 'z');
+  // The flash at the muzzle. Invisible unless the shader is told otherwise.
+  muzzleFlash(m, 0, 0.012, -0.894, 0.170, 0.070);
   return m;
 }
 
 /**
  * The rest of what you can carry. Same parts palette as the rifle: 0 receiver,
- * 1 barrel steel, 2 polymer, 3 sight, 4 the flash cone the shader hides between
- * shots. Everything is measured in metres from the eye, muzzle towards -z.
+ * 1 barrel steel, 2 polymer, 3 sight, 7 and 8 the flash the shader hides
+ * between shots. Everything is measured in metres from the eye, muzzle towards -z.
  */
 export function buildShotgunMesh() {
   const m = new MeshBuild();
@@ -247,7 +272,7 @@ export function buildShotgunMesh() {
   m.box(0, -0.008, -0.560, 0.046, 0.044, 0.130, 2);      // pump
   m.box(0, -0.092, -0.300, 0.044, 0.110, 0.060, 2);      // grip
   m.box(0, 0.040, -0.372, 0.010, 0.014, 0.010, 3);       // bead
-  m.cylinder(0, 0.020, -0.802, 0.006, 0.090, -0.200, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.020, -0.802, 0.200, 0.090);
   return m;
 }
 
@@ -261,7 +286,7 @@ export function buildRpgMesh() {
   // The warhead, sticking out of the front where you can see it.
   m.cylinder(0, 0.000, -0.900, 0.052, 0.052, -0.120, 12, 1, 'z');
   m.cylinder(0, 0.000, -1.020, 0.052, 0.006, -0.130, 12, 1, 'z');   // the nose
-  m.cylinder(0, 0.000, -0.902, 0.006, 0.130, -0.260, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.000, -0.902, 0.260, 0.130);
   return m;
 }
 
@@ -400,7 +425,7 @@ export function buildRailgunMesh() {
   m.box(0.022, 0.014, -0.700, 0.014, 0.030, 0.420, 1);
   m.box(0, 0.014, -0.520, 0.070, 0.016, 0.060, 0);
   m.box(0, -0.094, -0.300, 0.042, 0.115, 0.060, 2);      // grip
-  m.cylinder(0, 0.014, -0.912, 0.004, 0.060, -0.150, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.014, -0.912, 0.150, 0.060);
   return m;
 }
 
@@ -412,7 +437,7 @@ export function buildPlasmaMesh() {
   m.icosphere(0, 0.006, -0.360, 0.052, 10, 6, 5);        // the cell, glowing
   m.box(0, -0.090, -0.250, 0.044, 0.110, 0.062, 2);      // grip
   m.box(0, -0.030, -0.430, 0.040, 0.050, 0.090, 2);      // fore grip
-  m.cylinder(0, 0.006, -0.826, 0.005, 0.075, -0.170, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.006, -0.826, 0.170, 0.075);
   return m;
 }
 
@@ -441,7 +466,7 @@ export function buildFlakMesh() {
   m.box(0, -0.092, -0.280, 0.046, 0.112, 0.064, 2);      // grip
   m.box(0, -0.048, -0.470, 0.044, 0.070, 0.100, 2);      // pump
   m.box(0, 0.058, -0.300, 0.026, 0.024, 0.090, 3);       // sight
-  m.cylinder(0, 0.010, -0.902, 0.006, 0.110, -0.220, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.010, -0.902, 0.220, 0.110);
   return m;
 }
 
@@ -455,7 +480,7 @@ export function buildSplinterMesh() {
   m.cylinder(0, 0.004, -0.500, 0.022, 0.018, -0.260, 10, 1, 'z');
   m.box(0, -0.088, -0.270, 0.042, 0.110, 0.060, 2);      // grip
   m.box(0, 0.046, -0.240, 0.022, 0.020, 0.070, 3);       // sight
-  m.cylinder(0, 0.004, -0.762, 0.004, 0.055, -0.140, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.004, -0.762, 0.140, 0.055);
   return m;
 }
 
@@ -1618,7 +1643,8 @@ export class Actors {
     this.progViewmodel.use()
       .mat4('uViewModelProj', this.viewProj)
       .mat4('uViewModelMat', m)
-      .float('uMuzzle', muzzle);
+      .float('uMuzzle', muzzle)
+      .float('uMuzzleSeed', pose.seed || 0);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.CULL_FACE);

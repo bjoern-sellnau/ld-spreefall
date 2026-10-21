@@ -3447,3 +3447,36 @@ So there are two cities now, and a profile picks which:
 - Checks (combat): a drone in front gets one bar at the centre of the
   screen at 100% and the drone behind you none; one shot takes it to 25%
   with the chip still at 82%; dead, no bar. combat-01-contact.png shows four.
+
+## 79. A shot with punch, and a muzzle flash that looks like one
+
+- 2026-10-21: asked for: more punch in the firing sound, and a more
+  realistic muzzle flash.
+- The sound. Four things added to every voice in Audio.SHOT, each a number
+  per weapon: snap (1.5 ms of raw noise, the leading edge), boom (noise
+  through a falling low pass, the low middle a small speaker can play),
+  drive (the body sine starts at 1.8 times its pitch and goes through a tanh
+  soft clip, which gives it harmonics a laptop reproduces), and echo (a send
+  to two darker delays, about 0.1 s and 0.26 s, the facades across the
+  street; the near one moves a little each shot).
+- First try put everything through a DynamicsCompressor for density, and it
+  measured worse: Chrome's compressor looks ahead by a few milliseconds and
+  turned the first ten milliseconds of a rifle shot down by eight decibels,
+  which is the punch. Taken out. Measured offline (OfflineAudioContext, one
+  shot, same master gain), rifle before and after: peak -12.1 to -7.2 dB and
+  at 4 ms both times, first 10 ms -18.9 to -11.8 dB RMS, 10 to 80 ms -27.1 to
+  -19.4, the band under 150 Hz -30.9 to -24.5, and 300 to 600 ms -112 to -77
+  (the echo, which was not there). The mech cannon peaks at -4.3 dB.
+- The flash. The solid cone that shrank back into the barrel is gone. Each
+  weapon has two planes crossed along the barrel and a disc across its end,
+  drawn from both sides; their normal slot carries where on the flash a
+  vertex is, and the viewmodel shader cuts the shape out of that: a ragged
+  star (the flash hider's four slots, plus noise round the circle for rays
+  of every length) round a white core, and a plume that is widest a third of
+  the way out. A seed drawn on every shot turns and re-tears it, so no two
+  match. White hot in the middle, orange through it and a deep red at the
+  edge, with green and blue held low so the tonemapper keeps the orange. The
+  front of the gun is lit warm while it lasts. muzzle-01-rifle.png,
+  muzzle-02-dusk.png, muzzle-03-shotgun.png.
+- The winding audit in the unit tests skips parts 7 and 8, which are
+  two sided on purpose and have no normal to agree with.

@@ -251,9 +251,17 @@ What is under the hood:
   mesh per kind, fourteen centimetres proud of the collision height because the
   street that is drawn is not the height field that is collided against, and
   only within 260 m, where the fog has them anyway.
-- Every sound is synthesised: a noise burst through a swept bandpass for the shot,
-  a rotor bed whose level and pitch follow the nearest drone, and two different
-  confirms for a hull hit and a core hit.
+- Every sound is synthesised: for the shot, a millisecond and a half of raw
+  noise for the leading edge, a noise burst through a swept bandpass for the
+  crack, low passed noise for the boom under it, a falling sine driven into a
+  soft clip for the thump, and two darker echoes off the facades across the
+  street; a rotor bed whose level and pitch follow the nearest drone; and two
+  different confirms for a hull hit and a core hit.
+- The muzzle flash is a new shape every shot: a ragged star across the end
+  of the barrel and a short plume along it, white in the middle and orange
+  to deep red at the edges, cut out of two crossed planes and a disc by the
+  shader, gone in about four frames, and lighting the front of the gun while
+  it lasts.
 
 ## Cheats
 

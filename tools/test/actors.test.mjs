@@ -31,6 +31,10 @@ function audit(build) {
     const nz = (n[0][2] + n[1][2] + n[2][2]) / 3;
     const nlen = Math.hypot(nx, ny, nz);
     if (nlen < 1e-6) continue;
+    // The muzzle flash, parts 7 and 8, is drawn from both sides and carries
+    // where on the flash a vertex is in its normal slot, not a normal.
+    const part = v[idx[t] * 8 + 6];
+    if (part > 6.5 && part < 8.5) continue;
     checked++;
     if ((gx * nx + gy * ny + gz * nz) / (glen * nlen) < 0) bad++;
   }

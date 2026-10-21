@@ -5628,6 +5628,9 @@ async function main() {
       // the rotation opposes it. Recoil lifts the muzzle and pushes the weapon
       // back towards the eye. Holstering drops it and turns the muzzle down and
       // away, so it leaves the frame at the bottom rather than across it.
+      // A new shape for every shot: the flash going up again is a new shot.
+      if (state.muzzle > (state.muzzleWas || 0) + 0.25) state.muzzleSeed = Math.random();
+      state.muzzleWas = state.muzzle;
       renderer.viewmodel = {
         x: mix(hip.x, VM_AIM.x) + bobX + state.sway.x * 0.30,
         y: mix(hip.y, VM_AIM.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
@@ -5636,6 +5639,7 @@ async function main() {
         yaw: mix(hip.yaw, VM_AIM.yaw) - state.sway.x * 0.8,
         roll: mix(hip.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
         muzzle: state.muzzle * (1 - hol),
+        seed: state.muzzleSeed || 0,
         weapon: weapon.id,
       };
       renderer.actors.updateDrones(drones.active);
