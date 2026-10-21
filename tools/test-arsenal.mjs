@@ -82,13 +82,17 @@ async function run() {
       const ok = s.weapon.select(id) || s.weapon.id === id;
       s.weapon.cooldown = 0;
       const before = s.weapon.carried[id].ammo;
+      const swings = s.weapon.shotsFired;
       s.shoot();
-      out.push({ id, ok, before, after: s.weapon.carried[id].ammo, name: s.weapon.spec.name });
+      // A flail or a saw swung at nothing spends nothing: what counts is the swing.
+      const melee = s.weapon.spec.kind === 'melee';
+      out.push({ id, ok, before, after: s.weapon.carried[id].ammo, name: s.weapon.spec.name,
+        swung: melee && s.weapon.shotsFired > swings });
     }
     return out;
   }).catch(() => null);
   if (arsenal) {
-    const fired = arsenal.filter((w) => w.after < w.before);
+    const fired = arsenal.filter((w) => w.after < w.before || w.swung);
     check('every weapon in the loadout fires', fired.length === arsenal.length,
       arsenal.map((w) => `${w.id}:${w.before}>${w.after}`).join(' '));
   }
