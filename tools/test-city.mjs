@@ -472,11 +472,22 @@ async function run() {
     const m = s.combat.sanctuaries[0];
     if (!m) return { skip: true };
     const y = s.world.groundHeight(m.x, m.z);
-    const made = s.demolition.blast(m.x, y, m.z, 170, 4000);
-    return { made: made.length, sites: s.demolition.count, name: m.name };
+    // The field keeps the place, whatever goes off on it: the stelae stand
+    // and the ground is not dug, after the collapse has run its course.
+    const px = m.x + 15, pz = m.z + 10;
+    const before = { g: s.world.groundHeight(px, pz), t: s.world.tallestNear(px, pz, 12) };
+    s.demolition.blast(m.x, y, m.z, 170, 4000);
+    for (let i = 0; i < 60 * 8; i++) s.fixedForTest(1 / 60);
+    const after = { g: s.world.groundHeight(px, pz), t: s.world.tallestNear(px, pz, 12) };
+    s.demolition.reset(); s.renderer.clearCollapses();
+    return {
+      dug: +Math.abs(after.g - before.g).toFixed(2),
+      fell: +(before.t - after.t).toFixed(2),
+      name: m.name,
+    };
   });
-  check('nothing in the memorial comes down', memorial.made === 0 && memorial.sites === 0,
-    memorial.name);
+  check('nothing in the memorial comes down', !memorial.skip && memorial.dug < 0.05 && memorial.fell < 0.1,
+    `${memorial.name}: ground ${memorial.dug} m, walls ${memorial.fell} m lower`);
 
   // --- the shader is told about it ------------------------------------------
   const uniforms = await page.evaluate(() => {
@@ -488,7 +499,10 @@ async function run() {
     s.demolition.blast(x, y, z, 80, 3000);
     for (let i = 0; i < 120; i++) s.demolition.update(1 / 60);
     s.renderer.setCollapses(s.demolition.sites);
-    const site = s.demolition.sites[0];
+    // Read now: the sixty blasts below run out of slots and merge into the
+    // nearest site, which grows this one to hundreds of metres.
+    const first = s.demolition.sites[0];
+    const site = first ? { x: first.x, radius: first.radius } : null;
     const packed = Array.from(s.renderer.collapse.slice(0, 4));
     // And a lot of them never take more slots than the shader has.
     for (let i = 0; i < 60; i++) {
@@ -502,12 +516,14 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
     return {
       quiet, after: s.renderer.collapseCount,
-      matches: Math.abs(packed[0] - site.x) < 0.01 && Math.abs(packed[3] - site.radius) < 0.01,
+      matches: !!site && Math.abs(packed[0] - site.x) < 0.01 && Math.abs(packed[3] - site.radius) < 0.01,
+      detail: site ? `site at ${site.x.toFixed(1)} r ${site.radius.toFixed(1)}, slot 0 at ${packed[0].toFixed(1)} r ${packed[3].toFixed(1)}`
+        : `no site left after two seconds, blast at ${Math.round(x)}, ${Math.round(z)}`,
       many, max: s.demoSpec.maxSites,
     };
   });
   check('an untouched city costs the vertex shader nothing', uniforms.quiet === 0);
-  check('and a collapse reaches it with the right numbers', uniforms.matches);
+  check('and a collapse reaches it with the right numbers', uniforms.matches, uniforms.detail);
   check('sixty blasts never ask for more slots than there are',
     uniforms.many.sites <= uniforms.max && uniforms.many.uniforms <= uniforms.max,
     `${uniforms.many.sites} sites, ${uniforms.max} slots`);
@@ -674,8 +690,8 @@ async function run() {
     `${arrived.off} m out`);
   check('on the ground, with the interface back', arrived.onGround && arrived.hudBack);
 
-  // Travel into the memorial is allowed: walking there always has been, it is
-  // firing there that is not.
+  // Travel into the memorial is allowed, as walking and fighting there are:
+  // the force field keeps the place whole, not anybody out of it.
   const intoMemorial = await page.evaluate(() => {
     const s = window.spreefall;
     const m = s.combat.sanctuaries[0];
@@ -852,8 +868,16 @@ async function run() {
       s.input.keys.delete('KeyD');
       const moved = { x: t.x - was.x, z: t.z - was.z };
       const len = Math.hypot(moved.x, moved.z) || 1;
+      // And which way the hull is drawn, from what the renderer hands the
+      // shader: rotY(-w) puts a nose built along -z at (sin w, -cos w). A tank
+      // driving west used to be drawn facing east.
+      s.renderer.actors.updateVehicles(s.vehicles.active);
+      const w = s.renderer.actors.vehicles.tank.instData[3];
+      const nose = [Math.sin(w), -Math.cos(w)];
+      const heading = [-Math.sin(t.yaw), -Math.cos(t.yaw)];
       out.push({
         towardsView: +((moved.x / len) * f[0] + (moved.z / len) * f[1]).toFixed(2),
+        drawnAlong: +(nose[0] * heading[0] + nose[1] * heading[1]).toFixed(2),
         hullTurn: +(t.yaw - hullWas).toFixed(2),
         camTurn: +(s.camera.yaw - camWas).toFixed(2),
       });
@@ -1046,9 +1070,63 @@ async function run() {
   check('forward drives where you are looking, however it was parked',
     facing.every((f) => f.towardsView > 0.97),
     facing.map((f) => f.towardsView).join(', '));
-  check('and steering turns the view with the hull',
-    facing.every((f) => Math.abs(f.hullTurn) > 0.2 && Math.abs(f.hullTurn - f.camTurn) < 0.01),
+  check('and the hull is drawn pointing the way it drives',
+    facing.every((f) => f.drawnAlong > 0.99),
+    facing.map((f) => f.drawnAlong).join(', '));
+  // A tank's view is the turret's, laid with the mouse, so the hull turns
+  // under it and the view stays where you put it.
+  check('and steering turns the hull under a view that stays where you put it',
+    facing.every((f) => Math.abs(f.hullTurn) > 0.2 && Math.abs(f.camTurn) < 0.01),
     `hull ${facing[0].hullTurn} rad, view ${facing[0].camTurn} rad`);
+
+  const turret = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.look(0, 0);
+    const t = s.vehicles.spawn('tank', s.player.x + 3, s.player.z, 0.4);
+    s.teleport(t.x + 1.5, t.z);
+    s.toggleVehicle();
+    // Look well round to the left and see how far the turret has got.
+    s.camera.yaw = t.yaw + 1.2;
+    s.camera.pitch = 0.05;
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const half = t.turret;
+    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
+    const laid = t.turret;
+    // And fire it: the shell leaves the muzzle along the turret. Read off the
+    // launch itself, because the last projectile in the pool after a step is
+    // not necessarily this one, and a shell into a wall at eight metres is
+    // gone before anybody looks at it.
+    let shell = null;
+    const launch = s.projectiles.launch.bind(s.projectiles);
+    s.projectiles.launch = (kind, o) => {
+      if (o && o.weapon === 'tank') shell = { ...o };
+      return launch(kind, o);
+    };
+    t.cooldown = 0;
+    s.input.fire = true;
+    s.fixedForTest(1 / 60);
+    s.input.fire = false;
+    s.projectiles.launch = launch;
+    const turretYaw = t.yaw + t.turret;
+    const want = [-Math.sin(turretYaw), -Math.cos(turretYaw)];
+    const sp = shell ? Math.hypot(shell.vx, shell.vz) || 1 : 1;
+    const out = {
+      half: +half.toFixed(2),
+      laid: +laid.toFixed(2),
+      fired: !!shell,
+      along: shell ? +((shell.vx / sp) * want[0] + (shell.vz / sp) * want[1]).toFixed(3) : 0,
+      ahead: shell ? +(((shell.x - t.x) * want[0] + (shell.z - t.z) * want[1])).toFixed(1) : 0,
+    };
+    s.toggleVehicle();
+    return out;
+  });
+  check('a tank turret comes round to where you look, not at once',
+    turret.half > 0.15 && turret.half < 0.6 && Math.abs(turret.laid - 1.2) < 0.02,
+    `${turret.half} rad after half a second, ${turret.laid} of 1.2 after three and a half`);
+  check('and the shell leaves the muzzle along the turret',
+    turret.fired && turret.along > 0.99 && turret.ahead > 4,
+    `along ${turret.along}, ${turret.ahead} m out in front of the hull`);
 
   // --- the pictures ---------------------------------------------------------
   await page.evaluate(() => {

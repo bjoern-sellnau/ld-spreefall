@@ -47,6 +47,18 @@ export const PROJECTILE = {
     radius: 0.5, gravity: 2.2, drag: 0, bounce: 0.55, armTime: 0.02, maxAge: 16,
     detonateOnContact: false, bounces: 2, trail: 'glow', light: true, spin: 0,
   },
+  blast: {
+    // Blast plasma out of the rifle, after a long hold of the second trigger:
+    // harder than a bolt, so it does not bounce, it goes off on the first
+    // thing it touches.
+    radius: 0.24, gravity: 1.0, drag: 0, bounce: 0, armTime: 0.02, maxAge: 4,
+    detonateOnContact: true, trail: 'glow', light: true, spin: 0,
+  },
+  ultraBlast: {
+    // And out of orbit, the same way.
+    radius: 0.6, gravity: 2.2, drag: 0, bounce: 0, armTime: 0.02, maxAge: 16,
+    detonateOnContact: true, trail: 'glow', light: true, spin: 0,
+  },
   flak: {
     radius: 0.10, gravity: 14, drag: 0.05, bounce: 0.3, armTime: 0.02, maxAge: 2.6,
     detonateOnContact: false, bounces: 1, trail: 'spark', light: false, spin: 22,
@@ -59,6 +71,19 @@ export const PROJECTILE = {
     // Big and slow on purpose: you see it go, and so does everybody it is
     // going past. It goes off on the first thing it touches.
     radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 9,
+    detonateOnContact: true, trail: 'void', light: true, spin: 3,
+  },
+  voidMaw: {
+    // The mech's void arm: the cannon's ball nearly twice across, a little
+    // quicker, and with the range a forty tonne gun ought to have.
+    radius: 1.3, gravity: 0, drag: 0, bounce: 0, armTime: 0.08, maxAge: 14,
+    detonateOnContact: true, trail: 'void', light: true, spin: 2,
+  },
+  voidStorm: {
+    // The same ball out of orbit: faster, because four hundred metres at the
+    // cannon's walking pace is a quarter of a minute, and given long enough
+    // to come in at a slant from a long way off.
+    radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 28,
     detonateOnContact: true, trail: 'void', light: true, spin: 3,
   },
   nuke: {
@@ -146,6 +171,8 @@ export class Projectiles {
     b.thermite = o.thermite || null;
     b.emp = o.emp || null;
     b.mechKill = o.mechKill || null;
+    // And what a void ball reaches out with, when it was not the cannon's.
+    b.void = o.void || null;
     // Flak: how near the thing it was fired at the shell has to get before it
     // bursts. A shell that has to hit an aircraft is a shell that never does.
     b.proximity = o.proximity || 0;

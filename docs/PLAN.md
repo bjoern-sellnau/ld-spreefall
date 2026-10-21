@@ -3279,3 +3279,204 @@ So there are two cities now, and a profile picks which:
   tags this time and would have been 961.20 MB, so it was built back too. The
   live site is Mitte and Hansaviertel at tier 0, 941.71 MB of 1000. The checks
   on the same commit are green end to end (run 120).
+
+## 72. The tank drives the way it points, and its turret follows the mouse
+
+- 2026-10-21: reported from the live site, a tank on Pariser Platz: W and S
+  swapped, A and D swapped. The driving was right and the drawing was not.
+  Everything that moves goes along (-sin yaw, -cos yaw), and the body shader
+  turns by rotY(-w), which puts a nose built along -z at (sin w, -cos w); the
+  vehicles handed it their heading as w. That is right going north or south
+  and wrong by twice the angle otherwise, so a tank driving west was drawn
+  facing east. Measured before the change: a tank at yaw 0.6 drawn 69 degrees
+  off, at pi/2 drawn backwards; the S-Bahn carriages on a track at yaw 1.07
+  lay across it (0.53 along it, 1.00 after). The vehicles and the enemy jets
+  now hand the shader the heading negated and a train pi less its track
+  angle. The mechs were checked the same way and were already right. The
+  tank's muzzle had the same mistake in its own arithmetic and sat behind a
+  tank driving west; the slope it pitched to was sampled behind it too.
+- 2026-10-21: the turret. The mouse lays it and it traverses at 0.7 rad a
+  second, so it comes round rather than snapping; the view no longer turns
+  with the hull on a tank, the hull turns under it. The turret is parts 45 to
+  47 of the tank mesh, which the shader turns about the ring and draws as the
+  olive, the gun and the dark metal, in the shadow pass as well. A ring on
+  the screen shows where the gun is pointing and turns green once the turret
+  has caught up. Checks: the hull drawn the way it drives at three headings,
+  0.35 rad of turret after half a second and 1.2 of 1.2 after three and a
+  half, the shell along the turret from 8.8 m out in front. City 84 of 84.
+
+## 73. A frontage under shellfire comes down in pieces, not in spikes
+
+- 2026-10-21: reported from the live site, the ruins at Pariser Platz after a
+  tank had been at them: walls drawn out into sheets and spikes twenty
+  metres long. Reproduced with eight shells into the Gate end of the square
+  (collapse-05-spikes-before.png). Three causes, found in order:
+  - Every corner of a piece took its own bite, its own heap and its own throw
+    from its own position. A wall is now read by the four metre column it
+    stands in, the same lines remesh cuts it on, so the corners of a piece
+    move together. In the shader and in the bake alike.
+  - The sites were applied in turn, each from where the last had left the
+    corner, and a dozen shells threw a frontage's top a few metres a shell
+    while its foot stayed put. A wall now takes the one site that brings it
+    furthest down, read from where it was built, and rubble a finished site
+    baked is left where it lies by the sites still open.
+  - The one that mattered most, measured: after six shells 662 of the 6,396
+    wall triangles within 20 m of the hits still crossed a column line,
+    because columnCut only cut a piece whose middle was inside the site, and
+    the corners of an uncut piece just outside came down with the columns
+    they were in. Cut two columns past the rim, the count is 0 of 7,704.
+  collapse-06-spikes-after.png is the same shot. Still wrong and left for
+  later: the Gate's attic has nothing under it, so a piece of it that comes
+  down stops at the height the Gate is cut back to and hangs there, and a
+  column left standing next to fallen ones is a facade with no sides, which
+  reads as a thin panel. Machines 62 of 62, city 84 of 84.
+
+## 74. The memorial is under a force field instead of out of bounds
+
+- 2026-10-21: asked for: no weapons free zone at the memorial, a force field
+  so it cannot be damaged instead. The zone was one test, combat.isSanctuary,
+  asked by thirteen modules for two different things: keep away (the weapon
+  holsters, drones and soldiers turn back and stop seeing you, mechs, pads
+  and parked vehicles are not put there, the warhead, the ion cannon and the
+  plasma rain refuse it) and do no harm (no collapse, no crater, no fire).
+  The first kind is gone: nothing is told about the memorial any more. The
+  second is the field, combat.isShielded, 100 m from the middle of the
+  stelae rather than the 135 the zone kept clear of the streets round it.
+- What it protects, everywhere a blast can change the city: the collapse in
+  the world shader (a uniform for the field, and no vertex inside it moves),
+  the bake that writes a finished ruin into the tiles, the collision walls,
+  the craters in the ground the player stands on, the holes a shell punches
+  in a wall, trees catching fire or being blown over, and scorch marks. A
+  site may now open on the memorial, and it was wrong that it could not: a
+  warhead there used to spare the whole street round it. Measured: a
+  warhead on the edge of the field took a block outside it from 17 m to 3 m
+  and moved nothing inside it.
+- What it looks like: src/render/field.js, a low dome of hexagons generated
+  in the vertex shader, additive, faint at rest and lit from the point of a
+  hit outward with a ring that runs across it (field-01-dome.png, from a
+  helicopter over the synthetic city).
+- Checks rewritten to say what is true now: the weapon fires there and
+  hurts, a drone parked over the stelae stays and fights, a warhead and the
+  ion cannon can be put on it, a blast in it leaves the ground and the walls
+  where they were, and the street outside still comes down. The city check
+  that a collapse reaches the shader read its site after sixty more blasts
+  had merged into it; it reads it first now.
+
+## 75. Blast plasma: harder, orange, ten times the harm
+
+- 2026-10-21: asked for: blast plasma for Ultra Plasma (a toggle on the
+  launch screen) and for the plasma rifle (hold the right mouse button, ten
+  seconds or so). Harder, no bounce, ten times as strong, very bright orange.
+- Two projectile kinds, blast (the rifle) and ultraBlast (the rain), that
+  detonate on contact and never bounce; the rifle's is 340 damage over the
+  same 1.5 m as a 34 damage bolt, the rain's 800 over 8.25 m. Both meshes
+  carry part 48, an emissive orange in the actor shader.
+- The orange came out white the first time: the tonemapper (the ACES fit
+  with its two colour matrices) whitens anything bright whose green and blue
+  are not near nothing. Worked out on the CPU with the same matrices: an
+  emissive of (3.4, 0.38, 0) lands on (1.00, 0.64, 0.22) in sRGB, an orange,
+  where (9, 4, 0.5) landed on (1.00, 0.96, 0.84). blast-01-bolt.png beside an
+  ordinary bolt, blast-02-rain.png from the street.
+- The rifle charge runs while aiming, is lost on release before it is full,
+  and is announced with a toast and a chord when ready; the next shot uses it
+  and the one after is ordinary again. Checks: arsenal (charge, kind, damage,
+  no bounce, next shot ordinary) and cheats (a blast rain sends only the hard
+  kind, at 800, without a bounce).
+
+## 76. Void storm: the void cannon's ball from orbit
+
+- 2026-10-21: asked for: a new super weapon like Ultra Plasma, Void Storm,
+  with the void weapon's ball as the projectile.
+- Ultra takes its numbers from a spec now (ULTRA or VOID_STORM), so the
+  storm is a second instance of the same queue and the same map mode with
+  its own four settings in the cheats (count up to 600 on the slider, any
+  number in the box). The blast switch is hidden for it.
+- A projectile can carry its own void spec (b.void), which the in-flight
+  tendrils and the landing burst read before the weapon row's. The storm's
+  balls are a kind of their own, voidStorm, with the void mesh, 90 m/s and
+  long enough to live to come in at a slant. Their splash is the cannon's
+  without the punch: a hole cut per ball is a tile re-mesh each.
+- At most 48 in the air, because each looks for somebody to reach seven
+  times a second; that is the cost, not the pool.
+- The void ball's green was white from across a square, for the reason
+  blast plasma's orange was: brought down to (0, 1.7, 0.05) at the rim and
+  (0.3, 3, 0.2) facing you, which lands on a neon green after the ACES fit.
+- Checks (cheats): the panel shows its own numbers and leaves ultra plasma's
+  alone, it rains only voidStorm, all twelve sent and none left up, the four
+  soldiers under it are taken, never more than 48 up. storm-01-map.png,
+  storm-02-rain.png. The blast rain check now switches blast off again so
+  later checks are not run with it on.
+
+## 77. The Void Maw: every mech of yours carries a void cannon of its own
+
+- 2026-10-21: asked for: give the mechs an even stronger void weapon too.
+- An arm, voidmaw, appended to every chassis' own loadout in mechs.js rather
+  than written into ten rows, so a chassis added later carries it as well;
+  the sets stay distinct. It fires a projectile of its own kind, voidMaw:
+  the void ball's mesh at 1.3 m rather than 0.7, 34 m/s, fourteen seconds.
+  The ball carries the arm's void spec (the field from phase 76), so the
+  tendrils on the way and the burst where it lands are the arm's.
+- Numbers against the hand cannon: aura 26 m for 140 against 16 for 70,
+  reach 70 m for 900 against 48 for 450, blast 34 m for 1200 against 24 for
+  700, a 12 m hole against 9. Two in the magazine, six seconds to reload.
+- Checks (machines): the Warden carries chaingun, cannon, EMP bomb and the
+  Maw, with a row for each; every arm of every chassis fires; and a man in
+  the open sixty metres from where each lands is taken by the Maw and left
+  standing by the hand cannon. mech-voidmaw.png from the cockpit.
+- Seen once and not again: on the first run the EMP launcher check (rocket
+  gone at age 0, 2 m up) and the Reaper hurting check (0) failed together;
+  the rerun passed both, 64 of 64. Both spawn at random spots; noted here in
+  case it comes back.
+- The cockpit hint and the help row said 1 to 5 and named five arms, which
+  has not been true since phase 68; they now say the number row.
+
+## 78. A bar over every enemy in sight
+
+- 2026-10-21: asked for: enemy health bars.
+- src/ui/healthbars.js: a pool of 24 plain elements in a layer over the
+  canvas, placed each frame with the camera's view projection (the same sum
+  the tank's gun mark uses) and moved by transform. Soldiers and machines,
+  drones, jets (which now keep a maxHealth) and enemy mechs; passers by and
+  anything of yours get none, nor do the dead. Nearest first, within a range
+  per kind (110 m for a man, 520 for a mech, 700 for a jet), only on the
+  screen, and only with a line of sight, asked again per body every 0.2 s
+  rather than every frame.
+- Green to red by what is left, and a white chip of what the last hit took
+  that drains over 0.6 s. Wider for a jet or a mech, and narrower with
+  distance down to 26 px.
+- Checks (combat): a drone in front gets one bar at the centre of the
+  screen at 100% and the drone behind you none; one shot takes it to 25%
+  with the chip still at 82%; dead, no bar. combat-01-contact.png shows four.
+
+## 79. A shot with punch, and a muzzle flash that looks like one
+
+- 2026-10-21: asked for: more punch in the firing sound, and a more
+  realistic muzzle flash.
+- The sound. Four things added to every voice in Audio.SHOT, each a number
+  per weapon: snap (1.5 ms of raw noise, the leading edge), boom (noise
+  through a falling low pass, the low middle a small speaker can play),
+  drive (the body sine starts at 1.8 times its pitch and goes through a tanh
+  soft clip, which gives it harmonics a laptop reproduces), and echo (a send
+  to two darker delays, about 0.1 s and 0.26 s, the facades across the
+  street; the near one moves a little each shot).
+- First try put everything through a DynamicsCompressor for density, and it
+  measured worse: Chrome's compressor looks ahead by a few milliseconds and
+  turned the first ten milliseconds of a rifle shot down by eight decibels,
+  which is the punch. Taken out. Measured offline (OfflineAudioContext, one
+  shot, same master gain), rifle before and after: peak -12.1 to -7.2 dB and
+  at 4 ms both times, first 10 ms -18.9 to -11.8 dB RMS, 10 to 80 ms -27.1 to
+  -19.4, the band under 150 Hz -30.9 to -24.5, and 300 to 600 ms -112 to -77
+  (the echo, which was not there). The mech cannon peaks at -4.3 dB.
+- The flash. The solid cone that shrank back into the barrel is gone. Each
+  weapon has two planes crossed along the barrel and a disc across its end,
+  drawn from both sides; their normal slot carries where on the flash a
+  vertex is, and the viewmodel shader cuts the shape out of that: a ragged
+  star (the flash hider's four slots, plus noise round the circle for rays
+  of every length) round a white core, and a plume that is widest a third of
+  the way out. A seed drawn on every shot turns and re-tears it, so no two
+  match. White hot in the middle, orange through it and a deep red at the
+  edge, with green and blue held low so the tonemapper keeps the orange. The
+  front of the gun is lit warm while it lasts. muzzle-01-rifle.png,
+  muzzle-02-dusk.png, muzzle-03-shotgun.png.
+- The winding audit in the unit tests skips parts 7 and 8, which are
+  two sided on purpose and have no normal to agree with.

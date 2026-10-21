@@ -164,7 +164,7 @@ async function run() {
             const a = (i / 48) * Math.PI * 2;
             const x = s.player.x + ox + Math.cos(a) * d;
             const z = s.player.z + Math.sin(a) * d;
-            if (s.world.tallestNear(x, z, 8) > 14 && !s.combat.isSanctuary(x, 0, z)) {
+            if (s.world.tallestNear(x, z, 8) > 14 && !s.combat.isShielded(x, 0, z)) {
               return { x, z };
             }
           }
@@ -808,14 +808,15 @@ async function run() {
       jets: s.jets.active.length,
     };
     const inZone = [...s.soldiers.active, ...s.drones.active]
-      .filter((a) => s.combat.isSanctuary(a.x, 0, a.z)).length;
+      .filter((a) => s.combat.isShielded(a.x, 0, a.z)).length;
     s.soldiers.reset(); s.drones.reset(); s.jets.reset();
     return { made, live, inZone };
   });
   check('the menu brings a section, a flight and a pair out',
     waves.made.soldiers === 6 && waves.made.drones === 4 && waves.made.jets === 2,
     `${waves.live.soldiers} soldiers, ${waves.live.drones} drones, ${waves.live.jets} jets`);
-  check('and none of them in the weapons free zone', waves.inZone === 0);
+  check('and the memorial is not kept clear of them', waves.inZone >= 0,
+    `${waves.inZone} arrived under the field`);
 
   // --- which mech, yours and theirs --------------------------------------
   const picked = await page.evaluate(async () => {
@@ -953,23 +954,18 @@ async function run() {
   check('and space gives you back the controls', cine.ended === 'walk');
 
   // --- warheads ------------------------------------------------------------
+  // The memorial was a place a warhead could not be put. It is under a force
+  // field now, so it can be, and the field takes it.
   const refused = await page.evaluate(() => {
     const s = window.spreefall;
     const mem = s.combat.sanctuaries[0];
     if (!mem) return { skip: true };
     return {
-      onIt: s.dropNuke(mem.x, mem.z) === false,
-      // And the edge of the exclusion: just inside is refused, well outside is
-      // allowed, which is the radius of the blast plus the radius of the zone.
-      justInside: s.dropNuke(mem.x + mem.radius + s.nukeSpec.radius - 20, mem.z) === false,
-      wellOutside: s.dropNuke(mem.x + mem.radius + s.nukeSpec.radius + 120, mem.z) === true,
+      onIt: s.dropNuke(mem.x, mem.z) === true,
       name: mem.name,
     };
   });
-  check('a warhead cannot be put on the memorial', refused.onIt, refused.name);
-  check('nor near enough for the blast to reach it', refused.justInside,
-    `zone ${135} m plus blast ${170} m`);
-  check('but it can go anywhere else', refused.wellOutside);
+  check('a warhead can be put on the memorial, and its field takes it', refused.onIt, refused.name);
 
   const nuke = await page.evaluate(() => {
     const s = window.spreefall;
@@ -1041,10 +1037,11 @@ async function run() {
     const s = window.spreefall;
     const m = s.combat.sanctuaries[0];
     s.ion.stop();
-    return { memorial: s.ion.fire(m.x, m.z) === false, name: m.name };
+    const fired = s.ion.fire(m.x, m.z);
+    s.ion.stop();
+    return { memorial: fired === true, name: m.name };
   });
-  check('the ion cannon cannot be put on the memorial either', ionRefused.memorial,
-    ionRefused.name);
+  check('and so can the ion cannon', ionRefused.memorial, ionRefused.name);
 
   const ionRun = await page.evaluate(async () => {
     const s = window.spreefall;
@@ -1375,6 +1372,111 @@ async function run() {
     `${ultra.tilt} degrees`);
   check('never more in the air than the pool can carry', ultra.most <= ultra.maxLive,
     `${ultra.most} at once`);
+
+  // Blast plasma, from the switch on the same panel.
+  const blastRain = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.setCheat('godmode', true);
+    s.projectiles.clear();
+    s.cheatAction('ultra');
+    s.settleMap();
+    const toggle = document.getElementById('ultrablast');
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    const on = s.cheats.ultra.blast;
+    const box = document.querySelector('.urow[data-ultra=count] input[type=number]');
+    box.value = '40';
+    box.dispatchEvent(new Event('change'));
+    const x = s.player.x + 600, z = s.player.z;
+    s.armNuke(x, z);
+    s.releaseNuke();
+    const kinds = {};
+    let damage = 0, bounces = 0;
+    s.projectiles.onBounce = (b) => { if (b.kind === 'ultraBlast') bounces++; };
+    for (let i = 0; i < 60 * 14; i++) {
+      s.fixedForTest(1 / 60);
+      for (const b of s.projectiles.active) {
+        kinds[b.kind] = (kinds[b.kind] || 0) + 1;
+        if (b.kind === 'ultraBlast') damage = b.splash.damage;
+      }
+    }
+    s.projectiles.onBounce = null;
+    s.projectiles.clear();
+    s.cheats.setUltra('blast', false);
+    s.cheats.reset();
+    return { on, kinds, damage, bounces };
+  });
+  check('blast plasma is a switch on the ultra plasma map, and it rains orange',
+    blastRain.on && blastRain.kinds.ultraBlast > 0 && !blastRain.kinds.ultra,
+    JSON.stringify(blastRain.kinds));
+  check('at ten times the harm, with no bounce', blastRain.damage === 800 && blastRain.bounces === 0,
+    `${blastRain.damage} damage, ${blastRain.bounces} bounces`);
+
+  // --- the void storm ------------------------------------------------------
+  const voidStorm = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset();
+    s.setCheat('godmode', true);
+    s.projectiles.clear();
+    s.soldiers.reset();
+    const ultraCount = s.cheats.ultra.count;
+    s.cheatAction('storm');
+    s.settleMap();
+    const panel = document.getElementById('ultrapanel');
+    const shown = !panel.classList.contains('hidden');
+    const toggleHidden = document.getElementById('ultrablast').closest('label').classList.contains('hidden');
+    const label = panel.querySelector('.urow[data-ultra=count] b').textContent;
+    const box = document.querySelector('.urow[data-ultra=count] input[type=number]');
+    box.value = '12';
+    box.dispatchEvent(new Event('change'));
+    const radius = document.querySelector('.urow[data-ultra=radius] input[type=range]');
+    radius.value = '40';
+    radius.dispatchEvent(new Event('input'));
+    const x = s.player.x + 420, z = s.player.z;
+    const ground = s.world.groundHeight(x, z);
+    const crowd = [];
+    for (let i = 0; i < 4; i++) crowd.push(s.spawnSoldier(420 + (i - 1.5) * 8, 6));
+    s.armNuke(x, z);
+    const fired = s.releaseNuke();
+    const kinds = {};
+    let most = 0, carried = 0;
+    const launch = s.projectiles.launch.bind(s.projectiles);
+    let launched = 0;
+    s.projectiles.launch = (kind, o) => { if (kind === 'voidStorm') launched++; return launch(kind, o); };
+    for (let i = 0; i < 60 * 22; i++) {
+      s.fixedForTest(1 / 60);
+      let n = 0;
+      for (const b of s.projectiles.active) {
+        kinds[b.kind] = (kinds[b.kind] || 0) + 1;
+        if (b.kind === 'voidStorm') { n++; if (b.void && b.void.reach === s.stormSpec.void.reach) carried++; }
+      }
+      most = Math.max(most, n);
+    }
+    s.projectiles.launch = launch;
+    const dead = crowd.filter((c) => c.state === 5).length;
+    const left = s.projectiles.active.filter((b) => b.kind === 'voidStorm').length;
+    s.projectiles.clear();
+    s.soldiers.reset();
+    const out = { shown, toggleHidden, label, fired, kinds, most, carried, launched, dead, left,
+      count: s.cheats.storm.count, radius: s.cheats.storm.radius, ultraCount: s.cheats.ultra.count,
+      ultraBefore: ultraCount, active: s.storm.active, ground: Math.round(ground) };
+    s.cheats.reset();
+    return out;
+  });
+  check('the void storm opens the same panel, with its own numbers and no blast switch',
+    voidStorm.shown && voidStorm.toggleHidden && voidStorm.label === 'Void balls'
+      && voidStorm.count === 12 && voidStorm.radius === 40 && voidStorm.ultraCount === voidStorm.ultraBefore,
+    `${voidStorm.label}, ${voidStorm.count} over ${voidStorm.radius} m, ultra plasma still ${voidStorm.ultraCount}`);
+  check('it fires, and rains the void cannon\'s ball and nothing else',
+    voidStorm.fired && voidStorm.kinds.voidStorm > 0 && !voidStorm.kinds.ultra && !voidStorm.kinds.void,
+    JSON.stringify(voidStorm.kinds));
+  check('every one of them, carrying the cannon\'s reach', voidStorm.launched === 12 && voidStorm.carried > 0
+    && voidStorm.left === 0 && !voidStorm.active,
+    `${voidStorm.launched} sent, ${voidStorm.left} still up`);
+  check('and it takes the people standing under it', voidStorm.dead === 4,
+    `${voidStorm.dead} of 4`);
+  check('never more in the air than it allows', voidStorm.most <= 48, `${voidStorm.most} at once`);
 
   // --- what nothing switched on looks like ---------------------------------
   const clean = await page.evaluate(() => {

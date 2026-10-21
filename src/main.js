@@ -26,7 +26,7 @@ import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
 import { CHASSIS } from './game/chassis.js';
-import { Ultra, ULTRA, ULTRA_STATE } from './game/ultra.js';
+import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
@@ -42,6 +42,7 @@ import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
+import { HealthBars } from './ui/healthbars.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -57,7 +58,7 @@ const el = {
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   btnTravel: $('btntravel'),
-  crosshair: $('crosshair'), hitmarker: $('hitmarker'), damage: $('damage'),
+  crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
   combat: $('combat'), healthbar: $('healthbar'), healthnum: $('healthnum'),
   ammonum: $('ammonum'), reservenum: $('reservenum'), reloadhint: $('reloadhint'),
@@ -66,7 +67,7 @@ const el = {
   diffnote: $('diffnote'),
   weaponname: $('weaponname'),
   tiernum: $('tiernum'), contactnum: $('contactnum'), scorenum: $('scorenum'),
-  sanctuary: $('sanctuary'), killfeed: $('killfeed'), powers: $('powers'),
+  killfeed: $('killfeed'), powers: $('powers'),
   buildInfo: $('buildinfo'),
   cheats: $('cheats'), cheatActions: $('cheatactions'), cheatSwitches: $('cheatswitches'),
   cheatValues: $('cheatvalues'),
@@ -212,14 +213,31 @@ async function main() {
   try { wanted = localStorage.getItem('spreefall.difficulty') || 'normal'; } catch { /* private mode */ }
   const combat = new Combat(m, wanted);
   // Districts arrive and leave while you walk, and two things took a copy of
-  // the city's landmarks when they were built: the cards and the weapons free
-  // zone. Both are taken again whenever the city changes shape, so the
-  // memorial is still a sanctuary after Mitte has been dropped and reloaded.
+  // the city's landmarks when they were built: the cards and the memorial's
+  // force field. Both are taken again whenever the city changes shape, so the
+  // memorial is still shielded after Mitte has been dropped and reloaded.
+  const placeDomes = () => {
+    renderer.field.domes = combat.sanctuaries.map((f) => ({
+      x: f.x, y: world.groundHeight(f.x, f.z), z: f.z, radius: f.radius,
+    }));
+  };
+  // The ground under the field is never dug, which the world asks about
+  // every time it is asked how high the ground is.
+  world.shielded = (x, z) => combat.isShielded(x, 0, z);
   world.onManifest = (manifest) => {
     landmarks.refresh(manifest);
     combat.refreshSanctuaries(manifest);
+    placeDomes();
   };
-  const drones = new Drones(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  placeDomes();
+  // The field keeps the memorial whole; it does not keep anybody out of it.
+  // Nothing below is told about it except what could damage the place.
+  const shielded = (x, y, z) => combat.isShielded(x, y, z);
+  // Nor is it burnt: a scorch mark that would land under the field is not
+  // put down at all.
+  const addScar = renderer.addScar.bind(renderer);
+  renderer.addScar = (x, y, z, ...rest) => (shielded(x, y, z) ? undefined : addScar(x, y, z, ...rest));
+  const drones = new Drones(world);
   // Filled in by the soldier layer below, and referenced by the blast handler
   // before it exists, which is why it is a binding rather than a constant.
   let soldiers = null;   // built below, once combat exists to ask about zones
@@ -228,15 +246,15 @@ async function main() {
   const effects = new Effects();
   const reflex = new Reflex();
   reflex.drainScale = combat.rules.reflexDrain;
-  soldiers = new Soldiers(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const jets = new Jets(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  soldiers = new Soldiers(world);
+  const jets = new Jets(world);
   jets.accuracyScale = combat.rules.enemyAccuracy;
-  const pickups = new Pickups(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const pickups = new Pickups(world);
   const cheats = new Cheats();
   const gibs = new Gibs(world);
   const cars = new Cars(world);
   const trains = new Trains(world);
-  const demolition = new Demolition(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const demolition = new Demolition(world, shielded);
   // A ruin that has stopped moving is written into the city's own bytes, and
   // the card needs the new ones. Nothing else changes: the same ruin, drawn
   // from the buffers instead of from a uniform slot, which is then free for
@@ -305,12 +323,14 @@ async function main() {
   const travel = new Travel();
   const cinema = new Cinema();
   const fires = new Fires(world);
-  const fireWalls = new FireWalls(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const fireWalls = new FireWalls(world, shielded);
   const machines = new Machines();
-  const ion = new Ion(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const ultra = new Ultra(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const vehicles = new Vehicles(world, (x, y, z) => combat.isSanctuary(x, y, z));
-  const mechs = new Mechs(world, (x, y, z) => combat.isSanctuary(x, y, z));
+  const ion = new Ion(world);
+  const ultra = new Ultra(world);
+  const healthBars = new HealthBars(document.getElementById('healthbars'));
+  const storm = new Ultra(world, null, VOID_STORM);
+  const vehicles = new Vehicles(world);
+  const mechs = new Mechs(world);
   weapon.mechs = mechs;
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
@@ -445,7 +465,6 @@ async function main() {
     shieldTimer: 0,
     recoilApplied: { pitch: 0, yaw: 0 },
     bob: 0,
-    inSanctuary: false,
     targeting: false,
     // Just a Walk: nothing is sent after you. What the cheat menu brings out
     // by hand is still real, and still fights; it simply does not come back
@@ -608,6 +627,7 @@ async function main() {
     const dist = Math.hypot(player.x - x, player.y + PLAYER.eye - y, player.z - z);
     // Heard a great deal further than a rifle, and run from accordingly.
     soldiers.scare(x, z, Math.max(90, splash.radius * 3));
+    strikeField(x, y, z, splash.radius);
     if (splash.fusion) {
       // A mech's reactor: the warhead's code path at a fiftieth of the
       // volume, in blue and neon green, and a flash that washes the frame
@@ -790,7 +810,7 @@ async function main() {
 
     // The void cannon's ball, landing: a green flash the size of the blast,
     // and a tendril out to everybody within reach that a wall does not hide.
-    const voidSpec = row && row.void ? row.void : null;
+    const voidSpec = (body && body.void) || (row && row.void) || null;
     if (voidSpec) voidBurst(x, y, z, splash, voidSpec);
 
     // And what it did to the city itself. Small blasts add up on a grid and
@@ -985,8 +1005,8 @@ async function main() {
    */
   function voidTick(dt) {
     for (const b of projectiles.active) {
-      if (b.kind !== 'void' || !b.alive) continue;
-      const spec = WEAPONS.void.void;
+      if ((b.kind !== 'void' && !b.void) || !b.alive) continue;
+      const spec = b.void || WEAPONS.void.void;
       for (let i = 0; i < 3; i++) {
         effects.spark(b.x + (Math.random() - 0.5) * 1.4, b.y + (Math.random() - 0.5) * 1.4,
           b.z + (Math.random() - 0.5) * 1.4, 0.35, 1.0, 0.3);
@@ -1170,6 +1190,12 @@ async function main() {
   }
   weapon.onDryFire = () => audio.dryFire();
   weapon.onReloadStart = (seconds) => audio.reload(seconds);
+  // A full blast plasma charge says so, out loud and on the screen.
+  weapon.onBlastReady = () => {
+    audio.ultraCharge(0.5);
+    toast('blast plasma ready');
+  };
+
   weapon.onSwap = (id, spec) => {
     audio.swap();
     toast(spec.name);
@@ -1524,6 +1550,18 @@ async function main() {
         x: from.x, y: from.y, z: from.z,
         vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
         splash: arm.splash, weapon: 'mech', carbomb: arm.reach,
+      });
+      return;
+    }
+
+    if (arm.kind === 'void') {
+      // The ball carries its own reach, so the tendrils on the way and the
+      // burst where it lands are the arm's and not the hand cannon's.
+      const d = spread(arm.spread);
+      projectiles.launch('voidMaw', {
+        x: from.x, y: from.y, z: from.z,
+        vx: d.x * arm.speed, vy: d.y * arm.speed, vz: d.z * arm.speed,
+        splash: arm.splash, void: arm.void, weapon: 'mech',
       });
       return;
     }
@@ -2127,7 +2165,7 @@ async function main() {
       const px = x + Math.cos(a) * r;
       const pz = z + Math.sin(a) * r;
       const py = world.groundHeight(px, pz);
-      if (combat.isSanctuary(px, py, pz)) continue;
+      if (combat.isShielded(px, py, pz)) continue;
       fires.ignite(px, py, pz, 8, 0.9);
       renderer.addScar(px, py, pz, 4.5, 0.6);
       effects.flame(px, py + 0.5, pz, 3.0, 0.9);
@@ -2208,7 +2246,7 @@ async function main() {
     // untouched after a wall of fire had crossed it.
     fires.ignite(x, y, z, radius, 0.9);
     renderer.addScar(x, y, z, radius * 0.9, 0.55);
-    if (combat.isSanctuary(x, y, z)) return;
+    if (combat.isShielded(x, y, z)) return;
     burning.push({ x, y, z, radius: Math.max(5, radius * 0.6), left: spec.burnSeconds,
       damagePerSecond: spec.groundDamagePerSecond });
   };
@@ -2220,7 +2258,9 @@ async function main() {
   // your face.
   vehicles.onFire = (v, gun) => {
     const m = vehicles.muzzle(v);
-    const dir = {
+    // A tank fires where its gun is pointing, which is where the turret has
+    // got to rather than where you are looking.
+    const dir = v.spec.turret ? vehicles.gunDirection(v, camera.pitch) : {
       x: camera.forward[0], y: camera.forward[1], z: camera.forward[2],
     };
     if (gun.kind === 'shell') {
@@ -2299,6 +2339,75 @@ async function main() {
     }
   };
 
+  /**
+   * The ring that shows where a tank's gun is pointing: the end of its line
+   * of fire, put on the screen. It turns green once the turret has caught up
+   * with the view.
+   */
+  function placeGunMark() {
+    const v = state.inVehicle;
+    if (!v || !v.spec.turret || v.health <= 0) {
+      el.gunmark.classList.add('hidden');
+      return;
+    }
+    const m = vehicles.muzzle(v);
+    const d = vehicles.gunDirection(v, camera.pitch);
+    const hit = world.raycast(m.x, m.y, m.z, d.x, d.y, d.z, 400, {});
+    const t = hit ? hit.t : 400;
+    const p = [m.x + d.x * t, m.y + d.y * t, m.z + d.z * t];
+    const vp = camera.viewProj;
+    const cx = vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12];
+    const cy = vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13];
+    const cw = vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15];
+    if (cw <= 0.01) { el.gunmark.classList.add('hidden'); return; }
+    el.gunmark.classList.remove('hidden');
+    el.gunmark.style.left = `${((cx / cw) * 0.5 + 0.5) * window.innerWidth}px`;
+    el.gunmark.style.top = `${(0.5 - (cy / cw) * 0.5) * window.innerHeight}px`;
+    let off = (camera.yaw - (v.yaw + v.turret)) % (Math.PI * 2);
+    if (off > Math.PI) off -= Math.PI * 2;
+    if (off < -Math.PI) off += Math.PI * 2;
+    el.gunmark.classList.toggle('laid', Math.abs(off) < 0.02);
+  }
+
+  /**
+   * A bar over everything hostile in sight: soldiers and machines, drones,
+   * jets and their mechs. Passers by and anything of yours get none.
+   */
+  const hostiles = [];
+  function placeHealthBars() {
+    const wall = performance.now() / 1000;
+    const dt = Math.min(0.1, Math.max(0, wall - (state.hbWall || wall)));
+    state.hbWall = wall;
+    if (photo.active) { healthBars.hide(); return; }
+    hostiles.length = 0;
+    for (const sd of soldiers.active) {
+      if (!sd.alive || sd.civilian || sd.health <= 0 || sd.state === 5) continue;
+      hostiles.push({ body: sd, kind: sd.machine ? 'machine' : 'soldier',
+        x: sd.x, y: sd.y + 2.15, z: sd.z, health: sd.health, max: sd.maxHealth });
+    }
+    for (const d of drones.active) {
+      if (d.health <= 0) continue;
+      hostiles.push({ body: d, kind: 'drone', x: d.x, y: d.y + 0.9, z: d.z,
+        health: d.health, max: d.maxHealth });
+    }
+    for (const j of jets.active) {
+      if (!j.alive || j.health <= 0) continue;
+      hostiles.push({ body: j, kind: 'jet', x: j.x, y: j.y + 2.6, z: j.z,
+        health: j.health, max: j.maxHealth });
+    }
+    for (const mk of mechs.active) {
+      if (mk.mine || mk.health <= 0) continue;
+      hostiles.push({ body: mk, kind: 'mech', x: mk.x, y: mk.y + mk.spec.height + 0.8, z: mk.z,
+        health: mk.health, max: mk.maxHealth });
+    }
+    const eye = camera.position
+      ? { x: camera.position[0], y: camera.position[1], z: camera.position[2] }
+      : { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    healthBars.update(hostiles, camera.viewProj, eye,
+      (x, y, z) => world.lineOfSight(eye.x, eye.y, eye.z, x, y, z),
+      dt, wall, window.innerWidth, window.innerHeight);
+  }
+
   /** Into the nearest one, or out of the one you are in. */
   function toggleVehicle() {
     if (state.mode !== 'walk') return;
@@ -2317,12 +2426,14 @@ async function main() {
     el.vehicleName.textContent = near.spec.name;
     el.vehicleKeys.textContent = near.spec.kind === 'air'
       ? 'it flies where you look; W S throttle, A D turn, Space up, right mouse down, left mouse fires'
-      : 'W forward, S back, A D steer, Shift brake, left mouse fires';
+      : (near.spec.turret
+        ? 'W forward, S back, A D steer, mouse lays the turret, Shift brake, left mouse fires'
+        : 'W forward, S back, A D steer, Shift brake, left mouse fires');
     // You look where it is pointing. Before this the camera kept the heading
     // you had on foot, so a tank parked across your line of sight drove off
     // sideways or straight past you when you pressed forward, which reads as
     // reverse however the hull is actually moving.
-    camera.yaw = near.yaw;
+    camera.yaw = near.yaw + (near.turret || 0);
     camera.pitch = Math.min(camera.pitch, -0.05);
     audio.swap();
     toast(`${near.spec.name}. F to get out.`);
@@ -2835,7 +2946,7 @@ async function main() {
    * spot, with the difference that nobody can see why.
    */
   function placeable(x, z) {
-    return world.isLoaded(x, z) && !combat.isSanctuary(x, 0, z);
+    return world.isLoaded(x, z);
   }
 
   /**
@@ -2854,7 +2965,6 @@ async function main() {
         const r = 30 + Math.random() * 110;
         const x = at.x + Math.cos(a) * r;
         const z = at.z + Math.sin(a) * r;
-        if (combat.isSanctuary(x, 0, z)) continue;
         // Somewhere a vehicle could actually sit: nothing within its own
         // length in four directions.
         let boxed = false;
@@ -2907,9 +3017,9 @@ async function main() {
   // Ultra plasma: the balls leave orbit through the ordinary projectile
   // layer, so they bounce off the real streets and go off through the same
   // blast every other weapon uses.
-  ultra.launch = (from, v) => projectiles.launch('ultra', {
+  ultra.launch = (from, v) => projectiles.launch(cheats.ultra.blast ? 'ultraBlast' : 'ultra', {
     x: from.x, y: from.y, z: from.z, vx: v.x, vy: v.y, vz: v.z,
-    splash: ULTRA.splash, weapon: 'ultra',
+    splash: cheats.ultra.blast ? ULTRA.blastSplash : ULTRA.splash, weapon: 'ultra',
   });
   ultra.onCharge = (seconds) => {
     audio.ultraCharge(seconds);
@@ -2924,7 +3034,31 @@ async function main() {
   ultra.onDone = (sent) => { feed(`<i>ultra plasma</i> ${sent} away`); };
   const ultraLive = () => {
     let n = 0;
-    for (const b of projectiles.active) if (b.kind === 'ultra') n++;
+    for (const b of projectiles.active) if (b.kind === 'ultra' || b.kind === 'ultraBlast') n++;
+    return n;
+  };
+
+  // Void storm: the void cannon's ball from orbit. Each one carries the
+  // cannon's reach with it, so it tears out at whoever it passes on the way
+  // down and lands the way the cannon's own shot does.
+  storm.launch = (from, v) => projectiles.launch('voidStorm', {
+    x: from.x, y: from.y, z: from.z, vx: v.x, vy: v.y, vz: v.z,
+    splash: VOID_STORM.splash, void: VOID_STORM.void, weapon: 'storm',
+  });
+  storm.onCharge = (seconds) => {
+    audio.ultraCharge(seconds);
+    toast('void storm, charging');
+    feed('<i>void storm</i> charging');
+  };
+  storm.onRain = () => {
+    audio.explosion();
+    state.flash = Math.max(state.flash, 0.3);
+    feed(`<b>void storm</b> ${storm.left} inbound`);
+  };
+  storm.onDone = (sent) => { feed(`<i>void storm</i> ${sent} away`); };
+  const stormLive = () => {
+    let n = 0;
+    for (const b of projectiles.active) if (b.kind === 'voidStorm') n++;
     return n;
   };
 
@@ -3287,7 +3421,7 @@ async function main() {
   /**
    * More of them, now. Each goes in through the same spawn the game uses, so
    * a soldier put here is a soldier like any other: it finds a place to stand,
-   * keeps out of the weapons free zone, and belongs to the same budget.
+   * and belongs to the same budget.
    *
    * @returns {number} how many actually arrived
    */
@@ -3433,7 +3567,6 @@ async function main() {
         if (x < world.minX + 80 || x > world.maxX - 80) continue;
         if (z < world.minZ + 80 || z > world.maxZ - 80) continue;
         if (!world.isLoaded(x, z)) continue;
-        if (sanctuaryWithin(x, z, nukeRadius())) continue;
         dropNuke(x, z, true);
         break;
       }
@@ -3516,6 +3649,9 @@ async function main() {
     } else if (id === 'ultra') {
       openMap('ultra');
       return;
+    } else if (id === 'storm') {
+      openMap('storm');
+      return;
     }
     applyCheats();
   }
@@ -3587,6 +3723,12 @@ async function main() {
       armed: 'Enter to fire, Esc to cancel.',
       button: 'Fire',
     },
+    storm: {
+      hint: 'Set how many, how wide, from where and how steep, then click the city. '
+        + 'Wheel zooms, drag moves. Esc to think better of it.',
+      armed: 'Enter to fire, Esc to cancel.',
+      button: 'Fire',
+    },
     ion: {
       hint: 'Click the city to put the ion cannon on it. '
         + 'Wheel zooms, drag moves. Esc to think better of it.',
@@ -3615,8 +3757,8 @@ async function main() {
     state.mapPull = { from: MAP_ZOOM.near, to: MAP_ZOOM.pick, t: 0, back: false };
     targetMap.aim = { x: player.x, z: player.z, radius: aimRadius(mode), allowed: true, ...aimArrow(mode) };
     el.nukeTarget.classList.toggle('travel', mode === 'travel');
-    el.ultraPanel.classList.toggle('hidden', mode !== 'ultra');
-    if (mode === 'ultra') showUltra();
+    el.ultraPanel.classList.toggle('hidden', mode !== 'ultra' && mode !== 'storm');
+    if (mode === 'ultra' || mode === 'storm') showUltra();
     el.nukeTarget.classList.remove('hidden');
     el.targetConfirm.classList.add('hidden');
     el.confirmFire.textContent = MAP_MODE[mode].button;
@@ -3732,15 +3874,9 @@ async function main() {
       return true;
     }
     const radius = aimRadius(state.mapMode);
-    if (sanctuaryWithin(x, z, radius)) {
-      el.targetHint.textContent = 'not there: the memorial is a weapons free zone';
-      el.targetConfirm.classList.add('hidden');
-      state.pendingNuke = null;
-      return false;
-    }
     state.pendingNuke = { x, z };
     const inside = countInside(x, z, radius);
-    const u = cheats.ultra;
+    const u = state.mapMode === 'storm' ? cheats.storm : cheats.ultra;
     el.confirmWhere.textContent = state.mapMode === 'ion'
       ? `${away} m away. Three beams for ${Math.round(ION.charge)} seconds, `
         + `then ${radius} m of everything. ${inside} target${inside === 1 ? '' : 's'} inside.`
@@ -3748,7 +3884,11 @@ async function main() {
         ? `${away} m away. ${u.count} plasma balls over ${radius} m, from the `
           + `${compassName(u.bearing)} at ${u.tilt}\u00b0, after ${ULTRA.charge.toFixed(0)} seconds of charge. `
           + `${inside} target${inside === 1 ? '' : 's'} inside.`
-        : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
+        : state.mapMode === 'storm'
+          ? `${away} m away. ${u.count} void balls over ${radius} m, from the `
+            + `${compassName(u.bearing)} at ${u.tilt}\u00b0, after ${VOID_STORM.charge.toFixed(0)} seconds of charge. `
+            + `${inside} target${inside === 1 ? '' : 's'} inside.`
+          : `${away} m away, ${radius} m across, ${inside} target${inside === 1 ? '' : 's'} inside.`;
     const self = away < radius;
     el.confirmSelf.classList.toggle('hidden', !self);
     el.confirmSelf.textContent = combat.godmode
@@ -3780,7 +3920,19 @@ async function main() {
       if (!ultra.fire(at.x, at.z, cheats.ultra)) {
         el.targetHint.textContent = ultra.active
           ? 'the last one is still coming down'
-          : 'not there: the memorial is a weapons free zone';
+          : 'it cannot be fired there';
+        return false;
+      }
+      cheats.used = true;
+      applyCheats();
+      closeTargeting();
+      return true;
+    }
+    if (state.mapMode === 'storm') {
+      if (!storm.fire(at.x, at.z, cheats.storm)) {
+        el.targetHint.textContent = storm.active
+          ? 'the last one is still coming down'
+          : 'it cannot be fired there';
         return false;
       }
       cheats.used = true;
@@ -3792,7 +3944,7 @@ async function main() {
       if (!ion.fire(at.x, at.z)) {
         el.targetHint.textContent = ion.firing
           ? 'the cannon is already firing'
-          : 'not there: the memorial is a weapons free zone';
+          : 'it cannot be fired there';
         return false;
       }
       cheats.used = true;
@@ -3801,7 +3953,7 @@ async function main() {
       return true;
     }
     if (!dropNuke(at.x, at.z)) {
-      el.targetHint.textContent = 'not there: the memorial is a weapons free zone';
+      el.targetHint.textContent = 'it cannot be dropped there';
       return false;
     }
     closeTargeting();
@@ -4101,22 +4253,38 @@ async function main() {
     if (mode === 'travel') return 14;
     if (mode === 'ion') return ionRadius();
     if (mode === 'ultra') return cheats.ultra.radius;
+    if (mode === 'storm') return cheats.storm.radius;
     return nukeRadius();
   }
 
-  /** The way ultra plasma comes in, for the arrow the map draws. */
+  /** The way ultra plasma or the void storm comes in, for the arrow the map draws. */
   function aimArrow(mode) {
-    return mode === 'ultra' ? { bearing: cheats.ultra.bearing, tilt: cheats.ultra.tilt } : {};
+    const u = mode === 'ultra' ? cheats.ultra : mode === 'storm' ? cheats.storm : null;
+    return u ? { bearing: u.bearing, tilt: u.tilt } : {};
   }
 
   // The four numbers, on the map while it is up for ultra plasma. Each one
   // moves the circle or the arrow as it is dragged, and a point already
   // picked is asked about again with the new numbers.
+  // The void storm uses the same panel with its own four numbers, and no
+  // blast switch: a void ball is already the hard kind.
   const ultraRows = {};
+  const rainMode = () => (state.mapMode === 'storm' ? 'storm' : 'ultra');
   function showUltra() {
-    const u = cheats.ultra;
+    const mode = rainMode();
+    const u = mode === 'storm' ? cheats.storm : cheats.ultra;
+    const spec = mode === 'storm' ? VOID_STORM : ULTRA;
+    const toggle = document.getElementById('ultrablast');
+    if (toggle) {
+      toggle.checked = !!u.blast;
+      toggle.closest('label').classList.toggle('hidden', mode === 'storm');
+    }
     for (const key of Object.keys(ultraRows)) {
       const row = ultraRows[key];
+      const [lo, hi] = spec.limits[key];
+      row.slider.min = String(lo);
+      row.slider.max = String(hi);
+      if (key === 'count') row.name.textContent = mode === 'storm' ? 'Void balls' : 'Plasma balls';
       row.slider.value = String(Math.min(Number(row.slider.max), u[key]));
       if (row.box) row.box.value = String(u[key]);
       row.say.textContent = key === 'count' ? `${u.count}`
@@ -4128,10 +4296,12 @@ async function main() {
     return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8];
   }
   function setUltra(key, v) {
-    cheats.setUltra(key, v);
+    const mode = rainMode();
+    if (mode === 'storm') cheats.setStorm(key, v);
+    else cheats.setUltra(key, v);
     showUltra();
     if (targetMap.aim) {
-      targetMap.aim = { ...targetMap.aim, radius: aimRadius('ultra'), ...aimArrow('ultra') };
+      targetMap.aim = { ...targetMap.aim, radius: aimRadius(mode), ...aimArrow(mode) };
     }
     if (state.pendingNuke) armNuke(state.pendingNuke.x, state.pendingNuke.z);
     else drawTargetMap();
@@ -4163,14 +4333,27 @@ async function main() {
       row.append(box);
     }
     el.ultraPanel.appendChild(row);
-    ultraRows[key] = { slider, box, say };
+    ultraRows[key] = { slider, box, say, name };
   }
+  // And which kind comes down: the rifle's plasma, or blast plasma.
+  const blastRow = document.createElement('label');
+  blastRow.className = 'urow toggle';
+  const blastName = document.createElement('b');
+  blastName.textContent = 'Blast plasma';
+  const blastSay = document.createElement('span');
+  blastSay.textContent = 'harder, orange, no bounce, ten times the harm';
+  const blastToggle = document.createElement('input');
+  blastToggle.type = 'checkbox';
+  blastToggle.id = 'ultrablast';
+  blastToggle.addEventListener('change', () => setUltra('blast', blastToggle.checked));
+  blastRow.append(blastName, blastSay, blastToggle);
+  el.ultraPanel.appendChild(blastRow);
 
   function aimAt(x, z) {
     const r = aimRadius(state.mapMode);
     targetMap.aim = {
       x, z, radius: r,
-      allowed: state.mapMode === 'travel' || !sanctuaryWithin(x, z, r),
+      allowed: true,
       ...aimArrow(state.mapMode),
     };
   }
@@ -4258,7 +4441,6 @@ async function main() {
    *   not mark the run the way reaching for one in the cheat menu does.
    */
   function dropNuke(x, z, ofTheMode = false) {
-    if (sanctuaryWithin(x, z, nukeRadius())) return false;
     if (!ofTheMode) {
       cheats.used = true;
       applyCheats();
@@ -4307,20 +4489,27 @@ async function main() {
     relock();
   }
 
-  /** True when a circle of this radius would reach into a weapons free zone. */
-  function sanctuaryWithin(x, z, radius) {
-    for (const sanctuary of combat.sanctuaries) {
-      const dx = x - sanctuary.x, dz = z - sanctuary.z;
-      if (Math.hypot(dx, dz) < sanctuary.radius + radius) return true;
+  /**
+   * A blast that reaches the memorial lights its force field from the point
+   * where it touched: the middle of the blast if it went off inside, the edge
+   * of the field facing it if not. What it does to the memorial is nothing,
+   * which is the demolition layer's business.
+   */
+  function strikeField(x, y, z, radius) {
+    for (const f of combat.sanctuaries) {
+      const d = Math.hypot(x - f.x, z - f.z);
+      if (d >= f.radius + radius) continue;
+      const at = d < f.radius ? { x, z } : { x: f.x + ((x - f.x) / d) * f.radius, z: f.z + ((z - f.z) / d) * f.radius };
+      renderer.field.struck(at.x, Math.max(y, world.groundHeight(at.x, at.z) + 2), at.z,
+        state.time, Math.min(3, Math.max(0.3, radius / 12)));
     }
-    return false;
   }
 
   /**
    * Nuke rain. One warhead every few seconds, somewhere you can see but not
-   * where you are standing, and never into the memorial. Because it has to
-   * pick a point that is allowed, it tries a handful and gives this tick up
-   * rather than looping until it finds one.
+   * where you are standing; the memorial's field takes any that land on it.
+   * Because it has to pick a point that is allowed, it tries a handful and
+   * gives this tick up rather than looping until it finds one.
    */
   function rainTick(dt) {
     if (!cheats.nukeRain || state.mode !== 'walk') return;
@@ -4934,6 +5123,7 @@ async function main() {
       trains.update(worldDt, player);
       ion.update(worldDt);
       ultra.update(worldDt, ultraLive());
+      storm.update(worldDt, stormLive());
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
@@ -4994,8 +5184,10 @@ async function main() {
       const controls = {
         throttle: photo.active ? 0 : input.moveZ,
         steer: photo.active ? 0 : (air ? 0 : -input.moveX),
-        // Where you are looking, which is where an aircraft goes.
+        // Where you are looking, which is where an aircraft goes, and where a
+        // tank lays its turret.
         aimYaw: air && !photo.active ? camera.yaw : undefined,
+        turretAim: v.spec.turret && !photo.active ? camera.yaw : undefined,
         aimPitch: air && !photo.active ? camera.pitch : undefined,
         pitch: 0,
         roll: 0,
@@ -5011,7 +5203,10 @@ async function main() {
       // with the mouse rather than taking the mouse away.
       const hullWas = v.yaw;
       vehicles.update(selfDt, controls, state.time);
-      if (!air) camera.yaw += v.yaw - hullWas;
+      // Except on a tank, where the mouse lays the turret: the view stays
+      // where you put it while the hull turns under it, and the turret works
+      // its way round to it.
+      if (!air && !v.spec.turret) camera.yaw += v.yaw - hullWas;
       // Dead or alive, you are where it is.
       player.teleport(v.x, v.z);
       state.curr.x = v.x; state.curr.y = v.y; state.curr.z = v.z;
@@ -5053,11 +5248,10 @@ async function main() {
       z: player.z,
       alive: combat.health > 0,
     };
-    state.inSanctuary = combat.isSanctuary(eye.x, eye.y, eye.z);
     // The cheat menu and the target map are both modal: the mouse belongs to
     // them, so nothing fires while either is up.
     const paused = state.targeting || !el.cheats.classList.contains('hidden');
-    const holstered = state.holstered || photo.active || state.inSanctuary
+    const holstered = state.holstered || photo.active
       || combat.health <= 0 || paused;
     weapon.setHolstered(holstered);
     // A flamethrower has nothing to aim down. Its second trigger throws a
@@ -5118,6 +5312,7 @@ async function main() {
     trains.update(worldDt, player);
     ion.update(worldDt);
     ultra.update(worldDt, ultraLive());
+    storm.update(worldDt, stormLive());
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     // And the ones hunting you keep walking whether or not you are in one.
@@ -5433,6 +5628,9 @@ async function main() {
       // the rotation opposes it. Recoil lifts the muzzle and pushes the weapon
       // back towards the eye. Holstering drops it and turns the muzzle down and
       // away, so it leaves the frame at the bottom rather than across it.
+      // A new shape for every shot: the flash going up again is a new shot.
+      if (state.muzzle > (state.muzzleWas || 0) + 0.25) state.muzzleSeed = Math.random();
+      state.muzzleWas = state.muzzle;
       renderer.viewmodel = {
         x: mix(hip.x, VM_AIM.x) + bobX + state.sway.x * 0.30,
         y: mix(hip.y, VM_AIM.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
@@ -5441,6 +5639,7 @@ async function main() {
         yaw: mix(hip.yaw, VM_AIM.yaw) - state.sway.x * 0.8,
         roll: mix(hip.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
         muzzle: state.muzzle * (1 - hol),
+        seed: state.muzzleSeed || 0,
         weapon: weapon.id,
       };
       renderer.actors.updateDrones(drones.active);
@@ -5527,21 +5726,20 @@ async function main() {
       el.crosshair.style.setProperty('--gap', `${px}px`);
       el.crosshair.classList.toggle('aiming', weapon.aimBlend > 0.6);
       el.crosshair.classList.toggle('holstered', weapon.holstered);
+      placeGunMark();
+      placeHealthBars();
+      // How far a blast plasma charge has got, under the crosshair while it
+      // builds, and what it is once it is full.
+      const charge = weapon.blastCharge;
+      el.blastCharge.classList.toggle('hidden', !(charge > 0) || weapon.holstered);
+      if (charge > 0) {
+        el.blastCharge.textContent = charge >= 1 ? 'BLAST PLASMA READY'
+          : `BLAST PLASMA ${Math.floor(charge * 100)}%`;
+        el.blastCharge.classList.toggle('ready', charge >= 1);
+      }
       showBuildingDamage();
       // Aiming narrows the field of view, which is most of what aiming is.
       camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;
-      if (state.inSanctuary !== state.sanctuaryShown) {
-        state.sanctuaryShown = state.inSanctuary;
-        if (state.inSanctuary) {
-          const name = combat.sanctuaryName(player.x, player.z) || 'This place';
-          el.sanctuary.innerHTML =
-            `<b>weapons free zone</b>${name} is a memorial. `
-            + 'The weapon holsters itself here and nothing will follow you in.';
-          el.sanctuary.classList.remove('hidden');
-        } else {
-          el.sanctuary.classList.add('hidden');
-        }
-      }
       // What you are standing next to. Vehicles were always here and F always
       // worked, but nothing on the screen said so, which is the same thing as
       // them not working.
@@ -5625,6 +5823,7 @@ async function main() {
     cinema, cinemaSpec: CINEMA,
     ion, ionSpec: ION, ionState: ION_STATE,
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
+    storm, stormSpec: VOID_STORM,
     reactors, fusionSpec: FUSION,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,

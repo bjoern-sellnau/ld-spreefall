@@ -23,6 +23,8 @@ const MAX_PICKUPS = 16;
 const MAX_GIBS = 256;
 // Ultra plasma's balls in the air at once, which is its own ceiling.
 const MAX_ULTRA = 480;
+// And the void storm's balls, which VOID_STORM.maxLive holds to 48.
+const MAX_STORM = 64;
 // Past this there is no point drawing a pad: the fog has it anyway.
 const PICKUP_RANGE = 260;
 
@@ -204,11 +206,36 @@ export function buildDroneMesh() {
 }
 
 /**
+ * The flash at a muzzle, as two planes crossed along the barrel (part 7) and a
+ * disc across the end of it (part 8), both drawn from either side. Neither
+ * needs a normal, so the normal slot carries where on the flash a vertex is:
+ * across the plume and along it for the planes, a position on the disc for the
+ * disc. The shader cuts the shapes out of that, a different star each shot.
+ */
+function muzzleFlash(m, cx, cy, z0, len, r) {
+  const both = (base) => m.i.push(base, base + 1, base + 2, base, base + 2, base + 3,
+    base + 2, base + 1, base, base + 3, base + 2, base);
+  for (const [ax, ay] of [[1, 0], [0, 1]]) {
+    const base = m.n;
+    for (const [v, u] of [[-1, 0], [1, 0], [1, 1], [-1, 1]]) {
+      m.vertex([cx + ax * v * r * 1.3, cy + ay * v * r * 1.3, z0 - u * len], [v, 0, u], 7);
+    }
+    both(base);
+  }
+  const base = m.n;
+  const d = r * 1.7;
+  for (const [x, y] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    m.vertex([cx + x * d, cy + y * d, z0 - 0.006], [x, y, 0], 8);
+  }
+  both(base);
+}
+
+/**
  * The weapon, in view space: the eye is at the origin and the muzzle points
  * down -z. Laid out so the butt of the stock sits about ten centimetres in
  * front of the eye and the muzzle about ninety, which is what puts a rifle in
  * the lower right of the frame rather than across all of it.
- * Part ids: 0 receiver, 1 barrel, 2 polymer, 3 sight, 4 muzzle flash.
+ * Part ids: 0 receiver, 1 barrel, 2 polymer, 3 sight, 7 and 8 the muzzle flash.
  */
 export function buildWeaponMesh() {
   const m = new MeshBuild();
@@ -225,15 +252,15 @@ export function buildWeaponMesh() {
   m.box(0, 0.082, -0.400, 0.030, 0.038, 0.060, 3);      // sight body
   m.box(0, 0.104, -0.400, 0.036, 0.006, 0.066, 3);      // sight hood
   m.box(0, 0.088, -0.400, 0.006, 0.014, 0.004, 3);      // the post you aim with
-  // Flash cone at the muzzle. Invisible unless the shader is told otherwise.
-  m.cylinder(0, 0.012, -0.894, 0.005, 0.070, -0.170, 10, 7, 'z');
+  // The flash at the muzzle. Invisible unless the shader is told otherwise.
+  muzzleFlash(m, 0, 0.012, -0.894, 0.170, 0.070);
   return m;
 }
 
 /**
  * The rest of what you can carry. Same parts palette as the rifle: 0 receiver,
- * 1 barrel steel, 2 polymer, 3 sight, 4 the flash cone the shader hides between
- * shots. Everything is measured in metres from the eye, muzzle towards -z.
+ * 1 barrel steel, 2 polymer, 3 sight, 7 and 8 the flash the shader hides
+ * between shots. Everything is measured in metres from the eye, muzzle towards -z.
  */
 export function buildShotgunMesh() {
   const m = new MeshBuild();
@@ -245,7 +272,7 @@ export function buildShotgunMesh() {
   m.box(0, -0.008, -0.560, 0.046, 0.044, 0.130, 2);      // pump
   m.box(0, -0.092, -0.300, 0.044, 0.110, 0.060, 2);      // grip
   m.box(0, 0.040, -0.372, 0.010, 0.014, 0.010, 3);       // bead
-  m.cylinder(0, 0.020, -0.802, 0.006, 0.090, -0.200, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.020, -0.802, 0.200, 0.090);
   return m;
 }
 
@@ -259,7 +286,7 @@ export function buildRpgMesh() {
   // The warhead, sticking out of the front where you can see it.
   m.cylinder(0, 0.000, -0.900, 0.052, 0.052, -0.120, 12, 1, 'z');
   m.cylinder(0, 0.000, -1.020, 0.052, 0.006, -0.130, 12, 1, 'z');   // the nose
-  m.cylinder(0, 0.000, -0.902, 0.006, 0.130, -0.260, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.000, -0.902, 0.260, 0.130);
   return m;
 }
 
@@ -322,6 +349,10 @@ export function buildProjectileMesh(kind) {
     m.box(0, 0.052, 0, 0.10, 0.02, 0.07, 7);
   } else if (kind === 'plasma') {
     m.icosphere(0, 0, 0, 0.16, 10, 6, 11);
+  } else if (kind === 'blast') {
+    // Blast plasma out of the rifle: a bigger, harder bolt in orange.
+    m.icosphere(0, 0, 0, 0.24, 10, 6, 48);
+    m.cylinder(0, 0, 0.12, 0.2, 0.02, 1.4, 8, 48, 'z');
   } else if (kind === 'flak') {
     m.box(0, 0, 0, 0.14, 0.10, 0.14, 8);
     m.box(0, 0, 0, 0.08, 0.18, 0.08, 8);
@@ -332,10 +363,19 @@ export function buildProjectileMesh(kind) {
     // tail runs back along +z.
     m.icosphere(0, 0, 0, 0.5, 10, 6, 11);
     m.cylinder(0, 0, 0.25, 0.42, 0.03, 7, 8, 11, 'z');
+  } else if (kind === 'ultraBlast') {
+    // The same comet out of orbit, as blast plasma: orange, and a longer
+    // streak, because it is not slowing down for anything.
+    m.icosphere(0, 0, 0, 0.6, 10, 6, 48);
+    m.cylinder(0, 0, 0.3, 0.5, 0.03, 10, 8, 48, 'z');
   } else if (kind === 'void') {
     // One green ball the size of a man's chest. The glow round it is sparks,
     // drawn by the game layer while it flies.
     m.icosphere(0, 0, 0, 0.7, 12, 6, 30);
+  } else if (kind === 'voidMaw') {
+    // The mech's: the same ball, nearly twice across, so it reads as the
+    // bigger thing before it lands.
+    m.icosphere(0, 0, 0, 1.3, 14, 7, 30);
   } else if (kind === 'splinter') {
     m.box(0, 0, 0.06, 0.030, 0.030, 0.22, 11);
     m.box(0, 0, -0.10, 0.012, 0.012, 0.10, 8);
@@ -385,7 +425,7 @@ export function buildRailgunMesh() {
   m.box(0.022, 0.014, -0.700, 0.014, 0.030, 0.420, 1);
   m.box(0, 0.014, -0.520, 0.070, 0.016, 0.060, 0);
   m.box(0, -0.094, -0.300, 0.042, 0.115, 0.060, 2);      // grip
-  m.cylinder(0, 0.014, -0.912, 0.004, 0.060, -0.150, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.014, -0.912, 0.150, 0.060);
   return m;
 }
 
@@ -397,7 +437,7 @@ export function buildPlasmaMesh() {
   m.icosphere(0, 0.006, -0.360, 0.052, 10, 6, 5);        // the cell, glowing
   m.box(0, -0.090, -0.250, 0.044, 0.110, 0.062, 2);      // grip
   m.box(0, -0.030, -0.430, 0.040, 0.050, 0.090, 2);      // fore grip
-  m.cylinder(0, 0.006, -0.826, 0.005, 0.075, -0.170, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.006, -0.826, 0.170, 0.075);
   return m;
 }
 
@@ -426,7 +466,7 @@ export function buildFlakMesh() {
   m.box(0, -0.092, -0.280, 0.046, 0.112, 0.064, 2);      // grip
   m.box(0, -0.048, -0.470, 0.044, 0.070, 0.100, 2);      // pump
   m.box(0, 0.058, -0.300, 0.026, 0.024, 0.090, 3);       // sight
-  m.cylinder(0, 0.010, -0.902, 0.006, 0.110, -0.220, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.010, -0.902, 0.220, 0.110);
   return m;
 }
 
@@ -440,7 +480,7 @@ export function buildSplinterMesh() {
   m.cylinder(0, 0.004, -0.500, 0.022, 0.018, -0.260, 10, 1, 'z');
   m.box(0, -0.088, -0.270, 0.042, 0.110, 0.060, 2);      // grip
   m.box(0, 0.046, -0.240, 0.022, 0.020, 0.070, 3);       // sight
-  m.cylinder(0, 0.004, -0.762, 0.004, 0.055, -0.140, 10, 7, 'z');
+  muzzleFlash(m, 0, 0.004, -0.762, 0.140, 0.055);
   return m;
 }
 
@@ -734,7 +774,8 @@ export function buildTrainMesh() {
 
 /**
  * A main battle tank, nine metres with the gun, nose towards -z. Parts: 31
- * the olive, 2 dark metal and the tracks, 39 road wheels, 8 the gun.
+ * the olive, 2 dark metal and the tracks, 39 road wheels, 8 the gun, and the
+ * turret's own 45 olive, 46 gun and 47 dark metal, which turn with it.
  *
  * Tracks with road wheels you can see, a sloped glacis, a turret with angled
  * cheeks and a bustle, and a long gun with an evacuator on it, which is the
@@ -757,23 +798,26 @@ export function buildTankMesh() {
   // The glacis: one sloped plate from the deck down to the nose.
   m.plate([[-1.6, 1.58, -2.55], [1.6, 1.58, -2.55], [1.4, 0.75, -3.35], [-1.4, 0.75, -3.35]], 0.14, P);
   m.box(0, 1.6, 2.95, 3.0, 0.3, 0.5, 2);                    // engine deck grille
-  // Turret.
-  m.box(0, 2.08, 0.45, 2.5, 0.62, 2.7, P);
+  // Turret. Everything from here on turns with it, so it is built in parts
+  // of its own, 45 to 47, which the shader turns about the turret ring and
+  // then draws as the olive, the gun and the dark metal they stand for.
+  const T = 45, G = 46, D = 47;
+  m.box(0, 2.08, 0.45, 2.5, 0.62, 2.7, T);
   for (const side of [-1, 1]) {
-    m.box(side * 0.82, 2.08, -1.15, 0.95, 0.58, 1.0, P, side * 0.42);   // cheeks
+    m.box(side * 0.82, 2.08, -1.15, 0.95, 0.58, 1.0, T, side * 0.42);   // cheeks
     // Smoke dischargers on the cheek.
     for (let k = 0; k < 3; k++) {
-      m.cylinder(side * 1.3, 2.25 + k * 0.1, -0.6, 0.06, 0.06, -0.25, 6, 2, 'z');
+      m.cylinder(side * 1.3, 2.25 + k * 0.1, -0.6, 0.06, 0.06, -0.25, 6, D, 'z');
     }
   }
-  m.box(0, 2.12, 2.15, 2.2, 0.52, 0.9, P);                  // bustle
-  m.cylinder(0.6, 2.38, 0.65, 0.34, 0.3, 0.26, 12, P, 'y'); // commander
-  m.box(-0.55, 2.47, 0.3, 0.6, 0.12, 0.6, 2);               // loader's hatch
-  m.box(0, 2.08, -1.6, 0.66, 0.5, 0.5, P);                  // mantlet
-  m.cylinder(0, 2.1, -1.8, 0.14, 0.12, -4.0, 12, 8, 'z');   // the gun
-  m.cylinder(0, 2.1, -3.2, 0.2, 0.2, -0.6, 12, 8, 'z');     // evacuator
-  m.cylinder(0, 2.1, -5.7, 0.17, 0.17, -0.2, 12, 8, 'z');   // muzzle
-  m.cylinder(0.6, 2.6, 0.5, 0.03, 0.03, -0.7, 6, 8, 'z');   // the roof gun
+  m.box(0, 2.12, 2.15, 2.2, 0.52, 0.9, T);                  // bustle
+  m.cylinder(0.6, 2.38, 0.65, 0.34, 0.3, 0.26, 12, T, 'y'); // commander
+  m.box(-0.55, 2.47, 0.3, 0.6, 0.12, 0.6, D);               // loader's hatch
+  m.box(0, 2.08, -1.6, 0.66, 0.5, 0.5, T);                  // mantlet
+  m.cylinder(0, 2.1, -1.8, 0.14, 0.12, -4.0, 12, G, 'z');   // the gun
+  m.cylinder(0, 2.1, -3.2, 0.2, 0.2, -0.6, 12, G, 'z');     // evacuator
+  m.cylinder(0, 2.1, -5.7, 0.17, 0.17, -0.2, 12, G, 'z');   // muzzle
+  m.cylinder(0.6, 2.6, 0.5, 0.03, 0.03, -0.7, 6, G, 'z');   // the roof gun
   return m;
 }
 
@@ -1038,7 +1082,11 @@ export class Actors {
       banana: this._uploadMesh(buildProjectileMesh('banana'), MAX_PROPS, 2),
       nuke: this._uploadMesh(buildProjectileMesh('nuke'), 8, 2),
       void: this._uploadMesh(buildProjectileMesh('void'), 8, 2),
+      voidStorm: this._uploadMesh(buildProjectileMesh('void'), MAX_STORM, 2),
+      voidMaw: this._uploadMesh(buildProjectileMesh('voidMaw'), 8, 2),
       ultra: this._uploadMesh(buildProjectileMesh('ultra'), MAX_ULTRA, 2),
+      blast: this._uploadMesh(buildProjectileMesh('blast'), MAX_PROPS, 2),
+      ultraBlast: this._uploadMesh(buildProjectileMesh('ultraBlast'), MAX_ULTRA, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -1146,21 +1194,25 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
-      const cap = b.kind === 'nuke' || b.kind === 'void' ? 8 : (b.kind === 'ultra' ? MAX_ULTRA : MAX_PROPS);
+      const cap = b.kind === 'nuke' || b.kind === 'void' || b.kind === 'voidMaw' ? 8
+        : b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA
+          : b.kind === 'voidStorm' ? MAX_STORM : MAX_PROPS;
       if (counts[b.kind] >= cap) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
       const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke'
-        || b.kind === 'ultra';
+        || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast';
       const yaw = flying ? Math.atan2(-b.vx, -b.vz) : b.spin * 0.7;
       const pitch = flying ? Math.asin(Math.max(-1, Math.min(1, b.vy
         / (Math.hypot(b.vx, b.vy, b.vz) || 1)))) : b.spin;
-      d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z; d[o + 3] = yaw;
+      // Negated for the shader, as the vehicles are: a rocket flying west was
+      // drawn with its nose to the east.
+      d[o] = b.x; d[o + 1] = b.y; d[o + 2] = b.z; d[o + 3] = -yaw;
       d[o + 4] = pitch; d[o + 5] = flying ? 0 : b.spin * 0.5; d[o + 6] = 0; d[o + 7] = 0;
       counts[b.kind]++;
     }
@@ -1223,7 +1275,8 @@ export class Actors {
     for (const j of list) {
       if (!j.alive || n >= MAX_JETS) continue;
       const o = n * 8;
-      data[o] = j.x; data[o + 1] = j.y; data[o + 2] = j.z; data[o + 3] = j.yaw;
+      // Negated for the same reason as the vehicles: see updateVehicles.
+      data[o] = j.x; data[o + 1] = j.y; data[o + 2] = j.z; data[o + 3] = -j.yaw;
       data[o + 4] = j.pitch; data[o + 5] = j.roll; data[o + 6] = j.hitFlash;
       data[o + 7] = j.afterburner;
       n++;
@@ -1343,12 +1396,24 @@ export class Actors {
       if (!v.alive || !mesh || counts[v.type] >= mesh.maxInstances) continue;
       const o = counts[v.type] * 8;
       const d = mesh.instData;
-      d[o] = v.x; d[o + 1] = v.y; d[o + 2] = v.z; d[o + 3] = v.yaw;
+      d[o] = v.x; d[o + 1] = v.y; d[o + 2] = v.z;
+      // A vehicle goes along (-sin yaw, -cos yaw), the same as the camera and
+      // the bullets, and the body shader turns by rotY(-w), which puts a nose
+      // built along -z at (sin w, -cos w). So it is handed the heading
+      // negated. It was handed the heading itself, which is right going
+      // north or south and wrong by everything else: a tank driving west was
+      // drawn facing east, so W looked like reverse and A and D like each
+      // other. A train's yaw is along its track, (sin, cos), and a carriage
+      // is the same either way round, so it takes pi less it.
+      d[o + 3] = v.type === 'train' ? Math.PI - v.yaw : -v.yaw;
       d[o + 4] = v.pitch; d[o + 5] = v.roll; d[o + 6] = v.hitFlash;
       // A fighter has no rotor: the channel says whether its wheels are down,
       // as two or nought, the same way an enemy jet sends its afterburner in
       // nought to one, which leaves the gear of those always up.
-      d[o + 7] = v.type === 'jet' ? (v.gearDown === false ? 0 : 2) : v.rotor;
+      // A tank sends its turret's angle on the hull instead, which the shader
+      // turns the turret's own parts by.
+      d[o + 7] = v.type === 'jet' ? (v.gearDown === false ? 0 : 2)
+        : (v.type === 'tank' ? (v.turret || 0) : v.rotor);
       counts[v.type]++;
     }
     for (const type in this.vehicles) {
@@ -1578,7 +1643,8 @@ export class Actors {
     this.progViewmodel.use()
       .mat4('uViewModelProj', this.viewProj)
       .mat4('uViewModelMat', m)
-      .float('uMuzzle', muzzle);
+      .float('uMuzzle', muzzle)
+      .float('uMuzzleSeed', pose.seed || 0);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.CULL_FACE);

@@ -83,6 +83,9 @@
 
 <div id="hud" class="hidden">
   <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="healthbars"></div>
+  <div id="gunmark" class="hidden"></div>
+  <div id="blastcharge" class="hidden"></div>
   <div id="streetname" class="hidden"></div>
   <div id="hitmarker"></div>
   <div id="lockon" class="hidden"><i></i><span id="locktext">lock</span></div>
@@ -138,7 +141,7 @@
         <span class="mcell"><b id="mechdash">ready</b><i>dash</i></span>
       </div>
       <b id="mechwarn" class="hidden"></b>
-      <em>1 to 5 or the wheel changes weapon, V changes the view, F to get out</em>
+      <em>the number row or the wheel changes weapon, V changes the view, F to get out</em>
     </div>
   </div>
   <div id="threat">
@@ -147,7 +150,6 @@
     <span class="tsep">score</span> <span id="scorenum">0</span>
     <span id="cheatmark" class="hidden">cheated</span>
   </div>
-  <div id="sanctuary" class="hidden"></div>
   <div id="buildinfo" class="hidden"></div>
   <div id="ridehint" class="hidden"><b>F</b><span id="ridehintname">Jeep</span></div>
   <div id="killfeed"></div>
@@ -213,9 +215,9 @@
     <tr><td>in a mech</td><td>W A S D walks, the mouse aims the torso, left mouse fires
       what is in its hands, right mouse empties the rocket pod, Shift dashes,
       Space jumps and the landing opens the road</td></tr>
-    <tr><td>1 to 5, or the wheel, in a mech</td><td>chaingun, 40 mm cannon, thermite
-      launcher, plasma railgun, Leadwall. The railgun charges while you hold the
-      trigger and fires when you let go.</td></tr>
+    <tr><td>the number row, or the wheel, in a mech</td><td>the chassis' own arms, and
+      last the Void Maw every one of them carries. The railgun charges while you
+      hold the trigger and fires when you let go.</td></tr>
     <tr><td>V in a mech</td><td>out of the cockpit and onto the shoulder, and back</td></tr>
     <tr><td>R in a mech</td><td>reload what is in its hands</td></tr>
     <tr><td>F4</td><td>debug overlay</td></tr>

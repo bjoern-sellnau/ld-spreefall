@@ -12,6 +12,7 @@ import { TREE_VS, TREE_FS, TREE_SHADOW_VS, TREE_SHADOW_FS, MAX_FIRES } from '../
 import { FULLSCREEN_VS, BRIGHT_FS, BLUR_FS, COMPOSITE_FS } from '../shaders/post.js';
 import { sunDirection, sunColour, berlinDate } from './sun.js';
 import { Actors } from './actors.js';
+import { ForceField } from './field.js';
 import { buildSurfaceMaps } from '../engine/surfaces.js';
 
 // std140 layout, see src/shaders/common.js
@@ -89,6 +90,8 @@ export class Renderer {
     this.progTree.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.actors = new Actors(gl, caps);
+    // The dome over the memorial, see src/render/field.js.
+    this.field = new ForceField(gl);
     this.drawActors = true;
     this.viewmodel = null;      // set by the game layer each frame, or null
     this.reflex = 0;            // 0 to 1, how far into slowed time we are
@@ -317,6 +320,10 @@ export class Renderer {
     const gl = this.gl;
     prog.int('uCollapseCount', this.collapseCount);
     if (!this.collapseCount) return;
+    // The memorial's field, where no collapse reaches. The first dome is the
+    // one there is.
+    const f = this.field.domes[0];
+    prog.vec4('uShield', f ? f.x : 0, f ? f.z : 0, f ? f.radius : 0, 0);
     const a = prog.loc('uCollapse');
     const b = prog.loc('uCollapseInfo');
     if (a) gl.uniform4fv(a, this.collapse);
@@ -717,6 +724,9 @@ export class Renderer {
       draws++;
     }
 
+    // The force field before the sparks, so a blast going off on it is drawn
+    // over it rather than under.
+    draws += this.field.draw(this._fieldTime || 0);
     if (this.drawActors) {
       gl.disable(gl.CULL_FACE);
       draws += this.actors.drawSparks();
@@ -788,6 +798,7 @@ export class Renderer {
   }
 
   render(camera, time, targetWidth, targetHeight) {
+    this._fieldTime = time;
     this.updateSky(camera, time);
     this.camBlock.upload();
     this.renderShadows(camera);

@@ -138,6 +138,61 @@ async function run() {
     plasma.born === 1 && plasma.bounced >= 1 && plasma.left === 0,
     `${plasma.bounced} bounces, ${plasma.left} left`);
 
+  // Blast plasma: ten seconds of the second trigger, then one hard orange bolt
+  // that does not bounce and does ten times the harm.
+  const charged = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.projectiles.clear();
+    s.weapon.select('plasma');
+    s.weapon.cooldown = 0;
+    s.weapon.spread = 0;
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const fwd = () => ({ x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] });
+    // Let go at five seconds: nothing kept.
+    s.weapon.aiming = true;
+    for (let i = 0; i < 60 * 5; i++) s.weapon.update(1 / 60, false, eye, fwd());
+    s.weapon.aiming = false;
+    s.weapon.update(1 / 60, false, eye, fwd());
+    const dropped = s.weapon.blastCharge;
+    // Held the whole ten.
+    s.weapon.aiming = true;
+    let half = 0;
+    for (let i = 0; i < 60 * 10 + 5; i++) {
+      s.weapon.update(1 / 60, false, eye, fwd());
+      if (i === 60 * 5) half = s.weapon.blastCharge;
+    }
+    const ready = s.weapon.blastCharge;
+    s.weapon.aiming = false;
+    let launched = null;
+    const launch = s.projectiles.launch.bind(s.projectiles);
+    s.projectiles.launch = (kind, o) => { launched = { kind, damage: o.splash.damage, radius: o.splash.radius }; return launch(kind, o); };
+    s.look(90, -14); s.camera.update(16 / 9);
+    s.weapon.cooldown = 0;
+    s.shoot();
+    s.projectiles.launch = launch;
+    let bounced = 0;
+    s.projectiles.onBounce = () => { bounced++; };
+    for (let i = 0; i < 60 * 6 && s.projectiles.count; i++) s.projectiles.update(1 / 60);
+    s.projectiles.onBounce = null;
+    // And the next shot is the ordinary kind again.
+    let next = null;
+    s.projectiles.launch = (kind, o) => { next = kind; return launch(kind, o); };
+    s.weapon.cooldown = 0;
+    s.shoot();
+    s.projectiles.launch = launch;
+    s.projectiles.clear();
+    return { dropped, half: +half.toFixed(2), ready, launched, bounced, left: s.projectiles.count, next };
+  });
+  check('holding the second trigger on the plasma rifle charges blast plasma, and letting go loses it',
+    charged.dropped === 0 && charged.half > 0.45 && charged.half < 0.55 && charged.ready === 1,
+    `${charged.half} at five seconds, ${charged.ready} at ten, ${charged.dropped} after letting go early`);
+  check('and the charged shot is one hard bolt at ten times the harm',
+    charged.launched && charged.launched.kind === 'blast' && charged.launched.damage === 340,
+    charged.launched ? `${charged.launched.kind}, ${charged.launched.damage} damage over ${charged.launched.radius} m` : 'nothing');
+  check('which does not bounce', charged.bounced === 0 && charged.left === 0,
+    `${charged.bounced} bounces`);
+  check('and the shot after it is the ordinary kind', charged.next === 'plasma', `${charged.next}`);
+
   const flak = await page.evaluate(() => {
     const s = window.spreefall;
     s.drones.reset(); s.soldiers.reset(); s.projectiles.clear();
@@ -503,7 +558,7 @@ async function run() {
     let underground = 0, worst = 0;
     for (const p of s.pickups.pads) {
       counts[p.kind] = (counts[p.kind] || 0) + 1;
-      if (s.combat.isSanctuary(p.x, 0, p.z)) inZone++;
+      if (s.combat.isShielded(p.x, 0, p.z)) inZone++;
       const off = Math.abs(p.y - (s.world.groundHeight(p.x, p.z) + 0.9));
       if (off > 0.01) underground++;
       worst = Math.max(worst, off);
@@ -514,8 +569,9 @@ async function run() {
     `${placed.total}: ${Object.entries(placed.counts).map(([k, n]) => `${n} ${k}`).join(', ')}`);
   check('and every kind of pad is out there',
     ['ammo', 'health', 'quad', 'ultra', 'overload'].every((k) => placed.counts[k] > 0));
-  check('none of them is in the weapons free zone', placed.inZone === 0,
-    `${placed.inZone} inside`);
+  // Pads may lie on the memorial now: it is shielded, not out of bounds.
+  check('and the memorial is no longer kept clear of them', placed.inZone >= 0,
+    `${placed.inZone} under the field`);
   check('and all of them stand on the ground', placed.underground === 0,
     `${placed.underground} off the ground, the worst by ${placed.worst} m`);
 

@@ -150,11 +150,12 @@ export function scarOf(site) {
 export class Demolition {
   /**
    * @param {object} world the collision world, which this edits in place
-   * @param {(x,y,z)=>boolean} isSanctuary nothing comes down in the memorial
+   * @param {(x,y,z)=>boolean} isShielded under the memorial's force field,
+   *   where nothing comes down and nothing is dug, whatever went off outside
    */
-  constructor(world, isSanctuary) {
+  constructor(world, isShielded) {
     this.world = world;
-    this.isSanctuary = isSanctuary || (() => false);
+    this.isShielded = isShielded || (() => false);
     this.sites = [];
     this.damage = new Map();
     // What every wall in a touched tile was before any of this started, by
@@ -280,7 +281,6 @@ export class Demolition {
    * @returns {object|null} the site, or null if nothing changed
    */
   _open(x, z, radius, level, blastRadius, opts = {}) {
-    if (this.isSanctuary(x, 0, z)) return null;
     const y = this.world.groundHeight(x, z);
     const crater = this.ground && blastRadius >= DEMO.craterFrom
       ? Math.min(DEMO.maxCraterRadius,
@@ -516,6 +516,7 @@ export class Demolition {
         const mz = (segs[o + 1] + segs[o + 3]) * 0.5;
         const k = bite(mx, mz, site);
         if (k <= 0) continue;
+        if (this.isShielded(mx, 0, mz)) continue;
         const base = segs[o + 4];
         // The same cut the shader makes, out of the same original height,
         // and the heap the rubble leaves on top of it.
@@ -552,6 +553,7 @@ export class Demolition {
    */
   punch(x, y, z, radius) {
     if (!this.enabled || !this.buildings) return 0;
+    if (this.isShielded(x, y, z)) return 0;
     const w = this.world;
     const tiles = new Set();
     w.forEachSegmentTile(x - radius, z - radius, x + radius, z + radius,

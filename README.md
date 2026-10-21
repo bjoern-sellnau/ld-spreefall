@@ -40,7 +40,7 @@ npm run serve        # http://localhost:8080/
 screenshots in a headless browser and fails on any console error, `npm run
 test:ui` drives the whole game layer through a real browser, `npm run
 test:combat` fights drones in one and checks the damage, the cover and the
-weapons free zone, and `npm run clip` records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
+memorial's force field, and `npm run clip` records the walk. `npm run build` writes a `dist/` folder that can be copied onto GitHub Pages,
 Cloudflare Pages, or any static host. There is nothing to run on the server.
 
 ### All of Berlin at full detail, on your own machine
@@ -155,8 +155,7 @@ and a chip on the interface counting it down:
 | Ultrashield | an overshield well above your normal maximum, for 26 s, then it bleeds back down rather than vanishing |
 | Overload | you fire almost twice as fast and reload in under half the time, for 18 s |
 
-None of them spawns in the weapons free zone. The map marks every pad that is
-up, in the colour it glows in on the street.
+The map marks every pad that is up, in the colour it glows in on the street.
 
 ## The shooter
 
@@ -167,11 +166,14 @@ ones are also the more interesting problem: a quadrotor moves in three dimension
 has to find its way around buildings it can see, and has to lose you when you
 break line of sight.
 
-**The memorial is a weapons free zone.** Within 135 m of Peter Eisenman's field
-the weapon holsters itself, it will not fire, and the screen says why. No drone
-spawns inside the circle, one that drifts in turns and accelerates back out, and
-while you are in there none of them can see you. It is enforced in the game code
-rather than in the interface, and the combat test checks each part of it.
+**The memorial is under a force field.** It used to be a weapons free zone; now
+the fight can go anywhere, and within 100 m of the middle of Peter Eisenman's
+field nothing can be damaged. A blast there or one that reaches into it brings
+no stele down, digs no crater, sets no tree alight and leaves no scorch mark,
+while the street outside the circle comes down as it would anywhere else. The
+field is a low dome of hexagons, faint until something lands on it and then lit
+from the point of the hit outward. It is enforced in the shader, the baked
+ruins, the collision and the ground alike, and the combat test checks each.
 
 What is under the hood:
 
@@ -206,6 +208,12 @@ What is under the hood:
   first version of the rocket flew through the man it was aimed at and went off
   on the wall behind him. A blast damages everything inside its radius that it
   can see, including you. C4 sticks where it lands and waits.
+- Everything hostile in sight carries a bar over its head: soldiers and
+  machines, drones, jets and their mechs, never a passer by and nothing of
+  yours. It goes from green to red, and the part a hit just took off stays
+  white for a moment before it drains, so a connect shows on the bar as well
+  as on the body. The nearest twenty four get one, and only those a wall
+  does not hide.
 - Drones patrol, pursue, attack and evade. They steer with four horizontal probes
   and a ground clearance term, so they do not fly into walls, and they re-test
   line of sight every 0.22 s rather than every frame, on a rota, so the cost is
@@ -217,8 +225,7 @@ What is under the hood:
   missile that chases you slowly enough that moving is an answer.
 - Soldiers walk the same streets. They advance, take an angle on you, fire in
   bursts and lose you when you break line of sight, testing that line of sight
-  from their eyes to yours through the real geometry. They will not walk into
-  the weapons free zone. And they slip on a banana, which lays them out for
+  from their eyes to yours through the real geometry. And they slip on a banana, which lays them out for
   three and a half seconds.
 - Holding ground raises the threat tier, which raises how many of them are in the
   air at once, from six to fourteen. Integrity regenerates after a pause, and
@@ -244,9 +251,17 @@ What is under the hood:
   mesh per kind, fourteen centimetres proud of the collision height because the
   street that is drawn is not the height field that is collided against, and
   only within 260 m, where the fog has them anyway.
-- Every sound is synthesised: a noise burst through a swept bandpass for the shot,
-  a rotor bed whose level and pitch follow the nearest drone, and two different
-  confirms for a hull hit and a core hit.
+- Every sound is synthesised: for the shot, a millisecond and a half of raw
+  noise for the leading edge, a noise burst through a swept bandpass for the
+  crack, low passed noise for the boom under it, a falling sine driven into a
+  soft clip for the thump, and two darker echoes off the facades across the
+  street; a rotor bed whose level and pitch follow the nearest drone; and two
+  different confirms for a hull hit and a core hit.
+- The muzzle flash is a new shape every shot: a ragged star across the end
+  of the barrel and a short plume along it, white in the middle and orange
+  to deep red at the edges, cut out of two crossed planes and a disc by the
+  shader, gone in about four frames, and lighting the front of the gun while
+  it lasts.
 
 ## Cheats
 
@@ -261,6 +276,7 @@ visits.
 | Drop a nuke | opens a map of the city; click where you want it, then confirm |
 | Ion cannon | three beams in a ring, then the middle one |
 | Ultra plasma | as many plasma balls from orbit as you like, over a circle, from a side and at an angle you set |
+| Void storm | the void cannon's ball from orbit, by the dozen, set the same way |
 | Soldiers, Drones, Jets | brings a section, a flight or a pair out around you |
 | God mode | nothing hurts you, though you are still told which way it came from |
 | Infinite ammunition | the magazine never reaches the bottom |
@@ -361,11 +377,10 @@ And the warhead:
   kilometre a second: the crack, a sub tone falling for most of a second, and a
   roll of noise that takes eight seconds to go away. The roll is the part that
   sells the size.
-- **The memorial cannot be targeted, and neither can anywhere within a hundred
-  and seventy metres of it.** The map draws the weapons free zone and the ring
-  the blast may not cross, so a refused target is something you can see coming
-  rather than a message you get after clicking. This is the one line in the
-  project that no switch in this menu moves.
+- **A warhead can go anywhere, the memorial included, and the memorial's force
+  field takes what lands on it.** The map draws the field. That nothing under it
+  can be damaged is the one line in the project that no switch in this menu
+  moves.
 
 **Cinematic warheads.** With that switch on, releasing one hands the camera
 over. It leaves you where you are standing, takes a station beside the fall
@@ -409,6 +424,20 @@ they meet. They come thirty a second at first and a hundred and forty after
 six seconds, and never more than four hundred and eighty in the air at
 once; the rest wait their turn, so a hundred thousand costs nothing until
 they are falling.
+
+**Blast plasma.** A box under the sliders, and the same thing on the plasma
+rifle: hold the second mouse button for ten seconds and the next bolt is the
+hard kind. It does not bounce, it goes off on the first thing it touches and
+it does ten times the harm, and it burns a very bright orange where the
+ordinary bolt is cyan, so you can tell from the street which one is coming.
+The charge shows under the crosshair and is lost if you let go early.
+
+**Void storm.** The same map and the same four numbers, kept apart from ultra
+plasma's, with the void cannon's ball coming down instead of a bolt: up to
+six hundred of them, never more than forty eight in the air, after six
+seconds of charge. Each one reaches out at everybody it passes on the way
+down and lands the way the cannon's own shot does, a green flash the width
+of a street and a tendril to everybody in reach that a wall does not hide.
 
 The skeleton is real geometry rather than a texture. The soldier mesh carries
 a ribcage, a spine, a pelvis, a skull and limb bones inside the body, and the
@@ -675,6 +704,13 @@ rocket pod:
 | Ram | 40 mm cannon, Leadwall | twin shells |
 | Wraith | power laser, plasma railgun, EMP bomb | a beam held on you |
 
+And every one of yours carries a Void Maw after its own arms: the void
+cannon's ball nearly twice across, two in the magazine and six seconds to
+reload, which reaches out at whoever it passes from 26 m rather than 16,
+lands with a 34 m blast for 1200 rather than 24 m for 700, and sends a
+tendril for 900 to everybody within 70 m who can be seen from where it went
+off.
+
 Each one is a row of numbers in `src/game/chassis.js` (size, where its hips
 are, speed, turn, armour, shield, jump, dash, the landing, where its guns
 are and which arm weapon it arrives holding) and a shape in
@@ -802,10 +838,10 @@ already draws. Only where the data has nothing does a surveyed footprint get
 used as it stands.
 
 This matters more than it sounds. Every piece of curated content rides on those
-facts, including the weapons free zone: the game finds the memorial through the
+facts, including the force field: the game finds the memorial through the
 landmark card, so without this pass the deployed city would have no memorial,
-no stelae and no sanctuary at all, which was exactly the state of it until the
-build log was read.
+no stelae and no field over them at all, which was exactly the state of it
+until the build log was read.
 
 ## What is real and what is generated
 
@@ -1098,7 +1134,7 @@ worth naming because each of them was invisible until something was checked:
 ![Contact over Pariser Platz](docs/screenshots/combat-01-contact.png)
 *Four drones over Pariser Platz, with the Gate behind them.*
 
-![The weapons free zone](docs/screenshots/combat-04-sanctuary.png)
+![The force field over the memorial](docs/screenshots/field-01-dome.png)
 *Inside the memorial the weapon is holstered and the screen says why.*
 
 ![Soldiers on Pariser Platz](docs/screenshots/combat-05-soldiers.png)

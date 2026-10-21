@@ -587,7 +587,7 @@ async function run() {
     // memorial is two hundred metres from the Gate, inside 170 m of a point
     // sixty metres east of here, and nothing within reach of it comes down,
     // so the blast did nothing at all. The nearest point with buildings on it
-    // that is clear of every weapons free zone.
+    // that is clear of the memorial's force field, where a blast moves nothing.
     let x = s.player.x + 60, z = s.player.z;
     const clear = (px, pz) => s.combat.sanctuaries.every((q) => Math.hypot(px - q.x, pz - q.z) > q.radius + 200);
     if (!clear(x, z)) {

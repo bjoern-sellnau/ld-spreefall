@@ -99,8 +99,6 @@ export function craterShape(x, z, site, level) {
  *   marked as rubble
  */
 export function settle(p, isGround, height, site) {
-  const bite = collapseBite(p.x, p.z, site);
-  if (bite <= 0) return 0;
   if (!(site.level > 0)) return 0;
   // A site made while the buildings switch was off carries the crater and
   // nothing else: the hole is written into the street and every wall around
@@ -108,9 +106,15 @@ export function settle(p, isGround, height, site) {
   if (!isGround && site.walls === false) return 0;
 
   if (isGround) {
+    if (collapseBite(p.x, p.z, site) <= 0) return 0;
     p.y += craterShape(p.x, p.z, site, Math.min(1, site.level));
     return 0;
   }
+  // By the four metre column, as the shader does it, so every corner of a
+  // piece moves with the rest of it.
+  const cx = (Math.floor(p.x / 4) + 0.5) * 4, cz = (Math.floor(p.z / 4) + 0.5) * 4;
+  const bite = collapseBite(cx, cz, site);
+  if (bite <= 0) return 0;
   const colH = columnHash(p.x, p.z);
   const share = columnShare(bite, colH);
   const level = collapseLocal(site.level, Math.max(share, bite * 0.45 * (0.6 + 0.8 * colH)));
@@ -122,18 +126,18 @@ export function settle(p, isGround, height, site) {
   const cut = full * (1 - level);
   if (above <= cut) return 0;
 
-  const jitter = collapseHash(p.x, p.y, p.z);
+  const jitter = collapseHash(cx, 0, cz);
   const heap = site.rubble * (0.3 + jitter * 0.8) * bite;
   const landed = Math.min(above, cut + heap + Math.min((above - cut) * 0.08, 1.0));
   const fell = above - landed;
   p.y -= fell;
   const spread = Math.min(fell, SCATTER_FALL);
-  const ax = p.x - site.x, az = p.z - site.z;
+  const ax = cx - site.x, az = cz - site.z;
   const l = Math.max(0.001, Math.hypot(ax, az));
   p.x += (ax / l) * spread * (0.09 + jitter * 0.13);
   p.z += (az / l) * spread * (0.09 + jitter * 0.13);
   p.x += (jitter - 0.5) * spread * 0.30;
-  p.z += (collapseHash(p.z, p.y, p.x) - 0.5) * spread * 0.30;
+  p.z += (collapseHash(cz, 1, cx) - 0.5) * spread * 0.30;
   return Math.min(1, Math.max(0, fell / Math.max(1, above)));
 }
 
@@ -266,6 +270,11 @@ export function bakeSite(world, site) {
           const now = Math.round(burn * 255);
           if (now > was) { view.setUint8(o + 16, now); burntNow = true; }
         }
+        // Nothing under the memorial's force field is moved, as in the shader.
+        if (world.shielded && world.shielded(p.x, p.z)) continue;
+        // Rubble a site before this one put down stays where it lies, as it
+        // does in the shader.
+        if (!isGround && (flags & FACADE_FLAG.RUBBLE) !== 0) continue;
         const fall = settle(p, isGround, height, site);
         if (burntNow) touched++;
         if (fall <= 0 && p.y === startY) continue;

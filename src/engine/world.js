@@ -618,6 +618,8 @@ export class World {
   craterOffset(index, x, z) {
     const list = this.craters.get(index);
     if (!list) return 0;
+    // Nor under the memorial's force field, which the game says where it is.
+    if (this.shielded && this.shielded(x, z)) return 0;
     let d = 0;
     for (const c of list) d += craterProfile(x, z, c, c.level);
     return d;
@@ -1026,6 +1028,8 @@ export class World {
    *   decides whether the tile has to be sent to the card again
    */
   killTree(x, z) {
+    // The memorial's force field keeps its trees, as it keeps everything else.
+    if (this.shielded && this.shielded(x, z)) return false;
     const index = this.tileIndex(x, z);
     if (index < 0) return false;
     const ordinal = this.treeAt(index, x, z);

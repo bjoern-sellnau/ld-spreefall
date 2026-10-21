@@ -51,11 +51,23 @@ void main() {
   // A fighter's wheels: down while the channel says two, folded up into the
   // belly otherwise.
   if (aInfo.x > 43.5 && aInfo.x < 44.5 && iState.w < 1.5) p = vec3(p.x * 0.5, -0.2, p.z);
+  // A tank's turret, parts 45 to 47: turned about the turret ring by the
+  // angle the instance carries, then drawn as the olive, the gun and the
+  // dark metal it is made of.
+  vec3 nrm = aNormal;
+  float part = aInfo.x;
+  if (part > 44.5 && part < 47.5) {
+    mat3 t = rotY(iState.w);
+    vec3 ring = vec3(0.0, 0.0, 0.3);
+    p = ring + t * (p - ring);
+    nrm = t * nrm;
+    part = part < 45.5 ? 31.0 : (part < 46.5 ? 8.0 : 2.0);
+  }
   mat3 body = rotY(-iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
-  vNormal = normalize(body * aNormal);
-  vPart = aInfo.x;
+  vNormal = normalize(body * nrm);
+  vPart = part;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);
@@ -252,8 +264,11 @@ void main() {
     // The void cannon's green, in its cell and in the ball it fires. Brighter
     // and slower to pulse than plasma, because there is a lot more of it.
     albedo = vec3(0.02);
-    float pulse = 0.7 + 0.3 * sin(uCamPos.w * 9.0 + vWorld.y * 2.0);
-    emissive = vec3(0.35, 1.0, 0.28) * 9.0 * pulse;
+    // Kept low in red and blue for the same reason as blast plasma's orange:
+    // at nine times over, the tonemapper had it white from across a square.
+    float pulse = 0.75 + 0.25 * sin(uCamPos.w * 9.0 + vWorld.y * 2.0);
+    float face = abs(dot(n, normalize(uCamPos.xyz - vWorld)));
+    emissive = mix(vec3(0.0, 1.7, 0.05), vec3(0.3, 3.0, 0.2), face * face) * pulse;
     rough = 0.1;
     metal = 0.0;
   } else if (vPart > 30.5 && vPart < 31.5) {
@@ -330,6 +345,19 @@ void main() {
     albedo = vec3(0.12, 0.125, 0.13);
     rough = 0.5;
     metal = 0.5;
+  } else if (vPart > 47.5 && vPart < 48.5) {
+    // Blast plasma: the hard kind, which does not bounce and does ten times
+    // the harm, and burns a very bright orange rather than cyan so you know
+    // which one is coming down on you.
+    albedo = vec3(0.02);
+    // The tonemapper turns anything this bright white unless the green and
+    // blue stay low, so the colour is carried by the ratio rather than the
+    // level: an orange rim and a hotter, yellower heart where it faces you.
+    float pulse = 0.85 + 0.15 * sin(uCamPos.w * 30.0 + vWorld.y * 4.0);
+    float face = abs(dot(n, normalize(uCamPos.xyz - vWorld)));
+    emissive = mix(vec3(3.4, 0.38, 0.0), vec3(5.0, 0.75, 0.0), face * face) * pulse;
+    rough = 0.1;
+    metal = 0.0;
   } else {
     // Glass, in a windscreen or a canopy. Dark and sharp, with the sky in it.
     albedo = vec3(0.022, 0.030, 0.038);
@@ -712,13 +740,21 @@ void main() {
 export const DRONE_SHADOW_VS = `${VERSION}
 precision highp float;
 layout(location = 0) in vec3 aPos;
+layout(location = 2) in vec2 aInfo;
 layout(location = 5) in vec4 iPosYaw;
 layout(location = 6) in vec4 iState;
 uniform mat4 uLightViewProj;
 void main() {
+  vec3 p = aPos;
+  // A tank's turret casts its shadow where it is pointing.
+  if (aInfo.x > 44.5 && aInfo.x < 47.5) {
+    float tc = cos(iState.w), ts = sin(iState.w);
+    vec3 ring = vec3(0.0, 0.0, 0.3);
+    p = ring + mat3(tc, 0.0, -ts, 0.0, 1.0, 0.0, ts, 0.0, tc) * (p - ring);
+  }
   float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
-  gl_Position = uLightViewProj * vec4(rot * aPos + iPosYaw.xyz, 1.0);
+  gl_Position = uLightViewProj * vec4(rot * p + iPosYaw.xyz, 1.0);
 }
 `;
 
@@ -886,12 +922,15 @@ uniform mat4 uViewModelMat;
 out vec3 vLocal;
 out vec3 vModel;
 out vec3 vNormal;
+out vec3 vRaw;
 flat out float vPart;
 
 void main() {
   vec4 p = uViewModelMat * vec4(aPos, 1.0);
   vLocal = p.xyz;
   vModel = aPos;
+  // The flash carries where on it a vertex is in the normal slot.
+  vRaw = aNormal;
   vNormal = mat3(uViewModelMat) * aNormal;
   vPart = aInfo.x;
   gl_Position = uViewModelProj * p;
@@ -905,9 +944,11 @@ ${NOISE}
 in vec3 vLocal;
 in vec3 vModel;
 in vec3 vNormal;
+in vec3 vRaw;
 flat in float vPart;
 
 uniform float uMuzzle;     // 0..1, decays after each shot
+uniform float uMuzzleSeed; // a new one each shot, so no two flashes match
 layout(location = 0) out vec4 fragColour;
 
 void main() {
@@ -952,18 +993,53 @@ void main() {
     rough = 0.2;
     metal = 0.0;
   } else {
-    // Muzzle flash cone. It is geometry that exists all the time, so it has to
-    // take itself out of the picture between shots rather than draw as a black
-    // spike off the barrel.
+    // The muzzle flash. It is geometry that exists all the time, so it takes
+    // itself out of the picture between shots rather than drawing as a black
+    // spike off the barrel. A real one is over in a frame or two and is never
+    // the same shape twice: a white hot core, a ragged star of petals where
+    // the flash hider splits the gas, and a short plume forward that is
+    // orange at its edges. Every shot draws a new seed for the shape.
     if (uMuzzle < 0.02) discard;
-    // The cone runs 170 mm forward from the muzzle device. It retracts towards
-    // the barrel as the flash decays, so what you see is a flash going out
-    // rather than a lamp dimming on the end of the gun.
-    float t = clamp((vModel.z + 0.894) / -0.170, 0.0, 1.0);
-    if (t > uMuzzle) discard;
-    albedo = vec3(0.0);
-    emissive = vec3(1.0, 0.74, 0.38) * (1.0 - t * 0.6) * 6.5;
-    fragColour = vec4(emissive, 1.0);
+    float mz = min(uMuzzle, 1.0);
+    float seed = uMuzzleSeed * 61.7;
+    float I;
+    if (vPart < 7.5) {
+      // The plume, seen from the side on the two crossed planes: narrow
+      // where it leaves the muzzle, widest a third of the way out, and
+      // shorter as it goes out.
+      float u = vRaw.z;
+      float v = abs(vRaw.x);
+      float reach = 0.45 + 0.55 * mz;
+      float uu = u / reach;
+      if (uu > 1.0) discard;
+      float w = 0.16 + 0.84 * pow(sin(3.14159 * pow(uu, 0.6)), 1.3);
+      w *= 0.6 + 0.8 * vnoise(vec2(u * 7.0 + seed, seed * 0.37));
+      I = smoothstep(w, w * 0.3, v) * (1.0 - uu * 0.6);
+    } else {
+      // The star across the end of the barrel, which is most of what you see
+      // of a flash from behind the gun: the flash hider's four slots give it
+      // a cross, but the gas tears it into rays of every length, so the cross
+      // is only half of it and the noise round the circle is the other half,
+      // turned and drawn again each shot. A small white core sits in it.
+      vec2 q = vRaw.xy;
+      float r = length(q);
+      float a = atan(q.y, q.x);
+      float slots = pow(abs(cos(a * 2.0 + seed)), 6.0);
+      float tear = vnoise(vec2(a * 3.2 + seed, seed * 1.3));
+      tear *= 0.55 + 0.45 * vnoise(vec2(a * 7.0 - seed, seed * 0.7));
+      float reach = (0.26 + 0.42 * slots + 0.7 * tear) * (0.5 + 0.5 * mz);
+      I = max(smoothstep(reach, reach * 0.15, r) * 0.9, smoothstep(0.36, 0.0, r) * 1.1);
+    }
+    I *= pow(mz, 0.5);
+    if (I < 0.12) discard;
+    // White in the middle, orange through the body of it and a deep red at
+    // the very edge, with the green and blue kept low out there so the
+    // tonemapper leaves it orange rather than white.
+    vec3 hot = vec3(6.0, 5.0, 3.2);
+    vec3 mid = vec3(3.4, 1.05, 0.14);
+    vec3 edge = vec3(1.5, 0.28, 0.02);
+    vec3 c = I > 0.6 ? mix(mid, hot, (I - 0.6) / 0.4) : mix(edge, mid, (I - 0.12) / 0.48);
+    fragColour = vec4(c, 1.0);
     return;
   }
 
@@ -978,7 +1054,9 @@ void main() {
   dome = mix(dome, vec3(domeLum), 0.55) * 1.15;
 
   vec3 key = max(uSunColour.rgb, vec3(0.30)) * ndl * 0.75;
-  vec3 colour = albedo * (key + dome) + dome * rim * 0.5 * (1.0 - rough) + emissive;
+  // The flash lights the front of the gun for as long as it lasts.
+  vec3 flashLit = vec3(1.0, 0.62, 0.3) * 2.2 * uMuzzle * smoothstep(-0.45, -0.85, vModel.z);
+  vec3 colour = albedo * (key + dome + flashLit) + dome * rim * 0.5 * (1.0 - rough) + emissive;
   fragColour = vec4(colour, 1.0);
 }
 `;

@@ -75,7 +75,7 @@ export class Minimap {
     // As far in as the wheel may go on this canvas, worked out on each draw
     // from TIGHTEST_SPAN.
     this.maxZoom = 40;
-    // The weapons free zones, so the map can show where nothing may be aimed.
+    // The memorial's force field, so the map shows what nothing can damage.
     this.sanctuaries = [];
     // The transform the last draw used, so a click can be turned back into a
     // place in the city.
@@ -212,26 +212,17 @@ export class Minimap {
       ctx.stroke();
     }
 
-    // The weapons free zone, drawn under everything that can be shot at. On
-    // the targeting map it also carries the ring the blast may not cross, so
-    // a refused target is a thing you can see coming rather than a message
-    // you get after clicking.
+    // The memorial's force field, drawn under everything that can be shot
+    // at. Nothing is refused there any more; the circle is where a blast
+    // does the place no harm.
     for (const z of this.sanctuaries) {
-      ctx.fillStyle = 'rgba(226, 201, 141, 0.07)';
+      ctx.fillStyle = 'rgba(110, 190, 255, 0.08)';
       ctx.beginPath();
       ctx.arc(z.x, z.z, z.radius, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(226, 201, 141, 0.45)';
+      ctx.strokeStyle = 'rgba(130, 205, 255, 0.55)';
       ctx.lineWidth = 1.4 / scale * this.dpr;
       ctx.stroke();
-      if (this.aim) {
-        ctx.strokeStyle = 'rgba(226, 112, 90, 0.35)';
-        ctx.setLineDash([6 / scale * this.dpr, 7 / scale * this.dpr]);
-        ctx.beginPath();
-        ctx.arc(z.x, z.z, z.radius + this.aim.radius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
     }
 
     // Pickup pads, under the landmark pins because a landmark is the thing you

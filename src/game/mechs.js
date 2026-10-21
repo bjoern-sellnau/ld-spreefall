@@ -227,6 +227,18 @@ export const ARMS = [
     splash: { radius: 15, damage: 560, force: 14 }, slow: 2.4,
     magazine: 6, reload: 3.8, shake: 0.25, sound: 'rpg',
   },
+  // The void cannon, at the size of a mech. Every chassis of yours carries it
+  // as its last arm: the hand cannon's ball nearly twice across, which reaches
+  // further and harder on the way and lands with close to twice the blast.
+  // Two in the magazine and a long reload, because one is most of a block.
+  {
+    id: 'voidmaw', name: 'Void Maw', kind: 'void', mount: 'chaingun',
+    speed: 34, interval: 2.6, spread: 0.002,
+    splash: { radius: 34, damage: 1200, force: 60, punch: 12, self: 0.03,
+      wreck: { radius: 16, damage: 320 } },
+    void: { aura: 26, auraDamage: 140, every: 0.12, reach: 70, damage: 900 },
+    magazine: 2, reload: 6.0, shake: 0.7, sound: 'void',
+  },
   // And the one for the other machines: nothing with a motor in it moves
   // inside the pulse, which on something eight metres tall is seven seconds
   // of standing still in the open.
@@ -241,6 +253,9 @@ export const ARMS = [
 
 /** The arm by id, for the interface and the tests. */
 export function armById(id) { return ARMS.find((a) => a.id === id) || null; }
+
+/** A chassis' own arms with the Void Maw after them, which every one carries. */
+function withVoid(ids) { return ids.includes('voidmaw') ? ids : [...ids, 'voidmaw']; }
 
 /**
  * How far up and down a torso turns. The pilot's view is held to the same
@@ -352,7 +367,7 @@ export class Mechs {
     // Which arms is the chassis' own: m.arm is an index into that, not into
     // the whole table.
     m.loadout = spec.arms
-      ? (spec.loadout || ARMS.map((a) => a.id)).map((id) => armById(id)).filter(Boolean)
+      ? withVoid(spec.loadout || ARMS.map((a) => a.id)).map((id) => armById(id)).filter(Boolean)
       : [];
     m.arm = Math.max(0, m.loadout.findIndex((a) => a.id === spec.arm));
     m.armTimer = 0;
