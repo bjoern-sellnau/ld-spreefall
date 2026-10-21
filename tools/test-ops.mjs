@@ -142,19 +142,20 @@ async function run() {
     JSON.stringify(compass.order));
 
   // A mark: open the map, click it, and the compass points there.
-  await page.evaluate(() => window.spreefall.toggleMap());
-  await page.waitForTimeout(400);
+  await page.evaluate(() => { const s = window.spreefall; if (!s.minimap.big) s.toggleMap(); });
+  await page.waitForTimeout(700);
   const target = await page.evaluate(() => {
-    const s = window.spreefall;
     const r = document.getElementById('minimap').getBoundingClientRect();
-    return { x: r.left + r.width * 0.7, y: r.top + r.height * 0.4 };
+    const x = r.left + r.width * 0.7, y = r.top + r.height * 0.4;
+    const top = document.elementFromPoint(x, y);
+    return { x, y, top: top ? (top.id || top.className) : null };
   });
   await page.mouse.click(target.x, target.y);
-  const marked = await page.evaluate(() => {
+  const marked = await page.evaluate((target) => {
     const s = window.spreefall;
-    return { mark: s.state.waypoint ? { ...s.state.waypoint } : null,
+    return { mark: s.state.waypoint ? { ...s.state.waypoint } : null, big: s.minimap.big, top: target.top,
       button: !document.getElementById('mapunmark').classList.contains('hidden') };
-  });
+  }, target);
   await page.evaluate(() => window.spreefall.toggleMap());
   await page.waitForTimeout(300);
   const toMark = await page.evaluate(async () => {
@@ -523,6 +524,62 @@ async function run() {
   });
   check('an arrow in the head kills a guard without a sound', arrow.dead && !arrow.alarm && arrow.heard === 0);
   check('and an arrow that misses stays where it went in', arrow.stuck === 1);
+
+  // The heads: R changes them with the bow in hand, and each does its own work.
+  await page.evaluate(() => { const s = window.spreefall; s.weapon.select('bow'); s.weapon.arrowHead = 0; });
+  const heads = [];
+  for (let i = 0; i < 4; i++) {
+    heads.push(await page.evaluate(() => ({ head: window.spreefall.weapon.head,
+      label: document.getElementById('weaponname').textContent })));
+    await page.keyboard.press('KeyR');
+  }
+  const headed = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    const site = s.campaign.allSites()[0];
+    const hurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    // Three men standing in the open, one for each head, well apart.
+    const put = (dx) => {
+      const g = s.spawnSoldier(dx, 40);
+      g.state = 0; g.rise = 0; g.y = s.world.groundHeight(g.x, g.z);
+      return g;
+    };
+    s.teleport(site.x + 300, site.z + 300);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    const shotAt = (g, head) => {
+      // Into the ground at his feet, from above, so only the head can do it.
+      s.projectiles.launch('arrow', { x: g.x + 1.2, y: g.y + 3, z: g.z, vx: 0, vy: -40, vz: 0, weapon: 'bow', head });
+    };
+    const fire = put(-30), poison = put(0), blast = put(30);
+    const h0 = { fire: fire.health, poison: poison.health, blast: blast.health };
+    const burning0 = s.burningCount();
+    shotAt(fire, 'fire'); shotAt(poison, 'poison'); shotAt(blast, 'blast');
+    for (let i = 0; i < 12; i++) s.fixedForTest(1 / 60);
+    out.burning = s.burningCount() - burning0;
+    out.clouds = s.poisonClouds.length;
+    out.blastHit = blast.health < h0.blast || blast.state === 5 || !blast.alive;
+    for (let i = 0; i < 60 * 6; i++) {
+      // Held where they stand, so the fire and the gas have them to work on.
+      for (const g of [fire, poison]) if (g.alive && g.state !== 5) { g.vx = 0; g.vz = 0; }
+      s.fixedForTest(1 / 60);
+    }
+    out.fireHurt = fire.health < h0.fire || fire.state === 5 || !fire.alive;
+    out.poisonHurt = poison.health < h0.poison || poison.state === 5 || !poison.alive;
+    s.combat.hurt = hurt;
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+    s.soldiers.reset();
+    return out;
+  });
+  check('R with the bow in hand goes plain, fire, poison, explosive, and the HUD says which',
+    heads.map((h) => h.head).join(',') === 'plain,fire,poison,blast' && /FIRE/.test(heads[1].label)
+      && /POISON/.test(heads[2].label) && /BLAST/.test(heads[3].label), JSON.stringify(heads));
+  check('a fire arrow sets the ground burning and burns who stands in it', headed.burning >= 1 && headed.fireHurt,
+    JSON.stringify(headed));
+  check('a poison arrow lets out a cloud that hurts who breathes it', headed.clouds >= 1 && headed.poisonHurt,
+    JSON.stringify(headed));
+  check('an explosive arrow goes off where it lands', headed.blastHit, JSON.stringify(headed));
 
   await fresh();
   const knife = await page.evaluate(async () => {

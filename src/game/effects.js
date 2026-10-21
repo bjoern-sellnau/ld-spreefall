@@ -631,6 +631,32 @@ export class Effects {
   }
 
   /**
+   * A cloud of poison: low, slow, sickly green, hanging where it was let out.
+   */
+  gas(x, y, z, radius, strength = 1) {
+    const n = Math.round(10 * strength);
+    for (let i = 0; i < n; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.8;
+      s.ax = x + Math.cos(a) * r;
+      s.ay = y + 0.3 + Math.random() * 1.6;
+      s.az = z + Math.sin(a) * r;
+      s.vx = Math.cos(a) * 0.6;
+      s.vy = 0.2 + Math.random() * 0.5;
+      s.vz = Math.sin(a) * 0.6;
+      s.gravity = -0.05;
+      s.maxLife = 1.6 + Math.random() * 1.4;
+      s.life = s.maxLife;
+      s.r = 0.32; s.g = 0.62; s.b = 0.16;
+      s.size = radius * (0.22 + Math.random() * 0.18);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+  }
+
+  /**
    * Blood off a hit. Dark, heavy, and gone quickly, with a mist that hangs for
    * a moment where the round went in.
    *

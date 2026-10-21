@@ -93,6 +93,7 @@ district by hand. A comparison of the same street at either tier is in
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
 | F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels |
+| R | reload; with the bow in hand, the head on the next arrow: plain, fire, poison or explosive |
 | J | in Tactics and Slayer, the journal: every district, and the camps or nests given back, or given back harder |
 | driving | W forward, S back, A D steer, Shift brake, left mouse fires |
 | flying | it flies where you look; W S throttle (a fighter holds it), A D turn, Space climbs, right mouse drops |
@@ -102,7 +103,6 @@ district by hand. A comparison of the same street at either tier is in
 | T | blow the C4 you have put down |
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight |
-| R | reload |
 | G | holster the weapon, for walking and for photographs |
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |

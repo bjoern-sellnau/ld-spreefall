@@ -125,12 +125,16 @@ async function run() {
   const cover = await page.evaluate(() => {
     const s = window.spreefall;
     s.drones.reset(); s.weapon.reset();
-    // Behind the Gate, which stands at x 0 and is 81 m west of the spawn.
+    // Behind a cross wall of the Gate, which stands at x 0 and is 81 m west
+    // of the spawn; the passages either side of the wall are open.
+    const was = { x: s.player.x, z: s.player.z };
+    s.teleport(81, -2.6);
     const d = window.T.park(-140, 4, 0);
     window.T.aimAt(d);
     s.weapon.spread = 0;
     const before = d.health;
     s.shoot();
+    s.teleport(was.x, was.z);
     return { damage: before - d.health, hits: s.weapon.hits };
   });
   check('the Gate stops a shot at a drone behind it', cover.damage === 0 && cover.hits === 0,
@@ -152,8 +156,10 @@ async function run() {
 
   // --- the force field over the memorial -----------------------------------
   // It was a weapons free zone. Now the fight can go anywhere and the field
-  // keeps the place whole: the weapon fires there, things fly into it, and a
-  // blast in it neither brings anything down nor digs anything up.
+  // keeps the place whole against anything from outside it: the weapon fires
+  // there, things fly into it, and a blast in it set off from outside neither
+  // brings anything down nor digs anything up. Standing in it, it opens to
+  // you; that is in the memorial checks in test-ops.
   const zone = await page.evaluate(async () => {
     const s = window.spreefall;
     const mem = s.world.manifest.landmarks.find((l) => l.key === 'memorial');
@@ -166,8 +172,13 @@ async function run() {
     const holstered = s.weapon.holstered;
     s.weapon.update(1 / 60, true, { x: s.player.x, y: s.player.y + 1.7, z: s.player.z },
       { x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] });
-    const shielded = s.combat.isShielded(mem.x, 0, mem.z);
+    const shielded = s.combat.inField(mem.x, mem.z);
     const domes = s.renderer.field.domes.length;
+    // Standing in it the field opens to you; the blasts below are set off
+    // from outside it, where it holds.
+    const field0 = s.combat.sanctuaries[0];
+    s.teleport(mem.x, mem.z + field0.radius + 60);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
     // A rocket's worth in the middle of the stelae, and a warhead's worth.
     const g = s.world.groundHeight(mem.x + 12, mem.z + 9);
     const tall = s.world.tallestNear(mem.x + 12, mem.z + 9, 15);
@@ -194,11 +205,16 @@ async function run() {
     const opened = s.demolition.blast(mem.x + 12, g + 1, mem.z + 9, 8, 120).length
       + (edge ? s.demolition.blast(edge.x, g, edge.z, 170, 4000).length : 0);
     for (let i = 0; i < 60 * 6; i++) s.fixedForTest(1 / 60);
-    return {
-      shielded, domes, holstered, damage: before - d.health, ammo: s.weapon.ammo, opened,
+    const after = {
       groundMoved: +Math.abs(s.world.groundHeight(mem.x + 12, mem.z + 9) - g).toFixed(2),
-      tallBefore: +tall.toFixed(1),
       tallAfter: +s.world.tallestNear(mem.x + 12, mem.z + 9, 15).toFixed(1),
+    };
+    // Back where the rest of this run expects to stand.
+    s.teleport(mem.x, mem.z);
+    return {
+      ...after,
+      shielded, domes, holstered, damage: before - d.health, ammo: s.weapon.ammo, opened,
+      tallBefore: +tall.toFixed(1),
       lit: s.renderer.field.glow > glowBefore || s.renderer.field.hit.at > 0,
       outsideBefore: outside ? +outside.before.toFixed(1) : null,
       outsideAfter: outside ? +s.world.tallestNear(outside.x, outside.z, 6).toFixed(1) : null,
@@ -288,7 +304,9 @@ async function run() {
   check('a hit takes the bar down, with the part it took held in white',
     hit.length === 1 && hit[0].fill < 100 && hit[0].chip > hit[0].fill,
     hit.length ? `${hit[0].fill}% left, ${hit[0].chip}% chip` : 'no bar');
-  check('and the dead have no bar', gone.length === 0, `${gone.length} left`);
+  const barHealth = await page.evaluate(() => [window.T.bar.health, window.spreefall.drones.active.length,
+    window.spreefall.soldiers.active.length, window.spreefall.mechs.active.length]);
+  check('and the dead have no bar', gone.length === 0, `${gone.length} left ${JSON.stringify(gone)} ${JSON.stringify(barHealth)}`);
 
   // --- a pretty picture of an engagement -----------------------------------
   await page.evaluate(() => {

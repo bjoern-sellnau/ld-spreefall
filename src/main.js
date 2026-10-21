@@ -17,6 +17,7 @@ import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
 import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
+import { ARROW_HEADS } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
 import { Projectiles } from './game/projectiles.js';
@@ -1245,7 +1246,7 @@ async function main() {
   weapon.onSwap = (id, spec) => {
     audio.swap();
     toast(spec.name);
-    el.weaponname.textContent = spec.short;
+    el.weaponname.textContent = weaponLabel(spec);
     el.combat.classList.toggle('explosive', spec.kind !== 'hitscan');
   };
   // The wheel, while the pointer is locked. In a mech it goes through the
@@ -2227,6 +2228,78 @@ async function main() {
   // an incendiary leaves, kept here rather than in the fire module, because
   // that one is about trees and this one is about people.
   const burning = [];
+
+  // --- arrow heads ----------------------------------------------------------------
+  /** The weapon's name on the HUD, with the head on the next arrow for a bow. */
+  function weaponLabel(spec) {
+    const head = spec.heads ? ARROW_HEADS[weapon.head] : null;
+    return head && head.short ? `${spec.short} ${head.short}` : spec.short;
+  }
+  weapon.onArrowHead = (head) => {
+    const row = ARROW_HEADS[head];
+    toast(row ? row.name : head);
+    audio.swap();
+    el.weaponname.textContent = weaponLabel(weapon.spec);
+  };
+
+  // Poison let out by an arrow: it hangs, and it hurts whoever breathes it.
+  const poisonClouds = [];
+  function updatePoison(dt) {
+    for (let i = poisonClouds.length - 1; i >= 0; i--) {
+      const c = poisonClouds[i];
+      c.left -= dt;
+      if (c.left <= 0) { poisonClouds.splice(i, 1); continue; }
+      c.puff -= dt;
+      if (c.puff <= 0) {
+        c.puff = 0.22;
+        effects.gas(c.x, c.y, c.z, c.radius, Math.min(1, c.left / 2));
+      }
+      for (const sd of [...soldiers.active]) {
+        if (!sd.alive || sd.health <= 0 || sd.state === 5) continue;
+        if (Math.hypot(sd.x - c.x, sd.z - c.z) > c.radius + 0.4 || Math.abs(sd.y - c.y) > 3) continue;
+        if (soldiers.damage(sd, c.damagePerSecond * dt, { x: 0, y: 0, z: 0 })) creditTarget(sd, false, 'soldier');
+      }
+      if (!state.inMech && !state.inVehicle && combat.health > 0
+          && Math.hypot(player.x - c.x, player.z - c.z) < c.radius && Math.abs(player.y - c.y) < 3) {
+        combat.hurt(c.damagePerSecond * 0.5 * dt, c.x, c.z, player.x, player.z);
+      }
+    }
+  }
+
+  // Wherever an arrow lands, in somebody or in a wall, its head does its work.
+  projectiles.onArrowHead = (b, x, y, z) => {
+    const row = ARROW_HEADS[b.head];
+    if (!row) return;
+    const g = world.groundHeight(x, z);
+    if (row.burn) {
+      const bn = row.burn;
+      fires.ignite(x, g, z, bn.radius, 0.8);
+      renderer.addScar(x, g, z, bn.radius * 0.7, 0.5);
+      if (!combat.isShielded(x, g, z)) {
+        burning.push({ x, y: g, z, radius: bn.radius, left: bn.seconds, damagePerSecond: bn.damagePerSecond });
+      }
+      for (let i = 0; i < 5; i++) effects.flame(x + (Math.random() - 0.5) * 2, g + 0.3, z + (Math.random() - 0.5) * 2, 2.2, 0.9);
+      audio.flameWall();
+    } else if (row.cloud) {
+      const cl = row.cloud;
+      poisonClouds.push({ x, y: g, z, radius: cl.radius, left: cl.seconds, damagePerSecond: cl.damagePerSecond, puff: 0 });
+      effects.gas(x, g, z, cl.radius, 1.6);
+    } else if (row.splash) {
+      explode(x, y, z, row.splash, { weapon: 'bow' });
+    }
+  };
+
+  /** What an arrow with a head leaves behind it in the air. */
+  function arrowTrails() {
+    for (const b of projectiles.active || []) {
+      if (!b.alive || b.stuck || !b.head || b.head === 'plain') continue;
+      const row = ARROW_HEADS[b.head];
+      if (!row || !row.colour) continue;
+      const [r, g, bl] = row.colour;
+      if (b.head === 'fire' && Math.random() < 0.6) effects.flame(b.x, b.y - 0.2, b.z, 0.5, 0.5);
+      else effects.spark(b.x, b.y, b.z, r, g, bl);
+    }
+  }
 
   function updateBurning(dt) {
     for (let i = burning.length - 1; i >= 0; i--) {
@@ -4970,7 +5043,9 @@ async function main() {
     const row = WEAPONS[b.weapon] || WEAPONS.bow;
     const t = hit.target;
     const core = !!hit.core;
-    const dmg = (row.damage || 100) * (core ? (row.coreMultiplier || 1) : 1) * (weapon.damageScale || 1);
+    const headRow = ARROW_HEADS[b.head];
+    const dmg = (row.damage || 100) * (core ? (row.coreMultiplier || 1) : 1) * (weapon.damageScale || 1)
+      * (headRow && headRow.damage !== undefined ? headRow.damage : 1);
     const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
     const dir = { x: b.vx / sp, y: 0, z: b.vz / sp };
     let killed = false;
@@ -5950,7 +6025,12 @@ async function main() {
         el.btnSound.textContent = on ? 'sound on' : 'sound off';
         break;
       }
-      case 'KeyR': weapon.startReload(); break;
+      case 'KeyR':
+        // With the bow in hand R changes the head on the next arrow; the bow
+        // nocks its own.
+        if (weapon.spec.heads) weapon.cycleHead();
+        else weapon.startReload();
+        break;
       case 'KeyG':
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
@@ -6114,6 +6194,8 @@ async function main() {
       fires.update(worldDt, player);
       fireWalls.update(worldDt);
       updateBurning(worldDt);
+      updatePoison(worldDt);
+      arrowTrails();
       updateReactors(worldDt);
       warlordStep(worldDt);
       memorialStep();
@@ -6306,6 +6388,8 @@ async function main() {
     fires.update(worldDt, player);
     fireWalls.update(worldDt);
     updateBurning(worldDt);
+    updatePoison(worldDt);
+    arrowTrails();
     updateReactors(worldDt);
     warlordStep(worldDt);
     memorialStep();
@@ -6872,6 +6956,7 @@ async function main() {
     compassBar, setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
+    poisonClouds, burningCount: () => burning.length,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,
     /** The arms the mech you are in carries, in the order the keys pick them. */

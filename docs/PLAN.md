@@ -3807,3 +3807,27 @@ So there are two cities now, and a profile picks which:
   broken and restored was run by hand while building it. ops-10 and
   ops-11.
 
+## 89. Fire, poison and explosive arrows
+
+- The bow carries four heads, changed with R while it is in your hands (the
+  bow nocks its own arrow, so R had nothing else to do there): plain, fire,
+  poison and blast. The HUD shows the head next to the weapon's name and a
+  toast says which it is.
+- A fire arrow sets where it lands burning: the trees there catch, a scorch
+  mark, and a patch of ground that burns for eight seconds at 24 a second
+  for anyone standing in it. It flames in the air on the way.
+- A poison arrow lets out a low green cloud 5.5 m across that hangs for nine
+  seconds and does 20 a second to everyone in it who breathes, you included
+  at half that. It does a fifth less on the arrow itself.
+- A blast arrow goes off where it lands, 6.5 m and 240, and is heard like an
+  explosion, which is the price of it in a camp.
+- All three do their work wherever the arrow ends up: in a man or in a wall
+  or the ground. Each leaves a trail of its colour behind it in the air.
+- The combat checks were brought up to date with the Gate and the memorial:
+  the cover check now fires along a cross wall of the Gate rather than down
+  the open carriageway, and the memorial blasts are set off from outside the
+  field, where it holds.
+- Checks (ops, 73 now): R goes plain, fire, poison, blast and the HUD says
+  which; a fire arrow at a man's feet leaves the ground burning and burns
+  him; a poison arrow leaves a cloud that hurts him; a blast arrow goes off.
+

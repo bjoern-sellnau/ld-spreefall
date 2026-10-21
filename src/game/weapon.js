@@ -31,6 +31,9 @@ export class Weapon {
     this.mechs = opts.mechs || null;
     this.projectiles = opts.projectiles || null;
 
+    // Which head is on the next arrow, as an index into the bow's heads.
+    this.arrowHead = 0;
+    this.onArrowHead = null;     // fn(head) when it changes
     this.carried = {};
     for (const id of LOADOUT) {
       this.carried[id] = { ammo: WEAPONS[id].magazine, reserve: WEAPONS[id].reserve };
@@ -196,6 +199,21 @@ export class Weapon {
       this.state = STATE.READY;
       this.reloadLeft = 0;
     }
+  }
+
+  /** The head on the next arrow, or null for anything but a bow. */
+  get head() {
+    const heads = this.spec.heads;
+    return heads ? heads[this.arrowHead % heads.length] : null;
+  }
+
+  /** The next head along, for a bow. @returns {string|null} */
+  cycleHead() {
+    const heads = this.spec.heads;
+    if (!heads || this.holstered) return null;
+    this.arrowHead = (this.arrowHead + 1) % heads.length;
+    if (this.onArrowHead) this.onArrowHead(heads[this.arrowHead]);
+    return heads[this.arrowHead];
   }
 
   startReload() {
@@ -695,6 +713,7 @@ export class Weapon {
       slip: spec.slip,
       weapon: this.id,
       homing, target,
+      head: this.head,
     });
     if (spec.lock) {
       // Clearing it silently leaves the ring on screen for ever, because the
