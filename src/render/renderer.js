@@ -684,7 +684,8 @@ export class Renderer {
     if (this.drawActors) {
       gl.enable(gl.CULL_FACE);
       draws += this.actors.drawDrones();
-      tris += this.actors.drone.instanceCount * (this.actors.drone.count / 3);
+      tris += this.actors.drone.instanceCount * (this.actors.drone.count / 3)
+        + this.actors.gazer.instanceCount * (this.actors.gazer.count / 3);
       draws += this.actors.drawJets();
       tris += this.actors.jet.instanceCount * (this.actors.jet.count / 3);
       draws += this.actors.drawSoldiers();

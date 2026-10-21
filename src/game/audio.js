@@ -450,6 +450,69 @@ export class Audio {
    * and a tail long enough to bounce off the buildings that are not modelled
    * as reflectors. Cheap, and it reads as a long way away from a rifle.
    */
+  /**
+   * A demon's roar: a sawtooth growl that drops, under a band of noise, the
+   * bigger the demon the deeper. Quieter with distance.
+   */
+  roar(distance = 0, size = 1) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = Math.max(0.05, 1 - distance / 160) * 0.22;
+    const base = 120 / Math.sqrt(size);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(base * 1.4, t);
+    o.frequency.exponentialRampToValueAtTime(base * 0.7, t + 0.8);
+    const wob = ctx.createOscillator();
+    wob.frequency.value = 23;
+    const wg = ctx.createGain();
+    wg.gain.value = base * 0.18;
+    wob.connect(wg).connect(o.frequency);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+    o.connect(lp).connect(g).connect(this.master);
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 420 / Math.sqrt(size);
+    bp.Q.value = 1.4;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(level * 0.8, t + 0.05);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    n.connect(bp).connect(ng).connect(this.master);
+    o.start(t); wob.start(t); n.start(t, Math.random() * 3, 1);
+    o.stop(t + 1); wob.stop(t + 1); n.stop(t + 1);
+  }
+
+  /** Fire leaving a demon's hand, or landing: a short breathy whoomp. */
+  whoomp(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = Math.max(0.03, 1 - distance / 120) * 0.2;
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1800, t);
+    lp.frequency.exponentialRampToValueAtTime(260, t + 0.35);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    n.connect(lp).connect(g).connect(this.master);
+    n.start(t, Math.random() * 3, 0.5);
+    n.stop(t + 0.5);
+  }
+
   explosion() {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;

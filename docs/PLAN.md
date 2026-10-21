@@ -3595,3 +3595,36 @@ So there are two cities now, and a profile picks which:
   put, the takedown offered behind a guard and done with the real F key with
   no alarm and nobody spotted, and the scope coming up and going again.
   ops-04-bow.png.
+
+## 83. Slayer's demons
+
+- src/game/demons.js: three that walk and one that floats, as numbers, with
+  their names ours. A ghoul (110, quick, claws at two metres and throws
+  fire), a brute (620, no fire, a roaring charge at 12 m/s across open
+  ground, a blow worth 38), the tyrant (9000, three and a half times a man,
+  fire in volleys of five, both fists down for 60), and the gazer, a sphere
+  of hide with one eye that floats and spits fire (380).
+- Built on the pools there are. A walking demon is a soldier with a kind set
+  on it: the same body, ragdoll, gore and fire, given a step of its own in
+  soldiers.js that hunts (no patrol, no making up its mind), claws in
+  reach, throws fire when it can see you and has the breath, and charges.
+  The floating one is a drone with a flag, whose shot becomes fire.
+- Drawn in their own colours, the kind sent in the machine channel (two
+  and up): cloth and webbing become hide (ochre, raw red, or near black with
+  fire in the cracks for the tyrant), the helmet horn, the visor a pair of
+  eyes, two horns the soldier mesh now carries hidden on everybody else,
+  no rifle, and the whole figure and its shadow scaled. A demon is hit
+  where it is drawn: the capsule and the head scale with it. The gazer is a
+  mesh of its own drawn instead of a drone.
+- Their fire (projectile kind fireball) is hostile: it does not go through
+  the blast that knocks the city down, it does not touch another demon, it
+  looks for you and goes off on the street or on you, and what it does is
+  its own (projectiles.onHostile). A roar and a whoomp in the synth.
+- Fixed on the way: the body cylinder of a soldier ran to the top of his
+  head, and being the nearer surface it took every level shot at a head, so
+  a head shot only counted from above or below. It stops at the neck now.
+- Demons in the cheat menu's spawn row (a pack of seven), on the health
+  bars at their own height and size, and in the ops checks (33 now): the
+  four kinds and their sizes, a head shot at three and a half times a
+  man's height, closing, clawing and burning, the brute's charge, and fire
+  that does not touch another demon. ops-05-demons.png.

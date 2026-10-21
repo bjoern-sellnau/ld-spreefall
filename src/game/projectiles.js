@@ -73,6 +73,13 @@ export const PROJECTILE = {
     radius: 0.7, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 9,
     detonateOnContact: true, trail: 'void', light: true, spin: 3,
   },
+  fireball: {
+    // A demon's fire. It is not ours: it does not go through the blast that
+    // knocks the city down, it does not hurt other demons, and the only
+    // thing it is looking for is you.
+    radius: 0.3, gravity: 1.2, drag: 0, bounce: 0, armTime: 0.05, maxAge: 6,
+    detonateOnContact: true, hostile: true, trail: 'glow', light: true, spin: 6,
+  },
   arrow: {
     // An arrow: it drops, it goes into whatever it meets and stays there, and
     // the harm it does is its own rather than a blast's.
@@ -123,6 +130,9 @@ export class Projectiles {
     this.active = [];
     this.onBounce = null;
     this.onArrow = null;     // fn(body, hit) when an arrow goes into somebody
+    // Hostile fire: where the player is, and what to do when it arrives.
+    this.player = null;      // {x, y, z} at the feet
+    this.onHostile = null;   // fn(body, x, y, z, direct) when it goes off
     // Set by the game layer: the same raycast the bullets use against drones
     // and soldiers. Without it a rocket flies through the man it was aimed at
     // and goes off on the wall behind him, which is exactly what the first
@@ -287,6 +297,17 @@ export class Projectiles {
         }
       }
 
+      // Hostile fire looks for you and for nothing else.
+      if (b.spec.hostile && this.player && b.age > b.spec.armTime) {
+        const p = this.player;
+        const cy = Math.max(p.y + 0.2, Math.min(p.y + 1.6, b.y));
+        if (Math.hypot(b.x - p.x, b.y - cy, b.z - p.z) < 0.55 + b.spec.radius) {
+          if (this.onHostile) this.onHostile(b, b.x, b.y, b.z, true);
+          this._remove(b);
+          continue;
+        }
+      }
+
       if (b.spec.gravity) b.vy -= b.spec.gravity * dt;
       if (b.spec.drag) {
         const k = Math.max(0, 1 - b.spec.drag * dt);
@@ -306,7 +327,7 @@ export class Projectiles {
         const dist = speed * remaining + b.spec.radius;
         let hit = w.raycast(b.x, b.y, b.z, dx, dy, dz, dist);
         // Whoever is in the way counts too, and the nearer of the two wins.
-        if (this.hitActors) {
+        if (this.hitActors && !b.spec.hostile) {
           const actor = this.hitActors(b.x, b.y, b.z, dx, dy, dz, hit ? hit.t : dist);
           if (actor && (!hit || actor.t < hit.t)) {
             hit = {
@@ -330,6 +351,13 @@ export class Projectiles {
         b.x += dx * t; b.y += dy * t; b.z += dz * t;
         const used = t / speed;
         remaining = Math.max(0, remaining - used);
+
+        if (b.spec.hostile) {
+          if (this.onHostile) this.onHostile(b, b.x, b.y, b.z, false);
+          this._remove(b);
+          remaining = 0;
+          break;
+        }
 
         // An arrow goes into a body and is done, or into a wall and stays.
         if (b.spec.arrow) {

@@ -378,6 +378,10 @@ export function buildProjectileMesh(kind) {
     // The mech's: the same ball, nearly twice across, so it reads as the
     // bigger thing before it lands.
     m.icosphere(0, 0, 0, 1.3, 14, 7, 30);
+  } else if (kind === 'fireball') {
+    // A demon's fire: a ball of the blast orange.
+    m.icosphere(0, 0, 0, 0.3, 10, 6, 48);
+    m.cylinder(0, 0, 0.2, 0.22, 0.02, 0.6, 8, 48, 'z');
   } else if (kind === 'arrow') {
     // Seventy centimetres of shaft, a steel head at the front, which is -z
     // like everything else that flies here, and three vanes at the back.
@@ -1079,6 +1083,32 @@ export function buildSoldierMesh() {
   m.box(0.20, 1.06, -0.12, 0.06, 0.16, 0.12, 26);           // grip
   m.box(0.20, 1.16, 0.18, 0.13, 0.15, 0.16, 26);            // power pack
   m.box(0.20, 1.16, -0.80, 0.055, 0.055, 0.14, 27);         // emitter
+
+  // Horns, which only a demon has: two that sweep up and back from the
+  // brow, collapsed to nothing on anybody else.
+  for (const side of [-1, 1]) {
+    m.box(side * 0.12, 1.76, 0.00, 0.06, 0.16, 0.06, 29, side * 0.3);
+    m.box(side * 0.17, 1.88, 0.05, 0.045, 0.12, 0.045, 29, side * 0.5);
+    m.box(side * 0.20, 1.97, 0.11, 0.03, 0.09, 0.03, 29, side * 0.6);
+  }
+  return m;
+}
+
+/**
+ * Slayer's floating demon: a fat sphere of hide with one great eye in the
+ * front, a mouth under it and two horns. Built facing -z like a drone, and
+ * drawn through the same body shader. Parts 40 hide, 41 horn and mouth, 42
+ * the eye.
+ */
+export function buildGazerMesh() {
+  const m = new MeshBuild();
+  m.icosphere(0, 0, 0, 1.15, 16, 10, 40);
+  m.icosphere(0, 0.18, -0.95, 0.40, 12, 8, 42);
+  m.box(0, -0.42, -0.95, 0.85, 0.16, 0.32, 41);
+  for (const side of [-1, 1]) {
+    m.box(side * 0.55, 0.95, -0.1, 0.16, 0.42, 0.16, 41, side * 0.4);
+    m.box(side * 0.68, 1.25, 0.05, 0.10, 0.28, 0.10, 41, side * 0.6);
+  }
   return m;
 }
 
@@ -1158,6 +1188,7 @@ export class Actors {
     this.progGib.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
+    this.gazer = this._uploadMesh(buildGazerMesh(), MAX_DRONES, 2);
     // Three vec4s rather than two: the third carries how burnt they are,
     // which the walk and the fall had no room left for.
     this.soldier = this._uploadMesh(buildSoldierMesh(), MAX_SOLDIERS, 3);
@@ -1230,6 +1261,7 @@ export class Actors {
       blast: this._uploadMesh(buildProjectileMesh('blast'), MAX_PROPS, 2),
       ultraBlast: this._uploadMesh(buildProjectileMesh('ultraBlast'), MAX_ULTRA, 2),
       arrow: this._uploadMesh(buildProjectileMesh('arrow'), MAX_PROPS, 2),
+      fireball: this._uploadMesh(buildProjectileMesh('fireball'), MAX_PROPS * 2, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -1316,20 +1348,24 @@ export class Actors {
   /** Pack the live drones into the instance buffer. */
   updateDrones(list) {
     const gl = this.gl;
-    const data = this.drone.instData;
-    let n = 0;
-    for (const d of list) {
-      if (!d.alive || n >= MAX_DRONES) continue;
-      const o = n * 8;
-      data[o] = d.x; data[o + 1] = d.y; data[o + 2] = d.z; data[o + 3] = d.yaw;
-      data[o + 4] = d.tilt; data[o + 5] = d.roll; data[o + 6] = d.hitFlash; data[o + 7] = d.rotor;
-      n++;
-    }
-    this.drone.instanceCount = n;
-    if (n > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.drone.instVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    // A drone and a gazer are the same thing to the game and two meshes here.
+    for (const mesh of [this.drone, this.gazer]) {
+      const data = mesh.instData;
+      const gazer = mesh === this.gazer;
+      let n = 0;
+      for (const d of list) {
+        if (!d.alive || n >= MAX_DRONES || !!d.demon !== gazer) continue;
+        const o = n * 8;
+        data[o] = d.x; data[o + 1] = d.y; data[o + 2] = d.z; data[o + 3] = d.yaw;
+        data[o + 4] = d.tilt; data[o + 5] = d.roll; data[o + 6] = d.hitFlash; data[o + 7] = d.rotor;
+        n++;
+      }
+      mesh.instanceCount = n;
+      if (n > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, n * 8);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
     }
   }
 
@@ -1337,19 +1373,20 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0, fireball: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
       const cap = b.kind === 'nuke' || b.kind === 'void' || b.kind === 'voidMaw' ? 8
         : b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA
-          : b.kind === 'voidStorm' ? MAX_STORM : MAX_PROPS;
+          : b.kind === 'voidStorm' ? MAX_STORM : b.kind === 'fireball' ? MAX_PROPS * 2 : MAX_PROPS;
       if (counts[b.kind] >= cap) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
       const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke'
-        || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast' || b.kind === 'arrow';
+        || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast' || b.kind === 'arrow'
+        || b.kind === 'fireball';
       // An arrow that has gone in keeps pointing the way it was going.
       const vx = b.stuck && b.fx !== undefined ? b.fx : b.vx;
       const vy = b.stuck && b.fx !== undefined ? b.fy : b.vy;
@@ -1389,8 +1426,10 @@ export class Actors {
       // x charred, y machine, z stunned: a machine is drawn as steel and its
       // eye goes out while an EMP has hold of it.
       data[o + 8] = s.charred || 0;
-      data[o + 9] = s.machine ? 1 : 0;
-      data[o + 10] = s.machine && s.stunLeft > 0 ? Math.min(1, s.stunLeft / 2) : 0;
+      // One for a machine; a demon sends its kind's code, two and up.
+      data[o + 9] = s.machine ? 1 : (s.demon && s.dspec ? s.dspec.code : 0);
+      data[o + 10] = s.machine && s.stunLeft > 0 ? Math.min(1, s.stunLeft / 2)
+        : (s.demon && s.staggered > 0 ? 1 : 0);
       // Nought for a soldier; for somebody who lives here, one plus which
       // coat he has on, which the shader reads out of the fraction.
       data[o + 11] = s.civilian ? 1 + Math.min(0.99, s.who || 0) : 0;
@@ -1730,25 +1769,31 @@ export class Actors {
   }
 
   drawDrones() {
-    if (!this.drone.instanceCount) return 0;
     const gl = this.gl;
-    this.progDrone.use();
-    gl.bindVertexArray(this.drone.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.drone.count, this.drone.indexType, 0,
-      this.drone.instanceCount);
+    let draws = 0;
+    for (const mesh of [this.drone, this.gazer]) {
+      if (!mesh.instanceCount) continue;
+      this.progDrone.use();
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawDroneShadows(lightViewProj) {
-    if (!this.drone.instanceCount) return 0;
     const gl = this.gl;
-    this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
-    gl.bindVertexArray(this.drone.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.drone.count, this.drone.indexType, 0,
-      this.drone.instanceCount);
+    let draws = 0;
+    for (const mesh of [this.drone, this.gazer]) {
+      if (!mesh.instanceCount) continue;
+      this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
+      gl.bindVertexArray(mesh.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, mesh.count, mesh.indexType, 0, mesh.instanceCount);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   drawSoldierShadows(lightViewProj) {

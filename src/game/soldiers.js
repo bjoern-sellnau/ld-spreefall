@@ -112,6 +112,14 @@ class Soldier {
     // has seen you, and the camp's business takes it from there.
     this.suspicion = 0;
     this.lookX = x; this.lookZ = z;
+    // Slayer: what kind of demon this is, if any, its numbers, and how much
+    // bigger than a man it is drawn and hit.
+    this.demon = null;
+    this.dspec = null;
+    this.scale = 1;
+    this.charging = 0;
+    this.staggered = 0;
+    this.nest = null;
     return this;
   }
 }
@@ -184,6 +192,63 @@ export class Soldiers {
     this.playerSpeed = 0;
     this.onSpot = null;           // fn(soldier, how) 'seen', 'heard' or 'hit'
     this.onDown = null;           // fn(soldier) the moment one is killed
+    // Slayer: a demon's claws, its fire and its charge, which the game layer
+    // turns into harm, projectiles and sound.
+    this.onMelee = null;          // fn(soldier, melee)
+    this.onFireball = null;       // fn(soldier, fire)
+    this.onCharge = null;         // fn(soldier)
+  }
+
+  /**
+   * A demon's step. It does not patrol and it does not make up its mind: it
+   * comes for you, claws when it is close, throws fire when it can see you
+   * and has the breath, and the heavy one charges across open ground.
+   */
+  _demonStep(s, dt, player, dist, dx, dz) {
+    const sp = s.dspec;
+    s.lean += (0 - s.lean) * Math.min(1, dt * 5);
+    s.meleeLeft -= dt;
+    s.fireLeft -= dt;
+    s.chargeLeft -= dt;
+    if (s.staggered > 0) {
+      // Reeling: it stands there, which is the moment to finish it.
+      s.staggered -= dt;
+      s.walk += dt * 0.5;
+      return;
+    }
+    let speed = sp.run;
+    const reach = sp.melee.range + SPEC.radius * s.scale;
+    if (sp.charge) {
+      if (s.charging > 0) {
+        s.charging -= dt;
+        speed = sp.charge.speed;
+      } else if (s.chargeLeft <= 0 && s.canSee && dist > sp.charge.from && dist < sp.charge.to) {
+        s.charging = sp.charge.seconds;
+        s.chargeLeft = sp.charge.every;
+        if (this.onCharge) this.onCharge(s);
+      }
+    }
+    if (dist <= reach) {
+      speed = 0;
+      s.charging = 0;
+      if (s.meleeLeft <= 0) {
+        s.meleeLeft = sp.melee.interval;
+        if (this.onMelee) this.onMelee(s, sp.melee);
+      }
+    } else if (sp.fire && s.canSee && dist < sp.fire.range && s.fireLeft <= 0 && s.charging <= 0) {
+      s.fireLeft = rand(sp.fire.interval[0], sp.fire.interval[1]);
+      if (this.onFireball) this.onFireball(s, sp.fire);
+    }
+    s.targetX = player.x;
+    s.targetZ = player.z;
+    this._move(s, dt, speed);
+    if (Math.abs(dx) + Math.abs(dz) > 0.01) {
+      const want = Math.atan2(-dx, -dz);
+      let d = want - s.yaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      s.yaw += d * Math.min(1, dt * 8);
+    }
   }
 
   /**
@@ -472,12 +537,15 @@ export class Soldiers {
       if (s.state === STATE.DYING && !this.isBones(s)) continue;
       // The head first, because it is worth more and sits inside the capsule's
       // own span at the top.
-      const hx = s.x - ox, hy = s.y + SPEC.headY - oy, hz = s.z - oz;
+      // A demon is drawn bigger than a man, and is hit bigger too.
+      const sc = s.scale || 1;
+      const headR = SPEC.headRadius * sc;
+      const hx = s.x - ox, hy = s.y + SPEC.headY * sc - oy, hz = s.z - oz;
       const hproj = hx * dx + hy * dy + hz * dz;
       if (hproj > 0 && hproj < best) {
         const perp2 = (hx * hx + hy * hy + hz * hz) - hproj * hproj;
-        if (perp2 <= SPEC.headRadius * SPEC.headRadius) {
-          const back = Math.sqrt(Math.max(0, SPEC.headRadius * SPEC.headRadius - perp2));
+        if (perp2 <= headR * headR) {
+          const back = Math.sqrt(Math.max(0, headR * headR - perp2));
           const t = hproj - back;
           if (t >= 0 && t < best) { best = t; hit = { soldier: s, t, core: true }; }
         }
@@ -487,13 +555,15 @@ export class Soldiers {
       const a = dx * dx + dz * dz;
       if (a > 1e-6) {
         const b = ex * dx + ez * dz;
-        const c = ex * ex + ez * ez - SPEC.radius * SPEC.radius;
+        const c = ex * ex + ez * ez - SPEC.radius * sc * SPEC.radius * sc;
         const disc = b * b - a * c;
         if (disc >= 0) {
           const t = (b - Math.sqrt(disc)) / a;
           if (t >= 0 && t < best) {
             const y = oy + dy * t;
-            if (y >= s.y && y <= s.y + SPEC.height) {
+            // The body stops at the neck. It ran to the top of the head and,
+            // being the nearer surface, took every level shot at a head.
+            if (y >= s.y && y <= s.y + (SPEC.headY - SPEC.headRadius) * sc) {
               best = t;
               hit = { soldier: s, t, core: false };
             }
@@ -676,6 +746,8 @@ export class Soldiers {
         }
         continue;
       }
+
+      if (s.demon) { this._demonStep(s, dt, player, dist, dx, dz); continue; }
 
       s.lean += (0 - s.lean) * Math.min(1, dt * 5);
 

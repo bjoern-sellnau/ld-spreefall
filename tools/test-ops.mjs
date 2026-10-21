@@ -472,6 +472,88 @@ async function run() {
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(SHOTS, 'ops-04-bow.png') });
 
+  // --- demons -----------------------------------------------------------------
+  const demons = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.tactics.clear();
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear();
+    s.teleport(81, 0);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    const out = {};
+    for (const kind of ['ghoul', 'brute', 'tyrant']) {
+      const d = s.spawnDemon(kind, -30, 0);
+      d.rise = 0;
+      d.y = s.world.groundHeight(d.x, d.z);
+      out[kind] = { health: d.health, scale: d.scale };
+    }
+    const gz = s.spawnDemon('gazer', -26, 8);
+    out.gazer = { health: gz.health, radius: gz.radius };
+    // A shot at the tyrant's head, three and a half times as high as a man's.
+    const t = s.soldiers.active.find((x) => x.demon === 'tyrant');
+    const eye = { x: t.x + 20, y: t.y + 1.62 * 3.5, z: t.z };
+    const hit = s.soldiers.raycast(eye.x, eye.y, eye.z, -1, 0, 0, 40);
+    out.headshot = !!(hit && hit.soldier === t && hit.core);
+    return out;
+  });
+  check('three demons that walk and one that floats, the tyrant three and a half times a man',
+    demons.ghoul.health > 0 && demons.brute.health > demons.ghoul.health && demons.tyrant.health >= 9000
+      && demons.tyrant.scale === 3.5 && demons.gazer.health > 0 && demons.gazer.radius > 1,
+    JSON.stringify(demons));
+  check('and it is hit where it is drawn: a head shot at three and a half times the height', demons.headshot);
+
+  const hunt = await page.evaluate(() => {
+    const s = window.spreefall;
+    let hurt = 0, fire = 0, roars = 0, maxSpeed = 0;
+    const hurtWas = s.combat.hurt;
+    s.combat.hurt = (d) => { hurt += d; return false; };
+    const launch = s.projectiles.launch.bind(s.projectiles);
+    s.projectiles.launch = (k, o) => { if (k === 'fireball') fire++; return launch(k, o); };
+    const charge = s.soldiers.onCharge;
+    s.soldiers.onCharge = (d) => { roars++; charge(d); };
+    const brute = s.soldiers.active.find((x) => x.demon === 'brute');
+    const start = s.soldiers.active.filter((x) => x.demon).map((x) => Math.hypot(x.x - s.player.x, x.z - s.player.z));
+    let px = brute.x, pz = brute.z;
+    for (let i = 0; i < 60 * 6; i++) {
+      s.fixedForTest(1 / 60);
+      maxSpeed = Math.max(maxSpeed, Math.hypot(brute.x - px, brute.z - pz) * 60);
+      px = brute.x; pz = brute.z;
+    }
+    const end = s.soldiers.active.filter((x) => x.demon).map((x) => Math.hypot(x.x - s.player.x, x.z - s.player.z));
+    s.projectiles.launch = launch;
+    s.soldiers.onCharge = charge;
+    s.combat.hurt = hurtWas;
+    // Their fire does not hurt each other.
+    const ghoul = s.soldiers.active.find((x) => x.demon === 'ghoul');
+    const before = ghoul.health;
+    s.projectiles.launch('fireball', { x: ghoul.x + 4, y: ghoul.y + 1.2, z: ghoul.z, vx: -30, vy: 0, vz: 0,
+      splash: { radius: 3, damage: 40 }, weapon: 'demon' });
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    return { hurt: Math.round(hurt), fire, roars, maxSpeed: Math.round(maxSpeed),
+      closer: end.every((d, i) => d < start[i]), friendly: ghoul.health === before };
+  });
+  check('they come for you, claw and burn', hunt.closer && hunt.hurt > 30 && hunt.fire >= 2,
+    `${hunt.hurt} harm in six seconds, ${hunt.fire} fireballs`);
+  check('the brute charges, roaring', hunt.roars >= 1 && hunt.maxSpeed >= 10, `${hunt.maxSpeed} m/s at its fastest`);
+  check('and their fire does not touch another demon', hunt.friendly);
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.teleport(81, 0);
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear();
+    s.spawnDemon('ghoul', -12, -4); s.spawnDemon('brute', -18, 5); s.spawnDemon('tyrant', -42, 0);
+    s.spawnDemon('gazer', -22, -8);
+    for (const x of s.soldiers.active) { x.rise = 0; x.y = s.world.groundHeight(x.x, x.z); }
+    // Held still for the picture.
+    s.soldiers.enabled = false; s.drones.enabled = false;
+    s.look(90, 6);
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-05-demons.png') });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.enabled = true; s.drones.enabled = true;
+    s.soldiers.reset(); s.drones.reset(); s.projectiles.clear();
+  });
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

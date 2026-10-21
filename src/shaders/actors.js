@@ -352,6 +352,34 @@ void main() {
     albedo = vec3(0.12, 0.125, 0.13);
     rough = 0.5;
     metal = 0.5;
+  } else if (vPart > 39.5 && vPart < 42.5) {
+    // A demon: hide, horn and eyes. Which demon is in the machine channel:
+    // nought for the floating one, two the ghoul, three the brute, four the
+    // tyrant, whose cracks have fire in them.
+    int kind = int(vMachine + 0.5);
+    float v = vnoise(vWorld.xz * 4.0 + vWorld.y * 3.0);
+    float vein = smoothstep(0.66, 0.71, vnoise(vec2(vWorld.x + vWorld.z, vWorld.y) * 9.0))
+      * smoothstep(0.35, 0.6, vnoise(vec2(vWorld.x - vWorld.z, vWorld.y) * 2.0));
+    rough = 0.7;
+    metal = 0.05;
+    if (vPart < 40.5) {
+      vec3 hide = kind == 3 ? vec3(0.50, 0.16, 0.14)
+        : (kind == 4 ? vec3(0.07, 0.05, 0.045)
+        : (kind == 2 ? vec3(0.30, 0.17, 0.09) : vec3(0.42, 0.10, 0.07)));
+      albedo = hide * (0.75 + 0.45 * v);
+      if (kind == 4) emissive = vec3(2.6, 0.55, 0.05) * vein;
+      else albedo *= 1.0 - 0.35 * vein;
+    } else if (vPart < 41.5) {
+      albedo = vec3(0.10, 0.085, 0.07) * (0.8 + 0.3 * v);
+      rough = 0.4;
+      metal = 0.1;
+    } else {
+      albedo = vec3(0.05);
+      emissive = kind == 0 ? vec3(3.2, 1.6, 0.1) : vec3(3.4, 1.2, 0.05);
+      rough = 0.2;
+    }
+    // Reeling: it glows from inside, which is the cue to finish it.
+    emissive += vec3(1.4, 0.55, 0.08) * vStun * (0.6 + 0.4 * sin(uCamPos.w * 12.0));
   } else if (vPart > 63.5 && vPart < 74.5) {
     // A camp. Sandbags, canvas, crates, the radio and its mast, poles, the
     // flag in their red or, once the camp is yours, in blue, and the siren.
@@ -454,7 +482,7 @@ void main() {
   // A machine is the same skeleton in steel: cold, a little shiny along the
   // bones, with one red eye in the skull. Stunned, the eye goes out and the
   // steel picks up the blue of whatever hit it.
-  if (vMachine > 0.5) {
+  if (vMachine > 0.5 && vMachine < 1.5) {
     float sheen = pow(clamp(dot(normalize(vNormal), normalize(vec3(0.3, 0.9, 0.2))), 0.0, 1.0), 3.0);
     colour = mix(vec3(0.085, 0.092, 0.105), vec3(0.42, 0.46, 0.52), sheen);
     // The skull, part 23, carries the eye: a red that is bright from the
@@ -633,7 +661,12 @@ void main() {
   // Parts 26 and 27 are the beam rifle, and only a machine carries one. A
   // soldier burnt to the skeleton by the ion cannon is still a dead man, not
   // a machine, and does not stand there holding a gun he never had.
-  if (aInfo.x > 25.5) keep = iExtra.y;
+  float kind = iExtra.y;
+  bool demon = kind > 1.5;
+  if (aInfo.x > 25.5 && aInfo.x < 27.5) keep = (kind > 0.5 && kind < 1.5) ? 1.0 : 0.0;
+  // A demon's horns, and no rifle in its hands.
+  if (aInfo.x > 28.5 && aInfo.x < 29.5) keep = demon ? 1.0 - charred : 0.0;
+  if (demon && aInfo.x > 6.5 && aInfo.x < 7.5) keep = 0.0;
   // Somebody on his way to work carries no rifle and wears no helmet. Both
   // shrink into the figure the same way the cloth does on a man who burns,
   // which costs nothing: the parts are in the mesh either way.
@@ -667,6 +700,11 @@ void main() {
     n = r * n;
   }
 
+  // A demon is drawn bigger than a man: a ghoul a little, a brute by two
+  // thirds, the tyrant three and a half times over.
+  float size = kind > 3.5 ? 3.5 : (kind > 2.5 ? 1.65 : (kind > 1.5 ? 1.08 : 1.0));
+  p *= size;
+
   // The fall: rotate the whole body about the feet. This is death, and it is
   // also what a banana does to you. The roll is zero unless the ragdoll cheat
   // is on, and then it carries whichever way the hit turned them, which is the
@@ -679,7 +717,17 @@ void main() {
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
   vNormal = normalize(body * n);
-  vPart = aInfo.x;
+  // A demon is the same body in hide and horn: cloth and webbing become
+  // hide, the helmet horn, and the visor a pair of eyes.
+  float part = aInfo.x;
+  if (demon) {
+    if ((part > 3.5 && part < 4.5) || (part > 5.5 && part < 6.5)) part = 40.0;
+    else if (part > 4.5 && part < 5.5) {
+      bool visor = aPos.z < -0.11 && abs(aPos.x) < 0.125 && aPos.y < 1.64;
+      part = visor ? 42.0 : 41.0;
+    } else if (part > 28.5 && part < 29.5) part = 41.0;
+  }
+  vPart = part;
   vFlash = iState.z;
   vViewDist = length(world - uCamPos.xyz);
   gl_Position = uViewProj * vec4(world, 1.0);
@@ -817,6 +865,7 @@ precision highp float;
 layout(location = 0) in vec3 aPos;
 layout(location = 5) in vec4 iPosYaw;
 layout(location = 6) in vec4 iState;
+layout(location = 7) in vec4 iExtra;
 uniform mat4 uLightViewProj;
 void main() {
   float fc = cos(-iState.x), fs = sin(-iState.x);
@@ -825,7 +874,10 @@ void main() {
   mat3 fall = mat3(rc, rs, 0.0, -rs, rc, 0.0, 0.0, 0.0, 1.0) * pitch;
   float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
-  gl_Position = uLightViewProj * vec4(rot * (fall * aPos) + iPosYaw.xyz, 1.0);
+  // A demon's shadow is as big as the demon.
+  float kind = iExtra.y;
+  float size = kind > 3.5 ? 3.5 : (kind > 2.5 ? 1.65 : (kind > 1.5 ? 1.08 : 1.0));
+  gl_Position = uLightViewProj * vec4(rot * (fall * (aPos * size)) + iPosYaw.xyz, 1.0);
 }
 `;
 

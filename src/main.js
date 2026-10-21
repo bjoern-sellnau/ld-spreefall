@@ -45,6 +45,7 @@ import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
+import { DEMON, GAZER, makeDemon, makeGazer } from './game/demons.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -2404,12 +2405,14 @@ async function main() {
     hostiles.length = 0;
     for (const sd of soldiers.active) {
       if (!sd.alive || sd.civilian || sd.health <= 0 || sd.state === 5) continue;
-      hostiles.push({ body: sd, kind: sd.machine ? 'machine' : 'soldier',
-        x: sd.x, y: sd.y + 2.15, z: sd.z, health: sd.health, max: sd.maxHealth });
+      const sc = sd.scale || 1;
+      const kind = sd.demon === 'tyrant' ? 'mech' : sd.demon === 'brute' ? 'jet' : sd.machine ? 'machine' : 'soldier';
+      hostiles.push({ body: sd, kind,
+        x: sd.x, y: sd.y + 2.15 * sc + (sd.demon ? 0.25 * sc : 0), z: sd.z, health: sd.health, max: sd.maxHealth });
     }
     for (const d of drones.active) {
       if (d.health <= 0) continue;
-      hostiles.push({ body: d, kind: 'drone', x: d.x, y: d.y + 0.9, z: d.z,
+      hostiles.push({ body: d, kind: 'drone', x: d.x, y: d.y + (d.demon ? 1.8 : 0.9), z: d.z,
         health: d.health, max: d.maxHealth });
     }
     for (const j of jets.active) {
@@ -3241,6 +3244,8 @@ async function main() {
 
   drones.onShot = (d, damage) => {
     if (combat.health <= 0) return;
+    // A gazer does not shoot: it spits fire, which you can see coming.
+    if (d.demon) { demonFire(d.x, d.y - 0.2, d.z, GAZER.fire, 1, 1.5); return; }
     effects.tracer(d.x, d.y - 0.2, d.z, camera.position[0], camera.position[1], camera.position[2], false);
     combat.hurt(damage, d.x, d.z, player.x, player.z);
   };
@@ -3639,12 +3644,16 @@ async function main() {
         // Nearer than the soldiers come in, because they are walking past
         // rather than arriving, and you asked to see them.
         if (soldiers.spawnCivilianNear(player.x, player.z, 12, 60)) made++;
+      } else if (kind === 'demons') {
+        // A pack: mostly ghouls, a brute, and something overhead.
+        const which = i === 0 ? 'brute' : i === 1 ? 'gazer' : 'ghoul';
+        if (spawnDemonNear(which, player.x, player.z, 24, 70)) made++;
       }
     }
     // The soldier layer's budget counts everybody in it, the people walking
     // past and the machines included, so it goes up with what was asked for
     // or the next squad is held back to make room for a passer by.
-    if (kind === 'soldiers' || kind === 'machines' || kind === 'civilians') {
+    if (kind === 'soldiers' || kind === 'machines' || kind === 'civilians' || kind === 'demons') {
       soldiers.budget = Math.max(soldiers.budget, soldiers.active.length);
     }
     if (kind === 'drones') drones.budget = Math.max(drones.budget, drones.active.length);
@@ -4890,6 +4899,89 @@ async function main() {
     if (killed) creditTarget(s, true, 'soldier');
     state.takedowns = (state.takedowns || 0) + 1;
     return true;
+  }
+
+  // --- demons ----------------------------------------------------------------
+  // Their fire is looking for you and nothing else, so the projectile layer
+  // is told where you are.
+  projectiles.player = player;
+
+  /**
+   * Fire from a demon at you: one ball or a volley, led a little to where you
+   * are going, spread across a volley so it is a wall rather than a line.
+   */
+  function demonFire(x, y, z, fire, volley = 1, size = 1) {
+    const chest = { x: player.x, y: player.y + 1.2, z: player.z };
+    const d0 = Math.hypot(chest.x - x, chest.y - y, chest.z - z) || 1;
+    const t = d0 / fire.speed;
+    const aim = { x: chest.x + (player.vx || 0) * t * 0.6, y: chest.y, z: chest.z + (player.vz || 0) * t * 0.6 };
+    for (let i = 0; i < volley; i++) {
+      const off = volley > 1 ? (i - (volley - 1) / 2) * 1.6 : 0;
+      const ax = aim.x + off * Math.cos(Math.atan2(aim.z - z, aim.x - x) + Math.PI / 2);
+      const az = aim.z + off * Math.sin(Math.atan2(aim.z - z, aim.x - x) + Math.PI / 2);
+      const dx = ax - x, dy = aim.y - y, dz = az - z;
+      const l = Math.hypot(dx, dy, dz) || 1;
+      projectiles.launch('fireball', {
+        x, y, z,
+        vx: dx / l * fire.speed, vy: dy / l * fire.speed + 0.6 * t, vz: dz / l * fire.speed,
+        splash: { radius: fire.radius, damage: fire.damage }, weapon: 'demon',
+      });
+    }
+    audio.whoomp(Math.hypot(player.x - x, player.z - z) / size);
+  }
+
+  projectiles.onHostile = (b, x, y, z, direct) => {
+    const r = b.splash ? b.splash.radius : 2;
+    effects.flash(x, y, z, r * 0.9, 1.0, 0.45, 0.08, 0.25);
+    for (let i = 0; i < 14; i++) {
+      effects.spark(x + (Math.random() - 0.5) * r, y + Math.random() * r * 0.6,
+        z + (Math.random() - 0.5) * r, 1.0, 0.45 + Math.random() * 0.3, 0.05);
+    }
+    renderer.addScar(x, world.groundHeight(x, z), z, r * 0.45, 0.35);
+    const toPlayer = Math.hypot(player.x - x, player.y + 1.0 - y, player.z - z);
+    if (!direct && toPlayer > r) return;
+    const dmg = (b.splash ? b.splash.damage : 15) * (direct ? 1 : 1 - toPlayer / r);
+    if (state.inMech) mechs.damage(state.inMech, dmg * 2);
+    else if (state.inVehicle) vehicles.damage(state.inVehicle, dmg * 2);
+    else if (combat.health > 0) combat.hurt(dmg, x, z, player.x, player.z);
+  };
+
+  soldiers.onFireball = (s, fire) => {
+    const sc = s.scale || 1;
+    const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
+    demonFire(s.x + fx * 0.6 * sc, s.y + 1.35 * sc, s.z + fz * 0.6 * sc, fire, fire.volley || 1, sc);
+  };
+
+  soldiers.onMelee = (s, melee) => {
+    const d = Math.hypot(player.x - s.x, player.z - s.z);
+    effects.shake = Math.min(1.4, effects.shake + 0.2 + (melee.slam ? 0.6 : 0));
+    audio.roar(d, s.scale || 1);
+    if (melee.slam) {
+      // The tyrant brings both fists down: a ring of dust and whoever is
+      // inside it takes the blow.
+      effects.flash(s.x, s.y + 0.5, s.z, melee.slam, 1.0, 0.5, 0.15, 0.3);
+      renderer.addScar(s.x, s.y, s.z, melee.slam * 0.5, 0.7);
+      state.flash = Math.max(state.flash, 0.2);
+    }
+    if (state.inMech) { mechs.damage(state.inMech, melee.damage * 2); return; }
+    if (state.inVehicle) { vehicles.damage(state.inVehicle, melee.damage * 2); return; }
+    if (combat.health > 0) combat.hurt(melee.damage, s.x, s.z, player.x, player.z);
+  };
+
+  soldiers.onCharge = (s) => {
+    audio.roar(Math.hypot(player.x - s.x, player.z - s.z), s.scale || 1);
+  };
+
+  /** A demon out of the street near a point: a soldier, made one. */
+  function spawnDemonNear(kind, x, z, minR, maxR, level = 0) {
+    if (kind === 'gazer') {
+      const d = drones.spawnNear(x, z, minR, maxR);
+      if (d) makeGazer(d, level);
+      return d;
+    }
+    const s = soldiers.spawnNear(x, z, minR, maxR);
+    if (s) makeDemon(s, kind, level);
+    return s;
   }
 
   soldiers.onSpot = (s, how) => { if (tactics.enabled) tactics.spot(s, how); };
@@ -6204,6 +6296,17 @@ async function main() {
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
     storm, stormSpec: VOID_STORM,
     takedown: () => takedown(), takedownTarget: () => takedownTarget(),
+    demonSpec: DEMON, gazerSpec: GAZER,
+    spawnDemon(kind, dx, dz, level = 0) {
+      if (kind === 'gazer') {
+        const d = this.spawnDrone(dx, 8, dz);
+        if (d) makeGazer(d, level);
+        return d;
+      }
+      const s = this.spawnSoldier(dx, dz);
+      if (s) makeDemon(s, kind, level);
+      return s;
+    },
     campaign, tactics, tacticsSpec: TACTICS, opsStep: (dt) => opsStep(dt), opsPanel: (on) => toggleOpsPanel(on),
     showOps: () => showOps(),
     startOps: () => startOps(),
