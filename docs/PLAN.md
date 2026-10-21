@@ -3480,3 +3480,48 @@ So there are two cities now, and a profile picks which:
   muzzle-02-dusk.png, muzzle-03-shotgun.png.
 - The winding audit in the unit tests skips parts 7 and 8, which are
   two sided on purpose and have no normal to agree with.
+
+## 80. Operations, and Spree Fall Tactics' camps
+
+- 2026-10-21: asked for two new modes. Spree Fall Tactics: in the manner of
+  the outpost game, pick one district or all of them, the game puts camps
+  down to be taken, points for a camp taken without an alarm (a switch), a
+  camp that has you spotted calls for help if its radio is still standing,
+  choose the district you start in, reset the camps or raise the difficulty,
+  weapons of that kind on top of ours. Spree Fall Slayer: in the manner of
+  the demon shooter, break the demonic presence by killing every demon in a
+  district, bosses on request, one district or all, waves that spawn while
+  you fight, weapons of that kind on top of ours. Names and numbers ours.
+- The plan, one phase each: 80 the shared campaign and the camps; 81
+  stealth, alarm, radio, reinforcements; 82 the Tactics weapons and a silent
+  takedown; 83 demons; 84 nests, waves and presence; 85 the Slayer weapons.
+- src/game/campaign.js, shared by both: the settings (scope, start district,
+  how many sites a district, the quiet bonus, bosses), the book per mode
+  (score, level, sites by district) kept in localStorage, sites placed the
+  first time a district is in memory from a generator seeded by mode and
+  district so they land in the same place every time, taking a site (1000,
+  400 a level, 1500 more if quiet and the switch is on), reset and reset
+  harder, and a summary. Unit tests in tools/test/campaign.test.mjs.
+- src/game/tactics.js: a camp within 280 m is manned out of the soldier pool
+  (5 guards, one more a level, machines among them from level 2), every
+  other one a sentry who stands looking out, the rest walking rounds of the
+  camp; a camp you walk 460 m away from before an alarm stands down and is
+  manned in full when you come back; the last guard down takes it. Soldiers
+  learnt a post: rounds inside it, a sentry stands, and the recycling of
+  anybody far behind you leaves guards alone. campSpot puts a camp only on
+  loaded, dry, level ground, out of the memorial's field, with nothing at
+  chest height for 13 m round (less if a district has nowhere that open).
+- The camp itself is one instanced mesh in the body shader (parts 64 to
+  74): a sandbag ring with four ways in, two tents, crates, a radio on a
+  table with a mast and a red light, a flagpole, a siren. Three switches in
+  the rotor channel: taken turns the flag blue, radio down takes the set
+  and mast away (shadow too), alarm turns the siren red and turning.
+- Interface: Tactics and Slayer on the title card with their setup under
+  them; a line at the top of the screen; red rings on the map that turn
+  blue; the journal on J with each district, and buttons to give the camps
+  back or give them back harder. Every spawner is held at nought in both
+  modes. Fixed on the way: the difficulty buttons were picked by a selector
+  that also caught the mode buttons, so clicking a mode cleared its own
+  highlight.
+- Checks: tools/test-ops.mjs (12), in CI after the interface suite.
+  ops-01-camp.png, ops-02-camp-taken.png.

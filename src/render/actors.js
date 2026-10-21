@@ -18,6 +18,8 @@ const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
 const MAX_VEHICLES = 8;
+// Camps near enough to draw at once.
+const MAX_CAMPS = 12;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 256;
@@ -688,6 +690,74 @@ export function buildJetMesh() {
  * Parts: 31 the olive it is painted, 2 dark metal, 32 tyres, 39 wheel hubs,
  * 24 glass, 6 the seats, 8 the gun, 34 the headlights.
  */
+/**
+ * A camp, for Tactics: a ring of sandbags with gaps to walk in through, two
+ * tents, crates, a radio on a table with its mast, a flagpole in the middle
+ * and a siren on a pole. Sixteen metres across, built round its own middle
+ * with the ground at nought.
+ *
+ * Parts 64 sandbag, 65 canvas, 66 wood, 67 the radio set, 68 its mast, 69 the
+ * light on top of the mast, 70 poles, 71 the flag, 72 the siren. The radio's
+ * three parts vanish when it is shot to pieces, the flag turns blue when the
+ * camp is taken and the siren goes red while the alarm is on: all three are
+ * read off the instance in the vertex shader.
+ */
+export const CAMP_RADIO = { x: 6.5, z: -5.0, y: 1.05 };
+export function buildCampMesh() {
+  const m = new MeshBuild();
+  // The sandbags: four arcs of two courses, with a gap between each pair of
+  // arcs for a way in.
+  const R = 14;
+  for (let k = 0; k < 4; k++) {
+    const a0 = (k * 90 + 16) * Math.PI / 180;
+    const a1 = (k * 90 + 74) * Math.PI / 180;
+    const n = Math.round((a1 - a0) * R / 1.3);
+    for (let row = 0; row < 2; row++) {
+      for (let i = 0; i < n; i++) {
+        const a = a0 + (i + 0.5 + (row ? 0.5 : 0)) / n * (a1 - a0);
+        if (row && i === n - 1) continue;
+        m.box(Math.cos(a) * R, 0.24 + row * 0.44, Math.sin(a) * R, 1.25, 0.44, 0.62, 64, a + Math.PI / 2);
+      }
+    }
+  }
+  // A tent: a ridge along its length, two pitched sides and two ends.
+  const tent = (cx, cz, rot, w, l, h) => {
+    const c = Math.cos(rot), sn = Math.sin(rot);
+    const P = (x, y, z) => [cx + x * c - z * sn, y, cz + x * sn + z * c];
+    const N = (x, y, z) => [x * c - z * sn, y, x * sn + z * c];
+    const hw = w / 2, hl = l / 2;
+    const slope = Math.hypot(hw, h);
+    m.quad([P(-hw, 0, -hl), P(-hw, 0, hl), P(0, h, hl), P(0, h, -hl)], N(-h / slope, hw / slope, 0), 65);
+    m.quad([P(hw, 0, hl), P(hw, 0, -hl), P(0, h, -hl), P(0, h, hl)], N(h / slope, hw / slope, 0), 65);
+    m.tri([P(-hw, 0, -hl), P(0, h, -hl), P(hw, 0, -hl)], N(0, 0, -1), 65);
+    m.tri([P(hw, 0, hl), P(0, h, hl), P(-hw, 0, hl)], N(0, 0, 1), 65);
+  };
+  tent(-5.2, 3.6, 0.35, 3.2, 4.6, 2.4);
+  tent(4.6, 5.4, -0.5, 3.0, 4.2, 2.2);
+  // Crates.
+  m.box(-2.2, 0.5, -6.4, 1.0, 1.0, 1.0, 66, 0.2);
+  m.box(-1.1, 0.5, -6.2, 1.0, 1.0, 1.0, 66, 0.05);
+  m.box(-1.7, 1.5, -6.3, 1.0, 1.0, 1.0, 66, 0.4);
+  m.box(-8.2, 0.4, -1.5, 2.0, 0.8, 0.9, 66, 1.2);
+  // The radio: a table, the set on it, a mast and the light on the mast.
+  const r = CAMP_RADIO;
+  m.box(r.x, 0.38, r.z, 1.5, 0.08, 0.8, 66);
+  for (const [dx, dz] of [[-0.65, -0.32], [0.65, -0.32], [-0.65, 0.32], [0.65, 0.32]]) {
+    m.box(r.x + dx, 0.18, r.z + dz, 0.08, 0.36, 0.08, 66);
+  }
+  m.box(r.x, 0.62, r.z, 0.62, 0.42, 0.42, 67);
+  m.box(r.x + 0.2, 0.9, r.z, 0.08, 0.16, 0.08, 67);
+  m.cylinder(r.x + 0.55, 0.4, r.z - 0.1, 0.05, 0.03, 6.2, 6, 68);
+  m.box(r.x + 0.55, 6.65, r.z - 0.1, 0.16, 0.16, 0.16, 69);
+  // The flagpole in the middle, and the flag.
+  m.cylinder(0, 0, 0, 0.07, 0.05, 7.4, 8, 70);
+  m.box(0.85, 6.75, 0, 1.6, 1.0, 0.05, 71);
+  // The siren on its pole.
+  m.cylinder(-6.2, 0, -3.6, 0.06, 0.05, 4.2, 6, 70);
+  m.cylinder(-6.2, 4.2, -3.6, 0.22, 0.32, 0.45, 10, 72);
+  return m;
+}
+
 export function buildJeepMesh() {
   const m = new MeshBuild();
   const P = 31;
@@ -1034,6 +1104,8 @@ export class Actors {
     this.mech = this.mechMeshes[0].mesh;
     // What you can get into. The fighter you can fly is the same mesh as the
     // ones that come after you, because it is the same aircraft.
+    // Tactics camps, drawn through the same body shader as the vehicles.
+    this.camp = this._uploadMesh(buildCampMesh(), MAX_CAMPS, 2);
     this.vehicles = {
       jeep: this._uploadMesh(buildJeepMesh(), MAX_VEHICLES, 2),
       tank: this._uploadMesh(buildTankMesh(), MAX_VEHICLES, 2),
@@ -1500,6 +1572,54 @@ export class Actors {
     }
     gl.bindVertexArray(null);
     return draws;
+  }
+
+  /**
+   * @param {{x:number,y:number,z:number,yaw:number,free:boolean,
+   *   radioDown:boolean,alarm:boolean,flash:number}[]} list camps to draw
+   */
+  updateCamps(list) {
+    const gl = this.gl;
+    const mesh = this.camp;
+    const d = mesh.instData;
+    let n = 0;
+    for (const c of list) {
+      if (n >= MAX_CAMPS) break;
+      const o = n * 8;
+      d[o] = c.x; d[o + 1] = c.y; d[o + 2] = c.z;
+      // Negated for the shader, as the vehicles are.
+      d[o + 3] = -c.yaw;
+      d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = c.flash || 0;
+      // Three switches in one channel: taken, radio down, alarm on.
+      d[o + 7] = (c.free ? 1 : 0) + (c.radioDown ? 2 : 0) + (c.alarm ? 4 : 0);
+      n++;
+    }
+    mesh.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  drawCamps() {
+    if (!this.camp.instanceCount) return 0;
+    const gl = this.gl;
+    this.progDrone.use();
+    gl.bindVertexArray(this.camp.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, this.camp.count, this.camp.indexType, 0, this.camp.instanceCount);
+    gl.bindVertexArray(null);
+    return 1;
+  }
+
+  drawCampShadows(lightViewProj) {
+    if (!this.camp.instanceCount) return 0;
+    const gl = this.gl;
+    this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
+    gl.bindVertexArray(this.camp.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, this.camp.count, this.camp.indexType, 0, this.camp.instanceCount);
+    gl.bindVertexArray(null);
+    return 1;
   }
 
   drawVehicles() {

@@ -528,6 +528,7 @@ export class Renderer {
         draws += this.actors.drawDroneShadows(this.lightVp[i]);
         draws += this.actors.drawSoldierShadows(this.lightVp[i]);
         draws += this.actors.drawMechShadows(this.lightVp[i]);
+        draws += this.actors.drawCampShadows(this.lightVp[i]);
       }
 
       if (i === 0) {
@@ -696,6 +697,8 @@ export class Renderer {
         tris += mesh.instanceCount * (mesh.count / 3);
       }
       draws += this.actors.drawVehicles();
+      draws += this.actors.drawCamps();
+      tris += this.actors.camp.instanceCount * (this.actors.camp.count / 3);
       for (const type in this.actors.vehicles) {
         const mesh = this.actors.vehicles[type];
         tris += mesh.instanceCount * (mesh.count / 3);

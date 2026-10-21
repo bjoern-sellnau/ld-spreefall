@@ -43,6 +43,8 @@ import { Vehicles, VEHICLE } from './game/vehicles.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
+import { Campaign, OPS, SITE } from './game/campaign.js';
+import { Tactics, campSpot } from './game/tactics.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
@@ -75,6 +77,12 @@ const el = {
   crossFill: $('crossfill'), crossHint: $('crosshint'),
   crossSightLine: $('crosssightline'), crossSight: $('crosssight'),
   modeNote: $('modenote'), timePick: $('timepick'),
+  opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
+  opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
+  opsProgress: $('opsprogress'), opsWipe: $('opswipe'),
+  ops: $('ops'), opsTitle: $('opstitle'), opsLine: $('opsline'), opsAlert: $('opsalert'),
+  opsPanel: $('opspanel'), opsPanelTitle: $('opspaneltitle'), opsPanelLine: $('opspanelline'),
+  opsList: $('opslist'), opsReset: $('opsreset'), opsHarder: $('opsharder'), opsClose: $('opsclose'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
   cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'),
@@ -328,6 +336,10 @@ async function main() {
   const ion = new Ion(world);
   const ultra = new Ultra(world);
   const healthBars = new HealthBars(document.getElementById('healthbars'));
+  // Operations: the campaign book that Tactics and Slayer keep, and the part
+  // of Tactics that runs, which mans the camps near you out of the soldiers.
+  const campaign = new Campaign();
+  const tactics = new Tactics(campaign, world, soldiers);
   const storm = new Ultra(world, null, VOID_STORM);
   const vehicles = new Vehicles(world);
   const mechs = new Mechs(world);
@@ -4605,7 +4617,7 @@ async function main() {
     // jets a budget of two, and a flight took off before the next step could
     // put the budget back. Which is what was reported: soldiers by hand in
     // Just a Walk, and then jets nobody asked for.
-    if (state.peaceful) {
+    if (state.peaceful || campaign.active) {
       drones.budget = 0;
       soldiers.budget = 0;
       jets.budget = 0;
@@ -4677,9 +4689,209 @@ async function main() {
     if (!locked && state.mode === 'walk' && !photo.active) toast('click to look around again');
   };
 
+  // --- operations: Tactics and Slayer ---------------------------------------
+  const builtDistricts = () => world.catalogue.filter((d) => world.isBuilt(d));
+  const opsWord = () => (campaign.mode === 'slayer' ? 'nest' : 'camp');
+
+  /** The setup under the mode buttons on the title card. */
+  function showOps() {
+    el.opsSetup.classList.toggle('hidden', !campaign.active);
+    if (!campaign.active) return;
+    const set = campaign.settings;
+    for (const b of el.opsSetup.querySelectorAll('[data-scope]')) {
+      b.classList.toggle('on', b.dataset.scope === set.scope);
+    }
+    const list = builtDistricts();
+    if (el.opsStart.options.length !== list.length) {
+      el.opsStart.textContent = '';
+      for (const d of list) {
+        const o = document.createElement('option');
+        o.value = d.id;
+        o.textContent = d.name;
+        el.opsStart.appendChild(o);
+      }
+    }
+    el.opsStart.value = set.start && list.some((d) => d.id === set.start) ? set.start
+      : (world.idAt(player.x, player.z) || world.home);
+    const [lo, hi] = OPS[campaign.mode].perDistrictRange;
+    el.opsCount.min = String(lo);
+    el.opsCount.max = String(hi);
+    el.opsCount.value = String(set.perDistrict[campaign.mode]);
+    el.opsCountNum.textContent = String(set.perDistrict[campaign.mode]);
+    el.opsCountLabel.textContent = `${opsWord() === 'nest' ? 'Nests' : 'Camps'} per district`;
+    el.opsQuiet.checked = set.quietBonus;
+    el.opsBosses.checked = set.bosses;
+    for (const r of el.opsSetup.querySelectorAll('.opstactics')) r.classList.toggle('hidden', campaign.mode !== 'tactics');
+    for (const r of el.opsSetup.querySelectorAll('.opsslayer')) r.classList.toggle('hidden', campaign.mode !== 'slayer');
+    const sum = campaign.summary(list.map((d) => d.id));
+    el.opsProgress.textContent = sum.total
+      ? `${sum.free} of ${sum.total} ${opsWord()}s taken so far, ${sum.done} of ${sum.districts} `
+        + `district${sum.districts === 1 ? '' : 's'} done, score ${sum.score.toLocaleString()}`
+        + (sum.level ? `, level ${sum.level + 1}` : '')
+      : `Nothing taken yet. The ${opsWord()}s are put down the first time you are in a district.`;
+    el.opsWipe.textContent = 'start this campaign again';
+  }
+  for (const b of el.opsSetup.querySelectorAll('[data-scope]')) {
+    b.addEventListener('click', () => { campaign.set('scope', b.dataset.scope); showOps(); });
+  }
+  el.opsStart.addEventListener('change', () => { campaign.set('start', el.opsStart.value); showOps(); });
+  el.opsCount.addEventListener('input', () => { campaign.set('perDistrict', el.opsCount.value); showOps(); });
+  el.opsQuiet.addEventListener('change', () => { campaign.set('quietBonus', el.opsQuiet.checked); });
+  el.opsBosses.addEventListener('change', () => { campaign.set('bosses', el.opsBosses.checked); });
+  el.opsWipe.addEventListener('click', () => {
+    // Twice, so a stray click does not throw a campaign away.
+    if (el.opsWipe.dataset.armed !== '1') {
+      el.opsWipe.dataset.armed = '1';
+      el.opsWipe.textContent = 'click again to wipe it';
+      setTimeout(() => { el.opsWipe.dataset.armed = ''; showOps(); }, 3000);
+      return;
+    }
+    el.opsWipe.dataset.armed = '';
+    campaign.wipe();
+    tactics.clear();
+    showOps();
+  });
+
+  /** A run starting: the start district, if one is set, is flown to once the intro is over. */
+  function startOps() {
+    tactics.clear();
+    if (!campaign.active) { el.ops.classList.add('hidden'); return; }
+    if (!campaign.settings.start) campaign.set('start', el.opsStart.value || world.idAt(player.x, player.z) || world.home);
+    state.opsTravel = true;
+    state.opsPlaceAt = 0;
+  }
+
+  /** Somewhere on a road near the middle of a district, to land on. */
+  function districtLanding(entry) {
+    const b = entry.bounds;
+    const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+    let best = null, bestD = Infinity;
+    for (const r of (entry.sketch && entry.sketch.roads) || []) {
+      for (let i = 0; i + 1 < r.length; i += 2) {
+        const d = Math.hypot(r[i] - cx, r[i + 1] - cz);
+        if (d < bestD) { bestD = d; best = { x: r[i], z: r[i + 1] }; }
+      }
+    }
+    return best || { x: cx, z: cz };
+  }
+
+  /** Every step of a run in Tactics or Slayer. */
+  function opsStep(dt) {
+    if (!campaign.active) return;
+    if (state.mode !== 'walk') return;
+    if (state.opsTravel) {
+      state.opsTravel = false;
+      const e = world.entryFor(campaign.settings.start);
+      if (e && world.isBuilt(e) && world.idAt(player.x, player.z) !== e.id) {
+        const at = districtLanding(e);
+        beginTravel(at.x, at.z);
+        return;
+      }
+    }
+    // Put the sites down in any district in scope that is in memory and has
+    // none yet. One district a second at most: the search is a few hundred
+    // raycasts.
+    state.opsPlaceAt = (state.opsPlaceAt || 0) - dt;
+    if (state.opsPlaceAt <= 0) {
+      state.opsPlaceAt = 1;
+      for (const id of world.loadedIds) {
+        if (!campaign.inScope(id) || campaign.sitesIn(id) || world.isOverflight(id)) continue;
+        const entry = world.entryFor(id);
+        if (!entry) continue;
+        const placed = campaign.place(id, (rand, clear) => campSpot(world, entry, rand, clear, shielded));
+        if (placed.length) feed(`<i>${entry.name}</i> ${placed.length} ${opsWord()}${placed.length === 1 ? '' : 's'}`);
+        break;
+      }
+    }
+    if (campaign.mode === 'tactics') tactics.update(dt, player);
+  }
+
+  tactics.onFree = (site, pts, run) => {
+    const quiet = !run.spotted && !run.alarm;
+    toast(quiet && campaign.settings.quietBonus ? `camp taken, undetected  +${pts}` : `camp taken  +${pts}`);
+    feed(`<b>camp taken</b> ${world.nameAt(site.x, site.z)} +${pts}`);
+    audio.ultraCharge(0.5);
+    combat.score += pts;
+    const list = campaign.sitesIn(site.d) || [];
+    if (list.length && list.every((x) => x.state === SITE.FREE)) {
+      toast(`${world.nameAt(site.x, site.z)} is free`);
+      feed(`<b>${world.nameAt(site.x, site.z)}</b> every camp taken`);
+    }
+  };
+
+  /** The line at the top of the screen. */
+  function opsHud() {
+    if (!campaign.active || state.mode === 'title') { el.ops.classList.add('hidden'); return; }
+    el.ops.classList.remove('hidden');
+    const here = world.idAt(player.x, player.z);
+    const list = (here && campaign.sitesIn(here)) || [];
+    const free = list.filter((x) => x.state === SITE.FREE).length;
+    const sum = campaign.summary(builtDistricts().map((d) => d.id));
+    el.opsTitle.textContent = campaign.mode === 'slayer' ? 'Slayer' : 'Tactics';
+    el.opsLine.textContent = !campaign.inScope(here)
+      ? `outside the operation  ·  score ${sum.score.toLocaleString()}`
+      : `${world.nameAt(player.x, player.z)} ${free}/${list.length} ${opsWord()}s  ·  `
+        + `${sum.done}/${sum.districts} districts  ·  score ${sum.score.toLocaleString()}`;
+    let alert = '';
+    if (campaign.mode === 'tactics') {
+      for (const r of tactics.live.values()) {
+        if (r.alarm && r.manned) { alert = r.radioUp ? 'alarm' : 'alarm, radio down'; break; }
+      }
+    }
+    el.opsAlert.textContent = alert;
+  }
+
+  /** The journal on J: every district in the operation and how it stands. */
+  function showOpsPanel() {
+    const list = builtDistricts();
+    const sum = campaign.summary(list.map((d) => d.id));
+    el.opsPanelTitle.textContent = campaign.mode === 'slayer' ? 'Spree Fall Slayer' : 'Spree Fall Tactics';
+    el.opsPanelLine.textContent = `Score ${sum.score.toLocaleString()}, level ${sum.level + 1}, `
+      + `${sum.free} of ${sum.total} ${opsWord()}s taken`
+      + (campaign.mode === 'tactics' ? `, ${sum.quiet} without an alarm.` : '.');
+    el.opsList.textContent = '';
+    for (const d of list) {
+      if (!campaign.inScope(d.id)) continue;
+      const sites = campaign.sitesIn(d.id);
+      const row = document.createElement('div');
+      const done = sites && sites.length && sites.every((x) => x.state === SITE.FREE);
+      row.className = `opsd${done ? ' done' : ''}`;
+      const name = document.createElement('span');
+      name.textContent = d.name;
+      const n = document.createElement('b');
+      n.textContent = sites ? `${sites.filter((x) => x.state === SITE.FREE).length} / ${sites.length}` : 'not visited';
+      row.append(name, n);
+      el.opsList.appendChild(row);
+    }
+    el.opsReset.textContent = `give the ${opsWord()}s back`;
+    el.opsHarder.textContent = 'give them back, harder';
+  }
+  function toggleOpsPanel(show) {
+    if (!campaign.active || state.mode === 'title') return;
+    const on = show === undefined ? el.opsPanel.classList.contains('hidden') : show;
+    el.opsPanel.classList.toggle('hidden', !on);
+    if (on) {
+      showOpsPanel();
+      state.lockWanted = state.lockWanted || input.pointerLocked;
+      input.exitLock();
+    } else {
+      relock();
+    }
+  }
+  el.opsClose.addEventListener('click', () => toggleOpsPanel(false));
+  const giveBack = (harder) => {
+    tactics.clear();
+    const n = campaign.reset({ harder });
+    toast(harder ? `${n} ${opsWord()}s back, at level ${campaign.book.level + 1}` : `${n} ${opsWord()}s back`);
+    showOpsPanel();
+  };
+  el.opsReset.addEventListener('click', () => giveBack(false));
+  el.opsHarder.addEventListener('click', () => giveBack(true));
+
   function beginWalk() {
     el.title.classList.add('hidden');
     el.hud.classList.remove('hidden');
+    startOps();
     landmarks.reset();
     combat.reset();
     drones.reset();
@@ -4711,21 +4923,28 @@ async function main() {
   // is the same city after it has gone, and it is picked here rather than in
   // the cheat menu because it is a mode, not a cheat: the score counts.
   const modeButtons = [...document.querySelectorAll('.diff.mode')];
-  const modeNow = () => (state.peaceful ? 'walk' : (machines.active ? 'machines' : 'berlin'));
+  const modeNow = () => (campaign.active ? campaign.mode
+    : state.peaceful ? 'walk' : (machines.active ? 'machines' : 'berlin'));
   const showMode = () => {
     const now = modeNow();
     for (const b of modeButtons) b.classList.toggle('on', b.dataset.mode === now);
-    el.modeNote.textContent = now === 'machines'
+    el.modeNote.textContent = now === 'tactics'
+      ? 'Armed camps across the city, to be taken one at a time. Take one without anybody raising the alarm for the bonus; break the radio and nobody comes to help them.'
+      : now === 'slayer'
+        ? 'The city has been overrun. Every district has nests that fill with demons as you fight; kill them all and the presence there is broken.'
+        : now === 'machines'
       ? 'Warheads come down every few seconds, the sky is gone, and what walks the streets is steel with one red eye. G flame, V an EMP to stop them, then anything you like.'
       : now === 'walk'
         ? 'Nothing is hunting you. The whole of Berlin to walk about in, and the cheat menu to bring anything out by hand if you change your mind.'
         : 'A walk through the real city, with the real fight in it.';
     el.timePick.classList.toggle('hidden', now !== 'machines');
     applyMachineLook();
+    showOps();
   };
   for (const b of modeButtons) {
     b.addEventListener('click', () => {
       state.peaceful = b.dataset.mode === 'walk';
+      campaign.setMode(b.dataset.mode);
       try { localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0'); } catch { /* private mode */ }
       machines.set(b.dataset.mode === 'machines');
       // Picking the mode puts the clock back on the hour it actually is,
@@ -4749,7 +4968,10 @@ async function main() {
   showModeTime();
   showMode();
 
-  const diffButtons = [...document.querySelectorAll('.difficulty .diff')];
+  // The mode buttons sit in a row of the same class. They are not
+  // difficulties, and counting them as such cleared their highlight the
+  // moment one was clicked.
+  const diffButtons = [...document.querySelectorAll('.difficulty .diff:not(.mode)')];
   const showDifficulty = () => {
     for (const b of diffButtons) b.classList.toggle('on', b.dataset.diff === combat.rules.name);
     const r = combat.rules;
@@ -4952,6 +5174,7 @@ async function main() {
         if (!minimap.big && !isTouch && !photo.active) input.requestLock();
         break;
       case 'KeyH': el.help.classList.toggle('hidden'); break;
+      case 'KeyJ': toggleOpsPanel(); break;
       case 'KeyN': {
         const on = audio.toggle();
         el.btnSound.textContent = on ? 'sound on' : 'sound off';
@@ -5089,7 +5312,10 @@ async function main() {
     // switched off, so that anything the cheat menu brings out by hand is a
     // real enemy with a real fight in it; it simply is not replaced when it
     // goes down, and nothing is sent after you in the first place.
-    if (state.peaceful) {
+    // Tactics and Slayer send nothing after you either: what there is to
+    // fight is in the camps and the nests, and the reinforcements a camp
+    // calls are its own.
+    if (state.peaceful || campaign.active) {
       drones.budget = 0;
       soldiers.budget = 0;
       jets.budget = 0;
@@ -5124,6 +5350,7 @@ async function main() {
       ion.update(worldDt);
       ultra.update(worldDt, ultraLive());
       storm.update(worldDt, stormLive());
+      opsStep(worldDt);
       drones.update(worldDt, eye, state.time);
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
@@ -5313,6 +5540,7 @@ async function main() {
     ion.update(worldDt);
     ultra.update(worldDt, ultraLive());
     storm.update(worldDt, stormLive());
+    opsStep(worldDt);
     // The ones nobody is in still sit there and still burn.
     if (!state.inVehicle) vehicles.update(worldDt, null, state.time);
     // And the ones hunting you keep walking whether or not you are in one.
@@ -5651,6 +5879,7 @@ async function main() {
       renderer.actors.updateGibs(gibs.active);
       renderer.actors.updateVehicles([...vehicles.active, ...trains.cars]);
       renderer.actors.updateMechs(mechs.active);
+      renderer.actors.updateCamps(tactics.enabled ? tactics.drawList(player.x, player.z) : []);
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -5668,6 +5897,8 @@ async function main() {
       renderer.actors.updateGibs(live ? gibs.active : []);
       renderer.actors.updateVehicles(live ? [...vehicles.active, ...trains.cars] : []);
       renderer.actors.updateMechs(live ? mechs.active : []);
+      renderer.actors.updateCamps(live && tactics.enabled
+        ? tactics.drawList(camera.position[0], camera.position[2], 1600) : []);
       renderer.drawActors = live;
     }
 
@@ -5728,6 +5959,7 @@ async function main() {
       el.crosshair.classList.toggle('holstered', weapon.holstered);
       placeGunMark();
       placeHealthBars();
+      opsHud();
       // How far a blast plasma charge has got, under the crosshair while it
       // builds, and what it is once it is full.
       const charge = weapon.blastCharge;
@@ -5753,6 +5985,8 @@ async function main() {
 
     if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
       || state.mode === 'cinema') {
+      minimap.sites = campaign.active ? campaign.allSites() : null;
+      minimap.siteKind = campaign.mode;
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live,
         vehicles.active.filter((v) => v.alive && !v.occupied && v.health > 0));
@@ -5824,6 +6058,9 @@ async function main() {
     ion, ionSpec: ION, ionState: ION_STATE,
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
     storm, stormSpec: VOID_STORM,
+    campaign, tactics, opsStep: (dt) => opsStep(dt), opsPanel: (on) => toggleOpsPanel(on),
+    showOps: () => showOps(),
+    startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
     vehicles, vehicleSpec: VEHICLE,
     mechs, mechSpec: MECH, mechArms: ARMS,

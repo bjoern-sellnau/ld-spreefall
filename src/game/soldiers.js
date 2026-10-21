@@ -104,6 +104,10 @@ class Soldier {
     this.y = y - RISE_DEPTH;
     this.charred = 0;
     this.seed = Math.random();
+    // A camp guard keeps to his post: where it is, how far he walks from it,
+    // and whether he stands still looking out instead of walking at all.
+    this.post = null;
+    this.sentry = false;
     return this;
   }
 }
@@ -617,11 +621,18 @@ export class Soldiers {
       let speed = 0;
       switch (s.state) {
         case STATE.PATROL: {
-          if (s.stateTime > 5 || Math.hypot(s.targetX - s.x, s.targetZ - s.z) < 4) {
-            this._pickPatrol(s, player.x, player.z);
-            s.stateTime = 0;
+          if (s.post && s.sentry) {
+            // A sentry holds his spot and looks out; he only moves once he
+            // has a reason to.
+            s.targetX = s.x; s.targetZ = s.z;
+            speed = 0;
+          } else {
+            if (s.stateTime > 5 || Math.hypot(s.targetX - s.x, s.targetZ - s.z) < (s.post ? 1.5 : 4)) {
+              this._pickPatrol(s, player.x, player.z);
+              s.stateTime = 0;
+            }
+            speed = SPEC.walkSpeed * (s.post ? 0.6 : 1);
           }
-          speed = SPEC.walkSpeed;
           if (s.canSee && dist < SPEC.sight) { s.state = STATE.ADVANCE; s.stateTime = 0; }
           break;
         }
@@ -668,8 +679,9 @@ export class Soldiers {
         s.yaw += d * Math.min(1, dt * 6);
       }
 
-      // Too far behind you and not engaged: recycle rather than simulate.
-      if (dist > 320 && !s.canSee) { this._retire(s); }
+      // Too far behind you and not engaged: recycle rather than simulate. A
+      // camp guard is the camp's to stand down, not this.
+      if (dist > 320 && !s.canSee && !s.post) { this._retire(s); }
     }
   }
 
@@ -682,6 +694,14 @@ export class Soldiers {
 
   _pickPatrol(s, px, pz) {
     const w = this.world;
+    if (s.post) {
+      // A round of the camp, never further out than the post allows.
+      const a = Math.random() * Math.PI * 2;
+      const r = rand(3, s.post.r);
+      s.targetX = s.post.x + Math.cos(a) * r;
+      s.targetZ = s.post.z + Math.sin(a) * r;
+      return;
+    }
     const a = Math.random() * Math.PI * 2;
     const r = rand(25, 90);
     let x = s.x + Math.cos(a) * r + (px - s.x) * 0.3;

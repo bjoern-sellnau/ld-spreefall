@@ -63,6 +63,13 @@ void main() {
     nrm = t * nrm;
     part = part < 45.5 ? 31.0 : (part < 46.5 ? 8.0 : 2.0);
   }
+  // A camp's three switches, in the rotor channel: taken, radio down, alarm.
+  if (part > 63.5 && part < 72.5) {
+    int st = int(iState.w + 0.5);
+    if ((st & 2) != 0 && part > 66.5 && part < 69.5) p = vec3(6.5, -0.5, -5.0);
+    if ((st & 1) != 0 && part > 70.5 && part < 71.5) part = 73.0;
+    if ((st & 4) != 0 && part > 71.5) part = 74.0;
+  }
   mat3 body = rotY(-iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
@@ -345,6 +352,44 @@ void main() {
     albedo = vec3(0.12, 0.125, 0.13);
     rough = 0.5;
     metal = 0.5;
+  } else if (vPart > 63.5 && vPart < 74.5) {
+    // A camp. Sandbags, canvas, crates, the radio and its mast, poles, the
+    // flag in their red or, once the camp is yours, in blue, and the siren.
+    int k = int(vPart + 0.5);
+    float v = vnoise(vWorld.xz * 3.1 + vWorld.y * 2.3);
+    rough = 0.9;
+    metal = 0.02;
+    if (k == 64) albedo = vec3(0.40, 0.35, 0.24) * (0.8 + 0.35 * v);
+    else if (k == 65) albedo = vec3(0.20, 0.22, 0.14) * (0.85 + 0.3 * v);
+    else if (k == 66) {
+      float plank = smoothstep(0.42, 0.5, abs(fract(vWorld.y * 3.0 + vWorld.x * 0.2) - 0.5));
+      albedo = vec3(0.34, 0.23, 0.12) * (0.75 + 0.3 * v) * (1.0 - 0.35 * plank);
+    } else if (k == 67) {
+      albedo = vec3(0.10, 0.12, 0.085);
+      emissive = vec3(0.1, 0.9, 0.25) * 0.5 * step(0.55, fract(vWorld.y * 9.0));
+      rough = 0.6; metal = 0.3;
+    } else if (k == 68 || k == 70) {
+      albedo = vec3(0.30, 0.31, 0.32);
+      rough = 0.45; metal = 0.7;
+    } else if (k == 69) {
+      albedo = vec3(0.05);
+      emissive = vec3(3.0, 0.08, 0.04) * step(0.5, fract(uCamPos.w * 0.9));
+    } else if (k == 71) {
+      albedo = vec3(0.55, 0.05, 0.04) * (0.85 + 0.3 * v);
+    } else if (k == 73) {
+      albedo = vec3(0.06, 0.20, 0.62) * (0.85 + 0.3 * v);
+    } else if (k == 72) {
+      albedo = vec3(0.30, 0.20, 0.05);
+      emissive = vec3(0.35, 0.18, 0.02);
+      rough = 0.4;
+    } else {
+      // The siren while the alarm is on: a red that turns, which is what a
+      // rotating beacon looks like from a hundred metres.
+      albedo = vec3(0.1, 0.01, 0.01);
+      float turn = 0.5 + 0.5 * sin(uCamPos.w * 9.0 + atan(vNormal.z, vNormal.x) * 1.0);
+      emissive = vec3(4.0, 0.12, 0.04) * (0.25 + 0.75 * turn);
+      rough = 0.3;
+    }
   } else if (vPart > 47.5 && vPart < 48.5) {
     // Blast plasma: the hard kind, which does not bounce and does ten times
     // the harm, and burns a very bright orange rather than cyan so you know
@@ -752,6 +797,8 @@ void main() {
     vec3 ring = vec3(0.0, 0.0, 0.3);
     p = ring + mat3(tc, 0.0, -ts, 0.0, 1.0, 0.0, ts, 0.0, tc) * (p - ring);
   }
+  // A camp's radio, once it is in pieces, casts nothing.
+  if (aInfo.x > 66.5 && aInfo.x < 69.5 && (int(iState.w + 0.5) & 2) != 0) p = vec3(6.5, -0.5, -5.0);
   float c = cos(-iPosYaw.w), s = sin(-iPosYaw.w);
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
   gl_Position = uLightViewProj * vec4(rot * p + iPosYaw.xyz, 1.0);

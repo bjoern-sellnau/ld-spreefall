@@ -39,8 +39,33 @@
       <button class="diff mode on" data-mode="berlin">Berlin</button>
       <button class="diff mode" data-mode="machines">Rise of the Machines</button>
       <button class="diff mode" data-mode="walk">Just a Walk</button>
+      <button class="diff mode" data-mode="tactics">Tactics</button>
+      <button class="diff mode" data-mode="slayer">Slayer</button>
     </div>
     <p class="diffnote" id="modenote">A walk through the real city, with the real fight in it.</p>
+    <div id="opssetup" class="hidden">
+      <div class="opsrow">
+        <span>Play in</span>
+        <span class="opsseg">
+          <button class="opsbtn" data-scope="district">one district</button>
+          <button class="opsbtn" data-scope="all">all of Berlin</button>
+        </span>
+      </div>
+      <div class="opsrow">
+        <span>Start in</span>
+        <select id="opsstart"></select>
+      </div>
+      <div class="opsrow">
+        <span id="opscountlabel">Camps per district</span>
+        <span><input id="opscount" type="range" min="1" max="8" step="1"> <b id="opscountnum">4</b></span>
+      </div>
+      <label class="opsrow opstactics"><span>Bonus for a camp taken without an alarm</span>
+        <input id="opsquiet" type="checkbox"></label>
+      <label class="opsrow opsslayer"><span>Bosses</span>
+        <input id="opsbosses" type="checkbox"></label>
+      <p class="opsline" id="opsprogress"></p>
+      <button class="opsbtn small" id="opswipe">start this campaign again</button>
+    </div>
     <label class="timepick hidden" id="timepick">
       <span>Time of day <b id="modetimelabel">20:12</b></span>
       <input id="modetime" type="range" min="0" max="23.9" step="0.1" value="20.2">
@@ -62,6 +87,20 @@
 
 <!-- Changing district. One district is in memory at a time, so crossing a
      boundary is a short wait, and a wait should say where you are going. -->
+<div id="opspanel" class="overlay hidden">
+  <div class="opsbox">
+    <h2 id="opspaneltitle">Operations</h2>
+    <p class="opsline" id="opspanelline"></p>
+    <div id="opslist"></div>
+    <div class="opsbuttons">
+      <button class="opsbtn" id="opsreset">give the camps back</button>
+      <button class="opsbtn" id="opsharder">give them back, harder</button>
+      <button class="opsbtn" id="opsclose">back to it</button>
+    </div>
+    <p class="hint"><b>J</b> opens and closes this</p>
+  </div>
+</div>
+
 <div id="titanfall" class="hidden">
   <div class="tfline">Stand by for Titanfall</div>
   <div class="tfsub" id="titanfallsub">Inbound</div>
@@ -144,6 +183,7 @@
       <em>the number row or the wheel changes weapon, V changes the view, F to get out</em>
     </div>
   </div>
+  <div id="ops" class="hidden"><b id="opstitle"></b><span id="opsline"></span><i id="opsalert"></i></div>
   <div id="threat">
     <span class="tlabel">threat</span> <span id="tiernum">1</span>
     <span class="tsep">contacts</span> <span id="contactnum">0</span>

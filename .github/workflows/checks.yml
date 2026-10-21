@@ -101,6 +101,8 @@ jobs:
         run: node tools/test-machines.mjs
       - name: Drive the interface
         run: node tools/test-ui.mjs
+      - name: Play Tactics and Slayer
+        run: node tools/test-ops.mjs
       - name: Keep the screenshots
         if: always()
         uses: actions/upload-artifact@v4
