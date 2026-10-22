@@ -746,6 +746,10 @@ async function run() {
     s.input.keys.delete('KeyW');
     const moved = Math.hypot(jeep.x - was.x, jeep.z - was.z);
     const rode = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
+    // Stopped first: out of it at speed is a bail out, and it drives on
+    // without you (phase 119, checked in the ops suite). This is the
+    // ordinary getting out.
+    jeep.speed = 0;
     s.toggleVehicle();
     const out = s.state.inVehicle === null;
     const dropped = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
