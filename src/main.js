@@ -1827,23 +1827,45 @@ async function main() {
   // on top of that, because a car that goes up goes on burning.
   const carBlasts = [];
   cars.onDestroyed = (car) => {
-    // Not at once, and not all at the same moment: a row of cars going up one
-    // after the other is a chain, and a chain that fires inside its own blast
-    // is a thousand deep stack of them.
-    carBlasts.push({ x: car.x, z: car.z, at: state.time + 0.08 + Math.random() * 0.3 });
+    // It catches first and burns, and goes up a couple of seconds later; and
+    // not all at the same moment, so a row of cars going up one after the
+    // other is a chain, and a chain that fires inside its own blast is not a
+    // thousand deep stack of them.
+    const burn = CAR_FIRE.burn[0] + Math.random() * (CAR_FIRE.burn[1] - CAR_FIRE.burn[0]);
+    carBlasts.push({ x: car.x, z: car.z, at: state.time + burn, burn, flame: 0 });
+    const y = world.groundHeight(car.x, car.z);
+    effects.flame(car.x, y + 0.7, car.z, 1.8, 1);
+    feed('<i>car</i> on fire');
   };
 
-  function updateCarBlasts() {
+  function updateCarBlasts(dt = 1 / 60) {
     for (let i = carBlasts.length - 1; i >= 0; i--) {
-      if (carBlasts[i].at > state.time) continue;
-      const b = carBlasts.splice(i, 1)[0];
+      const b = carBlasts[i];
+      if (b.at > state.time) {
+        // Burning while it waits, the flames higher the nearer it is to going.
+        b.flame -= dt;
+        if (b.flame <= 0) {
+          b.flame = CAR_FIRE.flameEvery;
+          const y = world.groundHeight(b.x, b.z);
+          const grown = 1 + Math.min(1, 1 - (b.at - state.time) / b.burn);
+          effects.flame(b.x + (Math.random() - 0.5) * 2, y + 0.6, b.z + (Math.random() - 0.5) * 2, 1.6 * grown, 1);
+        }
+        continue;
+      }
+      carBlasts.splice(i, 1);
       const y = world.groundHeight(b.x, b.z);
       explode(b.x, y + 0.8, b.z, CAR_BLAST, { weapon: 'car' });
-      gibs.rubble(b.x, y + 1.1, b.z, 4.5, 12, 1.6);
-      fires.ignite(b.x, y, b.z, 7, 1);
-      effects.flame(b.x, y + 0.7, b.z, 4.4, 1);
-      burning.push({ x: b.x, y, z: b.z, radius: 6.0, left: 16, damagePerSecond: 26 });
-      feed('<i>car</i> burning');
+      gibs.rubble(b.x, y + 1.1, b.z, 6, 16, 2);
+      for (let k = 0; k < CAR_FIRE.fireballs; k++) {
+        const a = (k / CAR_FIRE.fireballs) * Math.PI * 2 + Math.random() * 0.6;
+        const r = 1 + Math.random() * 4;
+        effects.flame(b.x + Math.cos(a) * r, y + 0.4 + Math.random() * 1.5, b.z + Math.sin(a) * r, 3 + Math.random() * 2.5, 1);
+      }
+      effects.flame(b.x, y + 0.7, b.z, 6.5, 1);
+      fires.ignite(b.x, y, b.z, 9, 1);
+      burning.push({ x: b.x, y, z: b.z, radius: 7.5, left: 20, damagePerSecond: 28 });
+      state.carsBlown = (state.carsBlown || 0) + 1;
+      feed('<i>car</i> went up');
     }
   }
 
@@ -1852,7 +1874,10 @@ async function main() {
    * than a grenade, and it reaches far enough to take the next car along with
    * it, which is the whole pleasure of a row of them.
    */
-  const CAR_BLAST = { radius: 11, damage: 120, crater: false, punch: false };
+  const CAR_BLAST = { radius: 14, damage: 220, crater: false, punch: false };
+  // A parked car burns for two or three seconds before the tank goes, and
+  // throws fire round it when it does.
+  const CAR_FIRE = { burn: [2.0, 3.2], flameEvery: 0.13, fireballs: 7 };
 
   /**
    * A round or a blast landing on a parked car.
@@ -2612,22 +2637,83 @@ async function main() {
     effects.shake = Math.min(1.2, effects.shake + 0.2);
   };
 
+  // A vehicle that is done for does not go up at once: it catches, burns for
+  // a few seconds with the flames getting bigger, and then the tank goes, a
+  // fireball much bigger than the vehicle with fire thrown all round it and
+  // left burning on the street. Aircraft burn on the way down and go up
+  // where they hit.
+  const WRECK = {
+    burn: 3.2,                 // seconds on fire before it goes, on the ground
+    airLimit: 9,               // and the longest an aircraft burns falling
+    flameEvery: 0.11,
+    blast: { jeep: { radius: 20, damage: 380, force: 18 }, tank: { radius: 26, damage: 560, force: 24 },
+      heli: { radius: 22, damage: 420, force: 20 }, jet: { radius: 24, damage: 460, force: 22 } },
+    fireballs: 9,              // flames thrown out round it when it goes
+    ground: { radius: 9, seconds: 22, damagePerSecond: 30 },
+  };
+  const wrecks = [];
   vehicles.onDestroyed = (v) => {
-    explode(v.x, v.y + 1.2, v.z, { radius: 16, damage: 300 });
-    gibs.rubble(v.x, v.y + 1, v.z, 6, 12, 2);
-    // One of theirs with men still in it takes them with it.
-    const crew = convoys.find((c) => c.v === v);
-    if (crew && crew.crew) {
-      feed(`<i>${v.spec.name.toLowerCase()} destroyed</i> with ${crew.crew} aboard`);
-      state.crewLost = (state.crewLost || 0) + crew.crew;
-      crew.crew = 0;
-    } else {
-      feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
-    }
+    // One of theirs with men still in it: they are in it when it goes.
     v.hostile = false;
     v.ai = null;
     if (state.inVehicle === v) leaveVehicle(true);
+    const air = v.spec.kind === 'air';
+    wrecks.push({ v, left: air ? WRECK.airLimit : WRECK.burn, flame: 0, air });
+    // It catches: a burst of flame and a crack, smaller than what is coming.
+    effects.flame(v.x, v.y + 1.0, v.z, 2.4, 1);
+    effects.flash(v.x, v.y + 1.2, v.z, 3, 1.0, 0.6, 0.25, 0.25);
+    audio.explosion && audio.explosion();
+    feed(`<i>${v.spec.name.toLowerCase()}</i> on fire`);
+    state.wrecksCaught = (state.wrecksCaught || 0) + 1;
   };
+  /** The blast at the end of a burning vehicle. */
+  function blowWreck(w) {
+    const v = w.v;
+    const b = WRECK.blast[v.type] || WRECK.blast.jeep;
+    const y = v.y + 1.2;
+    explode(v.x, y, v.z, { radius: b.radius, damage: b.damage, force: b.force }, { weapon: 'vehicle' });
+    // Fire thrown out all round it, high and low.
+    for (let k = 0; k < WRECK.fireballs; k++) {
+      const a = (k / WRECK.fireballs) * Math.PI * 2 + Math.random() * 0.5;
+      const r = 1.5 + Math.random() * b.radius * 0.35;
+      effects.flame(v.x + Math.cos(a) * r, v.y + 0.5 + Math.random() * 2, v.z + Math.sin(a) * r, 3.5 + Math.random() * 3, 1);
+    }
+    effects.flame(v.x, v.y + 1, v.z, 8, 1);
+    effects.flash(v.x, y + 2, v.z, b.radius * 0.8, 1.0, 0.55, 0.2, 0.5);
+    const g = world.groundHeight(v.x, v.z);
+    fires.ignite(v.x, g, v.z, WRECK.ground.radius + 3, 1);
+    burning.push({ x: v.x, y: g, z: v.z, radius: WRECK.ground.radius, left: WRECK.ground.seconds, damagePerSecond: WRECK.ground.damagePerSecond });
+    gibs.rubble(v.x, y, v.z, 8, 20, 2.4);
+    const crew = convoys.find((c) => c.v === v);
+    if (crew && crew.crew) {
+      feed(`<i>${v.spec.name.toLowerCase()} went up</i> with ${crew.crew} aboard`);
+      state.crewLost = (state.crewLost || 0) + crew.crew;
+      crew.crew = 0;
+    } else {
+      feed(`<i>${v.spec.name.toLowerCase()} went up</i>`);
+    }
+    state.wrecksBlown = (state.wrecksBlown || 0) + 1;
+  }
+  function wreckStep(dt) {
+    for (let i = wrecks.length - 1; i >= 0; i--) {
+      const w = wrecks[i];
+      const v = w.v;
+      w.left -= dt;
+      // The fire grows the longer it has burnt.
+      w.flame -= dt;
+      if (w.flame <= 0) {
+        w.flame = WRECK.flameEvery;
+        const grown = 1 + Math.min(1, (WRECK.burn - Math.max(0, w.left)) / WRECK.burn);
+        effects.flame(v.x + (Math.random() - 0.5) * 2.4, v.y + 0.8, v.z + (Math.random() - 0.5) * 2.4, 1.8 * grown, 1);
+      }
+      // A falling aircraft goes when it hits; anything else when its time is up.
+      const down = w.air && v.vy === 0 && v.y <= world.groundHeight(v.x, v.z) + 0.05;
+      if ((w.air ? down || w.left <= 0 : w.left <= 0) || !v.alive) {
+        wrecks.splice(i, 1);
+        if (v.alive) blowWreck(w);
+      }
+    }
+  }
 
   // A vehicle driven into something hard enough goes through it: a tree goes
   // over, a parked car goes up, a wall gets a hole the size of what hit it and
@@ -7429,9 +7515,10 @@ async function main() {
       refineStep();
       bombStep(worldDt);
       convoyStep(worldDt);
+      wreckStep(worldDt);
       onslaughtStep(worldDt);
       pingStep(worldDt);
-      updateCarBlasts();
+      updateCarBlasts(worldDt);
       trains.update(worldDt, player);
       ion.update(worldDt);
       ultra.update(worldDt, ultraLive());
@@ -7667,9 +7754,10 @@ async function main() {
     refineStep();
     bombStep(worldDt);
     convoyStep(worldDt);
+    wreckStep(worldDt);
     onslaughtStep(worldDt);
     pingStep(worldDt);
-    updateCarBlasts();
+    updateCarBlasts(worldDt);
     trains.update(worldDt, player);
     ion.update(worldDt);
     ultra.update(worldDt, ultraLive());

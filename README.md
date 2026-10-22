@@ -722,6 +722,14 @@ saw was a tank reversing.
 | Helicopter | hovers; space climbs, right mouse holds the rockets |
 | Fighter | 180 m/s, and it stops flying below 38 |
 
+Destroyed, none of them goes up at once. It catches, burns for three
+seconds with the fire climbing higher, and then the tank goes: a fireball
+20 to 26 metres across (the tank the biggest), fire thrown out all round it
+and left burning on the street for twenty seconds. An aircraft shot down
+burns on the way down and goes up where it hits. A parked car does the same
+on a smaller scale: two to three seconds alight, then 14 metres of blast
+and its own fire on the road.
+
 Both aircraft fly where you look. The mouse, or A and D, turn the view, and
 the aircraft turns its nose onto it as fast as it can, banking into the turn
 on its own; W and S are the throttle. A fighter turns harder the faster it is

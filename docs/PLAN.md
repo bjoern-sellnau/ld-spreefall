@@ -4589,6 +4589,31 @@ So there are two cities now, and a profile picks which:
   charged plasma check now expects ten times the bolt and the half again.
   Screenshot combat-07-grenade-arc.
 
+## 118. Vehicles burn, and then they go up
+
+- The ask: a destroyed vehicle should burn first and then explode, big,
+  with plenty of flames.
+- Before: a vehicle at no health went up the same frame (16 m, 300), and a
+  parked car a tenth to four tenths of a second later.
+- Now `vehicles.onDestroyed` sets it alight instead: a burst of flame and a
+  crack, its gun and its driver gone, and a wreck in a list that burns for
+  3.2 s, flames every 0.11 s growing to twice the height as the time runs
+  out. Then `blowWreck`: a blast of 20 m and 380 for a jeep, 26 and 560 for
+  a tank (22 and 24 for the helicopter and the fighter), nine flames thrown
+  out round it up to a third of the radius, a tall one in the middle, the
+  trees caught 12 m round and 9 m of burning ground for 22 s, more rubble.
+  An aircraft burns on the way down and goes up where it lands, or after 9
+  s at most. A convoy's men still aboard die in the blast, not the catch.
+- A parked car: alight for 2 to 3.2 s (a random share, so a row of them
+  still goes as a chain), then 14 m and 220 where it was 11 and 120, seven
+  flames thrown round it and 7.5 m of burning road for 20 s.
+- A vehicle rigged as a bomb still goes at once, and then burns and goes up
+  again as its tank does.
+- Checks (city): a jeep at no health is alight and not blown at once, not
+  blown 1.5 s later, blown by 4 s with more burning ground than before;
+  a parked car is not gone after a second and is by four. Screenshots
+  city-06-vehicle-burning and city-07-vehicle-blast.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
