@@ -17,7 +17,7 @@ import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
 import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
-import { ARROW_HEADS } from './game/arsenal.js';
+import { ARROW_HEADS, ARROW_DRAWS } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
 import { Projectiles } from './game/projectiles.js';
@@ -46,6 +46,7 @@ import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
 import { CockpitHud, project as projectPoint } from './ui/cockpit.js';
+import { Visor, VISOR } from './ui/visor.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
@@ -72,6 +73,7 @@ const el = {
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   mapUnmark: $('mapunmark'), compassBar: $('compassbar'), cockpitHud: $('cockpithud'),
   suit: $('suit'), suitBar: $('suitbar'), suitArmor: $('suitarmor'), suitCloak: $('suitcloak'), suitFx: $('suitfx'),
+  suitVisor: $('suitvisor'), suitNano: $('suitnano'), visorHud: $('visorhud'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -2313,8 +2315,15 @@ async function main() {
   /** The weapon's name on the HUD, with the head on the next arrow for a bow. */
   function weaponLabel(spec) {
     const head = spec.heads ? ARROW_HEADS[weapon.head] : null;
-    return head && head.short ? `${spec.short} ${head.short}` : spec.short;
+    const draw = spec.draws ? ARROW_DRAWS[weapon.draw] : null;
+    return [spec.short, draw && draw.short, head && head.short].filter(Boolean).join(' ');
   }
+  weapon.onDraw = (draw) => {
+    const row = ARROW_DRAWS[draw];
+    toast(row ? row.name : draw);
+    audio.reload(0.3);
+    el.weaponname.textContent = weaponLabel(weapon.spec);
+  };
   weapon.onArrowHead = (head) => {
     const row = ARROW_HEADS[head];
     toast(row ? row.name : head);
@@ -2372,6 +2381,29 @@ async function main() {
       effects.gas(x, g, z, cl.radius, 1.6);
     } else if (row.splash) {
       explode(x, y, z, row.splash, { weapon: 'bow' });
+    } else if (row.shock) {
+      // A burst of current: whoever is near is put down where he stands for
+      // a moment, and hurt.
+      const sh = row.shock;
+      let n = 0;
+      for (const t of [...soldiers.active]) {
+        if (!t.alive || t.health <= 0 || t.state === 5 || t.civilian) continue;
+        const d = Math.hypot(t.x - x, t.z - z);
+        if (d > sh.radius) continue;
+        n++;
+        for (let k = 0; k < 6; k++) {
+          effects.spark(t.x + (Math.random() - 0.5) * 0.8, t.y + 0.4 + Math.random() * 1.4, t.z + (Math.random() - 0.5) * 0.8, 0.55, 0.85, 1);
+        }
+        if (soldiers.damage(t, sh.damage, { x: (t.x - x) / (d || 1), y: 0, z: (t.z - z) / (d || 1) })) {
+          creditTarget(t, false, 'soldier');
+          continue;
+        }
+        t.state = 4; t.stateTime = 0; t.slipLeft = sh.stun;
+        t.vx = 0; t.vz = 0; t.spin = 0; t.lean = -0.2;
+      }
+      for (let k = 0; k < 14; k++) effects.spark(x + (Math.random() - 0.5) * 2, g + Math.random() * 1.5, z + (Math.random() - 0.5) * 2, 0.55, 0.85, 1);
+      audio.emp(Math.hypot(player.x - x, player.z - z));
+      state.shocked = (state.shocked || 0) + n;
     }
   };
 
@@ -5511,6 +5543,60 @@ async function main() {
     state.punches = (state.punches || 0) + 1;
     return true;
   }
+  // The visor (B) and Nano Vision (N).
+  const visor = new Visor(el.visorHud);
+  visor.onTag = (body) => {
+    audio.hitMarker(false);
+    state.tagged = (state.tagged || 0) + 1;
+    feed(`<b>tagged</b> ${body.machine ? 'machine' : body.demon ? body.demon : 'soldier'}`);
+  };
+  function toggleVisor() {
+    visor.up = !visor.up;
+    toast(visor.up ? 'visor' : 'visor off');
+    audio.swap();
+  }
+  function toggleNano() {
+    const on = suit.toggleNano();
+    if (!on && !suit.nano && suit.energy < 5) { toast('not enough energy'); audio.dryFire(); return; }
+    toast(suit.nano ? 'nano vision' : 'nano vision off');
+    audio.suit('cloak', suit.nano);
+  }
+  /** Everything of theirs, alive, with how tall it is, for the visor and the heat. */
+  function visorBodies() {
+    const out = [];
+    for (const t of soldiers.active) {
+      if (!t.alive || t.health <= 0 || t.civilian || t.state === 5) continue;
+      out.push({ body: t, x: t.x, y: t.y, z: t.z, h: 1.8 * (t.scale || 1), kind: 'soldier' });
+    }
+    for (const d of drones.active) {
+      if (d.health <= 0) continue;
+      out.push({ body: d, x: d.x, y: d.y - 0.4, z: d.z, h: 0.8, kind: 'soldier' });
+    }
+    for (const m of mechs.active) {
+      if (m.mine || !m.alive || m.health <= 0) continue;
+      out.push({ body: m, x: m.x, y: m.y, z: m.z, h: m.spec.height || 8, kind: 'mech' });
+    }
+    for (const v of vehicles.active) {
+      if (!v.hostile || v.health <= 0) continue;
+      out.push({ body: v, x: v.x, y: v.y, z: v.z, h: v.type === 'tank' ? 3 : 2.2, kind: 'vehicle' });
+    }
+    return out;
+  }
+  function visorStep() {
+    const wall = performance.now() / 1000;
+    const dt = Math.min(0.1, Math.max(0, wall - (state.visorWall || wall)));
+    state.visorWall = wall;
+    const on = suited() && !photo.active;
+    visor.nano = suit.nano;
+    el.canvas.classList.toggle('nano', on && suit.nano);
+    const eye = { x: camera.position[0], y: camera.position[1], z: camera.position[2] };
+    visor.draw({
+      vp: camera.viewProj, eye, dt, time: state.time, active: on,
+      bodies: on ? visorBodies() : [],
+      seen: (x, y, z) => world.lineOfSight(eye.x, eye.y, eye.z, x, y, z),
+    });
+  }
+
   /** The bar, the two modes, and the edge of the screen while they are on. */
   function suitHud() {
     const on = suited();
@@ -5523,11 +5609,14 @@ async function main() {
     el.suit.classList.toggle('sprint', suit.sprinting);
     el.suitArmor.classList.toggle('on', suit.armor);
     el.suitCloak.classList.toggle('on', suit.cloak);
+    el.suitVisor.classList.toggle('on', visor.up);
+    el.suitNano.classList.toggle('on', suit.nano);
   }
 
   /** A run starting: the start district, if one is set, is flown to once the intro is over. */
   function startOps() {
     suit.reset();
+    visor.reset();
     tactics.clear();
     slayer.clear();
     state.opsEnded = false;
@@ -5664,10 +5753,13 @@ async function main() {
     const t = hit.target;
     const core = !!hit.core;
     const headRow = ARROW_HEADS[b.head];
+    const drawRow = ARROW_DRAWS[b.draw];
     const dmg = (row.damage || 100) * (core ? (row.coreMultiplier || 1) : 1) * (weapon.damageScale || 1)
-      * (headRow && headRow.damage !== undefined ? headRow.damage : 1);
+      * (headRow && headRow.damage !== undefined ? headRow.damage : 1) * (drawRow ? drawRow.damage : 1);
     const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
-    const dir = { x: b.vx / sp, y: 0, z: b.vz / sp };
+    // A strong draw carries a man with the arrow, back along its line.
+    const carry = drawRow && drawRow.carry ? drawRow.carry : 1;
+    const dir = { x: b.vx / sp * carry, y: 0, z: b.vz / sp * carry };
     let killed = false;
     let kind = hit.actorKind;
     if (kind === 'soldier') {
@@ -6671,6 +6763,14 @@ async function main() {
       suitMode(code === 'KeyQ' ? 'armor' : 'cloak');
       return;
     }
+    // B the visor and N Nano Vision, the keys the remastered games use, and
+    // X the bow's draw weight.
+    if (suited() && !photo.active && (code === 'KeyB' || code === 'KeyN' || code === 'KeyX')) {
+      if (code === 'KeyB') toggleVisor();
+      else if (code === 'KeyN') toggleNano();
+      else if (!weapon.cycleDraw()) toast('the draw weight is the bow\'s');
+      return;
+    }
     switch (code) {
       case 'KeyP': togglePhoto(); break;
       case 'KeyM':
@@ -7534,6 +7634,7 @@ async function main() {
       showBuildingDamage();
       // Aiming narrows the field of view, which is most of what aiming is.
       camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;
+      if (visor.up && suited()) camera.fov = Math.min(camera.fov, VISOR.fov * DEG);
       // What you are standing next to. Vehicles were always here and F always
       // worked, but nothing on the screen said so, which is the same thing as
       // them not working.
@@ -7551,6 +7652,7 @@ async function main() {
       mechHud();
       cockpitStep();
       suitHud();
+      visorStep();
     } else {
       cockpitHud.hide();
     }
@@ -7656,7 +7758,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    compassBar, cockpitHud, suit, suitSpec: SUIT, suited: () => suited(), suitPunch: () => suitPunch(),
+    compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, suited: () => suited(), suitPunch: () => suitPunch(),
     setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),

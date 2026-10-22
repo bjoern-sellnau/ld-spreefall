@@ -151,7 +151,10 @@ export const WEAPONS = {
     // What is on the end of the arrow, changed with R while the bow is in
     // your hands: a plain head, one that sets where it lands burning, one
     // that lets out a cloud of poison, and one that goes off.
-    heads: ['plain', 'fire', 'poison', 'blast'],
+    heads: ['plain', 'fire', 'poison', 'blast', 'shock'],
+    // How hard it is drawn, changed with X: light is quick and weak, strong
+    // is slow and hits hard enough to carry a man with it.
+    draws: ['medium', 'strong', 'light'],
   },
   marksman: {
     name: 'Marksman rifle', short: 'MARKSMAN', kind: KIND.HITSCAN, slot: null,
@@ -365,8 +368,19 @@ export const ARROW_HEADS = {
     colour: [1.0, 0.55, 0.15] },
   poison: { name: 'Poison arrow', short: 'POISON', damage: 0.8,
     cloud: { radius: 5.5, seconds: 9, damagePerSecond: 20 }, colour: [0.45, 1.0, 0.25] },
+  // A charge on the head that goes into whoever is near where it lands:
+  // a burst of current that stops them where they stand and hurts.
+  shock: { name: 'Shock arrow', short: 'SHOCK', damage: 0.7,
+    shock: { radius: 5, damage: 70, stun: 2.4 }, colour: [0.5, 0.85, 1.0] },
   blast: { name: 'Explosive arrow', short: 'BLAST', damage: 0.6,
     splash: { radius: 6.5, damage: 240, force: 11 }, colour: [1.0, 0.2, 0.12] },
+};
+
+/** How hard the bow is drawn: what it does to the arrow and to the time between them. */
+export const ARROW_DRAWS = {
+  light: { name: 'Light draw', short: 'LIGHT', damage: 0.65, speed: 0.8, interval: 0.55 },
+  medium: { name: 'Medium draw', short: '', damage: 1, speed: 1, interval: 1 },
+  strong: { name: 'Strong draw', short: 'STRONG', damage: 1.6, speed: 1.3, interval: 1.6, carry: 4 },
 };
 
 export const LOADOUT = [

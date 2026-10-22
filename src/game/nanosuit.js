@@ -41,6 +41,9 @@ export const SUIT = {
   },
   sprint: { drain: 15, speed: 1.75, min: 8 },
   jump: { cost: 22, boost: 1.75, hold: 0.18 },
+  // Nano Vision, the heat view of the second and third games: a steady
+  // drain for as long as it is up.
+  nano: { drain: 6 },
   punch: { cost: 30, damage: 260, reach: 2.6, force: 16 },
   // How long it waits before trying again after being emptied.
   stall: 1.2,
@@ -57,6 +60,7 @@ export class Nanosuit {
     this.energy = SUIT.energy;
     this.armor = false;
     this.cloak = false;
+    this.nano = false;
     this.cloakAge = 0;
     this.sprinting = false;
     this.idle = SUIT.regenDelay;
@@ -75,6 +79,7 @@ export class Nanosuit {
       const dropped = [];
       if (this.cloak) { this.cloak = false; dropped.push('cloak'); }
       if (this.armor) { this.armor = false; dropped.push('armor'); }
+      if (this.nano) { this.nano = false; dropped.push('nano vision'); }
       if (dropped.length && this.onEmpty) this.onEmpty(dropped);
       return false;
     }
@@ -86,6 +91,13 @@ export class Nanosuit {
     if (!this.armor && (this.stalled > 0 || this.energy < 5)) return false;
     this.armor = !this.armor;
     return this.armor;
+  }
+
+  /** N. */
+  toggleNano() {
+    if (!this.nano && (this.stalled > 0 || this.energy < 5)) return false;
+    this.nano = !this.nano;
+    return this.nano;
   }
 
   /** E. */
@@ -108,6 +120,7 @@ export class Nanosuit {
     let drain = 0;
     const moving = body.speed > 0.6;
     if (this.armor) drain += moving ? SUIT.armor.drainMove : SUIT.armor.drainStill;
+    if (this.nano) drain += SUIT.nano.drain;
     if (this.cloak) {
       drain += body.speed > 5 ? SUIT.cloak.drainRun : moving ? SUIT.cloak.drainWalk : SUIT.cloak.drainStill;
     }

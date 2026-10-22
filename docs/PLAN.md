@@ -4140,3 +4140,42 @@ So there are two cities now, and a profile picks which:
   energy; Shift covers 9.7 m in a second against 2.6 walking; Space held
   goes 2.34 m up against 0.57 for a tap; F puts a man down for 30. Unit
   (107 now): the suit's arithmetic on its own. hunt-01-cloak.png.
+
+## 102. The visor, Nano Vision, and the bow's draw weights
+
+- B in the suit puts the visor up (src/ui/visor.js): the view narrows to
+  42 degrees, a frame and a count go round the middle, and the one of theirs
+  nearest the middle within 9 percent of the half width, 260 m and in sight
+  is scanned, a ring filling round him over 0.45 s, then tagged. A tag is a
+  red marker with the distance over his head, drawn whether or not he can be
+  seen and with the visor down, until he dies. Soldiers, drones, mechs of
+  theirs and their vehicles can all be tagged.
+- N is Nano Vision: a filter on the frame (grey, darkened, contrasted and
+  turned blue) and a warm shape, white through orange, drawn over every one
+  of theirs that is in sight, sized from where his feet and head land on the
+  screen; 6 energy a second, and it drops when the suit is empty. Head or
+  chest in sight counts, so a man behind crates with his head over them
+  shows; the visor's scan takes the same rule.
+- The bow has draw weights, on X in the suit: medium, strong (damage 1.6,
+  arrow speed 1.3, time to the next 1.6, and it carries the man four times
+  as hard back along the arrow) and light (0.65, 0.8, 0.55). The HUD says
+  BOW STRONG FIRE and so on. And a fifth head in every mode, shock: 0.7 of
+  the arrow's damage, and everybody within 5 m of where it lands takes 70
+  and is put down for 2.4 s, with sparks over them.
+- Keys in the suit are the remastered PC ones where the games have them (B
+  visor, N Nano Vision); X for the draw is ours. The Crysis 3 bow's draw
+  weights: a strong draw with the carbon tip pins a man to a wall and a low
+  draw wounds rather than kills (two TrueTrophies guides, Stick Around and
+  Arrow to the Knee); a medium setting is in one search summary but I found
+  no page that confirms it, so it is ours as much as the numbers are. The
+  electric head is in the launch review and the E3 previews (GamesBeat,
+  Destructoid). Game pages could not be opened from here, only searched.
+- Checks (hunt, 17 now): B narrows the view and a guard held in the middle
+  is tagged; the tag is still drawn with the visor down and with every line
+  of sight in the world answering no; N filters the frame, shows the guard
+  warm and costs energy; X goes medium, strong, light with the time between
+  arrows longer and then shorter; a shock arrow puts down and hurts the two
+  men beside where it lands and leaves one twenty metres off alone. Unit
+  (111 now): Nano Vision's drain and drop, the draw rows, the heads, and the
+  weapon cycling draws for a bow and having none for a rifle.
+  hunt-02-visor.png, hunt-03-nano.png.

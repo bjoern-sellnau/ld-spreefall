@@ -250,6 +250,109 @@ async function run() {
   check('F punches with the suit\'s strength, for energy', !punch.skip && punch.hit && punch.dead && punch.cost >= 25,
     JSON.stringify(punch));
 
+  // --- the visor and Nano Vision ----------------------------------------------------
+  // A guard who will not see you, in the middle of the screen, twenty metres off.
+  const lookAtGuard = () => page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    window.huntHurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    const { g } = window.huntGuard;
+    const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+    const dx = g.x - ex, dy = g.y + 1.1 - ey, dz = g.z - ez;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
+    g.vx = 0; g.vz = 0;
+    return Math.round(Math.hypot(dx, dz));
+  });
+  await guard();
+  await lookAtGuard();
+  const fov0 = await page.evaluate(() => window.spreefall.camera.fov);
+  await page.keyboard.press('KeyB');
+  await page.waitForTimeout(1500);
+  const visor = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const out = { up: s.visor.up, fov: s.camera.fov, tags: s.visor.tags.size, tagged: s.visor.tags.has(window.huntGuard.g),
+      drawn: s.visor.last ? s.visor.last.drawnTags : 0 };
+    return out;
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-02-visor.png') });
+  await page.keyboard.press('KeyB');
+  const throughWalls = await page.evaluate(async () => {
+    const s = window.spreefall;
+    // Nothing in sight anywhere: the tag is still drawn over him.
+    const los = s.world.lineOfSight;
+    s.world.lineOfSight = () => false;
+    for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+    const out = { up: s.visor.up, drawn: s.visor.last ? s.visor.last.drawnTags : 0 };
+    s.world.lineOfSight = los;
+    return out;
+  });
+  check('B puts the visor up, narrows the view, and holding a guard in the middle tags him',
+    visor.up && visor.fov < fov0 && visor.tagged && visor.drawn >= 1, JSON.stringify({ ...visor, fov0 }));
+  check('the tag stays over him with the visor down, and through walls', !throughWalls.up && throughWalls.drawn >= 1,
+    JSON.stringify(throughWalls));
+
+  await page.keyboard.press('KeyN');
+  await page.waitForTimeout(800);
+  const nano = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const out = { on: s.suit.nano, filtered: document.getElementById('view').classList.contains('nano'),
+      warm: s.visor.last ? s.visor.last.warm : 0, energy: Math.round(s.suit.energy) };
+    return out;
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-03-nano.png') });
+  check('N is Nano Vision: the city goes cold, the guard shows warm, and it costs energy',
+    nano.on && nano.filtered && nano.warm >= 1 && nano.energy < 100, JSON.stringify(nano));
+  await page.keyboard.press('KeyN');
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.combat.hurt = window.huntHurt;
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+  });
+
+  // --- the bow: draw weights and the shock head ---------------------------------------
+  await page.evaluate(() => { const s = window.spreefall; s.weapon.select('bow'); s.weapon.drawWeight = 0; s.weapon.arrowHead = 0; });
+  const draws = [];
+  for (let i = 0; i < 3; i++) {
+    draws.push(await page.evaluate(() => {
+      const s = window.spreefall;
+      s.weapon.cooldown = 0;
+      s.weapon.ammo = 1;
+      s.weapon.state = 0;
+      s.look(0, 30);
+      s.shoot();
+      return { draw: s.weapon.draw, label: document.getElementById('weaponname').textContent, cooldown: +s.weapon.cooldown.toFixed(2) };
+    }));
+    await page.keyboard.press('KeyX');
+  }
+  check('X changes the draw weight: medium, strong, light, with the time between arrows to match',
+    draws.map((d) => d.draw).join(',') === 'medium,strong,light' && /STRONG/.test(draws[1].label)
+      && draws[1].cooldown > draws[0].cooldown && draws[2].cooldown < draws[0].cooldown, JSON.stringify(draws));
+
+  const shock = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset();
+    s.teleport(81, 0);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    const put = (dx, dz) => {
+      const g = s.spawnSoldier(dx, dz);
+      g.state = 0; g.rise = 0; g.y = s.world.groundHeight(g.x, g.z);
+      return g;
+    };
+    const a = put(-20, 30), b = put(-17, 31), far = put(10, 30);
+    a.health = b.health = far.health = 400;
+    s.projectiles.launch('arrow', { x: a.x + 1.5, y: a.y + 3, z: a.z, vx: 0, vy: -40, vz: 0, weapon: 'bow', head: 'shock' });
+    for (let i = 0; i < 12; i++) s.fixedForTest(1 / 60);
+    const down = (g) => g.state === 4 || g.state === 5 || !g.alive;
+    const out = { a: down(a), b: down(b), far: down(far), hurt: a.health < 400 && b.health < 400, farHurt: far.health < 400 };
+    s.soldiers.stealth = s.tacticsSpec.stealth;
+    s.soldiers.reset();
+    return out;
+  });
+  check('a shock arrow puts down and hurts the two beside where it lands, and not the one twenty metres off',
+    shock.a && shock.b && shock.hurt && !shock.far && !shock.farHurt, JSON.stringify(shock));
+
   // The picture: cloaked, a guard in front of you who has no idea.
   await guard();
   await page.keyboard.press('KeyE');

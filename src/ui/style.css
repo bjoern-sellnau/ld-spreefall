@@ -1748,3 +1748,16 @@ html, body {
 @media (max-width: 720px) {
   #suit { left: 12px; bottom: 160px; }
 }
+
+/* The visor's scan and its tags, and the heat over the bodies in Nano
+   Vision, on one canvas over the frame. Nano Vision turns the frame itself
+   cold and blue underneath them. */
+#visorhud {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+#visorhud.hidden { display: none; }
+canvas.nano { filter: grayscale(1) brightness(0.62) contrast(1.4) sepia(1) hue-rotate(175deg) saturate(2.4); }
+#suit .modes { flex-wrap: wrap; gap: 6px 10px; }
+#suit #suitvisor.on { color: #9ee8ff; }
+#suit #suitnano.on { color: #ffb15a; }

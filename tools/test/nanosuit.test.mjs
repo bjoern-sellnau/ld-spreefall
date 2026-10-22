@@ -97,3 +97,15 @@ test('a held jump and a punch cost energy, and need it', () => {
   assert.equal(s.powerJump(), 1);
   assert.equal(s.punch(), false);
 });
+
+test('Nano Vision drains the energy while it is up, and drops with it', () => {
+  const s = new Nanosuit();
+  assert.equal(s.toggleNano(), true);
+  run(s, 2, { speed: 0 });
+  assert.ok(Math.abs(s.energy - (SUIT.energy - SUIT.nano.drain * 2)) < 0.5, `${s.energy}`);
+  let dropped = null;
+  s.onEmpty = (what) => { dropped = what; };
+  run(s, 30, { speed: 0 });
+  assert.equal(s.nano, false);
+  assert.deepEqual(dropped, ['nano vision']);
+});

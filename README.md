@@ -539,6 +539,17 @@ and you in a suit with one bar of energy that everything it does runs on.
   **Space** held puts the suit's strength into the jump and goes about four
   times as high. **F** with one of theirs in front of you is a punch that
   puts him down, for 30 energy.
+- **B** the visor: a narrower view with a scan over the middle; hold one
+  of theirs there for half a second and he is tagged, and the tag (a red
+  marker with the distance) stays over him wherever he goes, through walls
+  and with the visor down, for as long as he lives.
+- **N** Nano Vision: the city goes cold and blue and whatever of theirs is
+  in sight shows white and orange, for 6 energy a second.
+- **X** with the bow the draw weight: medium, strong (1.6 times the damage,
+  faster, carries a man back along the arrow's line, slower to draw again)
+  and light (quicker, weaker). **R** goes through the heads, and the bow now
+  has a fifth, in every mode: a shock arrow that puts down and hurts
+  whoever is within five metres of where it lands.
 - The energy comes back by itself 1.4 s after the last thing that drew on it.
   Run it out and whatever was on goes off, and it will not come back on for
   a moment.
@@ -559,6 +570,8 @@ for a share of the energy rather than all of it
 The numbers and everything else here are ours.
 
 ![Cloaked in front of a guard](docs/screenshots/hunt-01-cloak.png)
+![The visor, one tagged](docs/screenshots/hunt-02-visor.png)
+![Nano Vision](docs/screenshots/hunt-03-nano.png)
 
 ## The end of an operation
 
