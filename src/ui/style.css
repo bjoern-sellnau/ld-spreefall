@@ -1808,6 +1808,18 @@ html, body {
 #suit .modes b { margin-right: 4px; color: var(--ink); }
 #suit .modes span.on { opacity: 1; color: #7fe0ff; }
 #suit #suitarmor.on { color: #ffc46a; }
+/* What the suit has made of its kills: five pips for each of the three, and
+   a thin line for the catalyst towards the next step. */
+#suit .ups { display: flex; gap: 10px; margin-top: 7px; align-items: center; }
+#suit .ups span { display: flex; flex-direction: column; gap: 3px; font-size: 8.5px; }
+#suit .ups span i { display: block; width: 40px; height: 3px;
+  background: linear-gradient(90deg, #7fe0ff var(--lv, 0%), rgba(255, 255, 255, 0.12) var(--lv, 0%));
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 8.25px);
+  mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 8.25px); }
+#suit .ups em { flex: 1; height: 2px; align-self: flex-end; margin-bottom: 1px; background: rgba(255, 255, 255, 0.1); }
+#suit .ups em u { display: block; height: 100%; width: 0; background: #b8f0ff; }
+#suit .ups span.up { color: #fff; animation: suitup 0.5s ease 3; }
+@keyframes suitup { 50% { color: #7fe0ff; text-shadow: 0 0 8px #7fe0ff; } }
 #suitfx {
   position: absolute; inset: 0;
   pointer-events: none;

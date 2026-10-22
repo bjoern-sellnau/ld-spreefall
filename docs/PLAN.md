@@ -4738,6 +4738,53 @@ So there are two cities now, and a profile picks which:
   seconds later; the Tactics kit is a weapon a key. Screenshots
   arsenal-01-side-panel.png and arsenal-02-rotary.png.
 
+## 123. Kills make the suit better
+
+- The ask: upgrades for killing them: more energy for the suit, more speed,
+  a higher jump.
+- In the manner of the second game's nano catalyst. `Nanosuit.feed(kind)`:
+  a man is worth 1, a machine 2, an alien 3, a jeep, tank or jet 3, a mech
+  8; the first step costs 3 and each after it 2 more; the steps go round
+  energy, speed and jump, skipping one that is full, five of each. Energy
+  is 20 on the bar a step (which comes full when the step is taken) and 15
+  percent on the refill; speed is 6 percent on your feet and 0.12 on the
+  sprint multiple; jump is 0.3 on the held jump's multiple, so five steps
+  take it from 1.75 to 3.25. A kill in a hunt feeds it from `creditTarget`,
+  a mech from its destruction and a vehicle of theirs from its; each step
+  is a toast, a feed line, the charge chord and a flash on its pips. The
+  suit's panel has five pips a track and a line to the next step. The steps
+  are kept in the hunt's book and put back when the hunt carries on; a new
+  hunt starts from none.
+- Checks: unit (two new) on the order, the cost, the bigger bar coming full
+  and refilling to its own top, quicker feet, a higher jump, the ceiling,
+  and keeping them; hunt: three men and the bar is bigger and full, a mech
+  and you are quicker, the book has it and the pips read 20 percent.
+  Screenshot hunt-08-suit-upgrade.png.
+
+## 124. Death from above, mechs included
+
+- The ask: a takedown out of the jump, and onto their mechs: jump on one
+  and take it out.
+- In the air, F looks first for one of their mechs whose top you are within
+  2.5 m below and 12 m above and within its radius and 3.5 m of, and then
+  for a man 0.6 to 14 m below you, within 3.5 m and a third of a metre more
+  for every metre of drop, ahead of you or under you. You go to him on a
+  curve that gathers speed, a quarter of a second (a third for a mech), and
+  the body is not stepped meanwhile.
+- A man: dead, blood and a stain, a small blast of dust, and anybody within
+  3.2 m knocked down and hurt by up to 140. A mech: no shield stops a hand,
+  the reactor comes out with it, so it falls with none of the fusion blast
+  a kill otherwise sets off (the one way out of a mech's 46 m blast from
+  arm's length); 35 suit energy in a hunt, a second of slow motion, and you
+  are thrown up at 1.9 times a jump and back the way you came. On foot in
+  any mode; reaching a mech's back takes the suit's jump, the reflex leap or
+  a roof. The hint over the crosshair says Takedown or Mech takedown while
+  there is one.
+- Checks (hunt): six metres over a man, F takes him (and nothing from the
+  ground), you end on him, the man beside him is hurt, the kill feeds the
+  suit; three metres over a Lynx, F kills it with no reactor left running,
+  takes 35 energy, and you go up. Screenshot hunt-09-mech-takedown.png.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

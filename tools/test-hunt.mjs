@@ -690,10 +690,104 @@ async function run() {
     for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
     const r2 = s.tactics.live.get(site.id);
     return { manned, freeBefore, freeAfter: s.campaign.summary([]).free, held: site.state !== 1,
+      label: document.getElementById('weaponname').textContent, short: s.weapon.spec.short,
       again: !!(r2 && r2.manned && r2.guards.some((g) => g.alive && g.health > 0)) };
   });
   check('coming back after dying leaves the grounds held, and manned again', respawn.manned && respawn.held
     && respawn.freeAfter === respawn.freeBefore && respawn.again, JSON.stringify(respawn));
+  check('and the name under the ammunition is the weapon you come back with', respawn.label === respawn.short,
+    `${respawn.label} for ${respawn.short}`);
+
+  // --- kills feed the suit -------------------------------------------------------
+  const ups = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.suit.reset();
+    const out = {};
+    s.suitKill('soldier'); s.suitKill('soldier');
+    out.before = { ...s.suit.level };
+    s.suitKill('soldier');
+    out.after3 = { ...s.suit.level };
+    out.bar = s.suit.maxEnergy;
+    out.full = s.suit.energy === s.suit.maxEnergy;
+    out.toast = (document.getElementById('toast') || {}).textContent || '';
+    out.kept = s.campaign.book.suit ? s.campaign.book.suit.level.energy : null;
+    s.suitKill('mech');
+    out.afterMech = { ...s.suit.level };
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    return out;
+  });
+  await page.waitForTimeout(400);
+  const pips = await page.evaluate(() => {
+    const sp = document.querySelector('#suitups [data-up=energy] i');
+    return { lv: sp ? sp.style.getPropertyValue('--lv') : null,
+      flashing: !!document.querySelector('#suitups span.up') };
+  });
+  check('kills in a hunt feed the suit: three men and the bar is bigger and full, a mech and you are quicker',
+    ups.before.energy === 0 && ups.after3.energy === 1 && ups.bar > 100 && ups.full
+      && ups.afterMech.speed === 1 && /SUIT UPGRADE/.test(ups.toast),
+    JSON.stringify(ups));
+  check('and the hunt keeps them, and the suit shows them as pips', ups.kept === 1 && pips.lv === '20%',
+    JSON.stringify({ kept: ups.kept, pips }));
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-08-suit-upgrade.png') });
+
+  // --- death from above -----------------------------------------------------------
+  const slam = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.tactics.clear(); s.soldiers.reset(); s.mechs.reset(); s.effects.clear();
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 140, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const t = s.spawnSoldier(-4, 0);
+    t.rise = 0; t.state = 0;
+    const by = s.spawnSoldier(-5.5, 1.2);
+    by.rise = 0; by.state = 0;
+    const kills = s.combat.kills;
+    const cat = s.suit.catalyst + s.suit.steps * 100;
+    // Six metres up and coming down at him.
+    s.player.y = t.y + 6; s.player.onGround = false; s.player.vy = -2;
+    s.look(90, -45);
+    const seen = s.airTakedownTarget();
+    const grounded = (() => { s.player.onGround = true; const x = s.airTakedownTarget(); s.player.onGround = false; return x; })();
+    const went = s.airTakedown();
+    for (let i = 0; i < 24; i++) s.fixedForTest(1 / 60);
+    return { seen: seen && seen.kind, grounded: !!grounded, went, dead: t.health <= 0, by: Math.round(by.health),
+      kills: s.combat.kills - kills, fed: s.suit.catalyst + s.suit.steps * 100 > cat,
+      off: +Math.hypot(s.player.x - t.x, s.player.z - t.z).toFixed(2), slam: !!s.state.slam };
+  });
+  check('in the air over a man, F takes him from above, and not from the ground',
+    slam.seen === 'soldier' && !slam.grounded && slam.went && slam.dead && !slam.slam && slam.off < 0.5,
+    JSON.stringify(slam));
+  check('and the one beside him goes down hurt, and the kill feeds the suit',
+    slam.by < 100 && slam.kills >= 1 && slam.fed, JSON.stringify(slam));
+  const mechSlam = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.mechs.reset();
+    const m = s.spawnMech('lynx', 18);
+    if (!m) return { none: true };
+    m.mine = false;
+    const top = m.y + m.spec.height;
+    s.teleport(m.x + 1.5, m.z + 1);
+    s.player.y = top + 3; s.player.onGround = false; s.player.vy = 0;
+    s.look(Math.atan2(-(m.x - s.player.x), -(m.z - s.player.z)) * 180 / Math.PI, -60);
+    s.suit.energy = s.suit.maxEnergy;
+    const e0 = s.suit.energy;
+    const seen = s.airTakedownTarget();
+    const went = s.airTakedown();
+    const spent = e0 - s.suit.energy;
+    for (let i = 0; i < 24; i++) s.fixedForTest(1 / 60);
+    const out = { seen: seen && seen.kind, went, spent: Math.round(spent), dead: m.health <= 0,
+      reactor: s.mechs.reactors.some((r) => r.m === m), vy: +s.player.vy.toFixed(1), slam: !!s.state.slam,
+      takedowns: s.state.mechTakedowns || 0 };
+    s.look(Math.atan2(-(m.x - s.player.x), -(m.z - s.player.z)) * 180 / Math.PI, -35);
+    return out;
+  });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-09-mech-takedown.png') });
+  check('come down on one of their mechs and F tears its reactor out: it falls with no fusion blast, for suit energy',
+    mechSlam.seen === 'mech' && mechSlam.went && mechSlam.dead && !mechSlam.reactor && mechSlam.spent >= 30
+      && mechSlam.takedowns >= 1,
+    JSON.stringify(mechSlam));
+  check('and you are thrown clear of it', mechSlam.vy > 3 && !mechSlam.slam, JSON.stringify(mechSlam));
 
   // The picture: cloaked, a guard in front of you who has no idea.
   await guard();

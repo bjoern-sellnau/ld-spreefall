@@ -593,6 +593,21 @@ and you in a suit with one bar of energy that everything it does runs on.
 - The energy comes back by itself 1.4 s after the last thing that drew on it.
   Run it out and whatever was on goes off, and it will not come back on for
   a moment.
+- **Kills feed the suit.** Every kill of theirs in a hunt leaves nano
+  catalyst (a man 1, a machine 2, one of their aliens 3, a jeep, tank or jet
+  3, a mech 8), and enough of it buys a step: the first at 3, each after it
+  2 more. The steps go round energy (20 more on the bar, which comes full,
+  and 15 percent faster back), speed (6 percent on your feet and more on the
+  sprint) and jump (0.3 more on the held jump's multiple), five of each. The
+  suit's panel shows five pips for each and a line towards the next step,
+  and the hunt keeps them when you come back to it.
+- **Death from above.** In the air with one of theirs under you, **F**
+  takes him: you are on him in a quarter of a second, he is dead and
+  whoever is within three metres of him is knocked down and hurt. Come down
+  on the back of one of their mechs (the suit's jump, the reflex leap or a
+  roof gets you up there) and F tears its reactor out for 35 energy: it
+  falls with no fusion blast, and you are thrown clear. It works on foot in
+  any mode; the suit is what gets you high enough.
 - You start with the bow in your hands. The number row is bow, rifle,
   suppressed pistol, marksman rifle, shotgun, grenade, C4, rocket launcher,
   railgun, banana. A ground cleared without anybody raising the alarm pays
