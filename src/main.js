@@ -26,7 +26,8 @@ import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS, BOW_HOLDS } from './game/cheats.js';
-import { CHASSIS } from './game/chassis.js';
+import { CHASSIS, mechKey } from './game/chassis.js';
+import { Onslaught, ONSLAUGHT } from './game/onslaught.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
@@ -5253,7 +5254,7 @@ async function main() {
    *   it rather than you. The mode's own warheads are the mode, so they do
    *   not mark the run the way reaching for one in the cheat menu does.
    */
-  function dropNuke(x, z, ofTheMode = false) {
+  function dropNuke(x, z, ofTheMode = false, hostile = false) {
     if (!ofTheMode) {
       cheats.used = true;
       applyCheats();
@@ -5273,8 +5274,116 @@ async function main() {
       },
     });
     audio.incoming(NUKE.fall);
-    if (cheats.cinematic && state.mode === 'walk') startCinema(body, x, z);
+    // One sent against you is watched from where you are standing.
+    if (!hostile && cheats.cinematic && state.mode === 'walk') startCinema(body, x, z);
     return true;
+  }
+
+  // --- One Man Army and Nightmare ------------------------------------------------
+  const onslaught = new Onslaught();
+  // Their mechs, lightest first, for the waves to work up through.
+  const foeChassis = [...CHASSIS]
+    .sort((a, b) => ((a.foe && a.foe.health) || 2400) - ((b.foe && b.foe.health) || 2400))
+    .map((c) => mechKey(c.id, false));
+  // A camp that is wherever you are, for the convoys to drive to.
+  const onslaughtSite = {
+    id: 'onslaught',
+    get x() { return player.x; },
+    get z() { return player.z; },
+    level: 0,
+  };
+  /** A point this far from you in some direction the map has. */
+  function aroundYou(lo, hi) {
+    for (let k = 0; k < 24; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = lo + Math.random() * (hi - lo);
+      const x = player.x + Math.cos(a) * r, z = player.z + Math.sin(a) * r;
+      if (x < world.minX + 20 || x > world.maxX - 20 || z < world.minZ + 20 || z > world.maxZ - 20) continue;
+      if (combat.inField && combat.inField(x, z)) continue;
+      return { x, z, a };
+    }
+    return null;
+  }
+  /** A stick of bombs across the street you are in, falling one after another. */
+  function bombStick(n) {
+    const B = ONSLAUGHT.bombs;
+    const a = Math.random() * Math.PI * 2;
+    const off = B.offset[0] + Math.random() * (B.offset[1] - B.offset[0]);
+    // A line that passes beside you, off to one side.
+    const cx = player.x + Math.cos(a + Math.PI / 2) * off, cz = player.z + Math.sin(a + Math.PI / 2) * off;
+    let dropped = 0;
+    for (let i = 0; i < n; i++) {
+      const t = (i - (n - 1) / 2) * B.spacing;
+      const x = cx + Math.cos(a) * t, z = cz + Math.sin(a) * t;
+      if (combat.inField && combat.inField(x, z)) continue;
+      const g = world.groundHeight(x, z);
+      projectiles.launch('rocket', {
+        x, y: g + B.from[0] + i * ((B.from[1] - B.from[0]) / Math.max(1, n - 1)), z,
+        vx: 0, vy: -72, vz: 0,
+        splash: { radius: 9, damage: 240, force: 9 }, weapon: 'bomb',
+      });
+      dropped++;
+    }
+    if (dropped) audio.incoming(1.2);
+    return dropped;
+  }
+  /** One of the city's super weapons, near you rather than on you. */
+  function onslaughtSuper(kind) {
+    const N = ONSLAUGHT.nightmare;
+    const [lo, hi] = N.away[kind];
+    // A warhead or an ion blast set bigger in the menu lands as much further off.
+    const extra = kind === 'nuke' ? Math.max(0, nukeRadius() - NUKE.radius)
+      : kind === 'ion' ? Math.max(0, ionRadius() - ION.blast) : 0;
+    for (let k = 0; k < 6; k++) {
+      const at = aroundYou(lo + extra, hi + extra);
+      if (!at) continue;
+      let ok = false;
+      if (kind === 'ion') ok = ion.fire(at.x, at.z);
+      else if (kind === 'ultra') ok = ultra.fire(at.x, at.z, { ...cheats.ultra, ...N.ultra, bearing: Math.random() * 360 });
+      else if (kind === 'storm') ok = storm.fire(at.x, at.z, { ...cheats.storm, ...N.storm, bearing: Math.random() * 360 });
+      else if (kind === 'nuke') ok = dropNuke(at.x, at.z, true, true);
+      if (ok) return { kind, x: at.x, z: at.z, away: Math.round(Math.hypot(at.x - player.x, at.z - player.z)) };
+      // Busy with the last one: nothing to be gained by trying elsewhere.
+      if ((kind === 'ion' && ion.firing) || (kind === 'ultra' && ultra.active) || (kind === 'storm' && storm.active)) break;
+    }
+    return null;
+  }
+  const SUPER_NAMES = { ion: 'the ion cannon', ultra: 'ultra plasma', storm: 'a void storm', nuke: 'a warhead' };
+  /** Send a wave, whatever it is made of, and say what came. */
+  function launchOnslaught(w) {
+    const sent = { level: w.level, soldiers: 0, machines: 0, convoy: false, mechs: 0, bombs: 0, jets: 0, superweapon: null };
+    if (w.soldiers) sent.soldiers = spawnWave('soldiers', w.soldiers);
+    if (w.machines) sent.machines = spawnWave('machines', w.machines);
+    if (w.convoy) {
+      onslaughtSite.level = w.convoy.tank ? CONVOY.tankFrom : 0;
+      sent.convoy = sendConvoy(onslaughtSite, { waves: w.convoy.tank ? 2 : 0 }, w.convoy.men);
+      // No road that would do: they come on foot instead.
+      if (!sent.convoy) sent.soldiers += spawnWave('soldiers', w.convoy.men);
+    }
+    for (const type of w.mechs) if (spawnMech(type, 70 + Math.random() * 50)) sent.mechs++;
+    if (w.bombs) sent.bombs = bombStick(w.bombs);
+    if (w.jets) sent.jets = spawnWave('jets', w.jets);
+    if (w.superweapon) sent.superweapon = onslaughtSuper(w.superweapon);
+    const bits = [`${sent.soldiers + sent.machines} on foot`];
+    if (sent.convoy) bits.push(w.convoy.tank ? 'jeeps and a tank' : 'jeeps');
+    if (sent.mechs) bits.push(`${sent.mechs} mech${sent.mechs > 1 ? 's' : ''}`);
+    if (sent.bombs) bits.push('bombs');
+    if (sent.jets) bits.push(`${sent.jets} jet${sent.jets > 1 ? 's' : ''}`);
+    const title = cheats.nightmare ? 'NIGHTMARE' : 'ONE MAN ARMY';
+    feed(`<b>${title.toLowerCase()}</b> wave ${w.level}: ${bits.join(', ')}`);
+    toast(`${title} wave ${w.level}: ${bits.join(', ')}`, 3500);
+    if (sent.superweapon) {
+      const sw = sent.superweapon;
+      feed(`<b>${SUPER_NAMES[sw.kind]}</b> ${sw.away} m off`);
+      setTimeout(() => toast(`${SUPER_NAMES[sw.kind]} incoming, ${sw.away} m off`, 3500), 1600);
+    }
+    state.onslaughtLast = sent;
+    return sent;
+  }
+  function onslaughtStep(dt) {
+    const on = (cheats.oneManArmy || cheats.nightmare) && state.mode === 'walk' && combat.health > 0;
+    const w = onslaught.update(dt, { on, nightmare: cheats.nightmare, chassis: foeChassis });
+    if (w) launchOnslaught(w);
   }
 
   /**
@@ -5509,6 +5618,8 @@ async function main() {
     slayer.clear();
     soldiers.reset();
     jets.reset();
+    // A breath before the next wave, at the level it had got to.
+    onslaught.clock = ONSLAUGHT.first;
     projectiles.clear();
     reflex.reset();
     pickups.reset();
@@ -7298,6 +7409,7 @@ async function main() {
       refineStep();
       bombStep(worldDt);
       convoyStep(worldDt);
+      onslaughtStep(worldDt);
       pingStep(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
@@ -7535,6 +7647,7 @@ async function main() {
     refineStep();
     bombStep(worldDt);
     convoyStep(worldDt);
+    onslaughtStep(worldDt);
     pingStep(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
@@ -8129,6 +8242,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
+    onslaught, onslaughtSpec: ONSLAUGHT, launchOnslaught: (w) => launchOnslaught(w), foeChassis,
     compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grime, grimeSpec: GRIME, grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
     setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },

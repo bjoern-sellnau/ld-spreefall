@@ -26,7 +26,7 @@ export const OVERKILL_SCALE = 12;
 const KEYS = ['godmode', 'infiniteAmmo', 'everyWeapon', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
   'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore',
-  'extremeEnemies', 'crazyReality'];
+  'extremeEnemies', 'crazyReality', 'oneManArmy', 'nightmare'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -54,6 +54,10 @@ export const SWITCHES = [
   // The screen as a lens you are looking through: dust off every blast near
   // you, blood when you are hit or something dies close, soot from fire.
   { id: 'crazyReality', label: 'Crazy reality', note: 'the screen gets dirty: dust off blasts near you, blood when you are hit or a kill is close, soot from fire; it clears slowly' },
+  // Everything against you, and more of it every wave.
+  { id: 'oneManArmy', label: 'One Man Army', note: 'wave after wave, each worse than the last: squads, jeeps, a tank, mechs that get heavier, bombs, jets, bigger armies' },
+  // And the city's own super weapons on their side too.
+  { id: 'nightmare', label: 'Nightmare', note: 'One Man Army, and from the third wave the ion cannon, ultra plasma, a void storm and a warhead come down near you in turn' },
 ];
 
 export const GORE = [

@@ -4500,6 +4500,42 @@ So there are two cities now, and a profile picks which:
   upright from the menu puts it left of the crosshair; all four poses have
   no yaw and no pitch. hunt-07 and hunt-08 now show it flat.
 
+## 115. One Man Army, and Nightmare
+
+- The ask: a cheat menu switch, One Man Army, under which the attacks keep
+  getting heavier (jeeps, tanks, mechs, heavier mechs, bombs, bigger
+  armies), and a Nightmare switch that adds the ion cannon, the void storm,
+  ultra plasma and the warhead.
+- `src/game/onslaught.js` decides what comes and when, and nothing else, so
+  it is tested on its own. A wave twelve seconds after the switch, then
+  every 40 s, 2.5 s less each level, down to 18. Level by level: a squad of
+  4 and 2 more a level (up to 34, a third of them machines from level 5);
+  from 2 the rest by jeep (4 men and 1 more a level, up to 16); a tank with
+  them from 3; a mech from 4, one more every second level up to four, and
+  heavier as it goes (their chassis sorted by health, lightest first, the
+  heaviest by level 12); from 5 a stick of bombs across your street (6, 2
+  more a level, up to 22, nine metres apart, a line 18 to 55 m off to one
+  side, falling one after another); jets from 6, up to four.
+- Nightmare: from level 3 every other wave, and from 8 every wave, one of
+  the four in turn: ion, ultra, storm, nuke. Each lands past what it does:
+  the ion cannon 250 to 320 m off (its blast is 210), ultra plasma and the
+  void storm with a 70 m circle 150 to 210 m off, a warhead 240 to 320 m
+  off (its radius is 170); a bigger radius set in the menu moves them out
+  by as much. A warhead sent against you is not followed by the cinematic
+  camera.
+- The game layer sends each wave with what it already has: the spawners,
+  the convoys (to a stand in camp that is wherever you are), the mech drop,
+  the jets, a rocket body falling straight down for each bomb, and the
+  fire calls of the three super weapons and the warhead. A toast and the
+  feed say what came. Switched off it forgets the level; dying and coming
+  back keeps the level and gives you twelve seconds.
+- Checks: unit (4) on the order things come in, the heavier mechs, the
+  clock and the Nightmare rotation; cheats: nothing at once, a squad on the
+  first wave, and on the sixth jeeps and a tank, mechs, bombs in the air and
+  a jet; with Nightmare the ion cannon firing 240 m off or more on the third
+  and a warhead falling 230 m off or more later. Screenshots
+  cheat-11-one-man-army and cheat-12-nightmare.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
