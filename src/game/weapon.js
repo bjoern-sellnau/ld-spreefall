@@ -13,6 +13,7 @@
 // keep. That share is what makes a burst walk, rather than a stuck aim.
 
 import { WEAPONS, LOADOUT, KIND, KITS, ARROW_DRAWS, weaponBySlot } from './arsenal.js';
+import { THROW } from './throwarc.js';
 
 const STATE = { READY: 0, FIRING: 1, RELOADING: 2, HOLSTERED: 3 };
 export const WEAPON_STATE = STATE;
@@ -721,7 +722,8 @@ export class Weapon {
       this.blastHeld = 0;
     }
     const drawn = this.draw ? ARROW_DRAWS[this.draw] : null;
-    const speed = (blast ? blast.speed : spec.muzzleSpeed) * (drawn ? drawn.speed : 1);
+    const speed = (blast ? blast.speed : spec.muzzleSpeed) * (drawn ? drawn.speed : 1)
+      * (spec.kind === KIND.THROW ? this.throwScale : 1);
     const splash = blast ? {
       ...spec.splash,
       radius: spec.splash.radius * blast.radius,
@@ -776,7 +778,15 @@ export class Weapon {
    *
    * @returns {object|null} the grenade in the air, or null with none left
    */
-  quickGrenade(eye, dir) {
+  /** How hard a throw goes: harder with the right button held. */
+  get throwScale() { return this.aiming && !this.holstered ? THROW.far : 1; }
+
+  /** How fast what is in your hands leaves them, if it is thrown. */
+  throwSpeed() {
+    return this.spec.kind === KIND.THROW ? this.spec.muzzleSpeed * this.throwScale : 0;
+  }
+
+  quickGrenade(eye, dir, far = false) {
     if (!this.projectiles || this.quickCooldown > 0) return null;
     const slot = this.carried.grenade;
     if (!slot) return null;
@@ -787,11 +797,12 @@ export class Weapon {
     }
     const spec = WEAPONS.grenade;
     this.quickCooldown = 0.7;
+    const speed = spec.muzzleSpeed * (far ? THROW.far : 1);
     return this.projectiles.launch(spec.projectile, {
       x: eye.x + dir.x * 0.6, y: eye.y + dir.y * 0.6 - 0.12, z: eye.z + dir.z * 0.6,
-      vx: dir.x * spec.muzzleSpeed,
-      vy: dir.y * spec.muzzleSpeed + 3.4,
-      vz: dir.z * spec.muzzleSpeed,
+      vx: dir.x * speed,
+      vy: dir.y * speed + THROW.lift,
+      vz: dir.z * speed,
       fuse: spec.fuse,
       splash: this._scaledSplash(spec.splash),
       weapon: 'grenade',

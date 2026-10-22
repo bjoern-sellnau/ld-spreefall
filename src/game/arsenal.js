@@ -60,7 +60,8 @@ export const WEAPONS = {
     spreadRecover: 0.2,
     recoilKick: 0.004, recoilSide: 0.001, recoilRetain: 0.1,
     aimFov: 58, sound: 'throw',
-    splash: { radius: 8, damage: 135, force: 20 },
+    // Heavier than it was: a room's worth rather than a man's.
+    splash: { radius: 11, damage: 260, force: 26 },
   },
   c4: {
     name: 'C4', short: 'C4', kind: KIND.PLACE, slot: 5,

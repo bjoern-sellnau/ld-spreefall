@@ -87,6 +87,7 @@ district by hand. A comparison of the same street at either tier is in
 | 7 8 9 0 | railgun, plasma rifle, flak cannon, splinter gun |
 | Z | flamethrower, right mouse throws a wall of fire that runs across the ground |
 | B | incendiary bomb |
+| (anything thrown) | while it is in your hand a dotted arc shows where it will fly and a ring the size of its blast where it first comes down; warmer and brighter for the harder throw |
 | X | EMP, which stops the machines where they stand |
 | E, or right Shift | reflexes: the city slows and you do not; in The Hunt, E is the suit's cloak |
 | Space while reflexes run | a leap, paid for out of the same meter |
@@ -102,7 +103,7 @@ district by hand. A comparison of the same street at either tier is in
 | Q | back to the weapon you had before; in The Hunt, the suit's armour |
 | T | blow the C4 you have put down, and every vehicle rigged with a remote bomb |
 | Left mouse, or RT on a pad | fire |
-| Right mouse, or LT on a pad | aim down the sight |
+| Right mouse, or LT on a pad | aim down the sight; with a grenade, a banana or an incendiary in hand, the harder throw, 1.6 times as fast, nearly twice as far |
 | G | holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt |
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |

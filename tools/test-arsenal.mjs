@@ -197,7 +197,9 @@ async function run() {
     charged.dropped === 0 && charged.half > 0.45 && charged.half < 0.55 && charged.ready === 1,
     `${charged.half} at five seconds, ${charged.ready} at ten, ${charged.dropped} after letting go early`);
   check('and the charged shot is one hard bolt at ten times the harm',
-    charged.launched && charged.launched.kind === 'blast' && charged.launched.damage === 340,
+    // Ten times the bolt's 34, and half as much again for what everything
+    // you carry does since phase 117.
+    charged.launched && charged.launched.kind === 'blast' && Math.abs(charged.launched.damage - 340 * 1.5) < 1e-6,
     charged.launched ? `${charged.launched.kind}, ${charged.launched.damage} damage over ${charged.launched.radius} m` : 'nothing');
   check('which does not bounce', charged.bounced === 0 && charged.left === 0,
     `${charged.bounced} bounces`);
@@ -822,6 +824,61 @@ async function run() {
     JSON.stringify(shots));
   check('and a suppressed pistol is still a cough', shots.pistol.first50 < shots.rifle.first50 - 15,
     `${shots.pistol.first50} dB against the rifle's ${shots.rifle.first50}`);
+
+  // --- the grenade's arc, and a harder throw on the right button -------------------
+  const frames = (n) => page.evaluate((k) => new Promise((done) => {
+    let i = 0;
+    const st = () => (++i >= k ? done() : requestAnimationFrame(st));
+    requestAnimationFrame(st);
+  }), n);
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset();
+    s.teleport(81, 0);
+    s.weapon.select('grenade'); s.state.holstered = false; s.look(90, 8);
+  });
+  await frames(30);
+  const arcOf = () => page.evaluate(() => {
+    const s = window.spreefall;
+    const l = s.arcView.last;
+    return l && { dots: l.dots, ring: l.ring, strong: l.strong, hit: l.hit,
+      d: l.hit ? +Math.hypot(l.hit.x - s.player.x, l.hit.z - s.player.z).toFixed(1) : 0 };
+  });
+  const hipArc = await arcOf();
+  await page.mouse.move(512, 320);
+  await page.mouse.down({ button: 'right' });
+  await frames(30);
+  const aimArc = await arcOf();
+  await page.screenshot({ path: path.join(SHOTS, 'combat-07-grenade-arc.png') });
+  const flew = await page.evaluate(() => {
+    const s = window.spreefall;
+    const want = s.arcView.last.hit;
+    s.weapon.cooldown = 0; s.weapon.state = 0;
+    s.shoot();
+    const g = s.projectiles.active.find((p) => p.weapon === 'grenade');
+    if (!g || !want) return { none: true };
+    // Where it first comes down: the frame its fall turns into a bounce.
+    let prevVy = g.vy, at = null;
+    for (let i = 0; i < 400 && g.alive; i++) {
+      s.fixedForTest(1 / 60);
+      if (prevVy < -1 && g.vy > prevVy + 2) { at = { x: g.x, z: g.z }; break; }
+      prevVy = g.vy;
+    }
+    return { off: at ? +Math.hypot(at.x - want.x, at.z - want.z).toFixed(2) : null };
+  });
+  await page.mouse.up({ button: 'right' });
+  check('a grenade in hand shows the arc it will fly and a ring the size of its blast where it comes down',
+    hipArc && hipArc.dots > 5 && hipArc.ring && !hipArc.strong && hipArc.d > 10, JSON.stringify(hipArc));
+  check('and with the right button held it goes much farther, and lands where the arc said',
+    aimArc && aimArc.strong && aimArc.d > hipArc.d * 1.5 && flew.off !== null && flew.off < 1.5,
+    `${hipArc && hipArc.d} m from the hip, ${aimArc && aimArc.d} m held, landed ${flew.off} m from the mark`);
+  const power = await page.evaluate(() => {
+    const s = window.spreefall;
+    const g = s.weapon.spec.splash;
+    return { scale: s.weapon.damageScale, radius: g.radius, damage: g.damage * s.weapon.damageScale };
+  });
+  check('everything you carry hits half as hard again, and a grenade far harder than it did',
+    power.scale === 1.5 && power.radius >= 11 && power.damage >= 380, JSON.stringify(power));
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

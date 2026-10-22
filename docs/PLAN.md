@@ -4562,6 +4562,33 @@ So there are two cities now, and a profile picks which:
   reversed and an island, a chain that does not close, and the band with
   and without a width tag, stopping where an area already is.
 
+## 117. Stronger weapons and grenades, and the arc of a throw
+
+- The ask: stronger weapons and grenades, a path showing where a grenade
+  will land, and a harder throw on the right mouse button.
+- Everything you carry hits half as hard again: `COMBAT.playerPower` 1.5,
+  through the same `damageScale` the quad damage pickup uses, so rounds,
+  pellets, splash and the melee all get it (quad is now 4 times that). The
+  grenade itself goes from a radius of 8 m and 135 to 11 m and 260 (390
+  with the scale), and a little more force.
+- The arc: `src/game/throwarc.js` flies the throw ahead of time with the
+  projectile's own gravity and drag, the same lift and the same world
+  raycast the thrown one meets, and stops at the first thing it hits;
+  `src/ui/arcview.js` draws dots along it and a ring the size of the blast
+  where it comes down, on a canvas under the dirt on the glass. Shown while
+  a grenade, a banana or an incendiary is in your hand in the street.
+- The harder throw: with the right button held a throw leaves the hand 1.6
+  times as fast (the arc turns orange). Counter-Strike has its full throw on
+  the left and a lob on the right (csdb.gg, metabot.gg guides); here the
+  left is the ordinary throw and the right the one you line up, since the
+  right button is aiming everywhere else in the game. In The Hunt, G with
+  the right button held throws the hard one too.
+- Checks (arsenal, 51): the arc shows with its ring, 19.8 m out from the
+  hip and 36.8 m with the button held, and the grenade thrown with it first
+  comes down 0.13 m from the mark; the power and the grenade's numbers. The
+  charged plasma check now expects ten times the bolt and the half again.
+  Screenshot combat-07-grenade-arc.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

@@ -20,7 +20,9 @@ import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
 import { ARROW_HEADS, ARROW_DRAWS } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
-import { Projectiles } from './game/projectiles.js';
+import { Projectiles, PROJECTILE } from './game/projectiles.js';
+import { throwArc, THROW as THROW_SPEC } from './game/throwarc.js';
+import { ArcView } from './ui/arcview.js';
 import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
@@ -77,7 +79,7 @@ const el = {
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   mapUnmark: $('mapunmark'), compassBar: $('compassbar'), cockpitHud: $('cockpithud'),
   suit: $('suit'), suitBar: $('suitbar'), suitArmor: $('suitarmor'), suitCloak: $('suitcloak'), suitFx: $('suitfx'),
-  suitVisor: $('suitvisor'), suitNano: $('suitnano'), visorHud: $('visorhud'), grime: $('grime'),
+  suitVisor: $('suitvisor'), suitNano: $('suitnano'), visorHud: $('visorhud'), grime: $('grime'), throwArc: $('throwarc'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -2330,6 +2332,23 @@ async function main() {
 
   // Crazy reality: the glass you look through gets dirty.
   const grime = new Grime(el.grime);
+  const arcView = new ArcView(el.throwArc);
+  /**
+   * The arc of what is in your hand, if it is thrown: shown while it is in
+   * your hand in the street, harder and warmer with the right button held.
+   */
+  function arcStep() {
+    const spec = weapon.spec;
+    const throwing = !!(spec.projectile && spec.muzzleSpeed && weapon.throwSpeed() > 0)
+      && !weapon.holstered && state.mode === 'walk' && !state.inVehicle && !state.inMech
+      && !photo.active && el.cheats.classList.contains('hidden');
+    if (!throwing) { arcView.hide(); return; }
+    const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+    const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    const from = { x: eye.x + dir.x * 0.6, y: eye.y + dir.y * 0.6 - 0.12, z: eye.z + dir.z * 0.6 };
+    const arc = throwArc(world, from, dir, weapon.throwSpeed(), PROJECTILE[spec.projectile] || PROJECTILE.grenade);
+    arcView.draw(arc, camera.viewProj, { strong: weapon.throwScale > 1, radius: spec.splash ? spec.splash.radius : 0 });
+  }
   /** Which side of the view a point is on, -1 left to 1 right. */
   function sideOf(x, z) {
     const dx = x - player.x, dz = z - player.z;
@@ -5866,7 +5885,8 @@ async function main() {
     if (!suited() || photo.active) return false;
     const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
     const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
-    const g = weapon.quickGrenade(eye, dir);
+    // With the right button held it goes harder, as from the hand.
+    const g = weapon.quickGrenade(eye, dir, input.secondary);
     if (!g) {
       if (weapon.grenadesLeft <= 0) { toast('no grenades left'); audio.dryFire(); }
       return true;
@@ -8135,9 +8155,11 @@ async function main() {
       cockpitStep();
       suitHud();
       visorStep();
+      arcStep();
       grimeStep();
     } else {
       cockpitHud.hide();
+      arcView.hide();
       grime.draw(0, false);
     }
 
@@ -8242,6 +8264,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
+    arcView, throwSpec: THROW_SPEC,
     onslaught, onslaughtSpec: ONSLAUGHT, launchOnslaught: (w) => launchOnslaught(w), foeChassis,
     compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grime, grimeSpec: GRIME, grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
     setMark: (at) => setMark(at),

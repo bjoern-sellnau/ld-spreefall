@@ -1781,6 +1781,12 @@ html, body {
   pointer-events: none; z-index: 38;
 }
 #grime.hidden { display: none; }
+/* The line a grenade will fly, under the dirt on the glass. */
+#throwarc {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 37;
+}
+#throwarc.hidden { display: none; }
 canvas.nano { filter: grayscale(1) brightness(0.62) contrast(1.4) sepia(1) hue-rotate(175deg) saturate(2.4); }
 #suit .modes { flex-wrap: wrap; gap: 6px 10px; }
 #suit #suitvisor.on { color: #9ee8ff; }
