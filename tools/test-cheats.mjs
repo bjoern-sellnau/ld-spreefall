@@ -1704,6 +1704,59 @@ async function run() {
   check('on, a blast beside you throws dust on it, a hit puts blood on it and fire puts soot on it',
     grime.dust > 0.5 && grime.blood > 0.3 && grime.soot > 0.1 && grime.shown, JSON.stringify(grime));
   check('and it clears by itself', cleared.later === 0 && cleared.hidden, JSON.stringify(cleared));
+  check('and one blast beside you and one hit cover the glass with it, not a few specks',
+    grime.splats >= 40, `${grime.splats} splats`);
+
+  // In a mech the glass is the canopy: the frame and the dashboard under it
+  // are not, and nothing lands on them.
+  const mechGrime = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const frames = (n) => new Promise((done) => {
+      let i = 0;
+      const step = () => (++i >= n ? done() : requestAnimationFrame(step));
+      requestAnimationFrame(step);
+    });
+    s.mechs.reset();
+    s.teleport(81, 0);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const mine = s.spawnMech('titan', 12);
+    if (!mine) return { skip: true, why: 'no room for one' };
+    s.teleport(mine.x + 3, mine.z);
+    s.toggleVehicle();
+    if (s.state.inMech !== mine) return { skip: true, why: 'could not get in' };
+    if (!s.state.cockpit) s.toggleCockpit();
+    s.setCheat('godmode', true);
+    s.setCheat('crazyReality', true);
+    s.look(mine.torso * 180 / Math.PI, -2);
+    for (let i = 0; i < 4; i++) s.grime.dust(1, i % 2 ? -1 : 1);
+    for (let i = 0; i < 4; i++) s.grime.blood(1, 0);
+    await frames(6);
+    const c = document.getElementById('grime');
+    const ctx = c.getContext('2d');
+    const band = (y0, y1) => {
+      const y = Math.round(c.height * y0), h = Math.max(1, Math.round(c.height * (y1 - y0)));
+      const d = ctx.getImageData(Math.round(c.width * 0.2), y, Math.round(c.width * 0.6), h).data;
+      let lit = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 8) lit++;
+      return lit / (d.length / 4);
+    };
+    return { skip: false, cockpit: !document.getElementById('cockpithud').classList.contains('hidden'),
+      glass: +band(0.3, 0.7).toFixed(3), dash: +band(0.8, 0.98).toFixed(3) };
+  });
+  if (!mechGrime.skip) {
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(SHOTS, 'cheat-10-mech-grime.png') });
+  }
+  check('in a mech it lands on the canopy and not on the dashboard under it',
+    !mechGrime.skip && mechGrime.cockpit && mechGrime.glass > 0.05 && mechGrime.dash === 0, JSON.stringify(mechGrime));
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.grime.clear();
+    s.setCheat('crazyReality', false);
+    s.setCheat('godmode', false);
+    if (s.state.inMech) s.leaveMech();
+    s.mechs.reset();
+  });
 
   await page.evaluate(() => {
     const s = window.spreefall;

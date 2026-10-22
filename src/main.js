@@ -45,7 +45,7 @@ import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
-import { CockpitHud, project as projectPoint } from './ui/cockpit.js';
+import { CockpitHud, project as projectPoint, glassClip } from './ui/cockpit.js';
 import { Visor, VISOR } from './ui/visor.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
@@ -1258,8 +1258,8 @@ async function main() {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
     // A kill close enough to get on you does.
-    if (grime.enabled && dist < 9 && !target.machine) {
-      grime.blood((1 - dist / 9) * (cheats.bleeding ? 1 : 0.6), sideOf(target.x, target.z));
+    if (grime.enabled && dist < 14 && !target.machine) {
+      grime.blood((1 - dist / 14) * (cheats.bleeding ? 1 : 0.7), sideOf(target.x, target.z));
     }
     if (target.ceph || (target.dspec && target.dspec.ceph) || target.pinger) state.cephKilled = (state.cephKilled || 0) + 1;
     // A body that came apart does not also catch fire.
@@ -5424,9 +5424,9 @@ async function main() {
     const right = dir.x * basis[2] + dir.z * basis[3];
     const fwd = dir.x * basis[0] + dir.z * basis[1];
     // And blood on the glass from that side.
-    // Not every frame of standing in a fire: once a second or so at most.
+    // Not every frame of standing in a fire: not much more than once a second.
     const nowMs = performance.now();
-    if (grime.enabled && nowMs - (state.grimeHurtAt || 0) > 1200) {
+    if (grime.enabled && nowMs - (state.grimeHurtAt || 0) > 700) {
       state.grimeHurtAt = nowMs;
       grime.blood(0.45, Math.max(-1, Math.min(1, right)));
     }
@@ -5795,7 +5795,8 @@ async function main() {
         if (near > 0) grime.soot(near);
       }
     }
-    grime.draw(dt, !photo.active && (state.mode === 'walk'));
+    // In a mech only the canopy is glass: not its frame, not the dashboard.
+    grime.draw(dt, !photo.active && (state.mode === 'walk'), cockpitHud.shown ? glassClip : null);
   }
   function visorStep() {
     const wall = performance.now() / 1000;

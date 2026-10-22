@@ -3,24 +3,29 @@
 //
 // A blast near you throws dust across it, heaviest on the side it went off
 // and in the lower half, where it settles. A hit puts blood on it, from the
-// side the shot came from, and blood runs: each splat grows a drip or two
-// that crawls down the glass for a few seconds. Fire puts soot round the
-// edges. All of it fades over a quarter of a minute or so, the way a visor
-// clears, and more of the same on top of it is darker rather than more
-// numerous past a point.
+// side the shot came from, and blood runs: each splat grows up to three
+// drips that crawl down the glass for a few seconds. Fire puts soot round
+// the edges. Together they leave a film, a haze in from the edges that is
+// brown, or red where there is blood. All of it fades over half a minute or
+// so, the way a visor clears, and more of the same on top of it is darker
+// rather than more numerous past a point.
 //
 // It is one canvas over the HUD, like the health bars and the visor: no
-// geometry, so nothing to clip, and nothing drawn at all while it is clean.
+// geometry, and nothing drawn at all while it is clean. In a mech it is
+// cut to the canopy, since the frame and the dashboard are not glass.
 
 export const GRIME = {
-  max: 90,               // splats held at once; the oldest go first
-  // And of each kind, so a fight does not paint the glass red all over.
-  cap: { dust: 50, blood: 18, soot: 16 },
-  life: { dust: 16, blood: 22, soot: 26 },
+  max: 220,              // splats held at once; the oldest go first
+  // And of each kind, so one kind never pushes the others off the glass.
+  cap: { dust: 120, blood: 50, soot: 40 },
+  life: { dust: 22, blood: 30, soot: 32 },
   // How far a blast reaches the screen, beyond its own radius, in metres.
-  dustReach: 45,
+  dustReach: 70,
   // How fast a drip runs, in screen heights a second, and how far.
-  drip: { speed: 0.035, run: 0.22 },
+  drip: { speed: 0.04, run: 0.34 },
+  // The film all of it leaves: a brown haze in from the edges, and a red
+  // one where there is blood, as thick as there is dirt, up to this much.
+  film: { per: 0.012, most: 0.5, bloodPer: 0.03, bloodMost: 0.35 },
 };
 
 /** A small, stable random number from a seed, so a splat keeps its shape. */
@@ -59,13 +64,13 @@ export class Grime {
    */
   dust(strength, side = 0) {
     if (!this.enabled || strength <= 0.02) return;
-    const n = Math.round(6 + strength * 22);
+    const n = Math.round(12 + strength * 40);
     for (let i = 0; i < n; i++) {
       const a = hash(this.seed * 1.7), b = hash(this.seed * 2.3), c = hash(this.seed * 3.1);
       // Weighted to the side it came from and to the lower half.
       const x = Math.min(0.98, Math.max(0.02, 0.5 + side * 0.25 + (a - 0.5) * 1.1));
-      const y = Math.min(0.98, 0.25 + Math.sqrt(b) * 0.8);
-      this._add('dust', x, y, 0.03 + c * 0.08 * (0.5 + strength), 0.45 + strength * 0.45);
+      const y = Math.min(0.98, 0.2 + Math.sqrt(b) * 0.82);
+      this._add('dust', x, y, 0.035 + c * 0.1 * (0.5 + strength), Math.min(1, 0.55 + strength * 0.45));
     }
   }
 
@@ -77,28 +82,30 @@ export class Grime {
    */
   blood(strength, side = 0) {
     if (!this.enabled || strength <= 0.02) return;
-    const n = 1 + Math.floor(strength * 2.5);
+    const n = 2 + Math.floor(strength * 4);
     for (let i = 0; i < n; i++) {
       const a = hash(this.seed * 1.3), b = hash(this.seed * 2.9), c = hash(this.seed * 4.7);
       const x = Math.min(0.97, Math.max(0.03, 0.5 + side * 0.3 + (a - 0.5) * 0.8));
-      const y = 0.1 + b * 0.7;
+      const y = 0.08 + b * 0.72;
       const drips = [];
-      const k = c < 0.4 ? 1 : 2;
-      for (let d = 0; d < k; d++) drips.push({ dx: (hash(this.seed + d * 9.1) - 0.5) * 0.8, run: 0 });
-      this._add('blood', x, y, 0.012 + c * 0.035 * (0.6 + strength), 0.5 + strength * 0.35, { drips });
+      const k = 1 + Math.floor(c * 3);
+      for (let d = 0; d < k; d++) drips.push({ dx: (hash(this.seed + d * 9.1) - 0.5) * 0.9, run: 0 });
+      this._add('blood', x, y, 0.016 + c * 0.05 * (0.6 + strength), Math.min(1, 0.6 + strength * 0.35), { drips });
     }
   }
 
   /** Soot round the edges, from fire close by. */
   soot(strength) {
     if (!this.enabled || strength <= 0.02) return;
-    const a = hash(this.seed * 5.3), b = hash(this.seed * 6.1);
-    // On an edge: which one, and where along it.
-    const edge = Math.floor(a * 4);
-    const t = b;
-    const x = edge === 0 ? 0.02 : edge === 1 ? 0.98 : t;
-    const y = edge === 2 ? 0.03 : edge === 3 ? 0.97 : t;
-    this._add('soot', x, y, 0.06 + strength * 0.08, 0.3 + strength * 0.4);
+    for (let i = 0; i < 2; i++) {
+      const a = hash(this.seed * 5.3), b = hash(this.seed * 6.1);
+      // On an edge: which one, and where along it.
+      const edge = Math.floor(a * 4);
+      const t = b;
+      const x = edge === 0 ? 0.02 : edge === 1 ? 0.98 : t;
+      const y = edge === 2 ? 0.03 : edge === 3 ? 0.97 : t;
+      this._add('soot', x, y, 0.07 + strength * 0.1, Math.min(1, 0.4 + strength * 0.45));
+    }
   }
 
   /** How dirty it is, for the tests: how much of each, by weight. */
@@ -116,8 +123,11 @@ export class Grime {
    * One frame: age what is there and draw it.
    * @param {number} dt seconds
    * @param {boolean} active whether it may show at all (in the street, cheat on)
+   * @param {((ctx, W:number, H:number)=>void)|null} clip where the glass is,
+   *   when it is not the whole screen: in a mech, the canopy and not the
+   *   frame or the dashboard
    */
-  draw(dt, active) {
+  draw(dt, active, clip = null) {
     for (let i = this.splats.length - 1; i >= 0; i--) {
       const s = this.splats[i];
       s.age += dt;
@@ -142,6 +152,8 @@ export class Grime {
     const ctx = this.ctx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (clip) clip(ctx, W, H);
     const S = Math.min(W, H);
     for (const s of this.splats) {
       const fade = Math.max(0, 1 - s.age / s.life);
@@ -219,6 +231,19 @@ export class Grime {
         ctx.fill();
       }
     }
-    this.last = this.dirt;
+    // The film the lot of it leaves on the glass, heaviest at the edges.
+    const dirt = this.dirt;
+    const F = GRIME.film;
+    const haze = Math.min(F.most, dirt.total * F.per);
+    const red = Math.min(F.bloodMost, dirt.blood * F.bloodPer);
+    if (haze > 0.01 || red > 0.01) {
+      const g = ctx.createRadialGradient(W / 2, H / 2, S * 0.25, W / 2, H / 2, Math.hypot(W, H) * 0.55);
+      g.addColorStop(0, 'rgba(120, 100, 70, 0)');
+      g.addColorStop(1, `rgba(${Math.round(110 + 60 * (red / (haze + red + 1e-6)))}, ${Math.round(88 - 60 * (red / (haze + red + 1e-6)))}, 60, ${Math.max(haze, red)})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+    this.last = dirt;
   }
 }

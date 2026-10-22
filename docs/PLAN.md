@@ -4458,6 +4458,30 @@ So there are two cities now, and a profile picks which:
 - Checks: hunt, ops, combat and districts suites run with it, and the unit
   tests.
 
+## 113. Filthier glass, and in a mech only on the glass
+
+- The ask: crazy reality should be much dirtier, and in the mech the dirt
+  was on the dashboard at the bottom, where there is no glass.
+- More of everything: a blast throws 12 to 52 specks of dust where it threw
+  6 to 28, bigger and nearly opaque up close, out to 70 m past its radius
+  rather than 45; a hit puts two to six splats of blood on, each with one to
+  three drips that run a third of the screen; a kill within 14 m (was 9)
+  splashes; being hurt adds blood up to every 0.7 s (was 1.2); soot comes
+  two at a time. The glass holds up to 220 (120 dust, 50 blood, 40 soot),
+  and everything lasts longer (22, 30 and 32 s) while still clearing inside
+  40 s. And a film: as the dirt builds up a haze comes in from the edges,
+  brown, or red where it is blood, up to half opaque.
+- In a mech: `glassClip` in the cockpit HUD traces the canopy from the same
+  shapes the frame is drawn with (under the bar across the top, above the
+  dashboard, with the pillars cut out by the even odd rule, the side
+  windows outside them kept) and the grime canvas is clipped to it while
+  the cockpit is up.
+- Checks (cheats): one blast beside you and one hit leave at least 40
+  splats; in a titan's cockpit the band across the middle of the glass is
+  dirty and the band over the dashboard has no dirt on it at all;
+  screenshot cheat-10-mech-grime. The unit checks (caps, sides, clearing)
+  still hold.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
