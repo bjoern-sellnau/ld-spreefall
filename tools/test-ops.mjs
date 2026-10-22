@@ -194,22 +194,43 @@ async function run() {
   // --- through the Brandenburg Gate ---------------------------------------------
   const gate = await page.evaluate(() => {
     const s = window.spreefall;
+    // Where the passages and the walls between them are depends on the
+    // outline the extract gives the Gate (the synthetic one here, the live
+    // one in CI), so they are found rather than assumed: a line west through
+    // the Gate either stops in it or does not, every quarter metre along it.
+    const lm = s.world.manifest.landmarks.find((x) => x.key === 'brandenburg_gate') || { x: 0, z: 0 };
+    const runs = [];
+    for (let z = lm.z - 40; z <= lm.z + 40; z += 0.25) {
+      const y = s.world.groundHeight(lm.x + 25, z) + 1.2;
+      const hit = s.world.raycast(lm.x + 25, y, z, -1, 0, 0, 50);
+      const shut = !!hit && Math.abs(lm.x + 25 - hit.t - lm.x) < 8;
+      const last = runs[runs.length - 1];
+      if (last && last.shut === shut) last.to = z;
+      else runs.push({ shut, from: z, to: z });
+    }
+    // A passage is an open run with the Gate on both sides of it; the widest
+    // three, and the middle of the widest solid run that is not the end.
+    const mid = (r) => (r.from + r.to) / 2;
+    const passages = runs.filter((r, i) => !r.shut && i > 0 && i < runs.length - 1)
+      .sort((a, b) => (b.to - b.from) - (a.to - a.from)).slice(0, 3).map(mid);
+    const walls = runs.filter((r, i) => r.shut && i > 0 && i < runs.length - 1 && r.to - r.from >= 0.75)
+      .sort((a, b) => (b.to - b.from) - (a.to - a.from)).map(mid);
+    const lines = [...passages, walls.length ? walls[0] : lm.z + 9.27];
     const out = [];
-    // The gate stands across x = 0, its passages running east to west; the
-    // middle one and one either side of it, then a cross wall.
-    for (const z of [3.3, 15.2, -8.6, 9.27]) {
-      s.teleport(25, z);
+    for (const z of lines) {
+      s.teleport(lm.x + 25, z);
       for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
       s.look(90, 0);
       s.input.keys.add('KeyW');
       for (let i = 0; i < 60 * 20; i++) s.fixedForTest(1 / 60);
       s.input.keys.delete('KeyW');
-      out.push(+s.player.x.toFixed(1));
+      out.push(+(s.player.x - lm.x).toFixed(1));
     }
-    return out;
+    return { out, lines: lines.map((z) => +(z - lm.z).toFixed(2)), passages: passages.length, walls: walls.length };
   });
   check('the Brandenburg Gate can be walked through, its five passages open and its walls solid',
-    gate[0] < -10 && gate[1] < -10 && gate[2] < -10 && gate[3] > 3, JSON.stringify(gate));
+    gate.passages === 3 && gate.walls > 0
+      && gate.out[0] < -10 && gate.out[1] < -10 && gate.out[2] < -10 && gate.out[3] > 3, JSON.stringify(gate));
 
   const again = await page.evaluate(() => {
     const s = window.spreefall;
