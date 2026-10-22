@@ -26,7 +26,7 @@ export const OVERKILL_SCALE = 12;
 const KEYS = ['godmode', 'infiniteAmmo', 'everyWeapon', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
   'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore',
-  'extremeEnemies', 'crazyReality'];
+  'extremeEnemies', 'crazyReality', 'oneManArmy', 'nightmare'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -54,6 +54,10 @@ export const SWITCHES = [
   // The screen as a lens you are looking through: dust off every blast near
   // you, blood when you are hit or something dies close, soot from fire.
   { id: 'crazyReality', label: 'Crazy reality', note: 'the screen gets dirty: dust off blasts near you, blood when you are hit or a kill is close, soot from fire; it clears slowly' },
+  // Everything against you, and more of it every wave.
+  { id: 'oneManArmy', label: 'One Man Army', note: 'wave after wave, each worse than the last: squads, jeeps, a tank, mechs that get heavier, bombs, jets, bigger armies' },
+  // And the city's own super weapons on their side too.
+  { id: 'nightmare', label: 'Nightmare', note: 'One Man Army, and from the third wave the ion cannon, ultra plasma, a void storm and a warhead come down near you in turn' },
 ];
 
 export const GORE = [
@@ -156,6 +160,12 @@ export const BOWS = [
   { id: 'tactic', label: 'Tactic Bow', note: 'a takedown recurve in olive and black with a two pin sight' },
 ];
 
+/** How either bow is held: on its side with the arrow on top, or upright. */
+export const BOW_HOLDS = [
+  { id: 'flat', label: 'Held flat', note: 'on its side under the crosshair, the arrow lying on top of it' },
+  { id: 'upright', label: 'Held upright', note: 'upright in the left hand, left of the crosshair' },
+];
+
 /** Things to get into, parked where you are standing. */
 export const RIDES = [
   { id: 'jeep', label: 'Jeep', note: 'fast, open, a gun on the back' },
@@ -184,6 +194,8 @@ export class Cheats {
     this.mechs = { mine: CHASSIS[0].id, foe: CHASSIS[0].id };
     // Which bow: by mode, or one of the two whatever the mode.
     this.bow = 'mode';
+    // And how it is held.
+    this.bowHold = 'flat';
     // Ultra plasma: how many, how wide, from which way and how steep. Kept
     // with the choices rather than the switches, for the same reason.
     this.ultra = { ...ULTRA.defaults };
@@ -294,6 +306,15 @@ export class Cheats {
     return true;
   }
 
+  /** Hold the bow flat or upright. @returns {boolean} whether it was one there is */
+  chooseBowHold(id) {
+    if (!BOW_HOLDS.some((b) => b.id === id)) return false;
+    this.bowHold = id;
+    this.save();
+    if (this.onChange) this.onChange('bowHold', id);
+    return true;
+  }
+
   /** Which of the two bows is in your hands in this mode. */
   bowFor(mode) {
     if (this.bow === 'tech' || this.bow === 'tactic') return this.bow;
@@ -337,7 +358,7 @@ export class Cheats {
 
   save() {
     try {
-      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra, storm: this.storm, bow: this.bow };
+      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra, storm: this.storm, bow: this.bow, bowHold: this.bowHold };
       for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
@@ -368,6 +389,7 @@ export class Cheats {
         }
       }
       if (saved.bow && BOWS.some((b) => b.id === saved.bow)) this.bow = saved.bow;
+      if (saved.bowHold && BOW_HOLDS.some((b) => b.id === saved.bowHold)) this.bowHold = saved.bowHold;
       if (saved.mechs) {
         if (CHASSIS.some((c) => c.id === saved.mechs.mine)) this.mechs.mine = saved.mechs.mine;
         if (saved.mechs.foe === 'random' || CHASSIS.some((c) => c.id === saved.mechs.foe)) {

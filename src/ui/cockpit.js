@@ -39,6 +39,34 @@ export function radarSpot(dx, dz, heading, range = COCKPIT.radarRange) {
   return { x: right / range, y: -ahead / range, d: Math.hypot(dx, dz) };
 }
 
+/**
+ * Clip a canvas to the canopy's glass: below the bar across the top, above
+ * the dashboard and not on the two pillars, the same shapes the frame is
+ * drawn with. The side windows outside the pillars are glass too.
+ */
+export function glassClip(ctx, W, H) {
+  const dash = H * 0.76;
+  ctx.beginPath();
+  ctx.moveTo(0, H * 0.05);
+  ctx.quadraticCurveTo(W / 2, H * 0.11, W, H * 0.05);
+  ctx.lineTo(W, dash + H * 0.02);
+  ctx.lineTo(W * 0.84, dash);
+  ctx.lineTo(W * 0.16, dash);
+  ctx.lineTo(0, dash + H * 0.02);
+  ctx.closePath();
+  // The pillars, as holes in it.
+  for (const side of [-1, 1]) {
+    const x0 = side < 0 ? 0 : W;
+    ctx.moveTo(x0, 0);
+    ctx.lineTo(x0 - side * W * 0.075, 0);
+    ctx.lineTo(x0 - side * W * 0.16, dash);
+    ctx.lineTo(x0 - side * W * 0.12, dash);
+    ctx.lineTo(x0, H * 0.2);
+    ctx.closePath();
+  }
+  ctx.clip('evenodd');
+}
+
 // A little seeded noise, so the cracks are the same from frame to frame.
 function rng(seed) {
   let s = seed >>> 0 || 1;

@@ -25,8 +25,9 @@ import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
-import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS } from './game/cheats.js';
-import { CHASSIS } from './game/chassis.js';
+import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS, BOW_HOLDS } from './game/cheats.js';
+import { CHASSIS, mechKey } from './game/chassis.js';
+import { Onslaught, ONSLAUGHT } from './game/onslaught.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
@@ -45,7 +46,7 @@ import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
-import { CockpitHud, project as projectPoint } from './ui/cockpit.js';
+import { CockpitHud, project as projectPoint, glassClip } from './ui/cockpit.js';
 import { Visor, VISOR } from './ui/visor.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
@@ -61,7 +62,7 @@ import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from '.
 const $ = (id) => document.getElementById(id);
 const el = {
   canvas: $('view'), loading: $('loading'), loadbar: $('loadbar'), loadnote: $('loadnote'),
-  title: $('title'), play: $('playbtn'), hud: $('hud'), minimap: $('minimap'),
+  title: $('title'), play: $('playbtn'), playNew: $('playnew'), hud: $('hud'), minimap: $('minimap'),
   compass: $('compasslabel'), cards: $('cardhost'), toast: $('toast'), overkill: $('overkill'), debug: $('debug'),
   found: $('found'), total: $('total'), district: $('district'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
@@ -104,7 +105,7 @@ const el = {
   opsList: $('opslist'), opsReset: $('opsreset'), opsHarder: $('opsharder'), opsClose: $('opsclose'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
-  cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'), cheatBow: $('cheatbow'),
+  cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'), cheatBow: $('cheatbow'), cheatBowHold: $('cheatbowhold'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'), vehicleKeys: $('vehiclekeys'),
   vehicleHull: $('vehiclehull'), vehicleSpeed: $('vehiclespeed'),
   vehicleSpeedUnit: $('vehiclespeedunit'),
@@ -1258,8 +1259,8 @@ async function main() {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
     // A kill close enough to get on you does.
-    if (grime.enabled && dist < 9 && !target.machine) {
-      grime.blood((1 - dist / 9) * (cheats.bleeding ? 1 : 0.6), sideOf(target.x, target.z));
+    if (grime.enabled && dist < 14 && !target.machine) {
+      grime.blood((1 - dist / 14) * (cheats.bleeding ? 1 : 0.7), sideOf(target.x, target.z));
     }
     if (target.ceph || (target.dspec && target.dspec.ceph) || target.pinger) state.cephKilled = (state.cephKilled || 0) + 1;
     // A body that came apart does not also catch fire.
@@ -4111,6 +4112,33 @@ async function main() {
       el.cheatBow.appendChild(say);
       show();
     }
+    // And how it is held: flat with the arrow on top, or upright.
+    {
+      const say = document.createElement('div');
+      say.className = 'mechsay';
+      const chips = [];
+      const show = () => {
+        for (const c of chips) c.el.classList.toggle('on', c.id === cheats.bowHold);
+        const row = BOW_HOLDS.find((x) => x.id === cheats.bowHold);
+        say.textContent = row ? row.note : '';
+      };
+      for (const o of BOW_HOLDS) {
+        const b = document.createElement('button');
+        b.className = 'chip';
+        b.dataset.bowhold = o.id;
+        b.textContent = o.label;
+        b.title = o.note;
+        b.addEventListener('click', () => {
+          cheats.chooseBowHold(o.id);
+          show();
+          toast(`the bow ${o.label.toLowerCase()}`);
+        });
+        el.cheatBowHold.appendChild(b);
+        chips.push({ id: o.id, el: b });
+      }
+      el.cheatBowHold.appendChild(say);
+      show();
+    }
     for (const sp of SPAWNS) {
       const b = document.createElement('button');
       b.className = 'act';
@@ -5226,7 +5254,7 @@ async function main() {
    *   it rather than you. The mode's own warheads are the mode, so they do
    *   not mark the run the way reaching for one in the cheat menu does.
    */
-  function dropNuke(x, z, ofTheMode = false) {
+  function dropNuke(x, z, ofTheMode = false, hostile = false) {
     if (!ofTheMode) {
       cheats.used = true;
       applyCheats();
@@ -5246,8 +5274,116 @@ async function main() {
       },
     });
     audio.incoming(NUKE.fall);
-    if (cheats.cinematic && state.mode === 'walk') startCinema(body, x, z);
+    // One sent against you is watched from where you are standing.
+    if (!hostile && cheats.cinematic && state.mode === 'walk') startCinema(body, x, z);
     return true;
+  }
+
+  // --- One Man Army and Nightmare ------------------------------------------------
+  const onslaught = new Onslaught();
+  // Their mechs, lightest first, for the waves to work up through.
+  const foeChassis = [...CHASSIS]
+    .sort((a, b) => ((a.foe && a.foe.health) || 2400) - ((b.foe && b.foe.health) || 2400))
+    .map((c) => mechKey(c.id, false));
+  // A camp that is wherever you are, for the convoys to drive to.
+  const onslaughtSite = {
+    id: 'onslaught',
+    get x() { return player.x; },
+    get z() { return player.z; },
+    level: 0,
+  };
+  /** A point this far from you in some direction the map has. */
+  function aroundYou(lo, hi) {
+    for (let k = 0; k < 24; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = lo + Math.random() * (hi - lo);
+      const x = player.x + Math.cos(a) * r, z = player.z + Math.sin(a) * r;
+      if (x < world.minX + 20 || x > world.maxX - 20 || z < world.minZ + 20 || z > world.maxZ - 20) continue;
+      if (combat.inField && combat.inField(x, z)) continue;
+      return { x, z, a };
+    }
+    return null;
+  }
+  /** A stick of bombs across the street you are in, falling one after another. */
+  function bombStick(n) {
+    const B = ONSLAUGHT.bombs;
+    const a = Math.random() * Math.PI * 2;
+    const off = B.offset[0] + Math.random() * (B.offset[1] - B.offset[0]);
+    // A line that passes beside you, off to one side.
+    const cx = player.x + Math.cos(a + Math.PI / 2) * off, cz = player.z + Math.sin(a + Math.PI / 2) * off;
+    let dropped = 0;
+    for (let i = 0; i < n; i++) {
+      const t = (i - (n - 1) / 2) * B.spacing;
+      const x = cx + Math.cos(a) * t, z = cz + Math.sin(a) * t;
+      if (combat.inField && combat.inField(x, z)) continue;
+      const g = world.groundHeight(x, z);
+      projectiles.launch('rocket', {
+        x, y: g + B.from[0] + i * ((B.from[1] - B.from[0]) / Math.max(1, n - 1)), z,
+        vx: 0, vy: -72, vz: 0,
+        splash: { radius: 9, damage: 240, force: 9 }, weapon: 'bomb',
+      });
+      dropped++;
+    }
+    if (dropped) audio.incoming(1.2);
+    return dropped;
+  }
+  /** One of the city's super weapons, near you rather than on you. */
+  function onslaughtSuper(kind) {
+    const N = ONSLAUGHT.nightmare;
+    const [lo, hi] = N.away[kind];
+    // A warhead or an ion blast set bigger in the menu lands as much further off.
+    const extra = kind === 'nuke' ? Math.max(0, nukeRadius() - NUKE.radius)
+      : kind === 'ion' ? Math.max(0, ionRadius() - ION.blast) : 0;
+    for (let k = 0; k < 6; k++) {
+      const at = aroundYou(lo + extra, hi + extra);
+      if (!at) continue;
+      let ok = false;
+      if (kind === 'ion') ok = ion.fire(at.x, at.z);
+      else if (kind === 'ultra') ok = ultra.fire(at.x, at.z, { ...cheats.ultra, ...N.ultra, bearing: Math.random() * 360 });
+      else if (kind === 'storm') ok = storm.fire(at.x, at.z, { ...cheats.storm, ...N.storm, bearing: Math.random() * 360 });
+      else if (kind === 'nuke') ok = dropNuke(at.x, at.z, true, true);
+      if (ok) return { kind, x: at.x, z: at.z, away: Math.round(Math.hypot(at.x - player.x, at.z - player.z)) };
+      // Busy with the last one: nothing to be gained by trying elsewhere.
+      if ((kind === 'ion' && ion.firing) || (kind === 'ultra' && ultra.active) || (kind === 'storm' && storm.active)) break;
+    }
+    return null;
+  }
+  const SUPER_NAMES = { ion: 'the ion cannon', ultra: 'ultra plasma', storm: 'a void storm', nuke: 'a warhead' };
+  /** Send a wave, whatever it is made of, and say what came. */
+  function launchOnslaught(w) {
+    const sent = { level: w.level, soldiers: 0, machines: 0, convoy: false, mechs: 0, bombs: 0, jets: 0, superweapon: null };
+    if (w.soldiers) sent.soldiers = spawnWave('soldiers', w.soldiers);
+    if (w.machines) sent.machines = spawnWave('machines', w.machines);
+    if (w.convoy) {
+      onslaughtSite.level = w.convoy.tank ? CONVOY.tankFrom : 0;
+      sent.convoy = sendConvoy(onslaughtSite, { waves: w.convoy.tank ? 2 : 0 }, w.convoy.men);
+      // No road that would do: they come on foot instead.
+      if (!sent.convoy) sent.soldiers += spawnWave('soldiers', w.convoy.men);
+    }
+    for (const type of w.mechs) if (spawnMech(type, 70 + Math.random() * 50)) sent.mechs++;
+    if (w.bombs) sent.bombs = bombStick(w.bombs);
+    if (w.jets) sent.jets = spawnWave('jets', w.jets);
+    if (w.superweapon) sent.superweapon = onslaughtSuper(w.superweapon);
+    const bits = [`${sent.soldiers + sent.machines} on foot`];
+    if (sent.convoy) bits.push(w.convoy.tank ? 'jeeps and a tank' : 'jeeps');
+    if (sent.mechs) bits.push(`${sent.mechs} mech${sent.mechs > 1 ? 's' : ''}`);
+    if (sent.bombs) bits.push('bombs');
+    if (sent.jets) bits.push(`${sent.jets} jet${sent.jets > 1 ? 's' : ''}`);
+    const title = cheats.nightmare ? 'NIGHTMARE' : 'ONE MAN ARMY';
+    feed(`<b>${title.toLowerCase()}</b> wave ${w.level}: ${bits.join(', ')}`);
+    toast(`${title} wave ${w.level}: ${bits.join(', ')}`, 3500);
+    if (sent.superweapon) {
+      const sw = sent.superweapon;
+      feed(`<b>${SUPER_NAMES[sw.kind]}</b> ${sw.away} m off`);
+      setTimeout(() => toast(`${SUPER_NAMES[sw.kind]} incoming, ${sw.away} m off`, 3500), 1600);
+    }
+    state.onslaughtLast = sent;
+    return sent;
+  }
+  function onslaughtStep(dt) {
+    const on = (cheats.oneManArmy || cheats.nightmare) && state.mode === 'walk' && combat.health > 0;
+    const w = onslaught.update(dt, { on, nightmare: cheats.nightmare, chassis: foeChassis });
+    if (w) launchOnslaught(w);
   }
 
   /**
@@ -5424,9 +5560,9 @@ async function main() {
     const right = dir.x * basis[2] + dir.z * basis[3];
     const fwd = dir.x * basis[0] + dir.z * basis[1];
     // And blood on the glass from that side.
-    // Not every frame of standing in a fire: once a second or so at most.
+    // Not every frame of standing in a fire: not much more than once a second.
     const nowMs = performance.now();
-    if (grime.enabled && nowMs - (state.grimeHurtAt || 0) > 1200) {
+    if (grime.enabled && nowMs - (state.grimeHurtAt || 0) > 700) {
       state.grimeHurtAt = nowMs;
       grime.blood(0.45, Math.max(-1, Math.min(1, right)));
     }
@@ -5475,8 +5611,15 @@ async function main() {
     combat.revive();
     weapon.reset();
     drones.reset();
+    // The camps and nests stand down before the street is cleared, so they
+    // are manned again when you come back rather than counted as taken
+    // because nobody is standing in them.
+    tactics.clear();
+    slayer.clear();
     soldiers.reset();
     jets.reset();
+    // A breath before the next wave, at the level it had got to.
+    onslaught.clock = ONSLAUGHT.first;
     projectiles.clear();
     reflex.reset();
     pickups.reset();
@@ -5538,6 +5681,8 @@ async function main() {
   /** The setup under the mode buttons on the title card. */
   function showOps() {
     el.opsSetup.classList.toggle('hidden', !campaign.active);
+    el.play.textContent = 'Press to walk';
+    el.playNew.classList.add('hidden');
     if (!campaign.active) return;
     const set = campaign.settings;
     for (const b of el.opsSetup.querySelectorAll('[data-scope]')) {
@@ -5572,7 +5717,22 @@ async function main() {
         + (sum.level ? `, level ${sum.level + 1}` : '')
       : `Nothing taken yet. The ${opsWord()}s are put down the first time you are in a district.`;
     el.opsWipe.textContent = 'start this campaign again';
+    // A campaign is kept between runs, so the play button carries on with
+    // it. Said so on the button, with a new one beside it, because a run
+    // that opened with grounds already taken looked like a fault.
+    if (sum.free > 0 || sum.score > 0) {
+      el.play.textContent = `Continue: ${sum.free} of ${sum.total} ${opsWord()}s taken`;
+      el.playNew.textContent = campaign.mode === 'hunt' ? 'New hunt' : 'New operation';
+      el.playNew.classList.remove('hidden');
+    }
   }
+  el.playNew.addEventListener('click', () => {
+    campaign.wipe();
+    tactics.clear();
+    slayer.clear();
+    showOps();
+    beginWalk();
+  });
   for (const b of el.opsSetup.querySelectorAll('[data-scope]')) {
     b.addEventListener('click', () => { campaign.set('scope', b.dataset.scope); showOps(); });
   }
@@ -5773,7 +5933,8 @@ async function main() {
         if (near > 0) grime.soot(near);
       }
     }
-    grime.draw(dt, !photo.active && (state.mode === 'walk'));
+    // In a mech only the canopy is glass: not its frame, not the dashboard.
+    grime.draw(dt, !photo.active && (state.mode === 'walk'), cockpitHud.shown ? glassClip : null);
   }
   function visorStep() {
     const wall = performance.now() / 1000;
@@ -7248,6 +7409,7 @@ async function main() {
       refineStep();
       bombStep(worldDt);
       convoyStep(worldDt);
+      onslaughtStep(worldDt);
       pingStep(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
@@ -7485,6 +7647,7 @@ async function main() {
     refineStep();
     bombStep(worldDt);
     convoyStep(worldDt);
+    onslaughtStep(worldDt);
     pingStep(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
@@ -7806,8 +7969,14 @@ async function main() {
       // is actually for.
       // Each weapon may sit differently in the hand; the aim pose is shared,
       // because aiming means putting the sight on the centre line whatever you
-      // are holding.
-      const hip = weapon.spec.hold ? { ...VM_HIP, ...weapon.spec.hold } : VM_HIP;
+      // are holding. Except a bow, which is not aimed down a sight but along
+      // the arrow, and has an aim pose of its own.
+      // A bow held flat has a pair of its own.
+      const flat = weapon.spec.flatHold && cheats.bowHold === 'flat';
+      const hipHold = flat ? weapon.spec.flatHold : weapon.spec.hold;
+      const aimHold = flat ? weapon.spec.flatAim : weapon.spec.aimHold;
+      const hip = hipHold ? { ...VM_HIP, ...hipHold } : VM_HIP;
+      const aimed = aimHold ? { ...VM_AIM, ...aimHold } : VM_AIM;
       const mix = (a, b) => a + (b - a) * aim;
       // A weight left behind by the turn keeps its own orientation, so in view
       // space it rotates against the look: the translation follows the sway and
@@ -7818,12 +7987,12 @@ async function main() {
       if (state.muzzle > (state.muzzleWas || 0) + 0.25) state.muzzleSeed = Math.random();
       state.muzzleWas = state.muzzle;
       renderer.viewmodel = {
-        x: mix(hip.x, VM_AIM.x) + bobX + state.sway.x * 0.30,
-        y: mix(hip.y, VM_AIM.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
-        z: mix(hip.z, VM_AIM.z) + kick * 0.030,
-        pitch: mix(hip.pitch, VM_AIM.pitch) + kick * 0.075 - state.sway.y * 0.5 - hol * 0.95,
-        yaw: mix(hip.yaw, VM_AIM.yaw) - state.sway.x * 0.8,
-        roll: mix(hip.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
+        x: mix(hip.x, aimed.x) + bobX + state.sway.x * 0.30,
+        y: mix(hip.y, aimed.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
+        z: mix(hip.z, aimed.z) + kick * 0.030,
+        pitch: mix(hip.pitch, aimed.pitch) + kick * 0.075 - state.sway.y * 0.5 - hol * 0.95,
+        yaw: mix(hip.yaw, aimed.yaw) - state.sway.x * 0.8,
+        roll: mix(hip.roll, aimed.roll) + state.sway.x * 0.45 + hol * 0.5,
         muzzle: state.muzzle * (1 - hol),
         seed: state.muzzleSeed || 0,
         // The bow is drawn as whichever of the two is in your hands.
@@ -8073,6 +8242,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
+    onslaught, onslaughtSpec: ONSLAUGHT, launchOnslaught: (w) => launchOnslaught(w), foeChassis,
     compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grime, grimeSpec: GRIME, grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
     setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },

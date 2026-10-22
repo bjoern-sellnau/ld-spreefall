@@ -64,7 +64,7 @@ async function run() {
   check('every switch the brief asked for is in it',
     ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic', 'slowBlast',
       'wreckBuildings', 'wreckGround', 'lastKill',
-      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore', 'everyWeapon']
+      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore', 'everyWeapon', 'oneManArmy', 'nightmare']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
   check('and every button',
@@ -1704,6 +1704,120 @@ async function run() {
   check('on, a blast beside you throws dust on it, a hit puts blood on it and fire puts soot on it',
     grime.dust > 0.5 && grime.blood > 0.3 && grime.soot > 0.1 && grime.shown, JSON.stringify(grime));
   check('and it clears by itself', cleared.later === 0 && cleared.hidden, JSON.stringify(cleared));
+  check('and one blast beside you and one hit cover the glass with it, not a few specks',
+    grime.splats >= 40, `${grime.splats} splats`);
+
+  // In a mech the glass is the canopy: the frame and the dashboard under it
+  // are not, and nothing lands on them.
+  const mechGrime = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const frames = (n) => new Promise((done) => {
+      let i = 0;
+      const step = () => (++i >= n ? done() : requestAnimationFrame(step));
+      requestAnimationFrame(step);
+    });
+    s.mechs.reset();
+    s.teleport(81, 0);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const mine = s.spawnMech('titan', 12);
+    if (!mine) return { skip: true, why: 'no room for one' };
+    s.teleport(mine.x + 3, mine.z);
+    s.toggleVehicle();
+    if (s.state.inMech !== mine) return { skip: true, why: 'could not get in' };
+    if (!s.state.cockpit) s.toggleCockpit();
+    s.setCheat('godmode', true);
+    s.setCheat('crazyReality', true);
+    s.look(mine.torso * 180 / Math.PI, -2);
+    for (let i = 0; i < 4; i++) s.grime.dust(1, i % 2 ? -1 : 1);
+    for (let i = 0; i < 4; i++) s.grime.blood(1, 0);
+    await frames(6);
+    const c = document.getElementById('grime');
+    const ctx = c.getContext('2d');
+    const band = (y0, y1) => {
+      const y = Math.round(c.height * y0), h = Math.max(1, Math.round(c.height * (y1 - y0)));
+      const d = ctx.getImageData(Math.round(c.width * 0.2), y, Math.round(c.width * 0.6), h).data;
+      let lit = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 8) lit++;
+      return lit / (d.length / 4);
+    };
+    return { skip: false, cockpit: !document.getElementById('cockpithud').classList.contains('hidden'),
+      glass: +band(0.3, 0.7).toFixed(3), dash: +band(0.8, 0.98).toFixed(3) };
+  });
+  if (!mechGrime.skip) {
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(SHOTS, 'cheat-10-mech-grime.png') });
+  }
+  check('in a mech it lands on the canopy and not on the dashboard under it',
+    !mechGrime.skip && mechGrime.cockpit && mechGrime.glass > 0.05 && mechGrime.dash === 0, JSON.stringify(mechGrime));
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.grime.clear();
+    s.setCheat('crazyReality', false);
+    s.setCheat('godmode', false);
+    if (s.state.inMech) s.leaveMech();
+    s.mechs.reset();
+  });
+
+  // --- One Man Army and Nightmare --------------------------------------------------
+  // Wave after wave, each worse than the last; and with Nightmare the city's
+  // super weapons come down near you as well.
+  const oma = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.teleport(81, 0); s.look(90, -2);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const out = { chassis: s.foeChassis.length };
+    s.setCheat('godmode', true);
+    s.setCheat('oneManArmy', true);
+    // Nothing at once: the first wave comes on its clock.
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    out.early = s.onslaught.level;
+    s.onslaught.clock = 0.01;
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    out.w1 = s.state.onslaughtLast;
+    s.onslaught.level = 5; s.onslaught.clock = 0.01;
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    out.w6 = s.state.onslaughtLast;
+    out.bombs = s.projectiles.active.filter((p) => p.weapon === 'bomb').length;
+    out.mechs = s.mechs.active.filter((m) => m.alive && !m.mine).length;
+    out.toast = document.getElementById('toast') ? document.getElementById('toast').textContent : '';
+    return out;
+  });
+  await page.waitForTimeout(1800);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-11-one-man-army.png') });
+  check('One Man Army: nothing at once, then a squad, and by the sixth wave jeeps and a tank, mechs, bombs and a jet',
+    oma.early === 0 && oma.w1 && oma.w1.level === 1 && oma.w1.soldiers > 0 && !oma.w1.mechs
+      && oma.w6.level === 6 && oma.w6.convoy && oma.w6.mechs >= 1 && oma.mechs >= 1 && oma.w6.bombs > 0 && oma.bombs > 0
+      && oma.w6.jets >= 1 && oma.w6.soldiers + oma.w6.machines > oma.w1.soldiers,
+    JSON.stringify(oma));
+  const nightmare = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setCheat('nightmare', true);
+    s.onslaught.level = 2; s.onslaught.supers = 0; s.onslaught.clock = 0.01;
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    const ion = s.state.onslaughtLast.superweapon;
+    const out = { ion, firing: s.ion.firing };
+    // Look at it.
+    if (ion) s.look(Math.atan2(-(ion.x - s.player.x), -(ion.z - s.player.z)) * 180 / Math.PI, 4);
+    s.onslaught.level = 9; s.onslaught.supers = 3; s.onslaught.clock = 0.01;
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    out.nuke = s.state.onslaughtLast.superweapon;
+    out.falling = s.projectiles.active.filter((p) => p.kind === 'nuke').length;
+    return out;
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-12-nightmare.png') });
+  check('Nightmare: the ion cannon from the third wave and a warhead later, each far enough off to live through',
+    nightmare.ion && nightmare.ion.kind === 'ion' && nightmare.firing && nightmare.ion.away >= 240
+      && nightmare.nuke && nightmare.nuke.kind === 'nuke' && nightmare.falling === 1 && nightmare.nuke.away >= 230,
+    JSON.stringify(nightmare));
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setCheat('nightmare', false);
+    s.setCheat('oneManArmy', false);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    s.setCheat('godmode', false);
+    s.mechs.reset();
+  });
 
   await page.evaluate(() => {
     const s = window.spreefall;

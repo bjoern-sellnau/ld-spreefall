@@ -382,6 +382,13 @@ export class Tactics {
       } else {
         r.away = 0;
       }
+      // Guards taken off the street without being killed (dying and coming
+      // back clears the street) did not lose the camp: it stands down and is
+      // manned again in full, rather than being counted as taken by nobody.
+      if (r.guards.some((s) => !s.alive && s.health > 0)) {
+        this._standDown(r);
+        continue;
+      }
       // In The Hunt a ground can have an alpha, a walker of theirs, and it is
       // not clear while that is standing either.
       const alpha = r.alpha && r.alpha.alive && r.alpha.health > 0;

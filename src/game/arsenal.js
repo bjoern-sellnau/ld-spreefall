@@ -155,6 +155,21 @@ export const WEAPONS = {
     // How hard it is drawn, changed with X: light is quick and weak, strong
     // is slow and hits hard enough to carry a man with it.
     draws: ['medium', 'strong', 'light'],
+    // Held the way an archer holds one, not the way a rifle is: upright in
+    // the left hand, left of the crosshair, the string drawn back towards
+    // the face and the arrow lying straight along the line of sight. An
+    // arrow parallel to the view meets the middle of the screen however far
+    // off to the side it lies, so it points at the crosshair from the hip
+    // and from the aim alike, and the upper limb leans a little to the left
+    // so it never stands over what you are aiming at.
+    hold: { x: -0.095, y: -0.085, z: -0.140, pitch: 0, yaw: 0, roll: 0.14 },
+    aimHold: { x: -0.064, y: -0.056, z: -0.100, pitch: 0, yaw: 0, roll: 0.08 },
+    // Or on its side, turned a quarter to the left so the side the arrow
+    // lies on is the top: the bow across the bottom of the view, the arrow
+    // on top of the grip running up to the crosshair. Along the line of
+    // sight as before, so it still points at what the shot hits.
+    flatHold: { x: 0.010, y: -0.125, z: -0.100, pitch: 0, yaw: 0, roll: 1.47 },
+    flatAim: { x: 0.004, y: -0.092, z: -0.070, pitch: 0, yaw: 0, roll: 1.54 },
   },
   marksman: {
     name: 'Marksman rifle', short: 'MARKSMAN', kind: KIND.HITSCAN, slot: null,
@@ -350,7 +365,6 @@ WEAPONS.flak.hold = { x: 0.225, y: -0.150, z: -0.440, pitch: -0.010, yaw: 0.128,
 WEAPONS.void.hold = { x: 0.220, y: -0.150, z: -0.430, pitch: -0.014, yaw: 0.126, roll: 0.05 };
 WEAPONS.splinter.hold = { x: 0.215, y: -0.140, z: -0.420, pitch: -0.012, yaw: 0.135, roll: 0.06 };
 WEAPONS.sdpistol.hold = { x: 0.180, y: -0.125, z: -0.300, pitch: -0.010, yaw: 0.150, roll: 0.05 };
-WEAPONS.bow.hold = { x: 0.170, y: -0.070, z: -0.330, pitch: 0.000, yaw: 0.180, roll: 0.30 };
 WEAPONS.marksman.hold = { x: 0.220, y: -0.150, z: -0.480, pitch: -0.016, yaw: 0.120, roll: 0.04 };
 WEAPONS.doublebarrel.hold = { x: 0.205, y: -0.150, z: -0.420, pitch: -0.012, yaw: 0.120, roll: 0.04 };
 WEAPONS.chainsaw.hold = { x: 0.200, y: -0.170, z: -0.360, pitch: 0.020, yaw: 0.140, roll: 0.06 };

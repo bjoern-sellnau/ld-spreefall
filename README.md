@@ -73,8 +73,8 @@ district by hand. A comparison of the same street at either tier is in
 
 | | |
 |---|---|
-| W A S D, arrow keys | walk |
-| Shift | run |
+| W A S D, arrow keys | walk, at 3.5 m/s |
+| Shift | run, at 5.6 m/s |
 | Space | jump onto kerbs and low walls |
 | Mouse | look, with pointer lock |
 | Touch | drag left to walk, drag right to look |
@@ -297,7 +297,9 @@ visits.
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 | Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
 | Extreme enemies | a camp or hunting ground that calls for help gets wave after wave of it, as many as the waves setting says (a slider and a box to type the number in, 1 to 50, 6 to start with), 20 s apart instead of 38 and two more men in each; a Slayer nest holds that many waves of demons, each past the third a little bigger |
-| Crazy reality | the screen gets dirty: dust off every blast near you, from the side it went off and settling low, blood when you are hit (from that side, and it runs) or a kill is close, soot from fire at your feet or the flamethrower; it clears by itself in a quarter of a minute or so |
+| Crazy reality | the screen gets filthy: dust off every blast near you, dozens of specks at once, from the side it went off and settling low, blood when you are hit (from that side, and it runs in up to three drips) or a kill is close, soot from fire at your feet or the flamethrower, and a brown or red film in from the edges as it builds up; in a mech only the canopy gets it, not its frame or the dashboard; it clears by itself in half a minute or so |
+| One Man Army | wave after wave, the first twelve seconds after it is switched on and then every forty, coming closer together: a squad on foot, then bigger squads and jeeps, a tank from the third, a mech out of the sky from the fourth (the light ones first, the walking fortresses and the eleven metre one by the twelfth), steel among the men, a stick of bombs across your street from the fifth, jets from the sixth, and bigger armies every wave |
+| Nightmare | One Man Army, and from the third wave the city's super weapons on their side, in turn: the ion cannon, ultra plasma, a void storm and a warhead, every other wave and from the eighth every wave; each comes down far enough off that it reaches your street without starting in it |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not
@@ -462,7 +464,11 @@ across the city, to be taken one at a time. Pick one district or all of
 Berlin, the district you start in (the game flies you there) and how many
 camps a district holds; camps are put down on open ground the first time a
 district is in memory, always in the same places, and the campaign is kept
-in the browser.
+in the browser. With one under way the play button says so (Continue, and
+how many are taken) and a second button beside it starts a new operation,
+or a new hunt, from nothing. Dying and coming back clears the street but
+not the camps: they stand down and are manned again in full, never counted
+as taken because nobody is left standing in them.
 
 - A camp is a ring of sandbags with tents, crates, a flag, a siren and a
   radio on a table with a mast. Within 280 m it is manned: five guards and
@@ -618,6 +624,17 @@ with bright fibre ends, a rest and a short stabiliser. The HUD names the
 one you hold. The cheat menu's **Bow** row puts either in your hands in
 every mode, or leaves it to the mode; it is a look, so it does not mark the
 run. What a bow does (heads, draw weights, the cloak) is the same in both.
+
+Both are held flat, on their side across the bottom of the view with the
+arrow lying on top of the grip, or, with the cheat menu's **Held upright**,
+the way an archer holds one: upright in the left hand, left of the
+crosshair. Either way the arrow lies along the line of sight, so it points
+at the crosshair from the hip and aimed alike. Crysis 3 aims its bow by the crosshair and a trajectory line
+([Kotaku](https://kotaku.com/video-games-have-become-obsessed-with-bows-and-arrows-5991211)),
+and an archer draws to an anchor at the face with the arrow just under the
+aiming eye
+([Human Kinetics](https://us.humankinetics.com/blogs/excerpt/using-the-side-of-face-anchor));
+the pose itself is ours.
 
 They are ours, drawn from what the two game bows are described as: the
 hunter's composite bow of Crysis 3, with an adjustable draw weight

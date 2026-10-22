@@ -4395,6 +4395,147 @@ So there are two cities now, and a profile picks which:
   a moment after the menu closes, since the menu holsters the weapon while
   it is up.
 
+## 110. The bow held the way an archer holds one
+
+- The ask: hold the bow as in Crysis, because it aims better. Until now it
+  was held like a rifle at the hip, down and to the right and turned in,
+  so from the eye it was a stick lying across the right of the screen and
+  the arrow pointed nowhere in particular. (A second hold for it at the
+  foot of the arsenal, from an older phase, overrode the one in its spec;
+  it is gone.)
+- What the sources say: Crysis 3 aims the bow with the crosshair and a
+  trajectory line, the left trigger to zoom and the right to draw
+  (Kotaku); an archer holds the bow upright in the bow hand and draws to an
+  anchor at the face, with the arrow just under the aiming eye (Human
+  Kinetics on the side of face anchor). How the game draws its first
+  person model is not written down anywhere found, so the pose is ours.
+- The pose: upright in the left hand, left of the crosshair, the string
+  towards the face, the top leaning a little left so the upper limb never
+  stands over what you aim at. The arrow lies parallel to the line of
+  sight: a line parallel to the view meets the middle of the screen however
+  far off to the side it lies, so the arrow points at the crosshair from
+  the hip and aimed. Aiming has a pose of its own for the bow (the rifles
+  share one, the sight on the centre line): closer and nearer the middle,
+  still left of it.
+- Checks (hunt, 29 now): the bow's pose from the hip and aimed is left of
+  the crosshair, leaning less than a sixth of a turn, with no yaw and no
+  pitch, so its arrow is along the line of sight; hunt-07 and hunt-08 show
+  it.
+
+## 111. A hunt that opened with grounds already taken
+
+- The report: a new round of The Hunt, and some grounds were already
+  taken. Two causes, both real.
+  - Dying and coming back cleared the street with `soldiers.reset()`, the
+    guards of a ground near you with it. Tactics saw a manned ground with
+    nobody standing in it and paid it out as taken. Reproduced in the hunt
+    suite: two grounds freed by one respawn. Now the respawn stands every
+    camp and nest down first, and Tactics itself never pays for guards that
+    left the street without being killed (not alive, health above nothing):
+    that ground stands down and is manned again in full.
+  - The campaign is kept between runs on purpose, and the title said so
+    only in a small line of the setup. The play button now says
+    "Continue: 2 of 4 grounds taken" when there is progress, and a "New
+    hunt" (or "New operation") button beside it wipes the campaign and
+    starts.
+- Checks (hunt, 31 now): a respawn beside a manned ground leaves it held and
+  manned again (without the fix: two freed); with a ground taken the title
+  offers Continue and New hunt, and New hunt leaves nothing taken and no
+  score. Ops (93) and UI (35) unchanged and passing.
+
+## 112. A brisker walk
+
+- The ask: the normal pace is a little slow. It was 2.6 m/s, already twice
+  what a person walks at (preferred walking speed is about 1.25 m/s in the
+  laboratory studies, eLife and the PMC tables collected in the search),
+  but a shooter's pace without the run key is faster still: Counter-Strike
+  moves at 250 units a second, 4.8 or 6.35 m/s depending on how a unit is
+  converted (cs.money, profilerr). Now 3.5 m/s, a third more, with the run
+  left at 5.6, so running is still clearly the faster thing.
+- It stays under the 4 m/s at which a guard counts you as running and
+  notices you 1.7 times as fast (`playerSpeed > 4` in the soldiers), so
+  creeping up on a camp at the walk is as quiet as it was.
+- Checks: hunt, ops, combat and districts suites run with it, and the unit
+  tests.
+
+## 113. Filthier glass, and in a mech only on the glass
+
+- The ask: crazy reality should be much dirtier, and in the mech the dirt
+  was on the dashboard at the bottom, where there is no glass.
+- More of everything: a blast throws 12 to 52 specks of dust where it threw
+  6 to 28, bigger and nearly opaque up close, out to 70 m past its radius
+  rather than 45; a hit puts two to six splats of blood on, each with one to
+  three drips that run a third of the screen; a kill within 14 m (was 9)
+  splashes; being hurt adds blood up to every 0.7 s (was 1.2); soot comes
+  two at a time. The glass holds up to 220 (120 dust, 50 blood, 40 soot),
+  and everything lasts longer (22, 30 and 32 s) while still clearing inside
+  40 s. And a film: as the dirt builds up a haze comes in from the edges,
+  brown, or red where it is blood, up to half opaque.
+- In a mech: `glassClip` in the cockpit HUD traces the canopy from the same
+  shapes the frame is drawn with (under the bar across the top, above the
+  dashboard, with the pillars cut out by the even odd rule, the side
+  windows outside them kept) and the grime canvas is clipped to it while
+  the cockpit is up.
+- Checks (cheats): one blast beside you and one hit leave at least 40
+  splats; in a titan's cockpit the band across the middle of the glass is
+  dirty and the band over the dashboard has no dirt on it at all;
+  screenshot cheat-10-mech-grime. The unit checks (caps, sides, clearing)
+  still hold.
+
+## 114. The bow held flat, the arrow on top
+
+- The ask: could the bow be held horizontally with the arrow on top. It can,
+  and it is now the default: the same bow turned a quarter to the left
+  (roll 1.47 from the hip, 1.54 aimed, a little short of a right angle so
+  it does not look set with a ruler), so the side of the riser the arrow
+  lies against is the top, and set low (12.5 cm under the eye from the hip,
+  9 aimed) so you look down on the limbs rather than along their edge.
+- The arrow is still parallel to the line of sight, so it still meets the
+  middle of the screen: from the flat bow it runs up from the grip to just
+  under the crosshair.
+- The upright hold from phase 110 is kept: the cheat menu's bow group has a
+  second row, Held flat and Held upright, saved with the rest and not
+  marking the run.
+- Checks (hunt, 31): held flat by default, rolled more than 1.3; Held
+  upright from the menu puts it left of the crosshair; all four poses have
+  no yaw and no pitch. hunt-07 and hunt-08 now show it flat.
+
+## 115. One Man Army, and Nightmare
+
+- The ask: a cheat menu switch, One Man Army, under which the attacks keep
+  getting heavier (jeeps, tanks, mechs, heavier mechs, bombs, bigger
+  armies), and a Nightmare switch that adds the ion cannon, the void storm,
+  ultra plasma and the warhead.
+- `src/game/onslaught.js` decides what comes and when, and nothing else, so
+  it is tested on its own. A wave twelve seconds after the switch, then
+  every 40 s, 2.5 s less each level, down to 18. Level by level: a squad of
+  4 and 2 more a level (up to 34, a third of them machines from level 5);
+  from 2 the rest by jeep (4 men and 1 more a level, up to 16); a tank with
+  them from 3; a mech from 4, one more every second level up to four, and
+  heavier as it goes (their chassis sorted by health, lightest first, the
+  heaviest by level 12); from 5 a stick of bombs across your street (6, 2
+  more a level, up to 22, nine metres apart, a line 18 to 55 m off to one
+  side, falling one after another); jets from 6, up to four.
+- Nightmare: from level 3 every other wave, and from 8 every wave, one of
+  the four in turn: ion, ultra, storm, nuke. Each lands past what it does:
+  the ion cannon 250 to 320 m off (its blast is 210), ultra plasma and the
+  void storm with a 70 m circle 150 to 210 m off, a warhead 240 to 320 m
+  off (its radius is 170); a bigger radius set in the menu moves them out
+  by as much. A warhead sent against you is not followed by the cinematic
+  camera.
+- The game layer sends each wave with what it already has: the spawners,
+  the convoys (to a stand in camp that is wherever you are), the mech drop,
+  the jets, a rocket body falling straight down for each bomb, and the
+  fire calls of the three super weapons and the warhead. A toast and the
+  feed say what came. Switched off it forgets the level; dying and coming
+  back keeps the level and gives you twelve seconds.
+- Checks: unit (4) on the order things come in, the heavier mechs, the
+  clock and the Nightmare rotation; cheats: nothing at once, a squad on the
+  first wave, and on the sixth jeeps and a tank, mechs, bombs in the air and
+  a jet; with Nightmare the ion cannon firing 240 m off or more on the third
+  and a warhead falling 230 m off or more later. Screenshots
+  cheat-11-one-man-army and cheat-12-nightmare.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
