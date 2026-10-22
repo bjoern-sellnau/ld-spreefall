@@ -1418,11 +1418,17 @@ async function run() {
       eye[2] + f[2] * (ahead.t - 0.6), { radius: 11, damage: 240 }, { weapon: 'rpg' });
     for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
     const punched = await frame();
-    // The same frame with the hole closed and nothing else changed.
-    const was = s.renderer.scarInfo[2];
-    s.renderer.scarInfo[2] = 0;
+    // The same frame with the hole closed and nothing else changed. The
+    // shell's mark is the one that punches: whatever else the blast set off
+    // (a parked car, a tree, more of them in the live city than in the
+    // synthetic one) can put marks of its own in the ring before it.
+    const info = s.renderer.scarInfo;
+    let k = 0;
+    for (let i = 0; i < s.renderer.scarCount; i++) if (info[i * 4 + 2] > info[k * 4 + 2]) k = i;
+    const was = info[k * 4 + 2];
+    info[k * 4 + 2] = 0;
     const solid = await frame();
-    s.renderer.scarInfo[2] = was;
+    info[k * 4 + 2] = was;
     let moved = 0;
     for (let i = 0; i < punched.buf.length; i += 4) {
       if (Math.abs(punched.buf[i] - solid.buf[i])

@@ -4233,3 +4233,7 @@ So there are two cities now, and a profile picks which:
   Gate's landmark until a level shot west from the square stops within ten
   metres of it, and the memorial check puts its drone out over the stelae in
   the first of sixteen directions with a clear line from the eye.
+- And the next one along in CI, the city check that a shell opens the wall:
+  it read the hole from the first mark in the ring, and in the live city the
+  blast sets off something else (a car, a tree) that puts its own mark there
+  first. It now takes the mark that punches.
