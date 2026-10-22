@@ -4536,6 +4536,32 @@ So there are two cities now, and a profile picks which:
   and a warhead falling 230 m off or more later. Screenshots
   cheat-11-one-man-army and cheat-12-nightmare.
 
+## 116. The Teltowkanal had no water in it
+
+- The report: a link to 52.4306 N, 13.3108 E (x -4532, z 9477), Lichterfelde
+  West, looking down at the Teltowkanal: where is the water?
+- The cause: the OSM wiki says a long canal's water area is cut into
+  segments that are joined into one multipolygon (Tag:water=canal), and the
+  build took every member way of a multipolygon as a ring of its own. A
+  closed one is; an open piece of a canal's bank is not, and triangulated on
+  its own it was a sliver or nothing. Everything mapped that way was broken
+  the same way: canals and rivers in pieces, and buildings and parks drawn
+  as multipolygons with split outlines.
+- `joinRings` puts the member ways end to end where they share a node, in
+  either direction, until each ring closes, outers and inners apart; a chain
+  that never closes is left out rather than closed with a straight line.
+- And `centrelineWater`: where a river or a canal has only its line (the
+  wiki asks for the area and the line both, and not every stretch has the
+  area), a band of water along the stretches no water area covers, the
+  line's own `width` or 30 m for a river and 20 m for a canal. Not for
+  tunnels and culverts, and not for streams and ditches.
+- Neither OSM nor the live page can be reached from the sandbox, so the
+  canal itself is checked by the deploy, which builds from the live
+  extract; here the synthetic city builds unchanged (its water is closed
+  ways), and the unit checks (3) cover a canal in three pieces with one
+  reversed and an island, a chain that does not close, and the band with
+  and without a width tag, stopping where an area already is.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

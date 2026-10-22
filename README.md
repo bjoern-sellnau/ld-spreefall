@@ -1181,6 +1181,10 @@ downloaded textures and no downloaded models anywhere in this project:
 - Roads draw their own lane markings, kerbs and cobblestones; water animates two
   wave trains and reflects the sky; trees are instanced billboards with a real
   trunk.
+- Water comes from the water areas in the data, a long canal or river put
+  together from the pieces it is mapped in, and where a river or canal has
+  only its centreline, a band of water its width (the `width` tag, or 30 m
+  for a river and 20 m for a canal) along it.
 - Where the map gives a `building:colour`, that colour is used. Where it does
   not, a colour is picked from a Berlin palette of ochre, cream, grey, sandstone
   and red brick.
