@@ -4328,6 +4328,36 @@ So there are two cities now, and a profile picks which:
   kind fills the glass and the runs grow and it all clears.
   cheat-09-crazy-reality.png.
 
+## 108. More punch in a shot
+
+- The guides on weapon sound for games say a shot that sounds weak is
+  usually missing a layer: a transient, a body, a low end kept dry, the
+  mechanics just ahead of the report, and a short tail (Splice, Violet
+  Recording, designingsound.org on Chuck Russom). We had the transient (snap
+  and crack), the body and the tail (the street's echoes); two are new.
+  - **Kick**: a dry sine that drops from 110 to 50 Hz in 45 ms and decays
+    over a little more than a tenth of a second, kept out of the soft clip.
+  - **Mech**: a click of band passed noise round 4 kHz, the action, 6 ms
+    ahead of the report.
+  Both are numbers per voice in `Audio.SHOT`, as the rest are, and none on
+  the bow, the throw or the plasma's mechanics.
+- The bus: everything but the kick goes through a gentle clip (tanh at 1.6)
+  at 1.12 times the level it had, and the kick and that are summed into a
+  ceiling that rounds the top off at 98 percent, so a thump under a report
+  never adds up past full scale. The quiet ones have a level of their own
+  (pistol 0.4, suppressed 0.45, bow and throw 0.6) so the louder bus does
+  not make them loud.
+- Measured offline, before and after: the rifle's first 50 ms from -15.3
+  to -9.7 dB and its low end under 120 Hz in the first 150 ms from -25.6 to
+  -19.0 dB; the shotgun -10.4 to -6.4 and -18.0 to -13.1; the double barrel
+  -9.3 to -5.6 and -15.6 to -11.0; the mech cannon -7.6 to -5.6 and -9.4 to
+  -5.7. Every peak is at -2 dB or under (the first try without the ceiling
+  peaked at +3). The suppressed pistol is where it was, -33 to -32.
+- Checks (arsenal, 48 now): a rifle shot rendered offline is louder than
+  -12 dB in its first 50 ms and over -21 dB under 120 Hz, and neither it
+  nor the shotgun reaches -1 dB; the suppressed pistol is more than 15 dB
+  under the rifle.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
