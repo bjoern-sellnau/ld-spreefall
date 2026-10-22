@@ -353,6 +353,165 @@ async function run() {
   check('a shock arrow puts down and hurts the two beside where it lands, and not the one twenty metres off',
     shock.a && shock.b && shock.hurt && !shock.far && !shock.farHurt, JSON.stringify(shock));
 
+  // --- theirs, at the grounds ---------------------------------------------------------
+  const ceph = await page.evaluate(() => {
+    const s = window.spreefall;
+    // The arrows from the draw check are still in the air, and one into a
+    // ground's alarm box tells the ground.
+    s.projectiles.clear();
+    s.tactics.clear();
+    s.campaign.reset({});
+    s.soldiers.reset();
+    s.mechs.reset();
+    s.suit.reset();
+    const sites = s.campaign.allSites();
+    const site = sites[1] || sites[0];
+    site.level = 0;
+    // Not the last one held in the district, so no walker for this check.
+    s.teleport(site.x + 60, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    const grunts = run.guards.filter((g) => g.ceph === 'grunt' && g.look === 5);
+    const stalkers = run.guards.filter((g) => g.demon === 'stalker');
+    const out = { guards: run.guards.length, grunts: grunts.length, stalkers: stalkers.length,
+      dormant: stalkers.every((g) => g.dormant), alpha: !!run.alpha, gruntHp: grunts[0] ? grunts[0].health : 0 };
+    // Cloaked and twenty metres off it does not stir.
+    const st = stalkers[0];
+    const hurt = s.combat.hurt;
+    s.combat.hurt = () => false;
+    s.suit.toggleCloak();
+    // Up in full before going near: it takes a moment, and he would see that.
+    for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+    s.teleport(st.x + 18, st.z);
+    const at0 = { x: st.x, z: st.z };
+    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
+    out.stillDormant = st.dormant;
+    out.wokeBy = st.wokeBy || null;
+    out.hp = Math.round(st.health);
+    out.stayed = Math.round(Math.hypot(st.x - at0.x, st.z - at0.z));
+    // The alarm, and it comes.
+    s.tactics.raiseAlarm(run);
+    const d0 = Math.hypot(st.x - s.player.x, st.z - s.player.z);
+    for (let i = 0; i < 60 * 2; i++) s.fixedForTest(1 / 60);
+    out.woke = !st.dormant;
+    out.closed = Math.round(d0 - Math.hypot(st.x - s.player.x, st.z - s.player.z));
+    s.combat.hurt = hurt;
+    return out;
+  });
+  check('a hunting ground holds men in black, grunts of theirs among them, and stalkers waiting by the middle',
+    ceph.grunts >= 1 && ceph.stalkers >= 1 && ceph.dormant && ceph.gruntHp >= 300 && !ceph.alpha, JSON.stringify(ceph));
+  check('a stalker waits through a cloaked man nearby, and comes when the alarm goes',
+    ceph.stillDormant && ceph.stayed <= 2 && ceph.woke && ceph.closed > 5, JSON.stringify(ceph));
+
+  const blow = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.reset();
+    s.suit.reset();
+    s.combat.reset();
+    s.teleport(81, 0);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    const t = s.spawnSoldier(0, 0);
+    if (!t) return { skip: true };
+    s.makeDemon(t, 'stalker', 0);
+    t.x = s.player.x + 1.4; t.z = s.player.z; t.y = s.player.y; t.rise = 0; t.meleeLeft = 0;
+    const y0 = s.player.y, launched = s.state.launched || 0, h0 = s.combat.health + s.combat.shield;
+    let top = y0;
+    for (let i = 0; i < 40; i++) { s.fixedForTest(1 / 60); top = Math.max(top, s.player.y); }
+    return { launched: (s.state.launched || 0) - launched, rose: +(top - y0).toFixed(2), hurt: h0 - s.combat.health - s.combat.shield };
+  });
+  check('a stalker\'s blow hurts and lifts you off your feet', !blow.skip && blow.launched >= 1 && blow.rose > 1 && blow.hurt > 0,
+    JSON.stringify(blow));
+
+  const alpha = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.tactics.clear();
+    s.campaign.reset({});
+    s.soldiers.reset();
+    s.mechs.reset();
+    s.suit.reset();
+    s.combat.reset();
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    site.level = 1;
+    s.teleport(site.x + 45, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    const out = { alpha: !!run.alpha, pinger: !!(run.alpha && run.alpha.pinger) };
+    if (!run.alpha) return out;
+    // The ping: armour on, inside its reach.
+    s.suit.toggleArmor();
+    const m = run.alpha;
+    s.teleport(m.x + 30, m.z);
+    const pings = s.state.pings || 0;
+    const hurt = s.combat.hurt;
+    let hits = 0;
+    s.combat.hurt = (...a) => { hits++; return hurt.apply(s.combat, a); };
+    for (let i = 0; i < 60 * 8 && (s.state.pings || 0) === pings; i++) s.fixedForTest(1 / 60);
+    out.pinged = (s.state.pings || 0) - pings;
+    out.energy = Math.round(s.suit.energy);
+    out.armor = s.suit.armor;
+    s.combat.hurt = hurt;
+    // Every man and alien down, and the ground is still held while the walker stands.
+    for (const g of run.guards) s.soldiers.damage(g, 1e6, { x: 1, y: 0, z: 0 });
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    out.heldWithAlpha = site.state;
+    s.mechs.damage(m, 1e7, true);
+    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
+    out.freedAfter = site.state;
+    site.level = 0;
+    return out;
+  });
+  check('from level one a walker of theirs stands over the ground', alpha.alpha && alpha.pinger, JSON.stringify(alpha));
+  check('its ping empties the suit, armour and all', alpha.pinged >= 1 && alpha.energy === 0 && !alpha.armor,
+    JSON.stringify(alpha));
+  check('and the ground is not clear until the walker is down too', alpha.heldWithAlpha === 0 && alpha.freedAfter === 1,
+    JSON.stringify(alpha));
+
+  // The picture: a grunt and a stalker at a ground.
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.tactics.clear();
+    s.campaign.reset({});
+    s.soldiers.reset();
+    s.mechs.reset();
+    s.suit.reset();
+    const site = s.campaign.allSites()[2] || s.campaign.allSites()[0];
+    site.level = 0;
+    s.teleport(site.x + 40, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    s.soldiers.stealth = { range: 0, cone: 2, near: 0, fill: 0, decay: 1, run: 1 };
+    const run = s.tactics.live.get(site.id);
+    const st = run.guards.find((g) => g.demon === 'stalker');
+    const gr = run.guards.find((g) => g.ceph === 'grunt');
+    const a = st || gr;
+    if (gr && st) { gr.x = st.x + 2.5; gr.z = st.z + 1; gr.state = 0; gr.vx = gr.vz = 0; }
+    s.teleport(a.x + 9, a.z + 4);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    const dx = a.x - s.player.x, dz = a.z - s.player.z;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, -4);
+    s.soldiers.enabled = false;
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-04-ceph.png') });
+  await page.evaluate(() => { const s = window.spreefall; s.soldiers.enabled = true; s.soldiers.stealth = s.tacticsSpec.stealth; });
+
+  // --- the end of a hunt ------------------------------------------------------------
+  const over = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.tactics.clear();
+    s.soldiers.reset();
+    s.mechs.reset();
+    for (const site of s.campaign.allSites()) if (site.state !== 1) s.campaign.free(site, { quiet: true });
+    for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(r));
+    const card = document.getElementById('opsend');
+    return { shown: !card.classList.contains('hidden'), title: document.getElementById('opsendtitle').textContent,
+      stats: document.getElementById('opsendstats').textContent };
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-05-end.png') });
+  check('every ground cleared ends the hunt, on a card of its own', over.shown && /hunt is over/i.test(over.title)
+    && /Grounds cleared/.test(over.stats), JSON.stringify(over));
+  await page.evaluate(() => document.getElementById('opsend').classList.add('hidden'));
+
   // The picture: cloaked, a guard in front of you who has no idea.
   await guard();
   await page.keyboard.press('KeyE');

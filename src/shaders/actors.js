@@ -380,12 +380,22 @@ void main() {
       * smoothstep(0.35, 0.6, vnoise(vec2(vWorld.x - vWorld.z, vWorld.y) * 2.0));
     rough = 0.7;
     metal = 0.05;
+    bool ceph = kind == 5 || kind == 6;
     if (vPart < 40.5) {
       vec3 hide = kind == 3 ? vec3(0.50, 0.16, 0.14)
         : (kind == 4 ? vec3(0.07, 0.05, 0.045)
-        : (kind == 2 ? vec3(0.30, 0.17, 0.09) : vec3(0.42, 0.10, 0.07)));
+        : (kind == 2 ? vec3(0.30, 0.17, 0.09)
+        // Theirs: a dark shell, blue black for the grunt, grey for the
+        // stalker, with light running in the seams.
+        : (kind == 5 ? vec3(0.06, 0.07, 0.09)
+        : (kind == 6 ? vec3(0.16, 0.17, 0.19) : vec3(0.42, 0.10, 0.07)))));
       albedo = hide * (0.75 + 0.45 * v);
       if (kind == 4) emissive = vec3(2.6, 0.55, 0.05) * vein;
+      else if (ceph) {
+        emissive = (kind == 5 ? vec3(0.25, 1.4, 2.4) : vec3(1.6, 0.4, 2.2)) * vein;
+        metal = 0.55;
+        rough = 0.35;
+      }
       else albedo *= 1.0 - 0.35 * vein;
     } else if (vPart < 41.5) {
       albedo = vec3(0.10, 0.085, 0.07) * (0.8 + 0.3 * v);
@@ -393,7 +403,8 @@ void main() {
       metal = 0.1;
     } else {
       albedo = vec3(0.05);
-      emissive = kind == 0 ? vec3(3.2, 1.6, 0.1) : vec3(3.4, 1.2, 0.05);
+      emissive = kind == 0 ? vec3(3.2, 1.6, 0.1)
+        : (kind == 5 ? vec3(0.6, 2.6, 3.6) : (kind == 6 ? vec3(3.6, 0.5, 2.4) : vec3(3.4, 1.2, 0.05)));
       rough = 0.2;
     }
     // Reeling: it glows from inside, which is the cue to finish it.
@@ -749,7 +760,8 @@ void main() {
   if (aInfo.x > 25.5 && aInfo.x < 27.5) keep = (kind > 0.5 && kind < 1.5) ? 1.0 : 0.0;
   // A demon's horns, and no rifle in its hands.
   if (aInfo.x > 28.5 && aInfo.x < 29.5) keep = demon ? 1.0 - charred : 0.0;
-  if (demon && aInfo.x > 6.5 && aInfo.x < 7.5) keep = 0.0;
+  // A grunt of theirs carries a gun; nothing else in a hide does.
+  if (demon && aInfo.x > 6.5 && aInfo.x < 7.5 && (kind < 4.5 || kind > 5.5)) keep = 0.0;
   // Somebody on his way to work carries no rifle and wears no helmet. Both
   // shrink into the figure the same way the cloth does on a man who burns,
   // which costs nothing: the parts are in the mesh either way.
@@ -785,7 +797,7 @@ void main() {
 
   // A demon is drawn bigger than a man: a ghoul a little, a brute by two
   // thirds, the tyrant three and a half times over.
-  float size = kind > 3.5 ? 3.5 : (kind > 2.5 ? 1.65 : (kind > 1.5 ? 1.08 : 1.0));
+  float size = kind > 5.5 ? 1.15 : (kind > 4.5 ? 1.22 : (kind > 3.5 ? 3.5 : (kind > 2.5 ? 1.65 : (kind > 1.5 ? 1.08 : 1.0))));
   p *= size;
 
   // The fall: rotate the whole body about the feet. This is death, and it is
@@ -963,7 +975,7 @@ void main() {
   mat3 rot = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
   // A demon's shadow is as big as the demon.
   float kind = iExtra.y;
-  float size = kind > 3.5 ? 3.5 : (kind > 2.5 ? 1.65 : (kind > 1.5 ? 1.08 : 1.0));
+  float size = kind > 5.5 ? 1.15 : (kind > 4.5 ? 1.22 : (kind > 3.5 ? 3.5 : (kind > 2.5 ? 1.65 : (kind > 1.5 ? 1.08 : 1.0))));
   gl_Position = uLightViewProj * vec4(rot * (fall * (aPos * size)) + iPosYaw.xyz, 1.0);
 }
 `;

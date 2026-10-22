@@ -121,6 +121,11 @@ class Soldier {
     this.staggered = 0;
     this.reeled = false;
     this.nest = null;
+    // The Hunt: theirs, drawn in their own shape, and one kept waiting at a
+    // hunting ground.
+    this.ceph = null;
+    this.look = 0;
+    this.dormant = false;
     return this;
   }
 }
@@ -211,6 +216,20 @@ export class Soldiers {
    */
   _demonStep(s, dt, player, dist, dx, dz) {
     const sp = s.dspec;
+    // One kept at a hunting ground waits there, turning about, until the
+    // camp knows, until it sees you close, or until it is hurt.
+    if (s.dormant) {
+      // The sight check runs on a rota; the cloak counts from the moment it is up.
+      const sees = s.canSee && !(this.cloak && dist > this.cloak);
+      if ((s.post && s.post.alert) || (sees && dist < 26) || s.health < s.maxHealth) {
+        s.dormant = false;
+        s.wokeBy = s.post && s.post.alert ? 'alert' : s.health < s.maxHealth ? 'hurt' : 'saw';
+      } else {
+        s.yaw += dt * 0.4 * Math.sin(s.seed * 6.28 + s.walk);
+        s.walk += dt * 0.3;
+        return;
+      }
+    }
     s.lean += (0 - s.lean) * Math.min(1, dt * 5);
     s.meleeLeft -= dt;
     s.fireLeft -= dt;

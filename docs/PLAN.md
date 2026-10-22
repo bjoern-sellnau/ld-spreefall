@@ -4179,3 +4179,44 @@ So there are two cities now, and a profile picks which:
   (111 now): Nano Vision's drain and drop, the draw rows, the heads, and the
   weapon cycling draws for a bow and having none for a rifle.
   hunt-02-visor.png, hunt-03-nano.png.
+
+## 103. Theirs at the hunting grounds, and the end of a hunt
+
+- When a ground is manned in The Hunt (`tactics.onManned`), every third
+  guard is made a grunt (`makeGrunt`: look 5, 1.22 times a man, 300
+  health, the soldier's own rifle and mind), and one stalker per level, one
+  to three, is put down six metres from the middle (`DEMON.stalker`, code 6:
+  240 health, 8.6 m/s, a 15 m/s charge from 6 to 26 m, a blow of 20 that
+  sets your vertical speed to 7.5 m/s). It is `dormant`: it turns where it
+  stands until its ground is alerted, it sees you within 26 m (the cloak
+  counts at once, not on the sight rota) or it is hurt, and records which
+  (`wokeBy`).
+- From level one, or at the last ground still held in a district, an enemy
+  Heron stands twelve metres from the middle with half again its health and
+  a ping: every 6 s, within 50 m, an EMP ring, 30 damage less up to half
+  with distance, and the suit emptied with armour, cloak and Nano Vision
+  off and nothing back on for 2.5 s. `run.alpha` keeps the ground held
+  while it stands; standing the ground down takes it away.
+- Drawn on the soldier body as the demons are, codes 5 and 6 in the shader:
+  a dark shell (blue black for the grunt, grey for the stalker) with light
+  in the seams, cyan and violet, metallic, and eyes to match; the grunt
+  keeps its rifle, the stalker does not. A pooled soldier forgets `ceph`,
+  `look` and `dormant` when it is spawned again.
+- The end card says The hunt is over, Grounds cleared and Of theirs killed
+  (`state.cephKilled`, counted in `creditTarget` for grunts, stalkers and
+  the walker); a new hunt says the grounds are held again.
+- Sources, checked by search (the pages themselves could not be opened from
+  here): grunts as infantry, stalkers as fast light units that knock the
+  player into the air, the Pinger as a tall tripod walker whose ping is an
+  EMP reaching fifty metres (Crysis wiki, Ceph; Crysis 2 guides). The
+  numbers are ours, and the walker is one of our own chassis.
+- Checks (hunt, 24 now): a ground holds grunts and dormant stalkers and no
+  walker at level nought; a stalker waits through a cloaked man 18 m off
+  for three seconds and closes when the alarm goes; a stalker's blow hurts
+  and lifts you more than a metre; from level one a walker stands over the
+  ground, its ping empties the suit with the armour on, and the ground stays
+  held with every man down until the walker is too; every ground cleared
+  puts the end card up. The cloak check now clears the arrows of the draw
+  check first: one still in the air broke the next ground's alarm box and
+  woke the stalker through a silent alarm. hunt-04-ceph.png,
+  hunt-05-end.png.

@@ -558,12 +558,28 @@ and you in a suit with one bar of energy that everything it does runs on.
   railgun, banana. A ground cleared without anybody raising the alarm pays
   1800 on top of the 1200 it is worth.
 
+- **Theirs.** Every third man at a ground is a grunt of theirs: their
+  shape, a dark shell with blue light in the seams, the same rifle and the
+  same eyes as a guard, 300 health. A stalker or more (one, and one more a
+  level, three at most) waits by the middle, turning about, and does not
+  move until the ground knows you are there, it sees you within 26 m, or it
+  is hurt; then it comes fast, charges across open ground and its blow
+  throws you into the air. From level one, and at the last ground held in a
+  district, a tall walker of theirs stands over it: its ping is an EMP that
+  hurts everyone within 50 m through the armour and empties the suit,
+  modes and all, for 2.5 s. The ground is not clear while it stands.
+- Every ground cleared ends the hunt on its own card, with how many of
+  theirs you killed.
+
 Where the ideas come from, for the record: the first game had four suit
 modes, armour, speed, strength and cloak; the second and third kept armour
 and cloak as modes on Q and E and made the strength and the speed things the
 suit does when asked; the third added a bow that can be fired from the cloak
-for a share of the energy rather than all of it
+for a share of the energy rather than all of it; the aliens of the second
+are infantry grunts, quick stalkers that knock you into the air, and a tall
+tripod walker whose ping is an EMP reaching fifty metres
 ([Wikipedia: Crysis](https://en.wikipedia.org/wiki/Crysis),
+[Crysis wiki: Ceph](https://crysis.fandom.com/wiki/Ceph),
 [Crysis wiki: Armor](https://crysis.fandom.com/wiki/Armor),
 [Game Informer on the bow](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2012/06/06/crysis-3-bringing-a-bow-to-a-gunfight.aspx),
 [Crysis 2 Remastered PC controls](https://www.magicgameworld.com/crysis-2-remastered-pc-controls/)).
@@ -572,6 +588,7 @@ The numbers and everything else here are ours.
 ![Cloaked in front of a guard](docs/screenshots/hunt-01-cloak.png)
 ![The visor, one tagged](docs/screenshots/hunt-02-visor.png)
 ![Nano Vision](docs/screenshots/hunt-03-nano.png)
+![A grunt and a stalker at a hunting ground](docs/screenshots/hunt-04-ceph.png)
 
 ## The end of an operation
 

@@ -51,6 +51,7 @@ import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
 import { Nanosuit, SUIT } from './game/nanosuit.js';
+import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
 import { Slayer, SLAYER } from './game/slayer.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
@@ -1246,11 +1247,12 @@ async function main() {
   function creditTarget(target, core, kind) {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
+    if (target.ceph || (target.dspec && target.dspec.ceph) || target.pinger) state.cephKilled = (state.cephKilled || 0) + 1;
     // A body that came apart does not also catch fire.
     if (!target.gibbed) effects.explode(target.x, target.y, target.z);
     audio.droneDown();
     const name = target.demon ? (DEMON[target.demon] ? DEMON[target.demon].name : GAZER.name).toLowerCase()
-      : kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
+      : target.ceph ? target.ceph : kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
     // In Slayer every demon is worth its points in the campaign as well.
     if (target.demon && campaign.mode === 'slayer') {
       campaign.book.score += DEMON[target.demon] ? DEMON[target.demon].points : GAZER.points;
@@ -5597,6 +5599,82 @@ async function main() {
     });
   }
 
+  // --- theirs, at the hunting grounds ---------------------------------------------
+  //
+  // A ground is held by men in black, as a camp is, and by theirs with them:
+  // every third man is a grunt in their shape, a stalker or more waits by the
+  // middle until the ground knows you are there, and from level one, or at
+  // the last ground in a district, a tall walker stands over it whose ping is
+  // an EMP. The ground is not clear while that is standing.
+  tactics.onManned = (site, run) => {
+    if (campaign.mode !== 'hunt') return;
+    const level = site.level || 0;
+    run.guards.forEach((g, i) => { if (i % 3 === 1) makeGrunt(g, level); });
+    const stalkers = Math.min(3, 1 + level);
+    for (let i = 0; i < stalkers; i++) {
+      const s = soldiers.free();
+      if (!s) break;
+      const a = site.yaw + i * 2.1 + 0.6;
+      const x = site.x + Math.cos(a) * 6, z = site.z + Math.sin(a) * 6;
+      s.spawn(x, world.groundHeight(x, z), z, level);
+      s.rise = 0;
+      s.y = world.groundHeight(x, z);
+      makeDemon(s, 'stalker', level);
+      s.dormant = true;
+      s.state = 0;
+      s.post = { x: site.x, z: site.z, r: 10, camp: site.id };
+      s.yaw = a;
+      soldiers.active.push(s);
+      run.guards.push(s);
+    }
+    const list = campaign.sitesIn(site.d) || [];
+    const last = list.filter((x) => x.state !== SITE.FREE).length <= 1;
+    if (level >= 1 || last) {
+      const m = mechs.spawn(CEPH.pinger.chassis, site.x + 12, site.z + 12, site.yaw);
+      if (m) {
+        m.health *= CEPH.pinger.health;
+        m.maxHealth = m.health;
+        m.ping = { left: CEPH.pinger.ping.every * 0.6 };
+        m.pinger = true;
+        run.alpha = m;
+      }
+    }
+  };
+  tactics.onStandDown = (run) => {
+    const m = run.alpha;
+    const i = mechs.active.indexOf(m);
+    if (i >= 0) mechs.active.splice(i, 1);
+    if (m) m.alive = false;
+  };
+  /** The walker's ping: an EMP, felt through the armour and in the suit. */
+  function pingStep(dt) {
+    for (const m of mechs.active) {
+      if (!m.ping || !m.alive || m.health <= 0) continue;
+      const p = CEPH.pinger.ping;
+      const d = Math.hypot(player.x - m.x, player.z - m.z);
+      m.ping.left -= dt;
+      if (m.ping.left > 0 || d > p.radius) continue;
+      m.ping.left = p.every;
+      const y = world.groundHeight(m.x, m.z);
+      effects.arrival(m.x, y, m.z, p.radius * 0.5, 2, [0.4, 0.8, 1.0]);
+      renderer.addScar(m.x, y, m.z, 6, 0.4);
+      audio.emp(d);
+      effects.shake = Math.min(1.4, effects.shake + 0.5);
+      state.flash = Math.max(state.flash, 0.25);
+      state.pings = (state.pings || 0) + 1;
+      if (state.inMech || state.inVehicle) continue;
+      if (combat.health > 0) combat.hurt(p.damage * (1 - 0.5 * d / p.radius), m.x, m.z, player.x, player.z);
+      if (suited()) {
+        const was = suit.energy;
+        suit.armor = false; suit.cloak = false; suit.nano = false;
+        suit.energy = 0;
+        suit.stalled = p.stall;
+        suit.idle = 0;
+        if (was > 0) toast('EMP: the suit is empty');
+      }
+    }
+  }
+
   /** The bar, the two modes, and the edge of the screen while they are on. */
   function suitHud() {
     const on = suited();
@@ -5646,15 +5724,18 @@ async function main() {
 
   function showOpsEnd(sum) {
     const slay = campaign.mode === 'slayer';
+    const hunt = campaign.mode === 'hunt';
     const where = campaign.settings.scope === 'all' ? 'Berlin'
       : ((world.entryFor(campaign.settings.start) || {}).name || 'the district');
-    el.opsEndTitle.textContent = slay ? 'The presence is broken' : 'Operation complete';
+    el.opsEndTitle.textContent = slay ? 'The presence is broken' : hunt ? 'The hunt is over' : 'Operation complete';
     el.opsEndText.textContent = slay
       ? `Not one nest is left in ${where}.`
+      : hunt ? `Every hunting ground in ${where} is clear, and nothing of theirs is left standing in it.`
       : `Every camp in ${where} is yours.`;
     const minutes = Math.max(0, Math.round((state.time - (state.opsStartedAt || 0)) / 60));
     const rows = [
-      [slay ? 'Nests destroyed' : 'Camps taken', `${sum.free} of ${sum.total}`],
+      [slay ? 'Nests destroyed' : hunt ? 'Grounds cleared' : 'Camps taken', `${sum.free} of ${sum.total}`],
+      ...(hunt ? [['Of theirs killed', `${state.cephKilled || 0}`]] : []),
       ...(slay ? [] : [['Taken without an alarm', `${sum.quiet || 0}`]]),
       ['Level', `${(sum.level || 0) + 1}`],
       ['Score', `${sum.score}`],
@@ -5672,7 +5753,8 @@ async function main() {
     soldiers.reset();
     drones.reset();
     startOps();
-    toast(campaign.mode === 'slayer' ? 'a new operation: the nests are back' : 'a new operation: the camps are manned again');
+    toast(campaign.mode === 'slayer' ? 'a new operation: the nests are back'
+      : campaign.mode === 'hunt' ? 'a new hunt: the grounds are held again' : 'a new operation: the camps are manned again');
     if (!isTouch) input.requestLock();
   });
   // The title screen is where the page starts, so that is the way back to it:
@@ -5928,6 +6010,11 @@ async function main() {
     if (state.inMech) { mechs.damage(state.inMech, melee.damage * 2); return; }
     if (state.inVehicle) { vehicles.damage(state.inVehicle, melee.damage * 2); return; }
     if (combat.health > 0) combat.hurt(melee.damage, s.x, s.z, player.x, player.z);
+    // A stalker's blow lifts you off your feet.
+    if (melee.launch && combat.health > 0) {
+      player.vy = Math.max(player.vy || 0, melee.launch);
+      state.launched = (state.launched || 0) + 1;
+    }
   };
 
   soldiers.onCharge = (s) => {
@@ -6965,6 +7052,7 @@ async function main() {
       refineStep();
       bombStep(worldDt);
       convoyStep(worldDt);
+      pingStep(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -7180,6 +7268,7 @@ async function main() {
     refineStep();
     bombStep(worldDt);
     convoyStep(worldDt);
+    pingStep(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -7758,7 +7847,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, suited: () => suited(), suitPunch: () => suitPunch(),
+    compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(),
     setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
