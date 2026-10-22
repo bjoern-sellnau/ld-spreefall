@@ -3179,10 +3179,58 @@ async function main() {
     }
   }
 
+  // Out of a car at speed: you throw yourself out of the side, carrying some
+  // of its speed, and it goes on without you, foot still down, until it hits
+  // something or runs out of road. The question about a bomb is asked as it
+  // goes, and holds however far it has got by the time you answer.
+  const BAIL = {
+    from: 8,          // metres a second, faster than this is a bail out
+    keep: 14,         // seconds it keeps driving with nobody in it
+    side: 6,          // how hard you go sideways, metres a second
+    carry: 0.35,      // and how much of its speed you take with you
+    hop: 4.2,         // up, so it is a dive and not a step
+    tumble: 0.8,      // seconds the dive lasts
+  };
+  /** Which side of a vehicle has room to land on: its left, unless a wall is there. */
+  function bailSide(v) {
+    const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+    for (const sgn of [1, -1]) {
+      // Left of the nose is (fz, -fx); the right the other way.
+      const sx = fz * sgn, sz = -fx * sgn;
+      const hit = world.raycast(v.x, v.y + 1.0, v.z, sx, 0, sz, v.spec.radius + 2.6);
+      if (!hit || hit.kind === 'ground') return { sx, sz, fx, fz };
+    }
+    return { sx: fz, sz: -fx, fx, fz };
+  }
+  function bailOut(v) {
+    const { sx, sz, fx, fz } = bailSide(v);
+    const speed = v.speed;
+    vehicles.leave();
+    const x = v.x + sx * (v.spec.radius + 1.6), z = v.z + sz * (v.spec.radius + 1.6);
+    // Foot still down: it keeps going straight at the speed it had.
+    v.ai = { throttle: speed > 0 ? Math.min(1, Math.abs(speed) / v.spec.topSpeed + 0.25) : -0.6, steer: 0, brake: false };
+    v.runaway = BAIL.keep;
+    state.bail = { vx: sx * BAIL.side + fx * speed * BAIL.carry, vz: sz * BAIL.side + fz * speed * BAIL.carry, left: BAIL.tumble };
+    state.bails = (state.bails || 0) + 1;
+    return { x, z };
+  }
+  /** A vehicle running on with nobody in it stops when its time is up or it is stopped. */
+  function runawayStep(dt) {
+    for (const v of vehicles.active) {
+      if (v.runaway === undefined) continue;
+      v.runaway -= dt;
+      if (v.runaway <= 0 || v.occupied || v.health <= 0 || (v.runaway < BAIL.keep - 1 && Math.abs(v.speed) < 1)) {
+        if (!v.hostile) v.ai = null;
+        delete v.runaway;
+      }
+    }
+  }
+
   function leaveVehicle(thrown) {
     const v = state.inVehicle;
     if (!v) return;
-    const out = vehicles.leave() || { x: v.x, z: v.z, y: v.y };
+    const bailing = !thrown && v.spec.kind === 'ground' && Math.abs(v.speed) >= BAIL.from && v.health > 0;
+    const out = bailing ? bailOut(v) : (vehicles.leave() || { x: v.x, z: v.z, y: v.y });
     state.inVehicle = null;
     state.holstered = false;
     el.hud.classList.remove('driving');
@@ -3194,7 +3242,13 @@ async function main() {
       combat.hurt(22, v.x, v.z, out.x, out.z);
       toast('thrown clear');
     } else if (v.alive && v.health > 0 && state.mode === 'walk') {
-      askToRig(v);
+      if (bailing) {
+        player.vy = BAIL.hop;
+        effects.shake = Math.max(effects.shake || 0, 0.4);
+        audio.leap && audio.leap();
+        toast('bailed out: 1 time bomb, 2 remote, 3 let it go');
+      }
+      askToRig(v, bailing);
     }
   }
 
@@ -3215,8 +3269,8 @@ async function main() {
     },
   };
   let rigging = null;
-  function askToRig(v) {
-    rigging = { v, left: VBOMB.ask };
+  function askToRig(v, moving = false) {
+    rigging = { v, left: VBOMB.ask, moving };
     el.vbomb.classList.remove('hidden');
     input.exitLock();
   }
@@ -3269,7 +3323,9 @@ async function main() {
     if (rigging) {
       rigging.left -= dt;
       const v = rigging.v;
-      if (rigging.left <= 0 || !v.alive || Math.hypot(player.x - v.x, player.z - v.z) > 25) closeRig();
+      // One you have just jumped out of is driving away from you, and the
+      // question holds however far it has got.
+      if (rigging.left <= 0 || !v.alive || (!rigging.moving && Math.hypot(player.x - v.x, player.z - v.z) > 25)) closeRig();
     }
     for (const v of [...vehicles.active]) {
       const bomb = v.bomb;
@@ -7514,6 +7570,7 @@ async function main() {
       memorialStep();
       refineStep();
       bombStep(worldDt);
+      runawayStep(worldDt);
       convoyStep(worldDt);
       wreckStep(worldDt);
       onslaughtStep(worldDt);
@@ -7628,6 +7685,14 @@ async function main() {
       }
       wishX = (basis[0] * input.moveZ + basis[2] * input.moveX) * speed;
       wishZ = (basis[1] * input.moveZ + basis[3] * input.moveX) * speed;
+    }
+    // A dive out of a moving car: the push dies away over the dive.
+    if (state.bail) {
+      const k = Math.max(0, state.bail.left / BAIL.tumble);
+      wishX += state.bail.vx * k;
+      wishZ += state.bail.vz * k;
+      state.bail.left -= selfDt;
+      if (state.bail.left <= 0) state.bail = null;
     }
     const wasGround = player.onGround;
     // Jumping while the reflex is running spends a slice of the meter and
@@ -7753,6 +7818,7 @@ async function main() {
     memorialStep();
     refineStep();
     bombStep(worldDt);
+    runawayStep(worldDt);
     convoyStep(worldDt);
     wreckStep(worldDt);
     onslaughtStep(worldDt);
@@ -8352,7 +8418,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    arcView, throwSpec: THROW_SPEC,
+    arcView, throwSpec: THROW_SPEC, bailSpec: BAIL,
     onslaught, onslaughtSpec: ONSLAUGHT, launchOnslaught: (w) => launchOnslaught(w), foeChassis,
     compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grime, grimeSpec: GRIME, grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
     setMark: (at) => setMark(at),

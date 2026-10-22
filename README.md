@@ -93,7 +93,7 @@ district by hand. A comparison of the same street at either tier is in
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
-| F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels. Getting out asks whether to rig the vehicle as a bomb: 1 a time bomb of ten seconds, 2 a remote one for T, 3 no |
+| F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels. Getting out asks whether to rig the vehicle as a bomb: 1 a time bomb of ten seconds, 2 a remote one for T, 3 no. Out of a car or a tank at more than 8 m/s you dive clear out of the side (the side with room) and it drives on without you, foot still down, for up to fourteen seconds or until something stops it, and the question waits however far it has gone |
 | R | reload; with the bow in hand, the head on the next arrow: plain, fire, poison or explosive |
 | J | in Tactics and Slayer, the journal: every district, and the camps or nests given back, or given back harder |
 | driving | W forward, S back, A D steer, Shift brake, left mouse fires; drive into a wall fast enough and you go through it |

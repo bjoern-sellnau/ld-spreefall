@@ -4614,6 +4614,28 @@ So there are two cities now, and a profile picks which:
   a parked car is not gone after a second and is by four. Screenshots
   city-06-vehicle-burning and city-07-vehicle-blast.
 
+## 119. Out of a car at speed, and it drives on
+
+- The ask: jump out of a fast car to the side, pick a remote bomb, a time
+  bomb or nothing, and the car just keeps going.
+- Before: getting out set the handbrake (phase 98 had it on purpose, since a
+  jeep left at full throttle rolled on with a rigged bomb), you were put down
+  beside it, and the question went away once the car was 25 m off.
+- Now, out of a ground vehicle at more than 8 m/s is a bail out. You go out
+  of whichever side has room (the left, unless a raycast finds a wall within
+  the vehicle's radius and 2.6 m), with a push of 6 m/s sideways and a third
+  of the car's speed along it, 4.2 m/s up, dying away over 0.8 s. The car
+  gets a driver with no hands: the throttle where it was (its speed over
+  its top speed and a quarter), no steering, for up to 14 s, or until it is
+  stopped, hits something hard enough to stop it, or somebody gets in. The
+  bomb question is asked as before and holds however far the car has got;
+  T still blows a remote one wherever it is.
+- Getting out slower than that is what it was: the handbrake, beside it.
+- Checks (ops): a jeep at 22 m/s, out of it: you are out and asked, it has
+  a driver, after a second and a half it has run 43 m and is 40 m from you,
+  you are 4 m from where you got out, the question is still there, 2 rigs it
+  remote and T blows it.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

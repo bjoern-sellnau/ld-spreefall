@@ -1614,6 +1614,48 @@ async function run() {
   });
   check('three says no, and getting back in disarms one',
     declined.closed && !declined.bomb && declined.disarmed && declined.standing, JSON.stringify(declined));
+  // Out of a jeep at speed: a dive out of the side, the jeep driving on with
+  // nobody in it, and the question still there after it has gone 25 m.
+  const bail = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.teleport(81, 0);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    // Down Unter den Linden, nose to the east.
+    const j = s.vehicles.spawn('jeep', s.player.x + 4, s.player.z, -Math.PI / 2);
+    s.teleport(j.x + 1.5, j.z + 1.5);
+    s.toggleVehicle();
+    if (s.state.inVehicle !== j) return { skip: true };
+    j.speed = 22;
+    const from = { x: j.x, z: j.z };
+    s.toggleVehicle();
+    const out = { out: !s.state.inVehicle, asked: !!s.rigging() && s.rigging().v === j, driving: !!j.ai && j.ai.throttle > 0 };
+    const p0 = { x: s.player.x, z: s.player.z };
+    for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+    out.ran = Math.round(Math.hypot(j.x - from.x, j.z - from.z));
+    out.dove = +Math.hypot(s.player.x - p0.x, s.player.z - p0.z).toFixed(1);
+    out.away = Math.round(Math.hypot(j.x - s.player.x, j.z - s.player.z));
+    out.stillAsked = !!s.rigging();
+    return out;
+  });
+  if (!bail.skip) await page.keyboard.press('Digit2');
+  const bailBomb = await page.evaluate(() => {
+    const s = window.spreefall;
+    const j = s.vehicles.active[0];
+    return { bomb: j && j.bomb ? j.bomb.kind : null };
+  });
+  await page.keyboard.press('KeyT');
+  const bailGone = await page.evaluate(() => {
+    const s = window.spreefall;
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    const j = s.vehicles.active[0];
+    return { gone: !j || j.health <= 0 };
+  });
+  check('out of a jeep at speed you dive clear, it drives on without you, and the bomb question waits for you',
+    !bail.skip && bail.out && bail.asked && bail.driving && bail.ran > 25 && bail.dove > 2 && bail.away > 25
+      && bail.stillAsked && bailBomb.bomb === 'remote' && bailGone.gone,
+    JSON.stringify({ ...bail, ...bailBomb, ...bailGone }));
+
   await rigOut();
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(SHOTS, 'ops-14-vehicle-bomb.png') });
