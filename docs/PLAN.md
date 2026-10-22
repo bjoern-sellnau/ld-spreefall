@@ -4696,6 +4696,48 @@ So there are two cities now, and a profile picks which:
   those first and sends the ultra plasma alone, so the squad is the only
   thing it has to miss.
 
+## 121. More weapons, several to a key
+
+- The ask: more and stronger weapons, which can share keys.
+- The number row is now groups (`BUCKETS` in `arsenal.js`): a key held a
+  single weapon before, and 7 had two (the flamer and the railgun, so the
+  railgun was never reached from it). A key from outside its group gives the
+  one last held there, the first the first time; pressed again it goes to
+  the next in the group and round. The first of each group is what the key
+  always gave, so 1 is still the rifle and 4 the grenade. `LOADOUT` is the
+  groups in order, which is the order of the wheel. Kits (Tactics, Slayer,
+  The Hunt) are still a weapon a key.
+- Five new, each the heavy one of its group: a hand cannon (125 a round,
+  2.6 on the core, through two), a drum shotgun (ten pellets, automatic, a
+  twenty round drum), a rotary cannon (30 a round at 25 a second after a
+  0.4 s spin up that winds down at half the rate), a grenade launcher (a new
+  `shell` projectile, a third of a grenade's drop, goes off on contact, 9 m
+  and 210) and a swarm launcher (four rockets a shot, every one of them
+  homing on what the sight was on). Each has its own viewmodel and pose, and
+  the hand cannon, the rotary and the launcher their own report.
+- Checks (arsenal): the groups go round and remember, every one of the 27
+  fires, the hand cannon hurts two in a line, the rotary fires nothing in
+  its spin up and sixteen in the second after, four rockets out of the
+  swarm, and the shell goes off 60 m out in a second and a half.
+
+## 122. The weapons down the side
+
+- The ask: a modern HUD with the weapons at the side, like Half-Life's but
+  down the side.
+- `src/ui/arms.js`: a row a number key down the left edge, the key in a box
+  and the weapon it would give you under it with a bar of what is left of
+  its magazine and reserve together. The row you are on has its key lit in
+  the accent and the weapon in your hands a lit bar; a dry one is red. A pick
+  by a key, the wheel or anything else opens that key's group, every weapon
+  in it listed, for 2.4 s, and then the panel folds to one name a row and
+  dims to 55 %. A kit is shown a weapon a key. Hidden in a vehicle, a mech
+  (which has its own rows), in photo mode and while you are dying. Smaller
+  at phone width.
+- Checks (arsenal): ten rows 1 to 0 at the left edge, the right one lit and
+  open with its four, the marksman rifle lit; folded and dimmed three
+  seconds later; the Tactics kit is a weapon a key. Screenshots
+  arsenal-01-side-panel.png and arsenal-02-rotary.png.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

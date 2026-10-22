@@ -880,6 +880,141 @@ async function run() {
   check('everything you carry hits half as hard again, and a grenade far harder than it did',
     power.scale === 1.5 && power.radius >= 11 && power.damage >= 380, JSON.stringify(power));
 
+  // --- the number row in groups, and the panel down the side --------------
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.projectiles.clear(); s.weapon.reset(); s.weapon.lastInBucket = {};
+    s.weapon.select('m16');
+  });
+  await page.waitForTimeout(300);
+  const groups = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    const press = (k) => { s.weapon.selectSlot(k); s.arms.poke(k); return s.weapon.id; };
+    out.one = [press(1), press(1), press(1), press(1), press(1)];
+    out.three = [press(3), press(3)];
+    // Back to the rifles: the one last held there, not the first.
+    out.back = press(1);
+    out.away = press(4);
+    out.again = press(1);
+    return out;
+  });
+  check('a number key is a group: pressed again it goes through the group and round',
+    groups.one.join() === 'marksman,minigun,bow,m16,marksman' && groups.three.join() === 'rpg,swarm',
+    JSON.stringify(groups));
+  check('and coming back to a group gives the one you last had in it',
+    groups.back === 'marksman' && groups.away === 'grenade' && groups.again === 'marksman', JSON.stringify(groups));
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.weapon.select('m16'); s.weapon.selectSlot(1); s.arms.poke(1);
+    s.teleport(81, 0); s.look(100, 4); s.setTime(15.4);
+  });
+  await page.waitForTimeout(700);
+  const panel = await page.evaluate(() => {
+    const root = document.getElementById('arms');
+    const rows = [...root.querySelectorAll('.row')];
+    const cur = root.querySelector('.row.cur');
+    const r = root.getBoundingClientRect();
+    return {
+      shown: !root.classList.contains('hidden') && r.width > 0,
+      left: Math.round(r.left), mid: Math.round(r.top + r.height / 2), h: window.innerHeight,
+      rows: rows.length,
+      keys: rows.map((x) => x.querySelector('b').textContent).join(''),
+      cur: cur ? cur.querySelector('b').textContent : null,
+      open: cur ? cur.classList.contains('open') : false,
+      listed: cur ? [...cur.querySelectorAll('.it')].filter((x) => getComputedStyle(x).display !== 'none').length : 0,
+      on: (root.querySelector('.it.on span') || {}).textContent,
+      idle: root.classList.contains('idle'),
+    };
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'arsenal-01-side-panel.png') });
+  check('the weapons are down the left side, a row a key, the one you are on lit and its group open',
+    panel.shown && panel.left < 60 && panel.rows === 10 && panel.keys === '1234567890' && panel.cur === '1'
+      && panel.open && panel.listed === 4 && panel.on === 'MARKSMAN' && !panel.idle,
+    JSON.stringify(panel));
+  await page.waitForTimeout(3200);
+  const folded = await page.evaluate(() => {
+    const root = document.getElementById('arms');
+    const cur = root.querySelector('.row.cur');
+    return { idle: root.classList.contains('idle'),
+      listed: [...cur.querySelectorAll('.it')].filter((x) => getComputedStyle(x).display !== 'none').length };
+  });
+  check('and after a moment it folds back to one name a row and dims', folded.idle && folded.listed === 1,
+    JSON.stringify(folded));
+  const kitRows = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.weapon.setKit('tactics');
+    const rows = s.armsRows(s.weapon);
+    s.weapon.setKit(null);
+    return rows.map((r) => `${r.key}:${r.ids.join('+')}`);
+  });
+  check('in a mode with a kit it is one weapon a key, in the kit\'s order',
+    kitRows.length === 10 && kitRows[0] === '1:sdpistol' && kitRows[9] === '0:railgun', kitRows.join(' '));
+
+  // --- the heavy five ------------------------------------------------------
+  const heavy = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.combat.reset();
+    s.soldiers.enabled = false;
+    s.teleport(81, 0); s.look(90, 0); s.camera.update(16 / 9);
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    const aim = (t) => {
+      const to = { x: t.x - eye.x, y: t.y + 1.1 - eye.y, z: t.z - eye.z };
+      const l = Math.hypot(to.x, to.y, to.z);
+      s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+    };
+    // The hand cannon: one shot, two men in a line.
+    const line = [s.spawnSoldier(-20, 0), s.spawnSoldier(-26, 0)];
+    aim(line[0]);
+    s.weapon.select('magnum'); s.weapon.cooldown = 0; s.weapon.spread = 0;
+    s.shoot();
+    out.magnum = line.map((x) => Math.round(x.health));
+    // The rotary cannon: nothing for the first part of a second, then a stream.
+    s.weapon.select('minigun'); s.weapon.cooldown = 0;
+    const dir = { x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] };
+    const a0 = s.weapon.ammo;
+    for (let i = 0; i < 12; i++) s.weapon.update(1 / 60, true, eye, dir);
+    out.spinning = a0 - s.weapon.ammo;
+    for (let i = 0; i < 60; i++) s.weapon.update(1 / 60, true, eye, dir);
+    out.second = a0 - s.weapon.ammo - out.spinning;
+    s.weapon.update(1 / 60, false, eye, dir);
+    // Four rockets at once.
+    s.projectiles.clear();
+    s.weapon.select('swarm'); s.weapon.cooldown = 0;
+    s.shoot();
+    out.swarm = s.projectiles.active.filter((p) => p.kind === 'rocket').length;
+    // A launched grenade goes off on what it meets, a long way off.
+    s.projectiles.clear();
+    s.look(90, 6); s.camera.update(16 / 9);
+    s.weapon.select('launcher'); s.weapon.cooldown = 0; s.weapon.spread = 0;
+    s.shoot();
+    const shell = s.projectiles.active.find((p) => p.kind === 'shell');
+    out.shell = !!shell;
+    let t = 0;
+    while (shell && shell.alive && t < 8) { s.fixedForTest(1 / 60); t += 1 / 60; }
+    out.shellGone = shell ? !shell.alive : false;
+    out.shellFar = shell ? Math.round(Math.hypot(shell.x - eye.x, shell.z - eye.z)) : 0;
+    out.shellTime = +t.toFixed(2);
+    return out;
+  });
+  check('the hand cannon goes through one man into the one behind him',
+    heavy.magnum[0] < 100 && heavy.magnum[1] < 100, JSON.stringify(heavy.magnum));
+  check('the rotary cannon spins up first and then pours',
+    heavy.spinning === 0 && heavy.second >= 15, `${heavy.spinning} in the spin up, ${heavy.second} in the second after`);
+  check('the swarm launcher puts four rockets out at once', heavy.swarm === 4, `${heavy.swarm}`);
+  check('the grenade launcher lobs a long way and goes off on the first thing it meets',
+    heavy.shell && heavy.shellGone && heavy.shellFar > 30, JSON.stringify(heavy));
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.projectiles.clear(); s.weapon.select('minigun');
+    s.teleport(81, 0); s.look(100, 2); s.setTime(15.4);
+    s.weapon.selectSlot(1); s.weapon.select('minigun'); s.arms.poke(1);
+  });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: path.join(SHOTS, 'arsenal-02-rotary.png') });
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

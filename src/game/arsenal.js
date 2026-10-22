@@ -344,6 +344,64 @@ export const WEAPONS = {
       burnSeconds: 11, groundDamagePerSecond: 95,
     },
   },
+
+  // The heavy five, each the big brother of something already on its key:
+  // a revolver that goes through a man into the one behind him, a shotgun
+  // with a drum that does not stop, six barrels that have to spin up first,
+  // a launcher that lobs the grenade a long way and sets it off on whatever
+  // it meets, and four rockets at once.
+  magnum: {
+    name: 'Hand cannon', short: 'MAGNUM', kind: KIND.HITSCAN, slot: 5,
+    magazine: 6, reserve: 48, reloadTime: 2.0, fireInterval: 0.42, auto: false,
+    damage: 125, coreMultiplier: 2.6, range: 260, pellets: 1, pierce: 2,
+    spreadHip: 0.012, spreadAim: 0.002, spreadPerShot: 0.02, spreadMax: 0.04,
+    spreadRecover: 0.12,
+    recoilKick: 0.03, recoilSide: 0.006, recoilRetain: 0.25,
+    aimFov: 48, sound: 'magnum',
+  },
+  autoshotgun: {
+    name: 'Drum shotgun', short: 'DRUM', kind: KIND.HITSCAN, slot: 2,
+    magazine: 20, reserve: 100, reloadTime: 3.0, fireInterval: 0.22, auto: true,
+    damage: 15, coreMultiplier: 1.7, range: 70, pellets: 10,
+    spreadHip: 0.07, spreadAim: 0.05, spreadPerShot: 0.006, spreadMax: 0.1,
+    spreadRecover: 0.25,
+    recoilKick: 0.016, recoilSide: 0.005, recoilRetain: 0.22,
+    aimFov: 54, sound: 'shotgun',
+  },
+  minigun: {
+    name: 'Rotary cannon', short: 'ROTARY', kind: KIND.HITSCAN, slot: 1,
+    magazine: 200, reserve: 600, reloadTime: 3.6, fireInterval: 0.04, auto: true,
+    damage: 30, coreMultiplier: 1.8, range: 300, pellets: 1,
+    spreadHip: 0.024, spreadAim: 0.014, spreadPerShot: 0.0012, spreadMax: 0.05,
+    spreadRecover: 0.12,
+    recoilKick: 0.0024, recoilSide: 0.0018, recoilRetain: 0.08,
+    aimFov: 56, sound: 'minigun',
+    // Seconds of the trigger held before the first round, and it winds down
+    // twice as slowly as it winds up, so a pause between bursts costs little.
+    spinUp: 0.4,
+  },
+  launcher: {
+    name: 'Grenade launcher', short: 'LAUNCHER', kind: KIND.LAUNCH, slot: 3,
+    magazine: 6, reserve: 36, reloadTime: 2.8, fireInterval: 0.55, auto: false,
+    projectile: 'shell', muzzleSpeed: 40, range: 260,
+    spreadHip: 0.006, spreadAim: 0.002, spreadPerShot: 0, spreadMax: 0.006,
+    spreadRecover: 0.2,
+    recoilKick: 0.02, recoilSide: 0.003, recoilRetain: 0.2,
+    aimFov: 54, sound: 'launcher',
+    splash: { radius: 9, damage: 210, force: 24 },
+  },
+  swarm: {
+    name: 'Swarm launcher', short: 'SWARM', kind: KIND.LAUNCH, slot: 3,
+    magazine: 4, reserve: 24, reloadTime: 3.2, fireInterval: 1.1, auto: false,
+    projectile: 'rocket', muzzleSpeed: 46, range: 600, shards: 4,
+    spreadHip: 0.04, spreadAim: 0.03, spreadPerShot: 0, spreadMax: 0.04,
+    spreadRecover: 0.2,
+    recoilKick: 0.03, recoilSide: 0.005, recoilRetain: 0.3,
+    aimFov: 52, sound: 'rpg',
+    splash: { radius: 8, damage: 150, force: 22 },
+    // Every rocket of the four goes after what the sight was on.
+    homing: { turn: 3.2, range: 260 },
+  },
 };
 
 /**
@@ -370,6 +428,11 @@ WEAPONS.marksman.hold = { x: 0.220, y: -0.150, z: -0.480, pitch: -0.016, yaw: 0.
 WEAPONS.doublebarrel.hold = { x: 0.205, y: -0.150, z: -0.420, pitch: -0.012, yaw: 0.120, roll: 0.04 };
 WEAPONS.chainsaw.hold = { x: 0.200, y: -0.170, z: -0.360, pitch: 0.020, yaw: 0.140, roll: 0.06 };
 WEAPONS.shieldsaw.hold = { x: -0.130, y: -0.120, z: -0.330, pitch: 0.000, yaw: -0.200, roll: -0.10 };
+WEAPONS.magnum.hold = { x: 0.175, y: -0.122, z: -0.310, pitch: -0.012, yaw: 0.150, roll: 0.05 };
+WEAPONS.autoshotgun.hold = { x: 0.210, y: -0.150, z: -0.420, pitch: -0.012, yaw: 0.122, roll: 0.04 };
+WEAPONS.minigun.hold = { x: 0.215, y: -0.175, z: -0.440, pitch: -0.010, yaw: 0.105, roll: 0.03 };
+WEAPONS.launcher.hold = { x: 0.215, y: -0.145, z: -0.420, pitch: -0.012, yaw: 0.122, roll: 0.04 };
+WEAPONS.swarm.hold = { x: 0.205, y: -0.135, z: -0.440, pitch: -0.012, yaw: 0.115, roll: 0.04 };
 WEAPONS.flail.hold = { x: 0.190, y: -0.120, z: -0.320, pitch: 0.100, yaw: 0.180, roll: 0.10 };
 
 /**
@@ -398,12 +461,30 @@ export const ARROW_DRAWS = {
   strong: { name: 'Strong draw', short: 'STRONG', damage: 1.6, speed: 1.3, interval: 1.6, carry: 4 },
 };
 
-export const LOADOUT = [
-  'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'flamer', 'incendiary',
-  'emp', 'mechkiller', 'railgun', 'plasma', 'flak', 'splinter', 'void',
-  'sdpistol', 'bow', 'marksman',
-  'doublebarrel', 'chainsaw', 'shieldsaw', 'flail',
-];
+/**
+ * The number row, in the manner of Half-Life: every key is a group, and
+ * pressing it again goes to the next weapon in the group. The first of each
+ * is what the key always was, so a hand that knows 1 for the rifle and 4 for
+ * a grenade still finds them first.
+ */
+export const BUCKETS = {
+  1: { name: 'Rifles', ids: ['m16', 'marksman', 'minigun', 'bow'] },
+  2: { name: 'Shotguns', ids: ['shotgun', 'doublebarrel', 'autoshotgun', 'flak'] },
+  3: { name: 'Launchers', ids: ['rpg', 'swarm', 'launcher'] },
+  4: { name: 'Thrown', ids: ['grenade', 'incendiary', 'banana', 'c4'] },
+  5: { name: 'Pistols', ids: ['sdpistol', 'magnum'] },
+  6: { name: 'Close', ids: ['chainsaw', 'flail', 'shieldsaw'] },
+  7: { name: 'Fire', ids: ['flamer'] },
+  8: { name: 'Energy', ids: ['plasma', 'railgun', 'splinter'] },
+  9: { name: 'Anti armour', ids: ['mechkiller', 'emp'] },
+  0: { name: 'Void', ids: ['void'] },
+};
+export const BUCKET_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+
+// Everything you carry, in the order of the keys, which is the order the
+// wheel goes through them and the order the side of the screen lists them.
+export const LOADOUT = BUCKET_KEYS.flatMap((k) => BUCKETS[k].ids);
+for (const k of BUCKET_KEYS) for (const id of BUCKETS[k].ids) WEAPONS[id].slot = k;
 
 /**
  * What the number row picks in a mode that has a kit of its own: one to nine
@@ -418,6 +499,5 @@ export const KITS = {
 };
 
 export function weaponBySlot(slot) {
-  for (const id of LOADOUT) if (WEAPONS[id].slot === slot) return id;
-  return null;
+  return BUCKETS[slot] ? BUCKETS[slot].ids[0] : null;
 }

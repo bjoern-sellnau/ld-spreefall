@@ -17,6 +17,7 @@ import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
 import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
+import { ArmsPanel, armsRows } from './ui/arms.js';
 import { ARROW_HEADS, ARROW_DRAWS } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
@@ -2358,6 +2359,7 @@ async function main() {
   // Crazy reality: the glass you look through gets dirty.
   const grime = new Grime(el.grime);
   const arcView = new ArcView(el.throwArc);
+  const arms = new ArmsPanel(document.getElementById('arms'));
   /**
    * The arc of what is in your hand, if it is thrown: shown while it is in
    * your hand in the street, harder and warmer with the right button held.
@@ -7471,6 +7473,7 @@ async function main() {
       case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5':
       case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9': case 'Digit0':
         weapon.selectSlot(Number(code.slice(5)));
+        arms.poke(Number(code.slice(5)));
         break;
       // The number row carries the weapons now, so the quality tiers moved to
       // the function keys.
@@ -8288,6 +8291,10 @@ async function main() {
       photo.capture(`${timeLabel(renderer.timeOfDay)}, ${dayLabel(renderer.dayOfYear)}`);
     }
 
+    // The weapons down the side, on foot only: a mech has its own rows and
+    // a vehicle its own guns.
+    arms.update(elapsed, weapon, state.mode === 'walk' && !photo.active && !state.inMech
+      && !state.inVehicle && !state.death);
     if (state.mode === 'walk' && !photo.active) {
       // Combat interface.
       const hp = Math.round(combat.health);
@@ -8470,7 +8477,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    arcView, throwSpec: THROW_SPEC, bailSpec: BAIL,
+    arcView, arms, armsRows, throwSpec: THROW_SPEC, bailSpec: BAIL,
     onslaught, onslaughtSpec: ONSLAUGHT, launchOnslaught: (w) => launchOnslaught(w), foeChassis,
     compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grime, grimeSpec: GRIME, grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
     setMark: (at) => setMark(at),

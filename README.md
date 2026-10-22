@@ -83,7 +83,7 @@ district by hand. A comparison of the same street at either tier is in
 | M | enlarge the map, on the streets around you; click it to set a mark the compass points to, click the mark again (or right click) to take it off |
 | N | sound on and off |
 | H | help |
-| 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |
+| 1 to 0, again for the next, or the mouse wheel | a group of weapons a key, in the manner of Half-Life: 1 rifles, 2 shotguns, 3 launchers, 4 thrown, 5 pistols, 6 close, 7 fire, 8 energy, 9 anti armour, 0 void |
 | 7 8 9 0 | railgun, plasma rifle, flak cannon, splinter gun |
 | Z | flamethrower, right mouse throws a wall of fire that runs across the ground |
 | B | incendiary bomb |
@@ -198,6 +198,24 @@ What is under the hood:
   the names and the numbers are ours. Each one is a row in
   `src/game/arsenal.js`, because every difference between a rifle and a shotgun
   that the game cares about is a number.
+- The number row is groups, the way Half-Life has it: every key holds a few
+  weapons of a kind and pressing it again goes to the next, and coming back to
+  a key gives you the one you last had there. The first on each key is what
+  that key always was. 1 is the M16, the marksman rifle, a rotary cannon (six
+  barrels, spins up for 0.4 s and then puts out twenty five rounds a second)
+  and the bow; 2 the pump, the double barrel, a drum shotgun that fires as
+  fast as you can hold it, and the flak cannon; 3 the rocket launcher, a swarm
+  launcher (four rockets a shot, each after what the sight is on) and a
+  grenade launcher (lobbed a long way, goes off on what it meets); 4 the
+  grenade, the incendiary, the banana and C4; 5 the suppressed pistol and a
+  hand cannon whose round goes through one man into the next; 6 the chainsaw,
+  the flail and the shield saw; 7 the flamethrower; 8 plasma, the railgun and
+  the splinter gun; 9 the mech killer and the EMP; 0 the void cannon.
+- Down the left side of the screen is what you carry: a row a key with the key
+  in a box and the weapon it would give you, the row you are on lit, a bar of
+  ammunition under each name, and the group you just picked from opened out
+  for a couple of seconds before the panel folds back and dims. In a mode with
+  a kit of its own it is the kit, a weapon a key.
 - And on the wheel, past those, a void cannon: a slow green ball that reaches
   out to everybody within sixteen metres of where it is going, sends a tendril
   to everybody within forty eight of where it lands, and cuts a hole eighteen
