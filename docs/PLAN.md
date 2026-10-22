@@ -4669,6 +4669,33 @@ So there are two cities now, and a profile picks which:
   their shift of you, and ultra plasma with four of theirs 60 m east lands
   west of you with none of them in it.
 
+## 120. Dying in slow motion, the camera going round
+
+- The ask: when you die you come apart like the enemies do, in slow
+  motion, and the camera goes round you.
+- Before: the health bar ran out and the card came up at once over a frozen
+  first person view.
+- Now the card waits 4.2 s. The moment you go down you burst into pieces
+  (the same gibs a soldier makes, at twice the scale whatever the gore
+  switches say, since this is the one death always shown), with three jets
+  of blood, a stain, a blast and a flash. The world runs at a fifth of its
+  speed for as long as the camera goes round: from where you were looking,
+  0.55 rad a real second, out from 4.5 to 9 m and up from 2.2 to 4.8 m,
+  looking down at the spot, and pulled in along its own line when a wall is
+  in the way. The weapon in your hands is gone. Then the card, and the
+  button clears it all.
+- Checks (combat): health to nothing with godmode off: the burst is out (32
+  pieces), the card held back after half a second and after a second, the
+  camera 5 to 7 m off the spot with the yaw turning by a radian between the
+  first look and the third, the death clock under 3.5 s after more than two
+  real seconds (the slow motion), the card after it, and the button brings
+  you back with no death left over. Screenshot combat-04-death-cam.png.
+- And the Nightmare check from 120a, which was red here: its ultra plasma
+  was aimed while the jeeps and men of the earlier One Man Army waves were
+  still about, so six of theirs were inside wherever it went. It now clears
+  those first and sends the ultra plasma alone, so the squad is the only
+  thing it has to miss.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

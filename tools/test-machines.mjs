@@ -897,7 +897,9 @@ async function run() {
     // it can be measured, let alone photographed, through a screen that says
     // Systems down, so the run is picked up off the floor first.
     const down = document.getElementById('down');
-    if (down && !down.classList.contains('hidden')) {
+    // Or still on the way down: the card comes up after the camera has been
+    // round, and the button stands you up either way.
+    if ((down && !down.classList.contains('hidden')) || s.state.death) {
       document.getElementById('downbtn').click();
       await new Promise((r) => requestAnimationFrame(r));
     }
@@ -1847,7 +1849,9 @@ async function run() {
     // called down onto a corpse: the game cancels the call, which is the
     // right answer to the wrong situation for this check.
     const down = document.getElementById('down');
-    if (down && !down.classList.contains('hidden')) {
+    // Or still on the way down: the card comes up after the camera has been
+    // round, and the button stands you up either way.
+    if ((down && !down.classList.contains('hidden')) || s.state.death) {
       document.getElementById('downbtn').click();
       await new Promise((r) => requestAnimationFrame(r));
     }
@@ -1897,7 +1901,9 @@ async function run() {
     // called down onto a corpse: the game cancels the call, which is the
     // right answer to the wrong situation for this check.
     const down = document.getElementById('down');
-    if (down && !down.classList.contains('hidden')) {
+    // Or still on the way down: the card comes up after the camera has been
+    // round, and the button stands you up either way.
+    if ((down && !down.classList.contains('hidden')) || s.state.death) {
       document.getElementById('downbtn').click();
       await new Promise((r) => requestAnimationFrame(r));
     }

@@ -1799,15 +1799,19 @@ async function run() {
     const out = { ion, firing: s.ion.firing };
     // Ultra plasma with a squad of theirs 60 m east of you: it still comes
     // down on you, but on the side away from them.
+    // Nothing else of theirs about: what the earlier waves sent, jeeps
+    // included, is cleared, and the wave is the ultra plasma alone, so the
+    // squad is the only thing it has to miss.
     s.soldiers.reset(); s.mechs.reset();
+    for (const c of s.convoys) { c.v.hostile = false; c.v.ai = null; s.vehicles.remove(c.v); }
+    s.convoys.length = 0;
     const squad = [];
     for (const [dx, dz] of [[60, 0], [62, 5], [58, -4], [64, -2]]) {
       const g = s.spawnSoldier(dx, dz);
       if (g) { g.state = 0; g.rise = 0; squad.push(g); }
     }
     out.squad = squad.length;
-    s.onslaught.level = 4; s.onslaught.supers = 1; s.onslaught.clock = 0.01;
-    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    s.launchOnslaught({ level: 5, soldiers: 0, machines: 0, convoy: null, mechs: [], bombs: 0, jets: 0, superweapon: 'ultra' });
     out.ultra = s.state.onslaughtLast.superweapon;
     if (out.ultra) out.ultraWest = out.ultra.x < s.player.x;
     s.ultra.reset && s.ultra.reset();

@@ -123,6 +123,11 @@ learn to dread. The shot that empties it spends only what the shield had left,
 so the break is a warning rather than a wound, and you get the moment after it
 to find a wall.
 
+**Going down is not a cut to a card.** You come apart the way they do, the
+world drops to a fifth of its speed, and the camera goes round what is left of
+you for four seconds, wider and higher as it goes, before the card comes up
+over it.
+
 **Three difficulties, chosen on the title screen or with F5, F6 and F7.** They
 change the size of the shield, how long the quiet has to be before it comes
 back, how hard everything out there hits, and how straight it shoots. On easy

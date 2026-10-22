@@ -5738,7 +5738,28 @@ async function main() {
     combat._dmgTimer = setTimeout(() => el.damage.classList.remove('on'), 140);
   };
 
+  // Dying is not a cut to a card. You come apart the way they do, the world
+  // drops to a crawl, and the camera goes round what is left for a few
+  // seconds before the card comes up over it.
+  const DEATH = { slow: 0.2, seconds: 4.2, turn: 0.55, radius: [4.5, 9], height: [2.2, 4.8] };
   combat.onDown = () => {
+    const x = player.x, y = player.y, z = player.z;
+    state.death = { t: 0, x, y: y + 1.0, z, yaw: camera.yaw, carded: false };
+    // In pieces, whatever the gore switches say: this is the one death that
+    // is always shown.
+    const k = Math.max(2, cheats.goreScale || 1);
+    gibs.burst(x, y, z, { x: 0, y: 1, z: 0 }, k, 1);
+    for (const up of [0.4, 1.0, 1.5]) {
+      effects.blood(x, y + up, z, (Math.random() - 0.5) * 1.4, 1.2, (Math.random() - 0.5) * 1.4, k * 1.6);
+    }
+    effects.stain(x, y, z, 1.6);
+    effects.blast(x, y + 1, z, 3.5);
+    audio.explosion && audio.explosion();
+    state.flash = Math.max(state.flash, 0.5);
+    state.deaths = (state.deaths || 0) + 1;
+  };
+  /** The card, once the camera has been round. */
+  function showDown() {
     input.exitLock();
     el.downText.textContent =
       (cheats.used ? 'With cheats on, so this one does not count for much. ' : '')
@@ -5746,7 +5767,29 @@ async function main() {
       + `took down ${combat.kills} drone${combat.kills === 1 ? '' : 's'} `
       + `and scored ${combat.score.toLocaleString()}. Nothing here is permanent.`;
     el.down.classList.remove('hidden');
-  };
+  }
+  /** The camera going round where you were, a little wider and higher each second. */
+  function deathCam(elapsed) {
+    const d = state.death;
+    d.t += elapsed;
+    if (!d.carded && d.t >= DEATH.seconds) { d.carded = true; showDown(); }
+    const k = Math.min(1, d.t / DEATH.seconds);
+    const a = d.yaw + d.t * DEATH.turn;
+    const r = DEATH.radius[0] + (DEATH.radius[1] - DEATH.radius[0]) * k;
+    const h = DEATH.height[0] + (DEATH.height[1] - DEATH.height[0]) * k;
+    // Behind (sin a, cos a) of the middle, which is where a camera looking
+    // along (-sin a, -cos a) stands; pulled in along the same line when a
+    // wall is in the way.
+    const dx = Math.sin(a), dz = Math.cos(a);
+    const len = Math.hypot(r, h);
+    const blocked = world.raycast(d.x, d.y, d.z, dx * r / len, h / len, dz * r / len, len);
+    const pull = blocked ? Math.max(0.25, (blocked.t - 0.5) / len) : 1;
+    camera.position[0] = d.x + dx * r * pull;
+    camera.position[1] = d.y + h * pull;
+    camera.position[2] = d.z + dz * r * pull;
+    camera.yaw = a;
+    camera.pitch = -Math.atan2(h, r);
+  }
 
   combat.onTier = (tier) => {
     drones.setTier(tier);
@@ -5773,6 +5816,7 @@ async function main() {
 
   el.downBtn.addEventListener('click', () => {
     el.down.classList.add('hidden');
+    state.death = null;
     combat.revive();
     weapon.reset();
     drones.reset();
@@ -7498,6 +7542,8 @@ async function main() {
       state.goreStop = Math.max(0, state.goreStop - dt);
       scale = Math.min(scale, 0.1);
     }
+    // Dying, for as long as the camera is going round.
+    if (state.death && !state.death.carded) scale = Math.min(scale, DEATH.slow);
     // A Stinger in the air. Shallower than a blast, because you are still
     // flying the machine while you watch it.
     if (state.airSlow > 0) {
@@ -7960,6 +8006,8 @@ async function main() {
       camera.position[2] = p.z;
       camera.yaw = p.yaw;
       camera.pitch = p.pitch;
+    } else if (state.death) {
+      deathCam(elapsed);
     } else if (state.inMech && state.cockpit && state.inMech.spec.cockpit
       && !mechEyeBoxedIn(state.inMech)) {
       state.canopy = true;
@@ -8120,7 +8168,7 @@ async function main() {
     camera.update(w / Math.max(1, h));
 
     // --- the weapon in your hands ---
-    if (state.mode === 'walk' && !photo.active && !state.inVehicle && !state.inMech) {
+    if (state.mode === 'walk' && !photo.active && !state.inVehicle && !state.inMech && !state.death) {
       const speed = Math.hypot(player.vx || 0, player.vz || 0);
       state.bob += elapsed * (speed > 4 ? 11.5 : 7.4) * Math.min(1, speed / 2.6);
       // Sway lags the look, which is what makes a viewmodel feel like a weight.

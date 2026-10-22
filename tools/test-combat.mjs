@@ -392,6 +392,51 @@ async function run() {
   await page.waitForTimeout(260);
   await page.screenshot({ path: path.join(SHOTS, 'combat-03-down.png') });
 
+  // --- dying: in pieces, in slow motion, the camera going round ------------
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.effects.clear && s.effects.clear();
+    s.teleport(81, 0); s.look(90, 0); s.setTime(15.4);
+    s.combat.godmode = false;
+    s.combat.shield = 0;
+    s.combat.health = 1;
+    window.GIBS0 = s.gibs.active.length;
+    s.combat.hurt(500, s.player.x + 10, s.player.z, s.player.x, s.player.z);
+  });
+  const dying = [];
+  for (let i = 0; i < 3; i++) {
+    await page.waitForTimeout(700);
+    dying.push(await page.evaluate(() => {
+      const s = window.spreefall;
+      const d = s.state.death;
+      return {
+        on: !!d, t: d ? d.t : 0,
+        card: !document.getElementById('down').classList.contains('hidden'),
+        cam: [...s.camera.position].map((v) => +v.toFixed(2)), yaw: +s.camera.yaw.toFixed(3),
+        dist: d ? Math.hypot(s.camera.position[0] - d.x, s.camera.position[2] - d.z) : 0,
+        gibs: s.gibs.active.length - window.GIBS0,
+        gun: s.renderer.viewmodel ? !!s.renderer.viewmodel.visible : null,
+      };
+    }));
+    if (i === 1) await page.screenshot({ path: path.join(SHOTS, 'combat-04-death-cam.png') });
+  }
+  check('dying blows you apart, with the card held back while the camera goes round',
+    dying[0].on && dying[0].gibs > 10 && !dying[0].card && !dying[1].card,
+    JSON.stringify(dying[0]));
+  check('and the camera goes round from outside you, in slow motion',
+    dying[0].dist > 3 && dying[2].dist > 3 && Math.abs(dying[2].yaw - dying[0].yaw) > 0.3
+      && dying[2].t < 3.5,
+    JSON.stringify(dying.map((d) => [d.t.toFixed(2), d.yaw, d.dist.toFixed(1)])));
+  const carded = await page.waitForFunction(
+    () => !document.getElementById('down').classList.contains('hidden'), null, { timeout: 30000 })
+    .then(() => true, () => false);
+  check('then the card comes up over it, and the button brings you back',
+    carded && await page.evaluate(() => {
+      document.getElementById('downbtn').click();
+      const s = window.spreefall;
+      return !s.state.death && s.combat.health > 0;
+    }));
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {
