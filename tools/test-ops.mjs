@@ -418,9 +418,9 @@ async function run() {
     const run = s.tactics.live.get(site.id);
     // The alarm with the radio working: help after the call delay.
     s.tactics.raiseAlarm(run);
-    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    const before = s.inbound(site.id);
     for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 1); i++) s.fixedForTest(1 / 60);
-    const came = s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before;
+    const came = s.inbound(site.id) - before;
     // A shot straight through the radio, from three metres.
     const p = s.tactics.radioAt(site);
     const from = { x: p.x + 3, y: p.y, z: p.z };
@@ -488,11 +488,11 @@ async function run() {
     const down = !run.boxUp;
     const drawn = s.tactics.drawList(s.player.x, s.player.z).find((c) => Math.abs(c.x - site.x) < 1);
     // Seen now: they know, but no siren and nobody called.
-    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    const before = s.inbound(site.id);
     s.tactics.raiseAlarm(run);
     const alerted = run.guards.filter((g) => g.post && g.post.alert).length;
     for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 2); i++) s.fixedForTest(1 / 60);
-    const came = s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before;
+    const came = s.inbound(site.id) - before;
     const siren = run.alarm;
     // And taken like that it still pays the bonus: the alarm never sounded.
     const score = s.campaign.book.score;
@@ -521,10 +521,10 @@ async function run() {
     const sounding = run.alarm;
     const p = s.tactics.boxAt(site);
     s.explode(p.x + 0.4, p.y, p.z, { radius: 4, damage: 120 }, { weapon: 'grenade' });
-    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    const before = s.inbound(site.id);
     for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 2); i++) s.fixedForTest(1 / 60);
     return { sounding, after: run.alarm, boxUp: run.boxUp,
-      came: s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before };
+      came: s.inbound(site.id) - before };
   });
   check('with the siren going, a grenade at the box silences it and stops the call',
     hush.sounding && !hush.after && !hush.boxUp && hush.came === 0, JSON.stringify(hush));
@@ -545,6 +545,110 @@ async function run() {
   });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(SHOTS, 'ops-12-alarm-box.png') });
+  await page.evaluate(() => { window.spreefall.soldiers.enabled = true; });
+
+  // --- help by road: jeeps, and a tank when it is serious --------------------
+  await fresh();
+  const convoy = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.vehicles.reset();
+    s.teleport(site.x + 40, site.z + 20);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    run.waves = 1;
+    const level = site.level;
+    site.level = 0;
+    const sent = s.sendConvoy(site, run, 5);
+    // Nobody else called while this one drives in: the camp sees you soon
+    // enough, and a second wave would be counted with the first.
+    run.radioUp = false;
+    const out = { sent, jeeps: 0, tanks: 0, crew: 0, startFrom: Infinity, road: 0 };
+    for (const c of s.convoys) {
+      if (c.type === 'jeep') { out.jeeps++; out.crew += c.crew; } else out.tanks++;
+      out.startFrom = Math.min(out.startFrom, Math.round(Math.hypot(c.v.x - s.player.x, c.v.z - s.player.z)));
+      out.road = Math.max(out.road, +(c.path.road || 0).toFixed(2));
+    }
+    out.marked = s.convoys.every((c) => c.v.hostile && c.v.occupied);
+    out.inbound = s.inbound(site.id);
+    let t = 0;
+    while (s.convoys.length && t < 90) { for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60); t++; }
+    out.seconds = t;
+    out.out = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    const jeeps = s.vehicles.active.filter((v) => v.type === 'jeep' && v.health > 0);
+    out.near = Math.round(Math.min(...jeeps.map((v) => Math.hypot(v.x - s.player.x, v.z - s.player.z))));
+    out.yours = jeeps.length > 0 && jeeps.every((v) => !v.hostile && !v.occupied && !v.ai);
+    site.level = level;
+    return out;
+  });
+  check('a call by radio sends the men up the road in jeeps, from a couple of hundred metres off',
+    convoy.sent && convoy.jeeps === 2 && convoy.tanks === 0 && convoy.crew === 5 && convoy.startFrom >= 120
+      && convoy.marked && convoy.inbound === 5, JSON.stringify(convoy));
+  check('they drive up, jump down short of you, and leave the jeeps for the taking',
+    convoy.seconds < 60 && convoy.out === 5 && convoy.near >= 12 && convoy.near <= 45 && convoy.yours,
+    JSON.stringify(convoy));
+
+  await fresh();
+  const armour = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.vehicles.reset();
+    s.teleport(site.x + 40, site.z + 20);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    // The second wave: serious.
+    run.waves = 2;
+    s.sendConvoy(site, run, 3);
+    run.radioUp = false;
+    const tank = s.convoys.find((c) => c.type === 'tank');
+    const out = { tank: !!tank, jeeps: s.convoys.filter((c) => c.type === 'jeep').length };
+    if (!tank) return out;
+    const shells = s.state.tankShells || 0;
+    let t = 0;
+    while (t < 90 && (s.state.tankShells || 0) - shells < 2) { for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60); t++; }
+    out.seconds = t;
+    out.shells = (s.state.tankShells || 0) - shells;
+    out.dist = Math.round(Math.hypot(tank.v.x - s.player.x, tank.v.z - s.player.z));
+    out.speed = +Math.abs(tank.v.speed).toFixed(1);
+    out.hostile = tank.v.hostile;
+    // Stood down with the run: nothing of theirs is left in the street.
+    s.tactics.clear();
+    out.cleared = s.convoys.length === 0 && !s.vehicles.active.some((v) => v.hostile) && !s.vehicles.active.includes(tank.v);
+    return out;
+  });
+  check('when it is serious a tank comes with them', armour.tank && armour.jeeps >= 1, JSON.stringify(armour));
+  check('and it stops where it can see you and shells you', armour.shells >= 2 && armour.dist <= 160 && armour.hostile,
+    JSON.stringify(armour));
+  check('and a run stood down takes them off the street', armour.cleared, JSON.stringify(armour));
+
+  // The picture: the column coming up the road, seen from in front of it.
+  await fresh();
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.vehicles.reset();
+    s.teleport(site.x + 40, site.z + 20);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    run.waves = 2;
+    s.sendConvoy(site, run, 4);
+    const jeep = s.convoys.find((c) => c.type === 'jeep');
+    for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
+    if (!jeep) return;
+    // Held where they are for the picture, the brakes on.
+    const lead = s.convoys.filter((c) => c.type === 'jeep')
+      .sort((a, b) => Math.hypot(a.v.x - s.player.x, a.v.z - s.player.z) - Math.hypot(b.v.x - s.player.x, b.v.z - s.player.z))[0];
+    for (const c of s.convoys) c.v.ai = { throttle: 0, steer: 0, brake: true };
+    s.convoys.length = 0;
+    // Sixteen metres in front of the first one, looking back down the road.
+    const v = lead.v;
+    const ax = v.x - Math.sin(v.yaw) * 16, az = v.z - Math.cos(v.yaw) * 16;
+    s.teleport(ax, az);
+    s.look(Math.atan2(-(v.x - ax), -(v.z - az)) * 180 / Math.PI, -4);
+    s.soldiers.enabled = false;
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-15-convoy.png') });
   await page.evaluate(() => { window.spreefall.soldiers.enabled = true; });
 
   // --- the quiet three, and a takedown ---------------------------------------

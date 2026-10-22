@@ -471,8 +471,16 @@ in the browser.
   top of the screen says how seen you are. Once one is sure, the siren goes
   2.6 seconds later unless you kill him first. A rifle shot is heard 130 m
   off, an explosion 240 m; a guard who sees a body goes to look.
-- With the alarm on and the radio standing, help comes out of the street in
-  two waves. Shoot the radio (or blow it up) and nobody else is called.
+- With the alarm on and the radio standing, help comes in two waves. Shoot
+  the radio (or blow it up) and nobody else is called.
+- The help drives in: four men to a jeep, up the streets from a couple of
+  hundred metres out on the far side of the camp, red on the map and with a
+  health bar. They jump down twenty metres short of you and leave the jeep
+  standing, yours to take. Shot up on the way in they bail out where they
+  are; blown up, they go with it. When it is serious (the second wave, or a
+  camp at level two or more) a tank comes behind them, stops where it can
+  see you and shells you every five seconds. Where no street comes near
+  enough they still come out of a sphere.
 - Take a camp without the siren ever sounding for the bonus (a switch in
   the setup). The journal on J gives the camps back, or gives them back a
   level harder, with more men and more points.

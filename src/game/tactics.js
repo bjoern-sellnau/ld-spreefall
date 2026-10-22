@@ -97,6 +97,7 @@ export class Tactics {
     this.onRadio = null;        // fn(site, run) the radio is in pieces
     this.onBox = null;          // fn(site, run, wasSounding) the alarm box is broken
     this.onBody = null;         // fn(site, run, finder) a body is found
+    this.onClear = null;        // fn() every camp stood down, for what is on its way
     soldiers.stealth = TACTICS.stealth;
   }
 
@@ -285,6 +286,7 @@ export class Tactics {
   clear() {
     for (const r of this.live.values()) this._standDown(r);
     this.live.clear();
+    if (this.onClear) this.onClear();
   }
 
   /** How many guards a camp at this level carries. */

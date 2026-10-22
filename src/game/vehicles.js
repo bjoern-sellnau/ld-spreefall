@@ -125,6 +125,15 @@ export class Vehicles {
 
   free() { return this.pool.find((v) => !v.alive) || null; }
 
+  /** Takes one out of the street at once, with nothing left behind. */
+  remove(v) {
+    const i = this.active.indexOf(v);
+    if (i >= 0) this.active.splice(i, 1);
+    if (this.driving === v) this.driving = null;
+    v.alive = false;
+    v.occupied = false;
+  }
+
   /**
    * Puts one somewhere.
    * @param {string} type a key of VEHICLE
@@ -235,7 +244,8 @@ export class Vehicles {
         continue;
       }
 
-      const c = v === this.driving ? controls : null;
+      // Yours gets the keys; one of theirs gets what its driver decided.
+      const c = v === this.driving ? controls : (v.ai || null);
       if (v.spec.kind === KIND.GROUND) this._drive(v, dt, c);
       else this._fly(v, dt, c);
       if (c && v.spec.turret && c.turretAim !== undefined) this._traverse(v, dt, c.turretAim);

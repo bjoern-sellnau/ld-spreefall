@@ -4010,3 +4010,46 @@ So there are two cities now, and a profile picks which:
   gone at eleven; the remote one stands for twelve seconds and goes on T;
   three says no, and a rigged one is disarmed by getting back in.
   ops-14-vehicle-bomb.png.
+
+## 99. Help that drives in
+
+- A radio call that gets through no longer brings the men out of the
+  pavement: it sends them by road (src/game/convoy.js). A start is looked
+  for on a carriageway 170 to 240 m out on the far side of the camp from you,
+  fanning out from straight behind it, loaded, outside the memorial field
+  and at least 120 m from you. The way in is found with A star on a 4 m grid
+  over the streets: a cell on a carriageway costs 1, open ground 4, a cell
+  with a wall more than 1.2 m tall in it 60. A grid rather than the road
+  graph, because the centrelines are simplified at build time and the point
+  where two streets meet is often not a point either still has, so a graph
+  built from shared points falls apart at every junction.
+- Four men to a jeep, so a wave of five is two jeeps. A jeep follows its way
+  with a look ahead of 10 m, up to 17 m/s on a straight and 6 in a corner,
+  slowing for the stop; stuck against something for 1.6 s it backs off,
+  turned the other way, for 1.3 s. It stops 22 m short of you (or of the
+  camp, if you are not within 170 m of it), the men get down round it and
+  hunt you, and the jeep is left empty for you to take. Under 35 percent of
+  its hull left they get out where they are; blown up, they go with it.
+- Serious means the second wave, or a camp at level two or more: then a
+  tank sets out at the start with the jeeps a little up the road in front of
+  it. It stops 55 m from you once it can see you (18 m while it cannot), lays
+  its turret at its own slow rate and fires when the turret is within three
+  and a half degrees: a shell at 120 m/s every 5.2 s, 60 damage in 8 m,
+  within 150 m. Gentler than the one you drive, so it can be lived through
+  from behind a corner.
+- Theirs are drawn red on the map and carry a health bar. A run stood down
+  (a new operation, the camps given back) takes them off the street. A
+  vehicle with nobody at the wheel is handed the controls its driver
+  decided (`v.ai`) instead of none. Where no street will do, the help still
+  comes out of a sphere.
+- Checks (ops, 91 now): a call of five sends two jeeps and no tank from at
+  least 120 m off, marked as theirs, five inbound; inside a minute all five
+  are on their feet, the jeeps 12 to 45 m from you and yours to take. The
+  second wave brings a tank that shells you at least twice, from within
+  160 m, and standing the run down clears them. The existing reinforcement
+  checks count the men still in a jeep as inbound. Unit (97 now): the way
+  round an L of two streets keeps to them and never enters the block in the
+  corner, a footway does not count as a street, open ground still finds a
+  way, and a jeep driven by `follow` with the vehicle's own arithmetic gets
+  round the corner, never more than 14 m off the streets, and stops 10 to
+  26 m short of the goal. ops-15-convoy.png.

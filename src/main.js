@@ -47,6 +47,7 @@ import { HealthBars } from './ui/healthbars.js';
 import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
+import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
 import { Slayer, SLAYER } from './game/slayer.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
@@ -2529,7 +2530,17 @@ async function main() {
   vehicles.onDestroyed = (v) => {
     explode(v.x, v.y + 1.2, v.z, { radius: 16, damage: 300 });
     gibs.rubble(v.x, v.y + 1, v.z, 6, 12, 2);
-    feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
+    // One of theirs with men still in it takes them with it.
+    const crew = convoys.find((c) => c.v === v);
+    if (crew && crew.crew) {
+      feed(`<i>${v.spec.name.toLowerCase()} destroyed</i> with ${crew.crew} aboard`);
+      state.crewLost = (state.crewLost || 0) + crew.crew;
+      crew.crew = 0;
+    } else {
+      feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
+    }
+    v.hostile = false;
+    v.ai = null;
     if (state.inVehicle === v) leaveVehicle(true);
   };
 
@@ -2670,6 +2681,11 @@ async function main() {
       if (!j.alive || j.health <= 0) continue;
       hostiles.push({ body: j, kind: 'jet', x: j.x, y: j.y + 2.6, z: j.z,
         health: j.health, max: j.maxHealth });
+    }
+    for (const v of vehicles.active) {
+      if (!v.hostile || v.health <= 0) continue;
+      hostiles.push({ body: v, kind: v.type === 'tank' ? 'mech' : 'jet', x: v.x, y: v.y + (v.type === 'tank' ? 3.4 : 2.6),
+        z: v.z, health: v.health, max: v.maxHealth });
     }
     for (const mk of mechs.active) {
       if (mk.mine || mk.health <= 0 || mk.demon) continue;
@@ -3057,6 +3073,173 @@ async function main() {
       }
       if (bomb.left <= 0) blowVehicle(v);
     }
+  }
+
+  // --- help that drives in -------------------------------------------------------
+  //
+  // A call that gets through sends a jeep with the men in it, up the streets
+  // from a couple of hundred metres off and round the far side of the camp
+  // from you; four to a jeep, so a big wave is two. They jump down short of
+  // where you are, and what they leave in the street is a jeep you can take.
+  // When it is serious (the second wave, or a camp at level two or more) a
+  // tank comes behind them, stops where it can see you and shells you. Where
+  // no street comes near enough, the help comes the old way, out of a
+  // sphere.
+  const convoys = [];
+  const wallsIn = (minX, minZ, maxX, maxZ, fn) => {
+    world.forEachSegmentTile(minX, minZ, maxX, maxZ, (segs, count) => {
+      for (let i = 0; i < count; i++) {
+        const o = i * 6;
+        // A wall worth going round: a kerb or what is left of one is not.
+        if (segs[o + 5] - segs[o + 4] < 1.2) continue;
+        fn(segs[o], segs[o + 1], segs[o + 2], segs[o + 3]);
+      }
+    });
+  };
+  /** Where they are going: you, if you are anywhere near the camp. */
+  function convoyGoal(site) {
+    return Math.hypot(player.x - site.x, player.z - site.z) < 170
+      ? { x: player.x, z: player.z } : { x: site.x, z: site.z };
+  }
+  /** A start on a carriageway, out past the camp from where you are. */
+  function convoyStart(site) {
+    const lines = world.manifest.roadLines || [];
+    const away = Math.atan2(site.z - player.z, site.x - player.x);
+    for (let k = 0; k < 18; k++) {
+      const a = away + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35;
+      for (const r of [205, CONVOY.from[0], CONVOY.from[1]]) {
+        const x = site.x + Math.cos(a) * r, z = site.z + Math.sin(a) * r;
+        if (world.isLoaded && !world.isLoaded(x, z)) continue;
+        if (combat.inField && combat.inField(x, z)) continue;
+        if (Math.hypot(x - player.x, z - player.z) < 120) continue;
+        if (onRoad(lines, x, z, 0)) return { x, z };
+      }
+    }
+    return null;
+  }
+  function convoySpawn(type, at, path, site, crew) {
+    const next = path[Math.min(path.length - 1, 3)];
+    const v = vehicles.spawn(type, at.x, at.z, headingTo(next.x - at.x, next.z - at.z));
+    if (!v) return null;
+    v.hostile = true;
+    v.occupied = true;
+    v.bomb = null;
+    v.ai = { throttle: 0, steer: 0, brake: false };
+    const c = { v, type, site, crew, path, at: 0, stuck: 0, backing: 0, cooldown: CONVOY.shell.interval, shots: 0 };
+    convoys.push(c);
+    return c;
+  }
+  /** Sends a wave by road. False if no road would do, for the old way. */
+  function sendConvoy(site, run, count) {
+    const from = convoyStart(site);
+    if (!from) return false;
+    const goal = convoyGoal(site);
+    const path = planRoute({ lines: world.manifest.roadLines || [], walls: wallsIn,
+      fromX: from.x, fromZ: from.z, toX: goal.x, toZ: goal.z });
+    if (!path || path.length < 4) return false;
+    // The tank, if it comes, sets out from the start; the jeeps from a
+    // little way up the road in front of it.
+    const serious = run.waves >= 2 || (site.level || 0) >= CONVOY.tankFrom;
+    let men = 0, jeeps = 0;
+    for (let left = count, k = 0; left > 0; k++) {
+      const p = path[Math.min(path.length - 1, (serious ? 5 : 0) + k * 4)];
+      const n = Math.min(CONVOY.seat, left);
+      const rest = path.slice(Math.min(path.length - 2, (serious ? 5 : 0) + k * 4));
+      rest.road = path.road;
+      if (!convoySpawn('jeep', p, rest, site, n)) break;
+      left -= n; men += n; jeeps++;
+    }
+    let tank = false;
+    if (serious) tank = !!convoySpawn('tank', from, path, site, 0);
+    if (!jeeps && !tank) return false;
+    feed(`<b>reinforcements</b> ${men} by road${tank ? ', and a tank' : ''}`);
+    toast(tank ? `${men} reinforcements and a tank inbound` : `${men} reinforcements inbound by jeep`);
+    state.convoysSent = (state.convoysSent || 0) + 1;
+    return true;
+  }
+  /** Out of the jeep, and the jeep is yours to take. */
+  function dismount(c) {
+    const v = c.v;
+    let n = 0;
+    const was = soldiers.onArrive;
+    soldiers.onArrive = null;
+    for (let i = 0; i < c.crew; i++) {
+      const s = soldiers.spawnNear(v.x, v.z, 2.5, 6);
+      if (!s) break;
+      s.rise = 0;
+      s.y = world.groundHeight(s.x, s.z);
+      s.state = 1;
+      s.reinforcement = c.site.id;
+      if ((c.site.level || 0) >= TACTICS.machinesFrom && i % 2 === 1) makeMachine(s);
+      n++;
+    }
+    soldiers.onArrive = was;
+    c.crew = 0;
+    v.hostile = false;
+    v.occupied = false;
+    v.ai = null;
+    state.dismounted = (state.dismounted || 0) + n;
+    if (n) feed(`<b>${n}</b> out of the jeep`);
+  }
+  function tankStep(c, dt) {
+    const v = c.v;
+    const ex = player.x, ey = player.y + 1.2, ez = player.z;
+    const dist = Math.hypot(ex - v.x, ez - v.z);
+    const m = vehicles.muzzle(v);
+    const sight = world.lineOfSight(m.x, m.y, m.z, ex, ey, ez);
+    // On, until it can see you from far enough off to be safe from you.
+    const spec = sight ? CONVOY.tank : { ...CONVOY.tank, stop: 18 };
+    const ctl = follow(v, c, spec, { x: ex, z: ez }, dt);
+    v.ai.throttle = ctl.throttle;
+    v.ai.steer = ctl.steer;
+    v.ai.brake = ctl.brake;
+    v.ai.turretAim = headingTo(ex - v.x, ez - v.z);
+    c.cooldown -= dt;
+    const laid = Math.abs(wrap(v.ai.turretAim - (v.yaw + v.turret))) < CONVOY.shell.aim;
+    if (c.cooldown <= 0 && sight && laid && dist < CONVOY.shell.range && combat.health > 0) {
+      c.cooldown = CONVOY.shell.interval;
+      const g = CONVOY.shell;
+      const dx = ex - m.x, dy = ey - m.y, dz = ez - m.z;
+      const l = Math.hypot(dx, dy, dz) || 1;
+      const d = spreadDir({ x: dx / l, y: dy / l, z: dz / l }, g.spread);
+      projectiles.launch('rocket', {
+        x: m.x, y: m.y, z: m.z,
+        vx: d.x * g.speed, vy: d.y * g.speed, vz: d.z * g.speed,
+        splash: g.splash, weapon: 'enemytank',
+      });
+      audio.gunshot('mechcannon');
+      effects.flash(m.x, m.y, m.z, 2.4, 1.0, 0.7, 0.3, 0.1);
+      c.shots++;
+      state.tankShells = (state.tankShells || 0) + 1;
+    }
+  }
+  function convoyStep(dt) {
+    for (let i = convoys.length - 1; i >= 0; i--) {
+      const c = convoys[i];
+      const v = c.v;
+      if (!v.alive || v.health <= 0 || !v.hostile) { convoys.splice(i, 1); continue; }
+      if (c.type === 'tank') { tankStep(c, dt); continue; }
+      // Hit hard enough on the way in and they get out where they are.
+      const ctl = follow(v, c, CONVOY.jeep, convoyGoal(c.site), dt);
+      if (ctl.there || v.health < v.maxHealth * 0.35) {
+        v.ai.throttle = 0; v.ai.steer = 0; v.ai.brake = true;
+        dismount(c);
+        convoys.splice(i, 1);
+        continue;
+      }
+      v.ai.throttle = ctl.throttle;
+      v.ai.steer = ctl.steer;
+      v.ai.brake = ctl.brake;
+    }
+  }
+  /** A run stood down: what was on its way is gone with it. */
+  function clearConvoys() {
+    for (const c of convoys) {
+      c.v.hostile = false;
+      c.v.ai = null;
+      vehicles.remove(c.v);
+    }
+    convoys.length = 0;
   }
 
   /**
@@ -5897,6 +6080,7 @@ async function main() {
     toast(wasSounding ? 'alarm silenced' : 'alarm disabled');
   };
   tactics.onCall = (site, run, count) => {
+    if (sendConvoy(site, run, count)) return;
     // Help comes the way everybody arrives in this game: out of the street,
     // in a sphere, from a little way off, and it knows where you are.
     let n = 0;
@@ -5913,6 +6097,8 @@ async function main() {
       toast(`${n} reinforcements inbound`);
     }
   };
+
+  tactics.onClear = () => clearConvoys();
 
   tactics.onFree = (site, pts, run) => {
     const quiet = !run.spotted && !run.alarm;
@@ -6568,6 +6754,7 @@ async function main() {
       memorialStep();
       refineStep();
       bombStep(worldDt);
+      convoyStep(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -6764,6 +6951,7 @@ async function main() {
     memorialStep();
     refineStep();
     bombStep(worldDt);
+    convoyStep(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -7231,7 +7419,7 @@ async function main() {
       minimap.siteKind = campaign.mode;
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live,
-        vehicles.active.filter((v) => v.alive && !v.occupied && v.health > 0));
+        vehicles.active.filter((v) => v.alive && (!v.occupied || v.hostile) && v.health > 0));
       if (minimap.big) mapTools();
       el.found.textContent = String(landmarks.foundInGoal);
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
@@ -7329,6 +7517,10 @@ async function main() {
     compassBar, setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
+    // Help for a camp: on its feet, or still in the back of a jeep.
+    inbound: (id) => soldiers.active.filter((x) => x.reinforcement === id && x.alive && x.health > 0).length
+      + convoys.filter((c) => c.site.id === id).reduce((n, c) => n + c.crew, 0),
+    convoys, sendConvoy: (site, run, count) => sendConvoy(site, run, count), convoySpec: CONVOY,
     rigVehicle: (v, kind) => rig(v, kind), blowRemote: () => blowRemote(), rigging: () => rigging,
     leaveVehicle: (thrown) => leaveVehicle(!!thrown),
     refineJobs, refineStep: () => refineStep(),

@@ -120,7 +120,7 @@ export class Minimap {
    * @param {number} yaw heading, radians
    * @param {Set} found the landmarks you have stood in front of
    * @param {Array} pads live pickup pads to mark, if any
-   * @param {Array} rides vehicles standing empty, if any
+   * @param {Array} rides vehicles standing empty, and theirs on the way (hostile), if any
    */
   draw(px, pz, yaw, found, pads = null, rides = null) {
     this._sizeCanvas();
@@ -268,11 +268,12 @@ export class Minimap {
     // Vehicles standing empty. A square rather than a dot, because the thing
     // a player is asking the map is not where something is but what it is,
     // and the answer here is always the same: something you can get into.
+    // Or, in red, something of theirs coming up the road at you.
     if (rides && rides.length) {
       const r = (this.big ? 2.6 : 3.8) / scale * this.dpr * 0.5;
-      ctx.fillStyle = '#7fd6c9';
       for (const v of rides) {
         if (!this.big && Math.hypot(v.x - px, v.z - pz) > reach) continue;
+        ctx.fillStyle = v.hostile ? '#ff5a46' : '#7fd6c9';
         ctx.fillRect(v.x - r, v.z - r, r * 2, r * 2);
       }
     }
