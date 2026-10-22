@@ -4785,6 +4785,20 @@ So there are two cities now, and a profile picks which:
   suit; three metres over a Lynx, F kills it with no reactor left running,
   takes 35 energy, and you go up. Screenshot hunt-09-mech-takedown.png.
 
+## CI: the machines suite stands the run up before it aims
+
+- Since phase 120 dying is four seconds of a camera going round the body,
+  and the machines suite gets killed by its own machines before the EMP
+  launcher and the bite out of the city. Both aim or look along the camera,
+  so the EMP warhead went into the street at the player's feet in a tenth
+  of a second and the bite was measured from the orbit. A `standUp()` in
+  the page presses the button first. Stood up and in the open, the bite's
+  heap comes out 94 to 100 per cent darker from run to run where it was
+  measured from the floor before; the bar is nine in ten now, which a hole
+  showing sky (thousands of brighter pixels) still fails. The respawn also
+  had a bug of its own: the rifle came back in your hands under the name
+  of whatever you had held, now told to the HUD (checked in the hunt suite).
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
