@@ -268,9 +268,13 @@ async function run() {
   await lookAtGuard();
   const fov0 = await page.evaluate(() => window.spreefall.camera.fov);
   await page.keyboard.press('KeyB');
-  await page.waitForTimeout(1500);
   const visor = await page.evaluate(async () => {
     const s = window.spreefall;
+    // The scan counts at most a tenth of a second a frame, so on a slow
+    // renderer it is frames that have to pass, not a second and a half.
+    for (let i = 0; i < 240 && !s.visor.tags.has(window.huntGuard.g); i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
     const out = { up: s.visor.up, fov: s.camera.fov, tags: s.visor.tags.size, tagged: s.visor.tags.has(window.huntGuard.g),
       drawn: s.visor.last ? s.visor.last.drawnTags : 0 };
     return out;
@@ -293,9 +297,10 @@ async function run() {
     JSON.stringify(throughWalls));
 
   await page.keyboard.press('KeyN');
-  await page.waitForTimeout(800);
   const nano = await page.evaluate(async () => {
     const s = window.spreefall;
+    // Frames rather than a wait on the clock, for the same reason as the scan.
+    for (let i = 0; i < 10; i++) await new Promise((r) => requestAnimationFrame(r));
     const out = { on: s.suit.nano, filtered: document.getElementById('view').classList.contains('nano'),
       warm: s.visor.last ? s.visor.last.warm : 0, energy: Math.round(s.suit.energy) };
     return out;
