@@ -4220,3 +4220,16 @@ So there are two cities now, and a profile picks which:
   check first: one still in the air broke the next ground's alarm box and
   woke the stalker through a silent alarm. hunt-04-ceph.png,
   hunt-05-end.png.
+
+## CI: the combat checks find their lines instead of assuming them
+
+- The browser checks in CI have been red since phase 92 on two combat
+  checks that pass here: the Gate stopping a shot, and the weapon firing in
+  the memorial. CI builds the city from the live Overpass extract and this
+  container from the synthetic one (Overpass and the Pages site cannot be
+  reached from here), and since the Gate became walkable in phase 87 where
+  its walls and passages fall, and how tall the stelae stand near the middle
+  of the memorial, depend on which. The Gate check now walks z out from the
+  Gate's landmark until a level shot west from the square stops within ten
+  metres of it, and the memorial check puts its drone out over the stelae in
+  the first of sixteen directions with a clear line from the eye.
