@@ -201,6 +201,7 @@ export class Projectiles {
     b.void = o.void || null;
     // An arrow's head: plain, fire, poison or blast.
     b.head = o.head || null;
+    b.draw = o.draw || null;
     // Flak: how near the thing it was fired at the shell has to get before it
     // bursts. A shell that has to hit an aircraft is a shell that never does.
     b.proximity = o.proximity || 0;

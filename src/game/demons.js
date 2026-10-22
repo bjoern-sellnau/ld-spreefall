@@ -36,6 +36,36 @@ export const DEMON = {
   },
 };
 
+// The Hunt's aliens, in the manner of the second and third nanosuit games:
+// the stalker is quick, light and close, and knocks you off your feet; the
+// grunt is their infantry, a soldier in their shape who carries a gun. Both
+// are drawn on the soldier body like the demons, in their own colours.
+DEMON.stalker = {
+  code: 6, name: 'Stalker', health: 240, scale: 1.15, run: 8.6,
+  charge: { speed: 15, seconds: 0.8, every: 3.5, from: 6, to: 26 },
+  melee: { range: 2.1, damage: 20, interval: 0.75, launch: 7.5 },
+  points: 250, ceph: true,
+};
+
+export const CEPH = {
+  grunt: { code: 5, name: 'Grunt', health: 300, scale: 1.22 },
+  // The alpha of a hunting ground: a tall walker of theirs whose ping is an
+  // EMP that hurts whoever is inside it and empties the suit.
+  pinger: { chassis: 'heron-foe', health: 1.5, ping: { every: 6, radius: 50, damage: 30, stall: 2.5 } },
+};
+
+/** A soldier in their shape: the same rifle and the same mind, more of him. */
+export function makeGrunt(s, level = 0) {
+  s.ceph = 'grunt';
+  s.look = CEPH.grunt.code;
+  s.scale = CEPH.grunt.scale;
+  s.health = CEPH.grunt.health * (1 + DEMON_LEVEL * level);
+  s.maxHealth = s.health;
+  s.machine = false;
+  s.civilian = false;
+  return s;
+}
+
 // The floating one: a drone with a flag.
 export const GAZER = {
   name: 'Gazer', health: 380, radius: 1.5, points: 250,

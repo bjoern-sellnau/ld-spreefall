@@ -97,6 +97,8 @@ export class Tactics {
     this.onRadio = null;        // fn(site, run) the radio is in pieces
     this.onBox = null;          // fn(site, run, wasSounding) the alarm box is broken
     this.onBody = null;         // fn(site, run, finder) a body is found
+    this.onClear = null;        // fn() every camp stood down, for what is on its way
+    this.onStandDown = null;    // fn(run) a camp stood down that has an alpha to take away
     soldiers.stealth = TACTICS.stealth;
   }
 
@@ -267,7 +269,7 @@ export class Tactics {
     return most;
   }
 
-  get enabled() { return this.campaign.mode === 'tactics'; }
+  get enabled() { return this.campaign.camps; }
 
   /** The runtime record for a site, made the first time it is asked for. */
   run(site) {
@@ -285,6 +287,7 @@ export class Tactics {
   clear() {
     for (const r of this.live.values()) this._standDown(r);
     this.live.clear();
+    if (this.onClear) this.onClear();
   }
 
   /** How many guards a camp at this level carries. */
@@ -332,6 +335,10 @@ export class Tactics {
   }
 
   _standDown(r) {
+    if (r.alpha) {
+      if (this.onStandDown) this.onStandDown(r);
+      r.alpha = null;
+    }
     for (const s of r.guards) {
       if (s.alive && s.health > 0 && s.state !== 5) this.soldiers._retire(s);
     }
@@ -371,7 +378,10 @@ export class Tactics {
       } else {
         r.away = 0;
       }
-      if (r.guards.length && this.standing(r).length === 0) {
+      // In The Hunt a ground can have an alpha, a walker of theirs, and it is
+      // not clear while that is standing either.
+      const alpha = r.alpha && r.alpha.alive && r.alpha.health > 0;
+      if (r.guards.length && this.standing(r).length === 0 && !alpha) {
         // No alarm ever sounded: that is the bonus. Seen but silenced in
         // time still counts; the siren is what it is about.
         const pts = this.campaign.free(site, { quiet: !r.alarmed });

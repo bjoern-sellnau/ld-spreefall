@@ -447,7 +447,11 @@ async function run() {
   check('overkill takes every kill apart, with nothing else switched on',
     over.top.gibbed && over.top.chunks > over.ultra.chunks * 2.5,
     `${over.ultra.chunks} pieces at ultra, ${over.top.chunks} at overkill`);
-  check('and the skeleton comes out with it', over.top.bones > 20 && over.ultra.bones === 0,
+  // Thirty three pieces of which each is bone four times in five, and the
+  // bursts after it take the oldest slots once the pool of 256 is full: the
+  // count lands anywhere from the high teens to the high twenties, so this
+  // asks for a skeleton's worth rather than for a number it happens to hit.
+  check('and the skeleton comes out with it', over.top.bones >= 12 && over.ultra.bones === 0,
     `${over.top.bones} bones`);
   check('and part of it goes up to rain back down', over.top.rain > 20, `${over.top.rain} pieces going up`);
   check('and the clock stops for a beat while a word goes across the screen',
@@ -481,6 +485,47 @@ async function run() {
     comic.gibbed && comic.comicWord && comic.rain >= 1 && comic.splashes >= 2 && /!/.test(comic.text),
     JSON.stringify(comic));
   check('and its blood is a comic book red', comic.red > 0.4, `${comic.red}`);
+  // And against the wall: a kill beside a frontage leaves blood on it.
+  const wall = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.cheats.reset(); s.setCheat('comicGore', true); s.setCheat('godmode', true);
+    s.soldiers.reset(); s.gibs.clear(); s.effects.clear(); s.renderer.clearBlood();
+    // A pale wall to see it on: the long north face of the Brandenburg
+    // Gate's cross wall south of the carriageway, from inside the passage.
+    const g0 = s.world.groundHeight(0, 6);
+    const probe = s.world.raycast(0, g0 + 1.2, 6, 0, 0, -1, 20);
+    const found = probe && probe.kind === 'wall' ? { x: 0, z: 6, a: -Math.PI / 2, t: probe.t } : null;
+    if (!found) return { skip: true };
+    s.teleport(found.x, found.z);
+    const before = s.state.wallSplats || 0;
+    const dx = Math.cos(found.a), dz = Math.sin(found.a);
+    const v = s.spawnSoldier(dx * (found.t - 2), dz * (found.t - 2));
+    v.rise = 0; v.y = s.world.groundHeight(v.x, v.z);
+    s.soldiers.damage(v, 9999, { x: dx, y: 0.1, z: dz });
+    const out = { skip: false, splats: (s.state.wallSplats || 0) - before, count: s.renderer.bloodCount };
+    // The picture of it, with the smoke and the fountain gone, from a step back.
+    s.teleport(s.player.x - dx * 1.5, s.player.z - dz * 1.5);
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, 2);
+    s.effects.clear(); s.gibs.clear();
+    s.bloodRain.length = 0; s.gushes.length = 0;
+    return out;
+  });
+  await page.waitForTimeout(5600);
+  await page.evaluate(() => {
+    window.spreefall.effects.clear(); window.spreefall.gibs.clear();
+    document.getElementById('splatter').innerHTML = '';
+  });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-08-comic-wall.png') });
+  check('a comic kill beside a frontage leaves its blood on the wall', !wall.skip && wall.splats >= 1 && wall.count >= 1,
+    JSON.stringify(wall));
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset(); s.renderer.clearBlood(); s.soldiers.reset();
+    s.teleport(81, 0);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+  });
+
   // The picture: three in front of you, gone at once.
   await page.evaluate(() => {
     const s = window.spreefall;

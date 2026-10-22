@@ -305,6 +305,11 @@ uniform vec3 uPalette[64];
 uniform vec4 uScars[MAX_SCARS];      // xyz centre, w radius
 uniform vec4 uScarInfo[MAX_SCARS];   // x severity 0..1, y age in seconds, z hole radius
 uniform int uScarCount;
+// Blood thrown against the city by the comic book gore: a splat a centre and
+// a radius, newest last, and nothing to pay when there is none.
+#define MAX_BLOOD 24
+uniform vec4 uBlood[MAX_BLOOD];
+uniform int uBloodCount;
 uniform int uDebugMode;   // 0 off, 1 material, 2 normals, 3 uv, 4 world position
 // 1 while the damaged tiles are drawn inside out, to fill the holes a blast
 // leaves in one sided geometry. See Renderer.renderScene.
@@ -1082,6 +1087,29 @@ void main() {
     s.metallic = mix(s.metallic, 0.0, scorch);
     // Glass near a blast is gone: the lit window becomes a hole.
     s.emissive *= 1.0 - clamp(shatter * 1.4, 0.0, 1.0);
+  }
+  // Blood on the walls and the street: a splat with drops round it, and on a
+  // wall runs down from it, wet and the red of a comic book.
+  float gore = 0.0;
+  for (int i = 0; i < uBloodCount; i++) {
+    vec3 d = vWorld - uBlood[i].xyz;
+    float r = uBlood[i].w;
+    // On a wall it runs: further down than up, in streaks.
+    float runs = punchable ? vnoise(vec2(dot(vWorld.xz, vec2(vNormal.z, -vNormal.x)) * 2.6, float(i) * 3.1)) : 0.0;
+    float down = d.y < 0.0 ? d.y * (0.35 - 0.25 * runs) : d.y;
+    float dist = length(vec3(d.x, down, d.z));
+    if (dist > r * 1.2) continue;
+    float t = 1.0 - dist / r;
+    float n = vnoise(vWorld.xz * 2.7 + vWorld.y * 2.1 + float(i) * 13.0);
+    float drops = smoothstep(0.78, 0.84, vnoise(vWorld.xz * 7.0 + vWorld.y * 6.0 + float(i) * 7.0))
+      * smoothstep(-0.25, 0.2, t);
+    gore = max(gore, max(smoothstep(0.1, 0.3, t + (n - 0.5) * 0.45), drops));
+  }
+  if (gore > 0.001) {
+    s.albedo = mix(s.albedo, vec3(0.42, 0.012, 0.01), gore * 0.95);
+    s.roughness = mix(s.roughness, 0.22, gore);
+    s.metallic = mix(s.metallic, 0.0, gore);
+    s.emissive *= 1.0 - gore;
   }
 
   vec3 diffuse = s.albedo * (direct + ambient);

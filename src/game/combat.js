@@ -171,6 +171,8 @@ export class Combat {
       if (this.onHurt) this.onHurt(0);
       return;
     }
+    // What the suit takes of it, in The Hunt, before the shield does.
+    if (this.absorb) amount = this.absorb(amount);
     const scaled = amount * this.rules.incoming;
     this.sinceHit = 0;
     this.streak = 0;

@@ -125,10 +125,21 @@ async function run() {
   const cover = await page.evaluate(() => {
     const s = window.spreefall;
     s.drones.reset(); s.weapon.reset();
-    // Behind a cross wall of the Gate, which stands at x 0 and is 81 m west
-    // of the spawn; the passages either side of the wall are open.
+    // Behind a cross wall of the Gate, 81 m west of the spawn. The passages
+    // either side of the walls are open, and where the walls are depends on
+    // the extract the city was built from (the synthetic one here, the live
+    // one in CI), so the line is found rather than assumed: the first one
+    // west from the square whose shot stops in the Gate.
     const was = { x: s.player.x, z: s.player.z };
-    s.teleport(81, -2.6);
+    const gate = s.world.manifest.landmarks.find((x) => x.key === 'brandenburg_gate') || { x: 0, z: 0 };
+    let line = null;
+    for (let k = 0; k < 80 && !line; k++) {
+      const z = gate.z + (k % 2 ? 1 : -1) * Math.floor(k / 2) * 0.35;
+      const y = s.world.groundHeight(81, z) + 1.7;
+      const hit = s.world.raycast(gate.x + 81, y, z, -1, 0, 0, 160);
+      if (hit && Math.abs(gate.x + 81 - hit.t - gate.x) < 10) line = z;
+    }
+    s.teleport(gate.x + 81, line === null ? -2.6 : line);
     const d = window.T.park(-140, 4, 0);
     window.T.aimAt(d);
     s.weapon.spread = 0;
@@ -165,7 +176,16 @@ async function run() {
     const mem = s.world.manifest.landmarks.find((l) => l.key === 'memorial');
     s.teleport(mem.x, mem.z);
     s.drones.reset(); s.weapon.reset();
-    const d = window.T.park(-28, 6, 0);
+    // Out over the stelae, in whichever direction no stele or tree is in the
+    // way: how tall they stand near the middle depends on the extract.
+    let off = [-28, 6, 0];
+    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    for (let k = 0; k < 16; k++) {
+      const a = k / 16 * Math.PI * 2;
+      const o = [Math.cos(a) * 24, 9, Math.sin(a) * 24];
+      if (s.world.lineOfSight(eye.x, eye.y, eye.z, eye.x + o[0], eye.y + o[1], eye.z + o[2])) { off = o; break; }
+    }
+    const d = window.T.park(off[0], off[1], off[2]);
     window.T.aimAt(d);
     for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
     const before = d.health;
@@ -263,6 +283,9 @@ async function run() {
   await page.evaluate(() => {
     const s = window.spreefall;
     s.drones.reset(); s.weapon.reset(); s.combat.reset(); s.soldiers.reset();
+    // The street sends a squad on a timer, and one walking into the frame is
+    // a bar this section did not put there.
+    s.soldiers.enabled = false;
     s.teleport(81, 0);
     window.T.bar = window.T.park(-30, 5, 0);
     // And one behind you, which is not on the screen and gets no bar.
@@ -306,6 +329,7 @@ async function run() {
     hit.length ? `${hit[0].fill}% left, ${hit[0].chip}% chip` : 'no bar');
   const barHealth = await page.evaluate(() => [window.T.bar.health, window.spreefall.drones.active.length,
     window.spreefall.soldiers.active.length, window.spreefall.mechs.active.length]);
+  await page.evaluate(() => { window.spreefall.soldiers.enabled = true; });
   check('and the dead have no bar', gone.length === 0, `${gone.length} left ${JSON.stringify(gone)} ${JSON.stringify(barHealth)}`);
 
   // --- a pretty picture of an engagement -----------------------------------

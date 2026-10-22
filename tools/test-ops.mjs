@@ -194,22 +194,72 @@ async function run() {
   // --- through the Brandenburg Gate ---------------------------------------------
   const gate = await page.evaluate(() => {
     const s = window.spreefall;
+    // Where the passages and the walls between them are depends on the
+    // outline the extract gives the Gate (the synthetic one here, the live
+    // one in CI), so they are found rather than assumed: a line west through
+    // the Gate either stops in it or does not, every quarter metre along it.
+    const lm = s.world.manifest.landmarks.find((x) => x.key === 'brandenburg_gate') || { x: 0, z: 0 };
+    // Each line is open (nothing in the way from the square to the far side,
+    // at the knee or the chest), shut by the Gate, or shut by something else
+    // on the way, a lamp or a bollard, which is neither.
+    const runs = [];
+    for (let z = lm.z - 40; z <= lm.z + 40; z += 0.25) {
+      let kind = 'open';
+      for (const up of [0.5, 1.5]) {
+        const y = s.world.groundHeight(lm.x + 25, z) + up;
+        const hit = s.world.raycast(lm.x + 25, y, z, -1, 0, 0, 40);
+        if (!hit) continue;
+        const at = lm.x + 25 - hit.t;
+        kind = Math.abs(at - lm.x) < 8 ? 'gate' : 'other';
+        break;
+      }
+      const last = runs[runs.length - 1];
+      if (last && last.kind === kind) last.to = z;
+      else runs.push({ kind, from: z, to: z });
+    }
+    // A passage is an open run with the Gate on both sides of it, wide enough
+    // to walk down the middle of; the widest three, and the cross wall
+    // nearest the middle of the Gate.
+    const mid = (r) => (r.from + r.to) / 2;
+    const passages = runs.filter((r, i) => r.kind === 'open' && i > 0 && i < runs.length - 1
+      && runs[i - 1].kind === 'gate' && runs[i + 1].kind === 'gate' && r.to - r.from >= 2)
+      .sort((a, b) => (b.to - b.from) - (a.to - a.from)).slice(0, 3).map(mid);
+    const walls = runs.filter((r, i) => r.kind === 'gate' && i > 0 && i < runs.length - 1
+      && runs[i - 1].kind === 'open' && runs[i + 1].kind === 'open' && r.to - r.from >= 0.75)
+      .map(mid).sort((a, b) => Math.abs(a - lm.z) - Math.abs(b - lm.z));
+    const lines = [...passages, walls.length ? walls[0] : lm.z + 9.27];
     const out = [];
-    // The gate stands across x = 0, its passages running east to west; the
-    // middle one and one either side of it, then a cross wall.
-    for (const z of [3.3, 15.2, -8.6, 9.27]) {
-      s.teleport(25, z);
+    for (const z of passages) {
+      s.teleport(lm.x + 25, z);
       for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
       s.look(90, 0);
       s.input.keys.add('KeyW');
       for (let i = 0; i < 60 * 20; i++) s.fixedForTest(1 / 60);
       s.input.keys.delete('KeyW');
-      out.push(+s.player.x.toFixed(1));
+      out.push(+(s.player.x - lm.x).toFixed(1));
     }
-    return out;
+    // The wall: a run at it from a couple of metres off, and how far past
+    // its face you got. Twenty seconds of pushing at a pier a metre and a
+    // half wide slides you round it, the way it would anybody; what is being
+    // asked is whether it lets you through, not whether it holds you for good.
+    const wz = lines[3];
+    const face = (() => {
+      const y = s.world.groundHeight(lm.x + 25, wz) + 1.5;
+      const hit = s.world.raycast(lm.x + 25, y, wz, -1, 0, 0, 40);
+      return hit ? lm.x + 25 - hit.t : lm.x;
+    })();
+    s.teleport(face + 2.5, wz);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    s.look(90, 0);
+    s.input.keys.add('KeyW');
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('KeyW');
+    const past = +(face - s.player.x).toFixed(2);
+    return { out, past, lines: lines.map((z) => +(z - lm.z).toFixed(2)), passages: passages.length, walls: walls.length };
   });
   check('the Brandenburg Gate can be walked through, its five passages open and its walls solid',
-    gate[0] < -10 && gate[1] < -10 && gate[2] < -10 && gate[3] > 3, JSON.stringify(gate));
+    gate.passages === 3 && gate.walls > 0
+      && gate.out[0] < -10 && gate.out[1] < -10 && gate.out[2] < -10 && gate.past < 0, JSON.stringify(gate));
 
   const again = await page.evaluate(() => {
     const s = window.spreefall;
@@ -418,9 +468,9 @@ async function run() {
     const run = s.tactics.live.get(site.id);
     // The alarm with the radio working: help after the call delay.
     s.tactics.raiseAlarm(run);
-    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    const before = s.inbound(site.id);
     for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 1); i++) s.fixedForTest(1 / 60);
-    const came = s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before;
+    const came = s.inbound(site.id) - before;
     // A shot straight through the radio, from three metres.
     const p = s.tactics.radioAt(site);
     const from = { x: p.x + 3, y: p.y, z: p.z };
@@ -488,11 +538,11 @@ async function run() {
     const down = !run.boxUp;
     const drawn = s.tactics.drawList(s.player.x, s.player.z).find((c) => Math.abs(c.x - site.x) < 1);
     // Seen now: they know, but no siren and nobody called.
-    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    const before = s.inbound(site.id);
     s.tactics.raiseAlarm(run);
     const alerted = run.guards.filter((g) => g.post && g.post.alert).length;
     for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 2); i++) s.fixedForTest(1 / 60);
-    const came = s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before;
+    const came = s.inbound(site.id) - before;
     const siren = run.alarm;
     // And taken like that it still pays the bonus: the alarm never sounded.
     const score = s.campaign.book.score;
@@ -521,10 +571,10 @@ async function run() {
     const sounding = run.alarm;
     const p = s.tactics.boxAt(site);
     s.explode(p.x + 0.4, p.y, p.z, { radius: 4, damage: 120 }, { weapon: 'grenade' });
-    const before = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    const before = s.inbound(site.id);
     for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + 2); i++) s.fixedForTest(1 / 60);
     return { sounding, after: run.alarm, boxUp: run.boxUp,
-      came: s.soldiers.active.filter((x) => x.reinforcement === site.id).length - before };
+      came: s.inbound(site.id) - before };
   });
   check('with the siren going, a grenade at the box silences it and stops the call',
     hush.sounding && !hush.after && !hush.boxUp && hush.came === 0, JSON.stringify(hush));
@@ -545,6 +595,110 @@ async function run() {
   });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(SHOTS, 'ops-12-alarm-box.png') });
+  await page.evaluate(() => { window.spreefall.soldiers.enabled = true; });
+
+  // --- help by road: jeeps, and a tank when it is serious --------------------
+  await fresh();
+  const convoy = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.vehicles.reset();
+    s.teleport(site.x + 40, site.z + 20);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    run.waves = 1;
+    const level = site.level;
+    site.level = 0;
+    const sent = s.sendConvoy(site, run, 5);
+    // Nobody else called while this one drives in: the camp sees you soon
+    // enough, and a second wave would be counted with the first.
+    run.radioUp = false;
+    const out = { sent, jeeps: 0, tanks: 0, crew: 0, startFrom: Infinity, road: 0 };
+    for (const c of s.convoys) {
+      if (c.type === 'jeep') { out.jeeps++; out.crew += c.crew; } else out.tanks++;
+      out.startFrom = Math.min(out.startFrom, Math.round(Math.hypot(c.v.x - s.player.x, c.v.z - s.player.z)));
+      out.road = Math.max(out.road, +(c.path.road || 0).toFixed(2));
+    }
+    out.marked = s.convoys.every((c) => c.v.hostile && c.v.occupied);
+    out.inbound = s.inbound(site.id);
+    let t = 0;
+    while (s.convoys.length && t < 90) { for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60); t++; }
+    out.seconds = t;
+    out.out = s.soldiers.active.filter((x) => x.reinforcement === site.id).length;
+    const jeeps = s.vehicles.active.filter((v) => v.type === 'jeep' && v.health > 0);
+    out.near = Math.round(Math.min(...jeeps.map((v) => Math.hypot(v.x - s.player.x, v.z - s.player.z))));
+    out.yours = jeeps.length > 0 && jeeps.every((v) => !v.hostile && !v.occupied && !v.ai);
+    site.level = level;
+    return out;
+  });
+  check('a call by radio sends the men up the road in jeeps, from a couple of hundred metres off',
+    convoy.sent && convoy.jeeps === 2 && convoy.tanks === 0 && convoy.crew === 5 && convoy.startFrom >= 120
+      && convoy.marked && convoy.inbound === 5, JSON.stringify(convoy));
+  check('they drive up, jump down short of you, and leave the jeeps for the taking',
+    convoy.seconds < 60 && convoy.out === 5 && convoy.near >= 12 && convoy.near <= 45 && convoy.yours,
+    JSON.stringify(convoy));
+
+  await fresh();
+  const armour = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.vehicles.reset();
+    s.teleport(site.x + 40, site.z + 20);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    // The second wave: serious.
+    run.waves = 2;
+    s.sendConvoy(site, run, 3);
+    run.radioUp = false;
+    const tank = s.convoys.find((c) => c.type === 'tank');
+    const out = { tank: !!tank, jeeps: s.convoys.filter((c) => c.type === 'jeep').length };
+    if (!tank) return out;
+    const shells = s.state.tankShells || 0;
+    let t = 0;
+    while (t < 90 && (s.state.tankShells || 0) - shells < 2) { for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60); t++; }
+    out.seconds = t;
+    out.shells = (s.state.tankShells || 0) - shells;
+    out.dist = Math.round(Math.hypot(tank.v.x - s.player.x, tank.v.z - s.player.z));
+    out.speed = +Math.abs(tank.v.speed).toFixed(1);
+    out.hostile = tank.v.hostile;
+    // Stood down with the run: nothing of theirs is left in the street.
+    s.tactics.clear();
+    out.cleared = s.convoys.length === 0 && !s.vehicles.active.some((v) => v.hostile) && !s.vehicles.active.includes(tank.v);
+    return out;
+  });
+  check('when it is serious a tank comes with them', armour.tank && armour.jeeps >= 1, JSON.stringify(armour));
+  check('and it stops where it can see you and shells you', armour.shells >= 2 && armour.dist <= 160 && armour.hostile,
+    JSON.stringify(armour));
+  check('and a run stood down takes them off the street', armour.cleared, JSON.stringify(armour));
+
+  // The picture: the column coming up the road, seen from in front of it.
+  await fresh();
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    const run = s.tactics.live.get(site.id);
+    s.vehicles.reset();
+    s.teleport(site.x + 40, site.z + 20);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    run.waves = 2;
+    s.sendConvoy(site, run, 4);
+    const jeep = s.convoys.find((c) => c.type === 'jeep');
+    for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
+    if (!jeep) return;
+    // Held where they are for the picture, the brakes on.
+    const lead = s.convoys.filter((c) => c.type === 'jeep')
+      .sort((a, b) => Math.hypot(a.v.x - s.player.x, a.v.z - s.player.z) - Math.hypot(b.v.x - s.player.x, b.v.z - s.player.z))[0];
+    for (const c of s.convoys) c.v.ai = { throttle: 0, steer: 0, brake: true };
+    s.convoys.length = 0;
+    // Sixteen metres in front of the first one, looking back down the road.
+    const v = lead.v;
+    const ax = v.x - Math.sin(v.yaw) * 16, az = v.z - Math.cos(v.yaw) * 16;
+    s.teleport(ax, az);
+    s.look(Math.atan2(-(v.x - ax), -(v.z - az)) * 180 / Math.PI, -4);
+    s.soldiers.enabled = false;
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-15-convoy.png') });
   await page.evaluate(() => { window.spreefall.soldiers.enabled = true; });
 
   // --- the quiet three, and a takedown ---------------------------------------
@@ -1337,6 +1491,86 @@ async function run() {
       && memorial.closed.ground === 0, JSON.stringify(memorial && memorial.closed));
   check('and walking back in finds it whole', !!memorial && memorial.back.open && memorial.back.stone === 1
     && memorial.back.ground === 0, JSON.stringify(memorial && memorial.back));
+
+  // A vehicle rigged as a bomb on the way out: asked, timed, remote, disarmed.
+  const rigOut = () => page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.teleport(81, 0);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    const j = s.vehicles.spawn('jeep', s.player.x + 4, s.player.z, 0);
+    s.teleport(j.x + 1.5, j.z);
+    s.toggleVehicle();
+    const inside = s.state.inVehicle === j;
+    s.toggleVehicle();
+    return { inside, asked: !!s.rigging() && s.rigging().v === j, weapon: s.weapon.id,
+      shown: !document.getElementById('vbomb').classList.contains('hidden') };
+  });
+  const timed0 = await rigOut();
+  await page.keyboard.press('Digit1');
+  const timed = await page.evaluate(() => {
+    const s = window.spreefall;
+    const j = s.vehicles.active[0];
+    const out = { closed: !s.rigging() && document.getElementById('vbomb').classList.contains('hidden'),
+      bomb: j.bomb && j.bomb.kind, weapon: s.weapon.id };
+    const bombs0 = s.state.vehicleBombs || 0;
+    s.teleport(j.x + 30, j.z);
+    for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
+    out.halfway = j.health > 0;
+    for (let i = 0; i < 60 * 6; i++) s.fixedForTest(1 / 60);
+    out.gone = j.health <= 0;
+    out.bombs = (s.state.vehicleBombs || 0) - bombs0;
+    return out;
+  });
+  check('getting out of a vehicle asks whether to rig it',
+    timed0.inside && timed0.asked && timed0.shown, JSON.stringify(timed0));
+  check('one picks the time bomb, and does not change the weapon',
+    timed.closed && timed.bomb === 'timed' && timed.weapon === timed0.weapon,
+    JSON.stringify({ ...timed, before: timed0.weapon }));
+  check('the time bomb waits its ten seconds and then goes',
+    timed.halfway && timed.gone && timed.bombs === 1, JSON.stringify(timed));
+  await rigOut();
+  await page.keyboard.press('Digit2');
+  const remote = await page.evaluate(() => {
+    const s = window.spreefall;
+    const j = s.vehicles.active[0];
+    const out = { bomb: j.bomb && j.bomb.kind };
+    s.teleport(j.x + 30, j.z);
+    for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
+    out.waited = j.health > 0;
+    return out;
+  });
+  await page.keyboard.press('KeyT');
+  const remoteAfter = await page.evaluate(() => {
+    const s = window.spreefall;
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    return { gone: s.vehicles.active[0].health <= 0 };
+  });
+  check('the remote bomb waits for T, and T blows it',
+    remote.bomb === 'remote' && remote.waited && remoteAfter.gone, JSON.stringify({ ...remote, ...remoteAfter }));
+  await rigOut();
+  await page.keyboard.press('Digit3');
+  const declined = await page.evaluate(() => {
+    const s = window.spreefall;
+    const j = s.vehicles.active[0];
+    const out = { closed: !s.rigging(), bomb: !!j.bomb };
+    // Rigged, then got back into: disarmed.
+    s.rigVehicle(j, 'timed');
+    s.teleport(j.x + 1.5, j.z);
+    s.toggleVehicle();
+    out.disarmed = !j.bomb;
+    s.toggleVehicle();
+    if (s.rigging()) s.rigging().left = 0;
+    for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
+    out.standing = j.health > 0;
+    return out;
+  });
+  check('three says no, and getting back in disarms one',
+    declined.closed && !declined.bomb && declined.disarmed && declined.standing, JSON.stringify(declined));
+  await rigOut();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-14-vehicle-bomb.png') });
+  await page.keyboard.press('Escape');
 
   // The pictures: broken from inside, then whole again after a step outside.
   const shellsInside = () => page.evaluate(() => {

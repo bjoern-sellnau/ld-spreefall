@@ -58,6 +58,7 @@ export class Drones {
   constructor(world, isSanctuary) {
     this.world = world;
     this.isSanctuary = isSanctuary || (() => false);
+    this.cloak = 0;             // the suit's cloak, as for the soldiers
     this.pool = [];
     for (let i = 0; i < MAX_DRONES; i++) this.pool.push(new Drone());
     this.active = [];
@@ -219,7 +220,7 @@ export class Drones {
       // run for every drone every step.
       if (time > d.lastSeen + 0.22) {
         d.lastSeen = time;
-        d.canSee = !playerSafe && dist < 220
+        d.canSee = !playerSafe && dist < 220 && !(this.cloak && dist > this.cloak)
           && w.lineOfSight(d.x, d.y, d.z, player.x, player.y, player.z);
       }
 

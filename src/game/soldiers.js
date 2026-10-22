@@ -121,6 +121,11 @@ class Soldier {
     this.staggered = 0;
     this.reeled = false;
     this.nest = null;
+    // The Hunt: theirs, drawn in their own shape, and one kept waiting at a
+    // hunting ground.
+    this.ceph = null;
+    this.look = 0;
+    this.dormant = false;
     return this;
   }
 }
@@ -191,6 +196,9 @@ export class Soldiers {
     // the numbers, how fast you are moving, and who to tell when he has.
     this.stealth = null;          // {range, cone, near, fill, decay, run}
     this.playerSpeed = 0;
+    // The suit's cloak: inside this many metres you are seen anyway, and
+    // nought when it is off.
+    this.cloak = 0;
     this.onSpot = null;           // fn(soldier, how) 'seen', 'heard' or 'hit'
     this.onDown = null;           // fn(soldier) the moment one is killed
     // Slayer: a demon's claws, its fire and its charge, which the game layer
@@ -208,6 +216,20 @@ export class Soldiers {
    */
   _demonStep(s, dt, player, dist, dx, dz) {
     const sp = s.dspec;
+    // One kept at a hunting ground waits there, turning about, until the
+    // camp knows, until it sees you close, or until it is hurt.
+    if (s.dormant) {
+      // The sight check runs on a rota; the cloak counts from the moment it is up.
+      const sees = s.canSee && !(this.cloak && dist > this.cloak);
+      if ((s.post && s.post.alert) || (sees && dist < 26) || s.health < s.maxHealth) {
+        s.dormant = false;
+        s.wokeBy = s.post && s.post.alert ? 'alert' : s.health < s.maxHealth ? 'hurt' : 'saw';
+      } else {
+        s.yaw += dt * 0.4 * Math.sin(s.seed * 6.28 + s.walk);
+        s.walk += dt * 0.3;
+        return;
+      }
+    }
     s.lean += (0 - s.lean) * Math.min(1, dt * 5);
     s.meleeLeft -= dt;
     s.fireLeft -= dt;
@@ -708,7 +730,8 @@ export class Soldiers {
       // to yours, so a parked car of a building really does hide you.
       if (time > s.lastSeen + 0.24) {
         s.lastSeen = time;
-        s.canSee = !playerSafe && dist < SPEC.sight
+        // Cloaked, you are not there to be seen until they walk into you.
+        s.canSee = !playerSafe && dist < SPEC.sight && !(this.cloak && dist > this.cloak)
           && w.lineOfSight(s.x, s.y + 1.6, s.z, player.x, player.y, player.z);
       }
 

@@ -751,6 +751,24 @@ export class Audio {
   }
 
   /** Somebody in a camp is sure of you: a short rising sting, high and thin. */
+  /** A bomb ticking: a short hard beep, higher as it runs out. */
+  bombBeep(distance = 0, urgent = false) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(urgent ? 2300 : 1750, t);
+    const g = ctx.createGain();
+    const level = 0.09 * Math.max(0.08, 1 - distance / 90);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.1);
+  }
+
   spotted() {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;
@@ -1469,6 +1487,32 @@ export class Audio {
       o.start(t + at);
       o.stop(t + at + 0.32);
     }
+  }
+
+  /**
+   * The suit changing mode: a sweep and a low hum for the armour, a thin
+   * rising shimmer for the cloak, the same played downwards when it goes off.
+   */
+  suit(which, on) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const armor = which === 'armor';
+    const [a, b] = armor ? [140, 260] : [900, 2400];
+    const o = ctx.createOscillator();
+    o.type = armor ? 'sawtooth' : 'sine';
+    o.frequency.setValueAtTime(on ? a : b, t);
+    o.frequency.exponentialRampToValueAtTime(on ? b : a, t + 0.32);
+    const f = ctx.createBiquadFilter();
+    f.type = armor ? 'lowpass' : 'bandpass';
+    f.frequency.value = armor ? 900 : 1800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(armor ? 0.09 : 0.05, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    o.connect(f).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.5);
   }
 
   /**

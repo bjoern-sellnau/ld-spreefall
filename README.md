@@ -88,19 +88,19 @@ district by hand. A comparison of the same street at either tier is in
 | Z | flamethrower, right mouse throws a wall of fire that runs across the ground |
 | B | incendiary bomb |
 | X | EMP, which stops the machines where they stand |
-| E, or right Shift | reflexes: the city slows and you do not |
+| E, or right Shift | reflexes: the city slows and you do not; in The Hunt, E is the suit's cloak |
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
-| F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels |
+| F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels. Getting out asks whether to rig the vehicle as a bomb: 1 a time bomb of ten seconds, 2 a remote one for T, 3 no |
 | R | reload; with the bow in hand, the head on the next arrow: plain, fire, poison or explosive |
 | J | in Tactics and Slayer, the journal: every district, and the camps or nests given back, or given back harder |
 | driving | W forward, S back, A D steer, Shift brake, left mouse fires; drive into a wall fast enough and you go through it |
 | flying | it flies where you look; W S throttle (a fighter holds it), A D turn, Space climbs, right mouse drops |
 | F4 | debug overlay |
 | V | free travel: pick a place on the map and fly there |
-| Q | back to the weapon you had before |
-| T | blow the C4 you have put down |
+| Q | back to the weapon you had before; in The Hunt, the suit's armour |
+| T | blow the C4 you have put down, and every vehicle rigged with a remote bomb |
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight |
 | G | holster the weapon, for walking and for photographs |
@@ -351,7 +351,8 @@ What the seven gore switches actually are:
   bright comic red in drops twice the size, every hit gushes, a head shot
   that kills takes the head, every kill brings a red rain down over the
   street round it and a taller, longer fountain, the word is yellow with a
-  red outline, and a kill close to you throws splashes on the screen.
+  red outline, a kill close to you throws splashes on the screen, and the
+  walls round a kill are left with the blood running down them.
 
 And the last kill:
 
@@ -470,8 +471,16 @@ in the browser.
   top of the screen says how seen you are. Once one is sure, the siren goes
   2.6 seconds later unless you kill him first. A rifle shot is heard 130 m
   off, an explosion 240 m; a guard who sees a body goes to look.
-- With the alarm on and the radio standing, help comes out of the street in
-  two waves. Shoot the radio (or blow it up) and nobody else is called.
+- With the alarm on and the radio standing, help comes in two waves. Shoot
+  the radio (or blow it up) and nobody else is called.
+- The help drives in: four men to a jeep, up the streets from a couple of
+  hundred metres out on the far side of the camp, red on the map and with a
+  health bar. They jump down twenty metres short of you and leave the jeep
+  standing, yours to take. Shot up on the way in they bail out where they
+  are; blown up, they go with it. When it is serious (the second wave, or a
+  camp at level two or more) a tank comes behind them, stops where it can
+  see you and shells you every five seconds. Where no street comes near
+  enough they still come out of a sphere.
 - Take a camp without the siren ever sounding for the bonus (a switch in
   the setup). The journal on J gives the camps back, or gives them back a
   level harder, with more men and more points.
@@ -511,6 +520,75 @@ all of them, a start district, how many nests, and bosses on or off.
   everywhere when it does, and the fuel comes back slowly), flak and the
   void cannon. A demon low on its feet reels and glows; F finishes it, and
   gives you thirty health.
+
+## Spree Fall: The Hunt
+
+The third operation, in the manner of the nanosuit shooters: hunting grounds
+held by squads in black, on the same camps as Tactics underneath (the
+stealth, the alarm, the radio, the alarm box and the help that drives in),
+and you in a suit with one bar of energy that everything it does runs on.
+
+- **Q** armour: most of a hit (80 percent) goes into the energy instead of
+  into you, at a little over half a point of energy a point; a little slower
+  on your feet, and a trickle of energy while it is on.
+- **E** cloak: a moment to come up, and then a guard looking straight at you
+  does not see you until he walks into you (3 m). It drains faster the faster
+  you move. The **bow** fires from it for 22 energy and leaves it up; any gun
+  fired from it drops it and empties the suit.
+- **Shift** is the suit's sprint, 1.75 times a run, while the energy lasts.
+  **Space** held puts the suit's strength into the jump and goes about four
+  times as high. **F** with one of theirs in front of you is a punch that
+  puts him down, for 30 energy.
+- **B** the visor: a narrower view with a scan over the middle; hold one
+  of theirs there for half a second and he is tagged, and the tag (a red
+  marker with the distance) stays over him wherever he goes, through walls
+  and with the visor down, for as long as he lives.
+- **N** Nano Vision: the city goes cold and blue and whatever of theirs is
+  in sight shows white and orange, for 6 energy a second.
+- **X** with the bow the draw weight: medium, strong (1.6 times the damage,
+  faster, carries a man back along the arrow's line, slower to draw again)
+  and light (quicker, weaker). **R** goes through the heads, and the bow now
+  has a fifth, in every mode: a shock arrow that puts down and hurts
+  whoever is within five metres of where it lands.
+- The energy comes back by itself 1.4 s after the last thing that drew on it.
+  Run it out and whatever was on goes off, and it will not come back on for
+  a moment.
+- You start with the bow in your hands. The number row is bow, rifle,
+  suppressed pistol, marksman rifle, shotgun, grenade, C4, rocket launcher,
+  railgun, banana. A ground cleared without anybody raising the alarm pays
+  1800 on top of the 1200 it is worth.
+
+- **Theirs.** Every third man at a ground is a grunt of theirs: their
+  shape, a dark shell with blue light in the seams, the same rifle and the
+  same eyes as a guard, 300 health. A stalker or more (one, and one more a
+  level, three at most) waits by the middle, turning about, and does not
+  move until the ground knows you are there, it sees you within 26 m, or it
+  is hurt; then it comes fast, charges across open ground and its blow
+  throws you into the air. From level one, and at the last ground held in a
+  district, a tall walker of theirs stands over it: its ping is an EMP that
+  hurts everyone within 50 m through the armour and empties the suit,
+  modes and all, for 2.5 s. The ground is not clear while it stands.
+- Every ground cleared ends the hunt on its own card, with how many of
+  theirs you killed.
+
+Where the ideas come from, for the record: the first game had four suit
+modes, armour, speed, strength and cloak; the second and third kept armour
+and cloak as modes on Q and E and made the strength and the speed things the
+suit does when asked; the third added a bow that can be fired from the cloak
+for a share of the energy rather than all of it; the aliens of the second
+are infantry grunts, quick stalkers that knock you into the air, and a tall
+tripod walker whose ping is an EMP reaching fifty metres
+([Wikipedia: Crysis](https://en.wikipedia.org/wiki/Crysis),
+[Crysis wiki: Ceph](https://crysis.fandom.com/wiki/Ceph),
+[Crysis wiki: Armor](https://crysis.fandom.com/wiki/Armor),
+[Game Informer on the bow](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2012/06/06/crysis-3-bringing-a-bow-to-a-gunfight.aspx),
+[Crysis 2 Remastered PC controls](https://www.magicgameworld.com/crysis-2-remastered-pc-controls/)).
+The numbers and everything else here are ours.
+
+![Cloaked in front of a guard](docs/screenshots/hunt-01-cloak.png)
+![The visor, one tagged](docs/screenshots/hunt-02-visor.png)
+![Nano Vision](docs/screenshots/hunt-03-nano.png)
+![A grunt and a stalker at a hunting ground](docs/screenshots/hunt-04-ceph.png)
 
 ## The end of an operation
 
@@ -742,7 +820,15 @@ legs chase the torso, the left mouse is a chaingun, the right mouse throws a
 salvo of six rockets, **Shift** dashes and **Space** jumps. The landing is a
 weapon in its own right: forty tonnes arriving opens the road and takes apart
 whatever is standing in eleven metres of it. The camera hangs behind the
-shoulders, because the thing worth looking at here is the mech.
+shoulders, because the thing worth looking at here is the mech. **Y** puts
+you in the cockpit instead: from in there your own mech is not drawn at all,
+so it never fills the screen with the back of its own head, and what you see
+is the inside of it, drawn over the view: the canopy frame, a dashboard with
+a radar that turns with the torso and the systems (hull, shield, weapon,
+rounds, pod, dash), a heading tape, brackets on what of theirs is in sight
+with the distance to the one nearest the middle, and glass that cracks as
+the hull goes. Back over the shoulder, or out of it, and the mech is drawn
+again.
 
 **Theirs**, the Reaper, walks in from two hundred metres, closes to about
 forty, sidesteps rather than standing still, and fires five rounds then waits

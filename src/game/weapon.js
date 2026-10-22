@@ -12,7 +12,7 @@
 // gets it back as it decays, minus the small share each weapon is allowed to
 // keep. That share is what makes a burst walk, rather than a stuck aim.
 
-import { WEAPONS, LOADOUT, KIND, KITS, weaponBySlot } from './arsenal.js';
+import { WEAPONS, LOADOUT, KIND, KITS, ARROW_DRAWS, weaponBySlot } from './arsenal.js';
 
 const STATE = { READY: 0, FIRING: 1, RELOADING: 2, HOLSTERED: 3 };
 export const WEAPON_STATE = STATE;
@@ -34,6 +34,9 @@ export class Weapon {
     // Which head is on the next arrow, as an index into the bow's heads.
     this.arrowHead = 0;
     this.onArrowHead = null;     // fn(head) when it changes
+    // And how hard it is drawn, as an index into the bow's draws.
+    this.drawWeight = 0;
+    this.onDraw = null;          // fn(draw) when it changes
     this.carried = {};
     for (const id of LOADOUT) {
       this.carried[id] = { ammo: WEAPONS[id].magazine, reserve: WEAPONS[id].reserve };
@@ -207,6 +210,21 @@ export class Weapon {
   get head() {
     const heads = this.spec.heads;
     return heads ? heads[this.arrowHead % heads.length] : null;
+  }
+
+  /** How hard the bow is drawn, or null for anything else. */
+  get draw() {
+    const draws = this.spec.draws;
+    return draws ? draws[this.drawWeight % draws.length] : null;
+  }
+
+  /** The next draw weight along, for a bow. @returns {string|null} */
+  cycleDraw() {
+    const draws = this.spec.draws;
+    if (!draws || this.holstered) return null;
+    this.drawWeight = (this.drawWeight + 1) % draws.length;
+    if (this.onDraw) this.onDraw(draws[this.drawWeight]);
+    return draws[this.drawWeight];
   }
 
   /** The next head along, for a bow. @returns {string|null} */
@@ -501,7 +519,8 @@ export class Weapon {
     // magazine that reads minus one on the screen is a bug wherever it came
     // from.
     if (!this.infiniteAmmo) this.ammo = Math.max(0, this.ammo - 1);
-    this.cooldown = spec.fireInterval * this.rateScale;
+    const drawn = this.draw ? ARROW_DRAWS[this.draw] : null;
+    this.cooldown = spec.fireInterval * this.rateScale * (drawn ? drawn.interval : 1);
     this.shotsFired++;
 
     if (spec.kind === KIND.HITSCAN) this._fireHitscan(eye, dir, spec);
@@ -698,7 +717,8 @@ export class Weapon {
       this.blastReady = false;
       this.blastHeld = 0;
     }
-    const speed = blast ? blast.speed : spec.muzzleSpeed;
+    const drawn = this.draw ? ARROW_DRAWS[this.draw] : null;
+    const speed = (blast ? blast.speed : spec.muzzleSpeed) * (drawn ? drawn.speed : 1);
     const splash = blast ? {
       ...spec.splash,
       radius: spec.splash.radius * blast.radius,
@@ -716,6 +736,7 @@ export class Weapon {
       weapon: this.id,
       homing, target,
       head: this.head,
+      draw: this.draw,
     });
     if (spec.lock) {
       // Clearing it silently leaves the ring on screen for ever, because the

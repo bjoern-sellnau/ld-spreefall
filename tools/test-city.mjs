@@ -757,21 +757,28 @@ async function run() {
   const findable = await page.evaluate(async () => {
     const s = window.spreefall;
     const jeep = s.vehicles.active.find((v) => v.type === 'jeep');
+    // Two frames: the hint is set in the draw, and the first frame after a
+    // teleport can be one the loop spent on something else.
+    const frames = async () => {
+      for (let i = 0; i < 2; i++) await new Promise((r) => requestAnimationFrame(r));
+    };
     s.teleport(jeep.x + 400, jeep.z);
-    await new Promise((r) => requestAnimationFrame(r));
+    await frames();
     const far = !document.getElementById('ridehint').classList.contains('hidden');
+    const farWhat = far ? document.getElementById('ridehintname').textContent : '';
     s.teleport(jeep.x + 2.5, jeep.z);
-    await new Promise((r) => requestAnimationFrame(r));
+    await frames();
     const hint = document.getElementById('ridehint');
     return {
-      far,
+      far, farWhat, rigging: !!s.rigging(),
       near: !hint.classList.contains('hidden'),
       name: document.getElementById('ridehintname').textContent,
       marked: s.vehicles.active.filter((v) => v.alive && !v.occupied).length,
     };
   });
   check('standing next to one says so on the screen',
-    findable.near && !findable.far, `${findable.name} within reach`);
+    findable.near && !findable.far, `${findable.name} within reach`
+      + (findable.far ? `, and at 400 m too: ${findable.farWhat}` : '') + (findable.rigging ? ', asked to rig' : ''));
   check('and the map says where the others are',
     findable.marked >= 3, `${findable.marked} marked`);
 
@@ -996,6 +1003,10 @@ async function run() {
     const out = [];
     for (const yaw of [Math.PI / 2, Math.PI, -2.1]) {
       s.vehicles.reset();
+      // From the open square, every time: the player is wherever the last
+      // test left the jeep, which can be a kerb or a wall away from a tank
+      // that then measures nothing because it cannot move.
+      s.teleport(81, 0);
       s.look(0, 0);
       const t = s.vehicles.spawn('tank', s.player.x + 3, s.player.z, yaw);
       s.teleport(t.x + 1.5, t.z);
@@ -1005,8 +1016,10 @@ async function run() {
       const cam = s.camera.yaw;
       const f = [-Math.sin(cam), -Math.cos(cam)];
       const was = { x: t.x, z: t.z };
+      const got = s.state.inVehicle === t && s.vehicles.driving === t;
       s.input.keys.add('KeyW');
-      for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+      let top = 0;
+      for (let i = 0; i < 90; i++) { s.fixedForTest(1 / 60); top = Math.max(top, t.speed); }
       s.input.keys.delete('KeyW');
       const hullWas = t.yaw, camWas = s.camera.yaw;
       s.input.keys.add('KeyD');
@@ -1023,6 +1036,7 @@ async function run() {
       const heading = [-Math.sin(t.yaw), -Math.cos(t.yaw)];
       out.push({
         towardsView: +((moved.x / len) * f[0] + (moved.z / len) * f[1]).toFixed(2),
+        got, top: +top.toFixed(1), mode: s.state.mode, moveZ: s.input.moveZ,
         drawnAlong: +(nose[0] * heading[0] + nose[1] * heading[1]).toFixed(2),
         hullTurn: +(t.yaw - hullWas).toFixed(2),
         camTurn: +(s.camera.yaw - camWas).toFixed(2),
@@ -1047,6 +1061,7 @@ async function run() {
     });
     const frame = () => new Promise((r) => requestAnimationFrame(r));
     s.vehicles.reset();
+    s.teleport(81, 0);
     s.look(0, 0);
     // A tank, driven, then shot at, then fired.
     const t = s.vehicles.spawn('tank', s.player.x + 4, s.player.z, 0);
@@ -1215,7 +1230,8 @@ async function run() {
 
   check('forward drives where you are looking, however it was parked',
     facing.every((f) => f.towardsView > 0.97),
-    facing.map((f) => f.towardsView).join(', '));
+    facing.map((f) => f.towardsView).join(', ')
+      + (facing.some((f) => !(f.towardsView > 0.97)) ? ` ${JSON.stringify(facing[0])}` : ''));
   check('and the hull is drawn pointing the way it drives',
     facing.every((f) => f.drawnAlong > 0.99),
     facing.map((f) => f.drawnAlong).join(', '));
@@ -1402,11 +1418,17 @@ async function run() {
       eye[2] + f[2] * (ahead.t - 0.6), { radius: 11, damage: 240 }, { weapon: 'rpg' });
     for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
     const punched = await frame();
-    // The same frame with the hole closed and nothing else changed.
-    const was = s.renderer.scarInfo[2];
-    s.renderer.scarInfo[2] = 0;
+    // The same frame with the hole closed and nothing else changed. The
+    // shell's mark is the one that punches: whatever else the blast set off
+    // (a parked car, a tree, more of them in the live city than in the
+    // synthetic one) can put marks of its own in the ring before it.
+    const info = s.renderer.scarInfo;
+    let k = 0;
+    for (let i = 0; i < s.renderer.scarCount; i++) if (info[i * 4 + 2] > info[k * 4 + 2]) k = i;
+    const was = info[k * 4 + 2];
+    info[k * 4 + 2] = 0;
     const solid = await frame();
-    s.renderer.scarInfo[2] = was;
+    info[k * 4 + 2] = was;
     let moved = 0;
     for (let i = 0; i < punched.buf.length; i += 4) {
       if (Math.abs(punched.buf[i] - solid.buf[i])

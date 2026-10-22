@@ -32,6 +32,22 @@ export const OPS = {
     // And per level of difficulty a camp has been reset to.
     perLevel: 400,
   },
+  // The Hunt: hunting grounds held by squads in black, played in the suit.
+  // The same camps underneath as Tactics (the stealth, the alarm, the radio
+  // and the help that drives in), and a bonus for a ground cleared without
+  // anybody ever being sure you were there.
+  hunt: {
+    name: 'Spree Fall: The Hunt',
+    site: 'ground',
+    perDistrict: 4,
+    perDistrictRange: [1, 8],
+    spacing: 170,
+    clear: 13,
+    radius: 16,
+    points: 1200,
+    quietBonus: 1800,
+    perLevel: 450,
+  },
   slayer: {
     name: 'Spree Fall Slayer',
     site: 'nest',
@@ -47,6 +63,9 @@ export const OPS = {
 };
 
 const KEY = 'spreefall.ops.v1';
+
+/** The operations there are, by name. */
+export const MODES = ['tactics', 'slayer', 'hunt'];
 
 /** A small seeded generator, so a district's sites land where they landed last time. */
 export function seeded(text) {
@@ -75,19 +94,21 @@ export class Campaign {
       start: null,           // the district id you start in, and the one played in 'district'
       quietBonus: true,      // Tactics: pay extra for a camp taken without an alarm
       bosses: true,          // Slayer: a boss in the last nest of a district
-      perDistrict: { tactics: OPS.tactics.perDistrict, slayer: OPS.slayer.perDistrict },
+      perDistrict: { tactics: OPS.tactics.perDistrict, slayer: OPS.slayer.perDistrict, hunt: OPS.hunt.perDistrict },
     };
-    this.books = { tactics: blankBook(), slayer: blankBook() };
+    this.books = { tactics: blankBook(), slayer: blankBook(), hunt: blankBook() };
     this.onChange = null;
     this.load();
   }
 
-  get active() { return this.mode === 'tactics' || this.mode === 'slayer'; }
+  get active() { return MODES.includes(this.mode); }
+  /** Played on the camps: Tactics, and The Hunt on the same machinery. */
+  get camps() { return this.mode === 'tactics' || this.mode === 'hunt'; }
   get spec() { return this.active ? OPS[this.mode] : null; }
   get book() { return this.active ? this.books[this.mode] : null; }
 
   setMode(mode) {
-    this.mode = mode === 'tactics' || mode === 'slayer' ? mode : null;
+    this.mode = MODES.includes(mode) ? mode : null;
     this.save();
   }
 
@@ -258,21 +279,21 @@ export class Campaign {
       const raw = this.storage.getItem(KEY);
       if (!raw) return;
       const s = JSON.parse(raw);
-      if (s.mode === 'tactics' || s.mode === 'slayer') this.mode = s.mode;
+      if (MODES.includes(s.mode)) this.mode = s.mode;
       if (s.settings) {
         if (s.settings.scope) this.settings.scope = s.settings.scope === 'all' ? 'all' : 'district';
         if (typeof s.settings.start === 'string') this.settings.start = s.settings.start;
         if (s.settings.quietBonus !== undefined) this.settings.quietBonus = !!s.settings.quietBonus;
         if (s.settings.bosses !== undefined) this.settings.bosses = !!s.settings.bosses;
         if (s.settings.perDistrict) {
-          for (const m of ['tactics', 'slayer']) {
+          for (const m of MODES) {
             const n = Number(s.settings.perDistrict[m]);
             const [lo, hi] = OPS[m].perDistrictRange;
             if (Number.isFinite(n)) this.settings.perDistrict[m] = Math.max(lo, Math.min(hi, Math.round(n)));
           }
         }
       }
-      for (const m of ['tactics', 'slayer']) {
+      for (const m of MODES) {
         const b = s.books && s.books[m];
         if (!b) continue;
         const book = blankBook();

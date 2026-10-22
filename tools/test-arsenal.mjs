@@ -37,6 +37,12 @@ async function run() {
     s.drones.enabled = false;
     s.teleport(81, 0); s.look(90, 0); s.setTime(15.4);
     s.setQuality('low');
+    // The vehicles are parked at random on every load, and a jet parked on
+    // the square three metres off the line of fire takes every round these
+    // checks aim at a man. They are for the vehicle suites, not this one.
+    for (const v of [...s.vehicles.active]) {
+      if (Math.hypot(v.x - s.player.x, v.z - s.player.z) < 160) s.vehicles.remove(v);
+    }
   });
   await page.waitForTimeout(4000);
 

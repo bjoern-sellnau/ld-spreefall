@@ -17,7 +17,7 @@ import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
 import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
-import { ARROW_HEADS } from './game/arsenal.js';
+import { ARROW_HEADS, ARROW_DRAWS } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
 import { Projectiles } from './game/projectiles.js';
@@ -45,8 +45,13 @@ import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
+import { CockpitHud, project as projectPoint } from './ui/cockpit.js';
+import { Visor, VISOR } from './ui/visor.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
+import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
+import { Nanosuit, SUIT } from './game/nanosuit.js';
+import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
 import { Slayer, SLAYER } from './game/slayer.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
@@ -60,13 +65,16 @@ const el = {
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
   splatter: $('splatter'),
+  vbomb: $('vbomb'), vbombTimed: $('vbombtimed'), vbombRemote: $('vbombremote'), vbombNo: $('vbombno'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
   opsEnd: $('opsend'), opsEndTitle: $('opsendtitle'), opsEndText: $('opsendtext'), opsEndStats: $('opsendstats'),
   opsEndAgain: $('opsendagain'), opsEndMenu: $('opsendmenu'),
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
-  mapUnmark: $('mapunmark'), compassBar: $('compassbar'),
+  mapUnmark: $('mapunmark'), compassBar: $('compassbar'), cockpitHud: $('cockpithud'),
+  suit: $('suit'), suitBar: $('suitbar'), suitArmor: $('suitarmor'), suitCloak: $('suitcloak'), suitFx: $('suitfx'),
+  suitVisor: $('suitvisor'), suitNano: $('suitnano'), visorHud: $('visorhud'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -353,6 +361,7 @@ async function main() {
   const ultra = new Ultra(world);
   const healthBars = new HealthBars(document.getElementById('healthbars'));
   const compassBar = new CompassBar(el.compassBar);
+  const cockpitHud = new CockpitHud(el.cockpitHud);
   // Operations: the campaign book that Tactics and Slayer keep, and the part
   // of Tactics that runs, which mans the camps near you out of the soldiers.
   const campaign = new Campaign();
@@ -608,6 +617,7 @@ async function main() {
     // A shotgun reports every pellet. One bang, one flash, one kick, but a
     // tracer and an impact each, because that spray is the whole weapon.
     const first = !shot.pellet;
+    if (first && suited()) suit.fired(weapon.id === 'bow');
     if (first) {
       audio.gunshot(spec.sound);
       effects.shake = Math.min(1, effects.shake + (spec.kind === 'hitscan' ? 0.07 : 0.16));
@@ -634,6 +644,13 @@ async function main() {
           -shot.end.nx, Math.abs(shot.end.ny) * 0.4 + 0.3, -shot.end.nz,
           cheats.goreScale * (shot.core ? 1.8 : 1));
         if (cheats.comicGore) {
+          // Out of the far side and onto whatever wall is behind them.
+          const bx = -shot.end.nx, bz = -shot.end.nz, bl = Math.hypot(bx, bz) || 1;
+          const behind = world.raycast(shot.end.x, shot.end.y, shot.end.z, bx / bl, -0.1, bz / bl, 6);
+          if (behind && behind.kind === 'wall') {
+            renderer.addBloodSplat(behind.x, behind.y, behind.z, 0.6 + Math.random() * 0.6);
+            state.wallSplats = (state.wallSplats || 0) + 1;
+          }
           // Every hit gushes for a moment, out of the far side.
           gushes.push({ x: shot.end.x, y: shot.end.y, z: shot.end.z, nx: -shot.end.nx, nz: -shot.end.nz, life: 0.7 });
           // And a head shot that kills takes the head with it.
@@ -1230,11 +1247,12 @@ async function main() {
   function creditTarget(target, core, kind) {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
+    if (target.ceph || (target.dspec && target.dspec.ceph) || target.pinger) state.cephKilled = (state.cephKilled || 0) + 1;
     // A body that came apart does not also catch fire.
     if (!target.gibbed) effects.explode(target.x, target.y, target.z);
     audio.droneDown();
     const name = target.demon ? (DEMON[target.demon] ? DEMON[target.demon].name : GAZER.name).toLowerCase()
-      : kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
+      : target.ceph ? target.ceph : kind === true ? 'drone' : (kind === false ? 'soldier' : kind);
     // In Slayer every demon is worth its points in the campaign as well.
     if (target.demon && campaign.mode === 'slayer') {
       campaign.book.score += DEMON[target.demon] ? DEMON[target.demon].points : GAZER.points;
@@ -2299,8 +2317,15 @@ async function main() {
   /** The weapon's name on the HUD, with the head on the next arrow for a bow. */
   function weaponLabel(spec) {
     const head = spec.heads ? ARROW_HEADS[weapon.head] : null;
-    return head && head.short ? `${spec.short} ${head.short}` : spec.short;
+    const draw = spec.draws ? ARROW_DRAWS[weapon.draw] : null;
+    return [spec.short, draw && draw.short, head && head.short].filter(Boolean).join(' ');
   }
+  weapon.onDraw = (draw) => {
+    const row = ARROW_DRAWS[draw];
+    toast(row ? row.name : draw);
+    audio.reload(0.3);
+    el.weaponname.textContent = weaponLabel(weapon.spec);
+  };
   weapon.onArrowHead = (head) => {
     const row = ARROW_HEADS[head];
     toast(row ? row.name : head);
@@ -2358,6 +2383,29 @@ async function main() {
       effects.gas(x, g, z, cl.radius, 1.6);
     } else if (row.splash) {
       explode(x, y, z, row.splash, { weapon: 'bow' });
+    } else if (row.shock) {
+      // A burst of current: whoever is near is put down where he stands for
+      // a moment, and hurt.
+      const sh = row.shock;
+      let n = 0;
+      for (const t of [...soldiers.active]) {
+        if (!t.alive || t.health <= 0 || t.state === 5 || t.civilian) continue;
+        const d = Math.hypot(t.x - x, t.z - z);
+        if (d > sh.radius) continue;
+        n++;
+        for (let k = 0; k < 6; k++) {
+          effects.spark(t.x + (Math.random() - 0.5) * 0.8, t.y + 0.4 + Math.random() * 1.4, t.z + (Math.random() - 0.5) * 0.8, 0.55, 0.85, 1);
+        }
+        if (soldiers.damage(t, sh.damage, { x: (t.x - x) / (d || 1), y: 0, z: (t.z - z) / (d || 1) })) {
+          creditTarget(t, false, 'soldier');
+          continue;
+        }
+        t.state = 4; t.stateTime = 0; t.slipLeft = sh.stun;
+        t.vx = 0; t.vz = 0; t.spin = 0; t.lean = -0.2;
+      }
+      for (let k = 0; k < 14; k++) effects.spark(x + (Math.random() - 0.5) * 2, g + Math.random() * 1.5, z + (Math.random() - 0.5) * 2, 0.55, 0.85, 1);
+      audio.emp(Math.hypot(player.x - x, player.z - z));
+      state.shocked = (state.shocked || 0) + n;
     }
   };
 
@@ -2521,7 +2569,17 @@ async function main() {
   vehicles.onDestroyed = (v) => {
     explode(v.x, v.y + 1.2, v.z, { radius: 16, damage: 300 });
     gibs.rubble(v.x, v.y + 1, v.z, 6, 12, 2);
-    feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
+    // One of theirs with men still in it takes them with it.
+    const crew = convoys.find((c) => c.v === v);
+    if (crew && crew.crew) {
+      feed(`<i>${v.spec.name.toLowerCase()} destroyed</i> with ${crew.crew} aboard`);
+      state.crewLost = (state.crewLost || 0) + crew.crew;
+      crew.crew = 0;
+    } else {
+      feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
+    }
+    v.hostile = false;
+    v.ai = null;
     if (state.inVehicle === v) leaveVehicle(true);
   };
 
@@ -2663,6 +2721,11 @@ async function main() {
       hostiles.push({ body: j, kind: 'jet', x: j.x, y: j.y + 2.6, z: j.z,
         health: j.health, max: j.maxHealth });
     }
+    for (const v of vehicles.active) {
+      if (!v.hostile || v.health <= 0) continue;
+      hostiles.push({ body: v, kind: v.type === 'tank' ? 'mech' : 'jet', x: v.x, y: v.y + (v.type === 'tank' ? 3.4 : 2.6),
+        z: v.z, health: v.health, max: v.maxHealth });
+    }
     for (const mk of mechs.active) {
       if (mk.mine || mk.health <= 0 || mk.demon) continue;
       hostiles.push({ body: mk, kind: 'mech', x: mk.x, y: mk.y + mk.spec.height + 0.8, z: mk.z,
@@ -2687,6 +2750,7 @@ async function main() {
     const near = vehicles.nearest(player.x, player.z, 7);
     if (!near) { toast('nothing to get into'); return; }
     if (!vehicles.enter(near)) return;
+    if (near.bomb) { near.bomb = null; toast('bomb disarmed'); }
     state.inVehicle = near;
     state.holstered = true;
     el.hud.classList.add('driving');
@@ -2890,6 +2954,48 @@ async function main() {
     toast(state.cockpit ? 'cockpit' : 'over the shoulder');
   }
 
+  /** How far in front of the head the seat is, in metres. */
+  const CANOPY_LEAD = 1;
+
+  /**
+   * The inside of the canopy: the frame, the dashboard with its radar and
+   * systems, brackets on what is out there. Only while the view really is
+   * out of the canopy; boxed in against a wall it falls back to over the
+   * shoulder and so does this.
+   */
+  function cockpitStep() {
+    const m = state.inMech;
+    const inside = !!(m && state.canopy && m.spec.arms && !photo.active);
+    el.hud.classList.toggle('canopy', inside);
+    if (!inside) { cockpitHud.hide(); return; }
+    const W = window.innerWidth, H = window.innerHeight;
+    const blips = [], targets = [];
+    for (const e of hostiles) {
+      const kind = vehicles.active.includes(e.body) || e.kind === 'jet' ? 'vehicle'
+        : e.kind === 'mech' ? 'mech' : 'soldier';
+      blips.push({ dx: e.x - m.x, dz: e.z - m.z, kind });
+      if (e.body._hbSeen === false) continue;
+      const p = projectPoint(camera.viewProj, e.x, e.y - 1, e.z, W, H);
+      if (!p || p.x < 0 || p.x > W || p.y < 0 || p.y > H) continue;
+      targets.push({ x: p.x, y: p.y, d: Math.hypot(e.x - m.x, e.y - m.y, e.z - m.z), kind });
+    }
+    const arm = mechs.arm(m);
+    cockpitHud.draw({
+      heading: m.torso,
+      pitch: camera.pitch,
+      hull: Math.max(0, m.health) / (m.maxHealth || m.spec.health),
+      shield: m.shieldMax ? Math.max(0, m.shield) / m.shieldMax : -1,
+      speed: m.speed || 0,
+      name: m.spec.name,
+      arm: arm ? arm.name : '',
+      ammo: m.reloadLeft > 0 ? `${m.reloadLeft.toFixed(1)}s` : String(m.mags[m.arm] ?? ''),
+      pod: (m.rocketTimer || 0) > 0.08 ? `${m.rocketTimer.toFixed(1)}s` : 'ready',
+      dash: m.dashLeft > 0 ? 'now' : ((m.dashCool || 0) > 0.08 ? `${m.dashCool.toFixed(1)}s` : 'ready'),
+      blips, targets,
+      time: state.time,
+    });
+  }
+
   /**
    * Into the cockpit. You see out of the canopy, the torso goes where you
    * look and the legs follow where it walks, the trigger fires whichever of
@@ -2955,7 +3061,266 @@ async function main() {
     if (thrown) {
       combat.hurt(22, v.x, v.z, out.x, out.z);
       toast('thrown clear');
+    } else if (v.alive && v.health > 0 && state.mode === 'walk') {
+      askToRig(v);
     }
+  }
+
+  // --- a vehicle rigged as a bomb ---------------------------------------------------
+  //
+  // Getting out, you are asked whether to leave something in it: a time bomb
+  // that goes in ten seconds, beeping faster as it runs out, or a charge
+  // that goes when you press T, with the C4. Getting back in disarms it, and
+  // one shot to pieces first goes up with its bomb.
+  const VBOMB = {
+    seconds: 10,
+    ask: 8,
+    blast: {
+      jeep: { radius: 20, damage: 1300, force: 22 },
+      tank: { radius: 26, damage: 2200, force: 26 },
+      heli: { radius: 22, damage: 1500, force: 22 },
+      jet: { radius: 32, damage: 2600, force: 30 },
+    },
+  };
+  let rigging = null;
+  function askToRig(v) {
+    rigging = { v, left: VBOMB.ask };
+    el.vbomb.classList.remove('hidden');
+    input.exitLock();
+  }
+  // Only an answer is a gesture the browser takes the mouse back on; the
+  // question running out by itself leaves the click to look round again.
+  function closeRig(answered) {
+    rigging = null;
+    el.vbomb.classList.add('hidden');
+    if (answered && !isTouch && state.mode === 'walk' && !minimap.big) input.requestLock();
+  }
+  function rig(v, kind) {
+    if (!v || !v.alive || v.health <= 0) return false;
+    v.bomb = kind === 'timed' ? { kind, left: VBOMB.seconds, beep: 0 } : { kind: 'remote' };
+    feed(kind === 'timed' ? `<b>${v.spec.name.toLowerCase()}</b> rigged, ${VBOMB.seconds} s`
+      : `<b>${v.spec.name.toLowerCase()}</b> rigged, T to blow it`);
+    toast(kind === 'timed' ? `time bomb: ${VBOMB.seconds} seconds` : 'remote bomb set: T to blow it');
+    audio.bombBeep(0, false);
+    return true;
+  }
+  function choose(kind) {
+    const v = rigging && rigging.v;
+    if (kind && v) rig(v, kind);
+    closeRig(true);
+  }
+  el.vbombTimed.addEventListener('click', () => choose('timed'));
+  el.vbombRemote.addEventListener('click', () => choose('remote'));
+  el.vbombNo.addEventListener('click', () => choose(null));
+
+  /** Blows a rigged vehicle. */
+  function blowVehicle(v) {
+    const bomb = v.bomb;
+    v.bomb = null;
+    const b = VBOMB.blast[v.type] || VBOMB.blast.jeep;
+    explode(v.x, v.y + 1.2, v.z, { ...b, crater: true }, { weapon: 'vehiclebomb' });
+    if (v.alive && v.health > 0) vehicles.damage(v, 1e7);
+    feed(`<b>${v.spec.name.toLowerCase()} bomb</b> ${bomb && bomb.kind === 'timed' ? 'went off' : 'blown'}`);
+    state.vehicleBombs = (state.vehicleBombs || 0) + 1;
+  }
+
+  /** Blows every remote one; the count, for the toast. */
+  function blowRemote() {
+    let n = 0;
+    for (const v of [...vehicles.active]) {
+      if (v.bomb && v.bomb.kind === 'remote') { blowVehicle(v); n++; }
+    }
+    return n;
+  }
+
+  function bombStep(dt) {
+    if (rigging) {
+      rigging.left -= dt;
+      const v = rigging.v;
+      if (rigging.left <= 0 || !v.alive || Math.hypot(player.x - v.x, player.z - v.z) > 25) closeRig();
+    }
+    for (const v of [...vehicles.active]) {
+      const bomb = v.bomb;
+      if (!bomb) continue;
+      // Shot to pieces with a bomb in it: it goes up with the bomb.
+      if (!v.alive || v.health <= 0) { blowVehicle(v); continue; }
+      if (bomb.kind !== 'timed') continue;
+      bomb.left -= dt;
+      bomb.beep -= dt;
+      if (bomb.beep <= 0) {
+        bomb.beep = Math.max(0.08, Math.min(1, bomb.left * 0.11));
+        audio.bombBeep(Math.hypot(player.x - v.x, player.z - v.z), bomb.left < 3);
+        effects.flash(v.x, v.y + 1.8, v.z, 1.2, 1.0, 0.1, 0.05, 0.08);
+      }
+      if (bomb.left <= 0) blowVehicle(v);
+    }
+  }
+
+  // --- help that drives in -------------------------------------------------------
+  //
+  // A call that gets through sends a jeep with the men in it, up the streets
+  // from a couple of hundred metres off and round the far side of the camp
+  // from you; four to a jeep, so a big wave is two. They jump down short of
+  // where you are, and what they leave in the street is a jeep you can take.
+  // When it is serious (the second wave, or a camp at level two or more) a
+  // tank comes behind them, stops where it can see you and shells you. Where
+  // no street comes near enough, the help comes the old way, out of a
+  // sphere.
+  const convoys = [];
+  const wallsIn = (minX, minZ, maxX, maxZ, fn) => {
+    world.forEachSegmentTile(minX, minZ, maxX, maxZ, (segs, count) => {
+      for (let i = 0; i < count; i++) {
+        const o = i * 6;
+        // A wall worth going round: a kerb or what is left of one is not.
+        if (segs[o + 5] - segs[o + 4] < 1.2) continue;
+        fn(segs[o], segs[o + 1], segs[o + 2], segs[o + 3]);
+      }
+    });
+  };
+  /** Where they are going: you, if you are anywhere near the camp. */
+  function convoyGoal(site) {
+    return Math.hypot(player.x - site.x, player.z - site.z) < 170
+      ? { x: player.x, z: player.z } : { x: site.x, z: site.z };
+  }
+  /** A start on a carriageway, out past the camp from where you are. */
+  function convoyStart(site) {
+    const lines = world.manifest.roadLines || [];
+    const away = Math.atan2(site.z - player.z, site.x - player.x);
+    for (let k = 0; k < 18; k++) {
+      const a = away + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35;
+      for (const r of [205, CONVOY.from[0], CONVOY.from[1]]) {
+        const x = site.x + Math.cos(a) * r, z = site.z + Math.sin(a) * r;
+        if (world.isLoaded && !world.isLoaded(x, z)) continue;
+        if (combat.inField && combat.inField(x, z)) continue;
+        if (Math.hypot(x - player.x, z - player.z) < 120) continue;
+        if (onRoad(lines, x, z, 0)) return { x, z };
+      }
+    }
+    return null;
+  }
+  function convoySpawn(type, at, path, site, crew) {
+    const next = path[Math.min(path.length - 1, 3)];
+    const v = vehicles.spawn(type, at.x, at.z, headingTo(next.x - at.x, next.z - at.z));
+    if (!v) return null;
+    v.hostile = true;
+    v.occupied = true;
+    v.bomb = null;
+    v.ai = { throttle: 0, steer: 0, brake: false };
+    const c = { v, type, site, crew, path, at: 0, stuck: 0, backing: 0, cooldown: CONVOY.shell.interval, shots: 0 };
+    convoys.push(c);
+    return c;
+  }
+  /** Sends a wave by road. False if no road would do, for the old way. */
+  function sendConvoy(site, run, count) {
+    const from = convoyStart(site);
+    if (!from) return false;
+    const goal = convoyGoal(site);
+    const path = planRoute({ lines: world.manifest.roadLines || [], walls: wallsIn,
+      fromX: from.x, fromZ: from.z, toX: goal.x, toZ: goal.z });
+    if (!path || path.length < 4) return false;
+    // The tank, if it comes, sets out from the start; the jeeps from a
+    // little way up the road in front of it.
+    const serious = run.waves >= 2 || (site.level || 0) >= CONVOY.tankFrom;
+    let men = 0, jeeps = 0;
+    for (let left = count, k = 0; left > 0; k++) {
+      const p = path[Math.min(path.length - 1, (serious ? 5 : 0) + k * 4)];
+      const n = Math.min(CONVOY.seat, left);
+      const rest = path.slice(Math.min(path.length - 2, (serious ? 5 : 0) + k * 4));
+      rest.road = path.road;
+      if (!convoySpawn('jeep', p, rest, site, n)) break;
+      left -= n; men += n; jeeps++;
+    }
+    let tank = false;
+    if (serious) tank = !!convoySpawn('tank', from, path, site, 0);
+    if (!jeeps && !tank) return false;
+    feed(`<b>reinforcements</b> ${men} by road${tank ? ', and a tank' : ''}`);
+    toast(tank ? `${men} reinforcements and a tank inbound` : `${men} reinforcements inbound by jeep`);
+    state.convoysSent = (state.convoysSent || 0) + 1;
+    return true;
+  }
+  /** Out of the jeep, and the jeep is yours to take. */
+  function dismount(c) {
+    const v = c.v;
+    let n = 0;
+    const was = soldiers.onArrive;
+    soldiers.onArrive = null;
+    for (let i = 0; i < c.crew; i++) {
+      const s = soldiers.spawnNear(v.x, v.z, 2.5, 6);
+      if (!s) break;
+      s.rise = 0;
+      s.y = world.groundHeight(s.x, s.z);
+      s.state = 1;
+      s.reinforcement = c.site.id;
+      if ((c.site.level || 0) >= TACTICS.machinesFrom && i % 2 === 1) makeMachine(s);
+      n++;
+    }
+    soldiers.onArrive = was;
+    c.crew = 0;
+    v.hostile = false;
+    v.occupied = false;
+    v.ai = null;
+    state.dismounted = (state.dismounted || 0) + n;
+    if (n) feed(`<b>${n}</b> out of the jeep`);
+  }
+  function tankStep(c, dt) {
+    const v = c.v;
+    const ex = player.x, ey = player.y + 1.2, ez = player.z;
+    const dist = Math.hypot(ex - v.x, ez - v.z);
+    const m = vehicles.muzzle(v);
+    const sight = world.lineOfSight(m.x, m.y, m.z, ex, ey, ez);
+    // On, until it can see you from far enough off to be safe from you.
+    const spec = sight ? CONVOY.tank : { ...CONVOY.tank, stop: 18 };
+    const ctl = follow(v, c, spec, { x: ex, z: ez }, dt);
+    v.ai.throttle = ctl.throttle;
+    v.ai.steer = ctl.steer;
+    v.ai.brake = ctl.brake;
+    v.ai.turretAim = headingTo(ex - v.x, ez - v.z);
+    c.cooldown -= dt;
+    const laid = Math.abs(wrap(v.ai.turretAim - (v.yaw + v.turret))) < CONVOY.shell.aim;
+    if (c.cooldown <= 0 && sight && laid && dist < CONVOY.shell.range && combat.health > 0) {
+      c.cooldown = CONVOY.shell.interval;
+      const g = CONVOY.shell;
+      const dx = ex - m.x, dy = ey - m.y, dz = ez - m.z;
+      const l = Math.hypot(dx, dy, dz) || 1;
+      const d = spreadDir({ x: dx / l, y: dy / l, z: dz / l }, g.spread);
+      projectiles.launch('rocket', {
+        x: m.x, y: m.y, z: m.z,
+        vx: d.x * g.speed, vy: d.y * g.speed, vz: d.z * g.speed,
+        splash: g.splash, weapon: 'enemytank',
+      });
+      audio.gunshot('mechcannon');
+      effects.flash(m.x, m.y, m.z, 2.4, 1.0, 0.7, 0.3, 0.1);
+      c.shots++;
+      state.tankShells = (state.tankShells || 0) + 1;
+    }
+  }
+  function convoyStep(dt) {
+    for (let i = convoys.length - 1; i >= 0; i--) {
+      const c = convoys[i];
+      const v = c.v;
+      if (!v.alive || v.health <= 0 || !v.hostile) { convoys.splice(i, 1); continue; }
+      if (c.type === 'tank') { tankStep(c, dt); continue; }
+      // Hit hard enough on the way in and they get out where they are.
+      const ctl = follow(v, c, CONVOY.jeep, convoyGoal(c.site), dt);
+      if (ctl.there || v.health < v.maxHealth * 0.35) {
+        v.ai.throttle = 0; v.ai.steer = 0; v.ai.brake = true;
+        dismount(c);
+        convoys.splice(i, 1);
+        continue;
+      }
+      v.ai.throttle = ctl.throttle;
+      v.ai.steer = ctl.steer;
+      v.ai.brake = ctl.brake;
+    }
+  }
+  /** A run stood down: what was on its way is gone with it. */
+  function clearConvoys() {
+    for (const c of convoys) {
+      c.v.hostile = false;
+      c.v.ai = null;
+      vehicles.remove(c.v);
+    }
+    convoys.length = 0;
   }
 
   /**
@@ -3441,6 +3806,11 @@ async function main() {
       const hit = world.raycast(s.x, s.y + 1.2, s.z, Math.cos(a), 0, Math.sin(a), 9);
       if (!hit || hit.kind === 'ground') continue;
       effects.blood(hit.x + hit.nx * 0.15, hit.y, hit.z + hit.nz * 0.15, hit.nx, 0.15, hit.nz, 3);
+      // The comic book leaves it there: a splat on the wall that runs.
+      if (cheats.comicGore) {
+        renderer.addBloodSplat(hit.x, hit.y + (Math.random() - 0.3) * 0.8, hit.z, 1.2 + Math.random() * 1.3);
+        state.wallSplats = (state.wallSplats || 0) + 1;
+      }
     }
     // The clock stops for a beat, which is what makes the word land.
     state.goreStop = Math.max(state.goreStop, 0.5);
@@ -5075,7 +5445,7 @@ async function main() {
 
   // --- operations: Tactics and Slayer ---------------------------------------
   const builtDistricts = () => world.catalogue.filter((d) => world.isBuilt(d));
-  const opsWord = () => (campaign.mode === 'slayer' ? 'nest' : 'camp');
+  const opsWord = () => (campaign.mode === 'slayer' ? 'nest' : campaign.mode === 'hunt' ? 'ground' : 'camp');
 
   /** The setup under the mode buttons on the title card. */
   function showOps() {
@@ -5102,10 +5472,10 @@ async function main() {
     el.opsCount.max = String(hi);
     el.opsCount.value = String(set.perDistrict[campaign.mode]);
     el.opsCountNum.textContent = String(set.perDistrict[campaign.mode]);
-    el.opsCountLabel.textContent = `${opsWord() === 'nest' ? 'Nests' : 'Camps'} per district`;
+    el.opsCountLabel.textContent = `${opsWord()[0].toUpperCase()}${opsWord().slice(1)}s per district`;
     el.opsQuiet.checked = set.quietBonus;
     el.opsBosses.checked = set.bosses;
-    for (const r of el.opsSetup.querySelectorAll('.opstactics')) r.classList.toggle('hidden', campaign.mode !== 'tactics');
+    for (const r of el.opsSetup.querySelectorAll('.opstactics')) r.classList.toggle('hidden', !campaign.camps);
     for (const r of el.opsSetup.querySelectorAll('.opsslayer')) r.classList.toggle('hidden', campaign.mode !== 'slayer');
     const sum = campaign.summary(list.map((d) => d.id));
     el.opsProgress.textContent = sum.total
@@ -5137,8 +5507,194 @@ async function main() {
     showOps();
   });
 
+  // --- the suit, in The Hunt -------------------------------------------------------
+  const suit = new Nanosuit();
+  /** Wearing it: The Hunt, on foot, in the street. */
+  const suited = () => campaign.mode === 'hunt' && state.mode === 'walk' && !state.inVehicle && !state.inMech;
+  suit.onEmpty = (what) => { toast(`suit energy empty: ${what.join(' and ')} off`); audio.powerEnd(); };
+  suit.onBreak = () => { toast('cloak broken'); feed('<b>cloak</b> broken by the shot'); };
+  combat.absorb = (amount) => (suited() ? suit.absorb(amount) : amount);
+  function suitMode(which) {
+    const on = which === 'armor' ? suit.toggleArmor() : suit.toggleCloak();
+    const now = which === 'armor' ? suit.armor : suit.cloak;
+    if (!now && !on && suit.energy < 5) { toast('not enough energy'); audio.dryFire(); return; }
+    toast(`${which === 'armor' ? 'armour' : 'cloak'} ${now ? 'on' : 'off'}`);
+    audio.suit(which, now);
+  }
+  /** A punch with the suit's strength, at whatever of theirs is in front of you. */
+  function suitPunch() {
+    if (!suited()) return false;
+    const fx = -Math.sin(camera.yaw), fz = -Math.cos(camera.yaw);
+    let best = null, bestD = SUIT.punch.reach;
+    for (const t of soldiers.active) {
+      if (!t.alive || t.health <= 0 || t.civilian || t.state === 5) continue;
+      const dx = t.x - player.x, dz = t.z - player.z;
+      const d = Math.hypot(dx, dz);
+      if (d > bestD || (fx * dx + fz * dz) / (d || 1) < 0.5) continue;
+      best = t; bestD = d;
+    }
+    if (!best || !suit.punch()) return false;
+    const k = SUIT.punch.force;
+    const killed = soldiers.damage(best, SUIT.punch.damage, { x: fx * k, y: 0.45 * k, z: fz * k });
+    effects.shake = Math.min(1.2, effects.shake + 0.4);
+    effects.blood(best.x, best.y + 1.3, best.z, fx, 0.4, fz, cheats.goreScale);
+    audio.whoomp(0);
+    if (tactics.enabled) soldiers.hear(player.x, player.z, 18);
+    if (killed) creditTarget(best, false, 'soldier');
+    feed('<b>suit punch</b>');
+    state.punches = (state.punches || 0) + 1;
+    return true;
+  }
+  // The visor (B) and Nano Vision (N).
+  const visor = new Visor(el.visorHud);
+  visor.onTag = (body) => {
+    audio.hitMarker(false);
+    state.tagged = (state.tagged || 0) + 1;
+    feed(`<b>tagged</b> ${body.machine ? 'machine' : body.demon ? body.demon : 'soldier'}`);
+  };
+  function toggleVisor() {
+    visor.up = !visor.up;
+    toast(visor.up ? 'visor' : 'visor off');
+    audio.swap();
+  }
+  function toggleNano() {
+    const on = suit.toggleNano();
+    if (!on && !suit.nano && suit.energy < 5) { toast('not enough energy'); audio.dryFire(); return; }
+    toast(suit.nano ? 'nano vision' : 'nano vision off');
+    audio.suit('cloak', suit.nano);
+  }
+  /** Everything of theirs, alive, with how tall it is, for the visor and the heat. */
+  function visorBodies() {
+    const out = [];
+    for (const t of soldiers.active) {
+      if (!t.alive || t.health <= 0 || t.civilian || t.state === 5) continue;
+      out.push({ body: t, x: t.x, y: t.y, z: t.z, h: 1.8 * (t.scale || 1), kind: 'soldier' });
+    }
+    for (const d of drones.active) {
+      if (d.health <= 0) continue;
+      out.push({ body: d, x: d.x, y: d.y - 0.4, z: d.z, h: 0.8, kind: 'soldier' });
+    }
+    for (const m of mechs.active) {
+      if (m.mine || !m.alive || m.health <= 0) continue;
+      out.push({ body: m, x: m.x, y: m.y, z: m.z, h: m.spec.height || 8, kind: 'mech' });
+    }
+    for (const v of vehicles.active) {
+      if (!v.hostile || v.health <= 0) continue;
+      out.push({ body: v, x: v.x, y: v.y, z: v.z, h: v.type === 'tank' ? 3 : 2.2, kind: 'vehicle' });
+    }
+    return out;
+  }
+  function visorStep() {
+    const wall = performance.now() / 1000;
+    const dt = Math.min(0.1, Math.max(0, wall - (state.visorWall || wall)));
+    state.visorWall = wall;
+    const on = suited() && !photo.active;
+    visor.nano = suit.nano;
+    el.canvas.classList.toggle('nano', on && suit.nano);
+    const eye = { x: camera.position[0], y: camera.position[1], z: camera.position[2] };
+    visor.draw({
+      vp: camera.viewProj, eye, dt, time: state.time, active: on,
+      bodies: on ? visorBodies() : [],
+      seen: (x, y, z) => world.lineOfSight(eye.x, eye.y, eye.z, x, y, z),
+    });
+  }
+
+  // --- theirs, at the hunting grounds ---------------------------------------------
+  //
+  // A ground is held by men in black, as a camp is, and by theirs with them:
+  // every third man is a grunt in their shape, a stalker or more waits by the
+  // middle until the ground knows you are there, and from level one, or at
+  // the last ground in a district, a tall walker stands over it whose ping is
+  // an EMP. The ground is not clear while that is standing.
+  tactics.onManned = (site, run) => {
+    if (campaign.mode !== 'hunt') return;
+    const level = site.level || 0;
+    run.guards.forEach((g, i) => { if (i % 3 === 1) makeGrunt(g, level); });
+    const stalkers = Math.min(3, 1 + level);
+    for (let i = 0; i < stalkers; i++) {
+      const s = soldiers.free();
+      if (!s) break;
+      const a = site.yaw + i * 2.1 + 0.6;
+      const x = site.x + Math.cos(a) * 6, z = site.z + Math.sin(a) * 6;
+      s.spawn(x, world.groundHeight(x, z), z, level);
+      s.rise = 0;
+      s.y = world.groundHeight(x, z);
+      makeDemon(s, 'stalker', level);
+      s.dormant = true;
+      s.state = 0;
+      s.post = { x: site.x, z: site.z, r: 10, camp: site.id };
+      s.yaw = a;
+      soldiers.active.push(s);
+      run.guards.push(s);
+    }
+    const list = campaign.sitesIn(site.d) || [];
+    const last = list.filter((x) => x.state !== SITE.FREE).length <= 1;
+    if (level >= 1 || last) {
+      const m = mechs.spawn(CEPH.pinger.chassis, site.x + 12, site.z + 12, site.yaw);
+      if (m) {
+        m.health *= CEPH.pinger.health;
+        m.maxHealth = m.health;
+        m.ping = { left: CEPH.pinger.ping.every * 0.6 };
+        m.pinger = true;
+        run.alpha = m;
+      }
+    }
+  };
+  tactics.onStandDown = (run) => {
+    const m = run.alpha;
+    const i = mechs.active.indexOf(m);
+    if (i >= 0) mechs.active.splice(i, 1);
+    if (m) m.alive = false;
+  };
+  /** The walker's ping: an EMP, felt through the armour and in the suit. */
+  function pingStep(dt) {
+    for (const m of mechs.active) {
+      if (!m.ping || !m.alive || m.health <= 0) continue;
+      const p = CEPH.pinger.ping;
+      const d = Math.hypot(player.x - m.x, player.z - m.z);
+      m.ping.left -= dt;
+      if (m.ping.left > 0 || d > p.radius) continue;
+      m.ping.left = p.every;
+      const y = world.groundHeight(m.x, m.z);
+      effects.arrival(m.x, y, m.z, p.radius * 0.5, 2, [0.4, 0.8, 1.0]);
+      renderer.addScar(m.x, y, m.z, 6, 0.4);
+      audio.emp(d);
+      effects.shake = Math.min(1.4, effects.shake + 0.5);
+      state.flash = Math.max(state.flash, 0.25);
+      state.pings = (state.pings || 0) + 1;
+      if (state.inMech || state.inVehicle) continue;
+      if (combat.health > 0) combat.hurt(p.damage * (1 - 0.5 * d / p.radius), m.x, m.z, player.x, player.z);
+      if (suited()) {
+        const was = suit.energy;
+        suit.armor = false; suit.cloak = false; suit.nano = false;
+        suit.energy = 0;
+        suit.stalled = p.stall;
+        suit.idle = 0;
+        if (was > 0) toast('EMP: the suit is empty');
+      }
+    }
+  }
+
+  /** The bar, the two modes, and the edge of the screen while they are on. */
+  function suitHud() {
+    const on = suited();
+    el.suit.classList.toggle('hidden', !on);
+    el.suitFx.classList.toggle('cloak', on && suit.cloak);
+    el.suitFx.classList.toggle('armor', on && suit.armor && !suit.cloak);
+    if (!on) return;
+    el.suitBar.style.width = `${Math.round(suit.energy / SUIT.energy * 100)}%`;
+    el.suit.classList.toggle('low', suit.energy < 25);
+    el.suit.classList.toggle('sprint', suit.sprinting);
+    el.suitArmor.classList.toggle('on', suit.armor);
+    el.suitCloak.classList.toggle('on', suit.cloak);
+    el.suitVisor.classList.toggle('on', visor.up);
+    el.suitNano.classList.toggle('on', suit.nano);
+  }
+
   /** A run starting: the start district, if one is set, is flown to once the intro is over. */
   function startOps() {
+    suit.reset();
+    visor.reset();
     tactics.clear();
     slayer.clear();
     state.opsEnded = false;
@@ -5168,15 +5724,18 @@ async function main() {
 
   function showOpsEnd(sum) {
     const slay = campaign.mode === 'slayer';
+    const hunt = campaign.mode === 'hunt';
     const where = campaign.settings.scope === 'all' ? 'Berlin'
       : ((world.entryFor(campaign.settings.start) || {}).name || 'the district');
-    el.opsEndTitle.textContent = slay ? 'The presence is broken' : 'Operation complete';
+    el.opsEndTitle.textContent = slay ? 'The presence is broken' : hunt ? 'The hunt is over' : 'Operation complete';
     el.opsEndText.textContent = slay
       ? `Not one nest is left in ${where}.`
+      : hunt ? `Every hunting ground in ${where} is clear, and nothing of theirs is left standing in it.`
       : `Every camp in ${where} is yours.`;
     const minutes = Math.max(0, Math.round((state.time - (state.opsStartedAt || 0)) / 60));
     const rows = [
-      [slay ? 'Nests destroyed' : 'Camps taken', `${sum.free} of ${sum.total}`],
+      [slay ? 'Nests destroyed' : hunt ? 'Grounds cleared' : 'Camps taken', `${sum.free} of ${sum.total}`],
+      ...(hunt ? [['Of theirs killed', `${state.cephKilled || 0}`]] : []),
       ...(slay ? [] : [['Taken without an alarm', `${sum.quiet || 0}`]]),
       ['Level', `${(sum.level || 0) + 1}`],
       ['Score', `${sum.score}`],
@@ -5194,7 +5753,8 @@ async function main() {
     soldiers.reset();
     drones.reset();
     startOps();
-    toast(campaign.mode === 'slayer' ? 'a new operation: the nests are back' : 'a new operation: the camps are manned again');
+    toast(campaign.mode === 'slayer' ? 'a new operation: the nests are back'
+      : campaign.mode === 'hunt' ? 'a new hunt: the grounds are held again' : 'a new operation: the camps are manned again');
     if (!isTouch) input.requestLock();
   });
   // The title screen is where the page starts, so that is the way back to it:
@@ -5252,7 +5812,7 @@ async function main() {
     }
     if (campaign.mode === 'slayer') slayer.update(dt, player);
     opsEndCheck(dt);
-    if (campaign.mode === 'tactics') {
+    if (campaign.camps) {
       soldiers.playerSpeed = Math.hypot(player.vx || 0, player.vz || 0);
       tactics.update(dt, player);
       // The siren, as loud as the nearest one that is going.
@@ -5275,10 +5835,13 @@ async function main() {
     const t = hit.target;
     const core = !!hit.core;
     const headRow = ARROW_HEADS[b.head];
+    const drawRow = ARROW_DRAWS[b.draw];
     const dmg = (row.damage || 100) * (core ? (row.coreMultiplier || 1) : 1) * (weapon.damageScale || 1)
-      * (headRow && headRow.damage !== undefined ? headRow.damage : 1);
+      * (headRow && headRow.damage !== undefined ? headRow.damage : 1) * (drawRow ? drawRow.damage : 1);
     const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
-    const dir = { x: b.vx / sp, y: 0, z: b.vz / sp };
+    // A strong draw carries a man with the arrow, back along its line.
+    const carry = drawRow && drawRow.carry ? drawRow.carry : 1;
+    const dir = { x: b.vx / sp * carry, y: 0, z: b.vz / sp * carry };
     let killed = false;
     let kind = hit.actorKind;
     if (kind === 'soldier') {
@@ -5447,6 +6010,11 @@ async function main() {
     if (state.inMech) { mechs.damage(state.inMech, melee.damage * 2); return; }
     if (state.inVehicle) { vehicles.damage(state.inVehicle, melee.damage * 2); return; }
     if (combat.health > 0) combat.hurt(melee.damage, s.x, s.z, player.x, player.z);
+    // A stalker's blow lifts you off your feet.
+    if (melee.launch && combat.health > 0) {
+      player.vy = Math.max(player.vy || 0, melee.launch);
+      state.launched = (state.launched || 0) + 1;
+    }
   };
 
   soldiers.onCharge = (s) => {
@@ -5791,6 +6359,7 @@ async function main() {
     toast(wasSounding ? 'alarm silenced' : 'alarm disabled');
   };
   tactics.onCall = (site, run, count) => {
+    if (sendConvoy(site, run, count)) return;
     // Help comes the way everybody arrives in this game: out of the street,
     // in a sphere, from a little way off, and it knows where you are.
     let n = 0;
@@ -5807,6 +6376,8 @@ async function main() {
       toast(`${n} reinforcements inbound`);
     }
   };
+
+  tactics.onClear = () => clearConvoys();
 
   tactics.onFree = (site, pts, run) => {
     const quiet = !run.spotted && !run.alarm;
@@ -5829,7 +6400,7 @@ async function main() {
     const list = (here && campaign.sitesIn(here)) || [];
     const free = list.filter((x) => x.state === SITE.FREE).length;
     const sum = campaign.summary(builtDistricts().map((d) => d.id));
-    el.opsTitle.textContent = campaign.mode === 'slayer' ? 'Slayer' : 'Tactics';
+    el.opsTitle.textContent = campaign.mode === 'slayer' ? 'Slayer' : campaign.mode === 'hunt' ? 'The Hunt' : 'Tactics';
     const fight = campaign.mode === 'slayer' ? slayer.active(player.x, player.z) : null;
     el.opsLine.textContent = !campaign.inScope(here)
       ? `outside the operation  ·  score ${sum.score.toLocaleString()}`
@@ -5841,7 +6412,7 @@ async function main() {
         : `${world.nameAt(player.x, player.z)} ${free}/${list.length} ${opsWord()}s  ·  `
           + `${sum.done}/${sum.districts} districts  ·  score ${sum.score.toLocaleString()}`;
     let alert = '';
-    if (campaign.mode === 'tactics') {
+    if (campaign.camps) {
       for (const r of tactics.live.values()) {
         if (!r.manned) continue;
         if (r.alarm) { alert = r.radioUp ? 'alarm' : 'alarm, radio down'; break; }
@@ -5860,10 +6431,10 @@ async function main() {
   function showOpsPanel() {
     const list = builtDistricts();
     const sum = campaign.summary(list.map((d) => d.id));
-    el.opsPanelTitle.textContent = campaign.mode === 'slayer' ? 'Spree Fall Slayer' : 'Spree Fall Tactics';
+    el.opsPanelTitle.textContent = campaign.spec.name;
     el.opsPanelLine.textContent = `Score ${sum.score.toLocaleString()}, level ${sum.level + 1}, `
       + `${sum.free} of ${sum.total} ${opsWord()}s taken`
-      + (campaign.mode === 'tactics' ? `, ${sum.quiet} without an alarm.` : '.');
+      + (campaign.camps ? `, ${sum.quiet} without an alarm.` : '.');
     el.opsList.textContent = '';
     for (const d of list) {
       if (!campaign.inScope(d.id)) continue;
@@ -5914,6 +6485,8 @@ async function main() {
     weapon.reset();
     // Tactics and Slayer have a number row of their own.
     weapon.setKit(campaign.active ? campaign.mode : null);
+    // In the suit you start with the bow in your hands: it is what the cloak is for.
+    if (campaign.mode === 'hunt') weapon.select('bow');
     pickups.reset();
     gibs.clear();
     demolition.reset();
@@ -5946,7 +6519,9 @@ async function main() {
   const showMode = () => {
     const now = modeNow();
     for (const b of modeButtons) b.classList.toggle('on', b.dataset.mode === now);
-    el.modeNote.textContent = now === 'tactics'
+    el.modeNote.textContent = now === 'hunt'
+      ? 'Hunting grounds held by squads in black, and you in the suit: Q armour, E cloak, Shift a sprint and Space held a jump that both run on its energy, F a punch. The bow fires from the cloak; a gun drops it.'
+      : now === 'tactics'
       ? 'Armed camps across the city, to be taken one at a time. Take one without anybody raising the alarm for the bonus; break the radio and nobody comes to help them.'
       : now === 'slayer'
         ? 'The city has been overrun. Every district has nests that fill with demons as you fight; kill them all and the presence there is broken.'
@@ -6203,6 +6778,13 @@ async function main() {
   });
 
   input.onKeyPress = (code) => {
+    // The question on getting out of a vehicle takes the number row while it
+    // stands, so a one does not also put the first weapon in your hands.
+    if (rigging) {
+      if (code === 'Digit1') { choose('timed'); return; }
+      if (code === 'Digit2') { choose('remote'); return; }
+      if (code === 'Digit3' || code === 'Escape') { choose(null); return; }
+    }
     if (code === 'Escape') {
       el.help.classList.add('hidden');
       // One step back rather than straight out: if a target is armed, Escape
@@ -6262,6 +6844,20 @@ async function main() {
         return;
       }
     }
+    // In the suit, Q and E are its two modes, the way the later games had
+    // them, rather than the last weapon and the reflex.
+    if (suited() && !photo.active && (code === 'KeyQ' || code === 'KeyE')) {
+      suitMode(code === 'KeyQ' ? 'armor' : 'cloak');
+      return;
+    }
+    // B the visor and N Nano Vision, the keys the remastered games use, and
+    // X the bow's draw weight.
+    if (suited() && !photo.active && (code === 'KeyB' || code === 'KeyN' || code === 'KeyX')) {
+      if (code === 'KeyB') toggleVisor();
+      else if (code === 'KeyN') toggleNano();
+      else if (!weapon.cycleDraw()) toast('the draw weight is the bow\'s');
+      return;
+    }
     switch (code) {
       case 'KeyP': togglePhoto(); break;
       case 'KeyM':
@@ -6286,7 +6882,7 @@ async function main() {
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
-      case 'KeyF': if (!takedown()) toggleVehicle(); break;
+      case 'KeyF': if (!takedown() && !suitPunch()) toggleVehicle(); break;
       case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(true); else openTravel(); break;
@@ -6301,7 +6897,7 @@ async function main() {
       case 'KeyX': weapon.select('emp'); break;
       case 'KeyK': weapon.select('mechkiller'); break;
       case 'KeyT': {
-        const n = weapon.detonate();
+        const n = weapon.detonate() + blowRemote();
         if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
         break;
       }
@@ -6454,6 +7050,9 @@ async function main() {
       warlordStep(worldDt);
       memorialStep();
       refineStep();
+      bombStep(worldDt);
+      convoyStep(worldDt);
+      pingStep(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -6461,6 +7060,7 @@ async function main() {
       storm.update(worldDt, stormLive());
       opsStep(worldDt);
       drones.update(worldDt, eye, state.time);
+      soldiers.cloak = drones.cloak = suited() && suit.hidden ? SUIT.cloak.near : 0;
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
       audio.setTimeScale(scale);
@@ -6556,7 +7156,11 @@ async function main() {
     let wishX = 0, wishZ = 0;
     if (!photo.active) {
       camera.walkBasis(basis);
-      const speed = input.run ? PLAYER.runSpeed : PLAYER.walkSpeed;
+      let speed = input.run ? PLAYER.runSpeed : PLAYER.walkSpeed;
+      // The suit's sprint and the weight of its armour.
+      if (suited()) {
+        speed *= suit.update(selfDt, { speed: Math.hypot(player.vx || 0, player.vz || 0), sprint: input.run });
+      }
       wishX = (basis[0] * input.moveZ + basis[2] * input.moveX) * speed;
       wishZ = (basis[1] * input.moveZ + basis[3] * input.moveX) * speed;
     }
@@ -6570,6 +7174,19 @@ async function main() {
       if (boost > 1) audio.leap();
     }
     player.step(selfDt, wishX, wishZ, jumped, boost);
+    // Held, the suit puts its strength into the jump: a moment after leaving
+    // the ground, still rising, it goes most of the way up again.
+    if (jumped && boost === 1) state.suitJump = { t: 0, done: false };
+    if (state.suitJump && suited()) {
+      const j = state.suitJump;
+      j.t += selfDt;
+      if (!j.done && input.jumpHeld && j.t >= SUIT.jump.hold && player.vy > 0) {
+        j.done = true;
+        const k = suit.powerJump();
+        if (k > 1) { player.vy = PLAYER.jumpSpeed * k; audio.leap(); state.powerJumps = (state.powerJumps || 0) + 1; }
+      }
+      if (player.onGround && j.t > 0.05) state.suitJump = null;
+    }
     player.vx = wishX; player.vz = wishZ;
     if (!wasGround && player.onGround) audio.land(player.surface);
 
@@ -6649,6 +7266,9 @@ async function main() {
     warlordStep(worldDt);
     memorialStep();
     refineStep();
+    bombStep(worldDt);
+    convoyStep(worldDt);
+    pingStep(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -6666,6 +7286,7 @@ async function main() {
     titanTick(worldDt);
     machinesTick(worldDt);
     drones.update(worldDt, eye, state.time);
+    soldiers.cloak = drones.cloak = suited() && suit.hidden ? SUIT.cloak.near : 0;
     soldiers.update(worldDt, eye, state.time);
     jets.update(worldDt, { ...eye, vx: player.vx, vz: player.vz }, state.time);
 
@@ -6762,6 +7383,8 @@ async function main() {
       if (p.finished) { state.mode = 'walk'; state.walking = true; }
     }
 
+    // Set again below when the view is out of a canopy.
+    state.canopy = false;
     if (state.mode === 'title' && state.deepLink) {
       camera.position[0] = player.x;
       camera.position[1] = player.y + PLAYER.eye;
@@ -6781,6 +7404,7 @@ async function main() {
       camera.pitch = p.pitch;
     } else if (state.inMech && state.cockpit && state.inMech.spec.cockpit
       && !mechEyeBoxedIn(state.inMech)) {
+      state.canopy = true;
       // Out of the canopy. The head is a point in the body's own coordinates,
       // so it turns with the torso and rides the hull: the camera is carried
       // by the machine rather than hung in the air near it.
@@ -6804,7 +7428,10 @@ async function main() {
       // the crosshair is, because every one of these points is on the aim
       // line rather than beside it.
       const eye = { x: m.x, y: m.y + ms.eye, z: m.z };
-      let lead = ms.cockpit;
+      // With the machine's own model not drawn from in here, the eye no
+      // longer has to be pushed out in front of the hull to see past it:
+      // a metre forward of the head is the seat behind the glass.
+      let lead = Math.min(ms.cockpit, CANOPY_LEAD);
       const blocked = world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, lead + 0.4);
       if (blocked) lead = Math.max(0, blocked.t - 0.4);
       const stride = Math.sin(m.walk * 2) * (m.onGround ? 1 : 0.2);
@@ -7011,7 +7638,10 @@ async function main() {
       renderer.actors.updatePickups(live ? pickups.live : [], camera.position);
       renderer.actors.updateGibs(live ? gibs.active : []);
       renderer.actors.updateVehicles(live ? [...vehicles.active, ...trains.cars] : []);
-      renderer.actors.updateMechs(live ? mechs.active : []);
+      // From the canopy your own machine is not drawn: it is all round the
+      // camera, and the only thing it ever did from in here was get in the way.
+      renderer.actors.updateMechs(!live ? []
+        : state.canopy ? mechs.active.filter((m) => m !== state.inMech) : mechs.active);
       renderer.actors.updateCamps(live && tactics.enabled
         ? tactics.drawList(camera.position[0], camera.position[2], 1600) : []);
       renderer.actors.updateNests(live && slayer.enabled
@@ -7093,6 +7723,7 @@ async function main() {
       showBuildingDamage();
       // Aiming narrows the field of view, which is most of what aiming is.
       camera.fov = 68 * DEG + (weapon.spec.aimFov * DEG - 68 * DEG) * weapon.aimBlend;
+      if (visor.up && suited()) camera.fov = Math.min(camera.fov, VISOR.fov * DEG);
       // What you are standing next to. Vehicles were always here and F always
       // worked, but nothing on the screen said so, which is the same thing as
       // them not working.
@@ -7108,6 +7739,11 @@ async function main() {
       el.scope.classList.toggle('hidden', !scoped);
       rideHud();
       mechHud();
+      cockpitStep();
+      suitHud();
+      visorStep();
+    } else {
+      cockpitHud.hide();
     }
 
     if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
@@ -7116,7 +7752,7 @@ async function main() {
       minimap.siteKind = campaign.mode;
       minimap.draw(camera.position[0], camera.position[2], camera.yaw, landmarks.found,
         state.mode === 'title' ? null : pickups.live,
-        vehicles.active.filter((v) => v.alive && !v.occupied && v.health > 0));
+        vehicles.active.filter((v) => v.alive && (!v.occupied || v.hostile) && v.health > 0));
       if (minimap.big) mapTools();
       el.found.textContent = String(landmarks.foundInGoal);
       const deg = ((-camera.yaw * 180 / Math.PI) % 360 + 360) % 360;
@@ -7211,9 +7847,16 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    compassBar, setMark: (at) => setMark(at),
+    compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(),
+    setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
+    // Help for a camp: on its feet, or still in the back of a jeep.
+    inbound: (id) => soldiers.active.filter((x) => x.reinforcement === id && x.alive && x.health > 0).length
+      + convoys.filter((c) => c.site.id === id).reduce((n, c) => n + c.crew, 0),
+    convoys, sendConvoy: (site, run, count) => sendConvoy(site, run, count), convoySpec: CONVOY,
+    rigVehicle: (v, kind) => rig(v, kind), blowRemote: () => blowRemote(), rigging: () => rigging,
+    leaveVehicle: (thrown) => leaveVehicle(!!thrown),
     refineJobs, refineStep: () => refineStep(),
     bloodRain, gushes,
     poisonClouds, burningCount: () => burning.length,

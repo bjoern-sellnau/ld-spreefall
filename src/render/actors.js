@@ -1529,7 +1529,8 @@ export class Actors {
       // eye goes out while an EMP has hold of it.
       data[o + 8] = s.charred || 0;
       // One for a machine; a demon sends its kind's code, two and up.
-      data[o + 9] = s.machine ? 1 : (s.demon && s.dspec ? s.dspec.code : 0);
+      // Five and six are theirs in The Hunt, the grunt and the stalker.
+      data[o + 9] = s.machine ? 1 : (s.demon && s.dspec ? s.dspec.code : (s.look || 0));
       data[o + 10] = s.machine && s.stunLeft > 0 ? Math.min(1, s.stunLeft / 2)
         : (s.demon && s.staggered > 0 ? 1 : 0);
       // Nought for a soldier; for somebody who lives here, one plus which

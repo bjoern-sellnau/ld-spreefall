@@ -3966,3 +3966,278 @@ So there are two cities now, and a profile picks which:
   four hundred buildings at random places and turns. The wall hole check now
   clears the scorch mark ring first, since it reads the first mark in it.
 
+## 97. Comic carnage throws the blood against the walls
+
+- With comic carnage on, the blood stays where it lands on a wall: every
+  kill throws it along eight rays at chest height and every wall within nine
+  metres gets a splat a metre or two across where its ray met it, and every
+  hit puts one on whatever wall is within six metres behind the one hit.
+- A splat is its own ring of twenty four in the world shader (uBlood), apart
+  from the sixteen blast marks so it never pushes the soot out: a ragged
+  blob from the facade noise with drops round it, running down the wall in
+  streaks further than it reaches up, wet (low roughness), and the red of a
+  comic book. On the street it is a splat without the runs.
+- Checks (cheats, 120 now): a comic kill two metres in front of the long
+  face of the Brandenburg Gate's cross wall leaves its blood on the wall.
+  cheat-08-comic-wall.png.
+
+
+## 98. A vehicle rigged as a bomb
+
+- Getting out of a vehicle on foot, whole and not thrown clear, puts a
+  question on the screen: rig it as a bomb? 1 is a time bomb of ten seconds,
+  2 a remote bomb that goes with T along with the C4, 3 or Escape is no. The
+  question takes the number row while it stands, so the one does not also
+  change the weapon, and it goes by itself after eight seconds or once you
+  are 25 m away.
+- A time bomb beeps from the vehicle, a square wave falling off with distance,
+  faster as it runs out (every tenth of the time left, never under 0.08 s),
+  higher in the last three seconds, with a red flash on the roof each beep.
+- The blast is the vehicle's own: 20 m for a jeep, 26 for a tank, 22 for a
+  helicopter, 32 for a fighter, with a crater, and the vehicle goes with it.
+  One shot to pieces with a bomb in it goes up with the bomb. Getting back in
+  disarms it.
+- A vehicle nobody is driving now has its handbrake on. Since the drag was
+  lowered in phase 90 a jeep left at full throttle rolled on for a hundred
+  metres after you got out, which took the bomb away with it and was why the
+  city check on the ride hint had started to fail: the jeep it stood next to
+  had gone. It now stops within two metres. Two tank checks in the city
+  suite took their place from wherever that jeep was left, which now is
+  where it stopped and sometimes a kerb away from a wall, so they start on
+  the open square instead.
+- Checks (ops, 86 now): the question comes on getting out; one picks the time
+  bomb without changing the weapon; the jeep stands at five seconds and is
+  gone at eleven; the remote one stands for twelve seconds and goes on T;
+  three says no, and a rigged one is disarmed by getting back in.
+  ops-14-vehicle-bomb.png.
+
+## 99. Help that drives in
+
+- A radio call that gets through no longer brings the men out of the
+  pavement: it sends them by road (src/game/convoy.js). A start is looked
+  for on a carriageway 170 to 240 m out on the far side of the camp from you,
+  fanning out from straight behind it, loaded, outside the memorial field
+  and at least 120 m from you. The way in is found with A star on a 4 m grid
+  over the streets: a cell on a carriageway costs 1, open ground 4, a cell
+  with a wall more than 1.2 m tall in it 60. A grid rather than the road
+  graph, because the centrelines are simplified at build time and the point
+  where two streets meet is often not a point either still has, so a graph
+  built from shared points falls apart at every junction.
+- Four men to a jeep, so a wave of five is two jeeps. A jeep follows its way
+  with a look ahead of 10 m, up to 17 m/s on a straight and 6 in a corner,
+  slowing for the stop; stuck against something for 1.6 s it backs off,
+  turned the other way, for 1.3 s. It stops 22 m short of you (or of the
+  camp, if you are not within 170 m of it), the men get down round it and
+  hunt you, and the jeep is left empty for you to take. Under 35 percent of
+  its hull left they get out where they are; blown up, they go with it.
+- Serious means the second wave, or a camp at level two or more: then a
+  tank sets out at the start with the jeeps a little up the road in front of
+  it. It stops 55 m from you once it can see you (18 m while it cannot), lays
+  its turret at its own slow rate and fires when the turret is within three
+  and a half degrees: a shell at 120 m/s every 5.2 s, 60 damage in 8 m,
+  within 150 m. Gentler than the one you drive, so it can be lived through
+  from behind a corner.
+- Theirs are drawn red on the map and carry a health bar. A run stood down
+  (a new operation, the camps given back) takes them off the street. A
+  vehicle with nobody at the wheel is handed the controls its driver
+  decided (`v.ai`) instead of none. Where no street will do, the help still
+  comes out of a sphere.
+- Checks (ops, 91 now): a call of five sends two jeeps and no tank from at
+  least 120 m off, marked as theirs, five inbound; inside a minute all five
+  are on their feet, the jeeps 12 to 45 m from you and yours to take. The
+  second wave brings a tank that shells you at least twice, from within
+  160 m, and standing the run down clears them. The existing reinforcement
+  checks count the men still in a jeep as inbound. Unit (97 now): the way
+  round an L of two streets keeps to them and never enters the block in the
+  corner, a footway does not count as a street, open ground still finds a
+  way, and a jeep driven by `follow` with the vehicle's own arithmetic gets
+  round the corner, never more than 14 m off the streets, and stops 10 to
+  26 m short of the goal. ops-15-convoy.png.
+
+## 100. A cockpit to sit in, with the mech not drawn round you
+
+- From the cockpit view your own mech is no longer drawn (the instance list
+  handed to the renderer leaves it out, so its shadow goes with it). That was
+  the whole of the complaint: eight metres of armour round the camera filled
+  the screen whenever it turned or stood by a wall. With nothing to see past,
+  the eye no longer has to be pushed out in front of the hull: it sits a
+  metre in front of the head (it was the chassis' own `cockpit` distance,
+  1.6 m, which put it outside the canopy and against anything close). It stays on the aim line, so the crosshair still says
+  where the shot goes, and boxed in against a frontage the view still falls
+  back to over the shoulder, which draws the mech again.
+- What you see instead is the inside of it, a canvas over the frame
+  (src/ui/cockpit.js): the canopy frame with two pillars and a top bar, a
+  faint tint toward the edges, a dashboard along the bottom quarter with a
+  radar on the left (260 m, turning with the torso, theirs in red, a sweep),
+  the systems on the right (hull, shield, weapon and rounds or reload, speed,
+  pod and dash), a heading tape in the middle and a pitch ladder either side
+  of the glass. Whatever of theirs is in sight (the health bars' line of
+  sight) gets corner brackets within 320 m, bigger for a mech or a vehicle,
+  and the one nearest the middle is held in red with its distance. The glass
+  cracks as the hull goes, a crack for every seven percent lost, nine at
+  most, and they are gone when you climb out. Under a third of the hull a
+  warning comes on, blinking below a sixth.
+- The status box, the on foot readouts, the buttons and the threat line are
+  hidden while you sit in it, because the dashboard says the same; the
+  loadout stays down the right inside the pillar. The help line in the mech
+  panel said V changes the view, which it has not done since the travel map
+  took V; it says Y now.
+- Checks (machines, 68 now): from the canopy the mech you are in is not
+  among the ones drawn and the cockpit is up with something on its radar and
+  the status box hidden; half the hull gone leaves at least five cracks; over
+  the shoulder it is drawn again and the cockpit is gone; and climbed out of
+  it, it is drawn and the cockpit is gone. Every enemy chassis now gets three
+  placements to show its gun can hurt you, since one spot where it walked
+  behind a kiosk for twelve seconds read as a gun that could not. Unit (100
+  now): the radar puts what is ahead straight up and what is to your right to
+  the right, whichever way you face, and the projection lands where clip
+  space says and nowhere behind you. mech-05-cockpit.png.
+
+## 101. The Hunt, and the suit
+
+- A third operation on the title card, The Hunt (campaign mode `hunt`, its
+  own book in the save, 1200 a ground, 1800 for one cleared without an
+  alarm, 450 a level). It runs on the Tactics camps: `tactics.enabled` is now
+  `campaign.camps`, true for both, so the guards, the stealth, the alarm, the
+  radio, the alarm box and the convoys all come with it. The line at the top
+  says The Hunt and grounds; the journal is titled from the operation's own
+  name.
+- The suit (src/game/nanosuit.js), one bar of energy, 100: Q armour (80
+  percent of a hit into the energy at 0.55 a point, 0.88 speed, 1.2 a second
+  standing and 3.5 moving), E cloak (0.35 s to come up; 2.5, 7 and 20 a
+  second standing, walking and running; inside 3.2 m they see you anyway),
+  Shift a sprint at 1.75 times a run for 15 a second, Space held a jump that
+  goes again at 1.75 times jump speed a moment after leaving the ground for
+  22, F a punch for 30 that does 260. The energy comes back at 24 a second
+  1.4 s after the last draw; emptied, whatever was on drops and nothing comes
+  back on for 1.2 s. The bow fires from the cloak for 22 and leaves it up;
+  any other shot drops it and empties the suit.
+- The cloak reaches the soldiers and the drones as a distance (`cloak`):
+  beyond it `canSee` stays false, so suspicion never fills, and a fight
+  already going loses you and goes looking. The armour reaches you through a
+  hook in `combat.hurt` (`absorb`), before the shield.
+- On the screen: a SUIT bar over the vitals with the two modes lit while they
+  are on, the bar yellow while sprinting and red when low, and the edge of
+  the screen tinted, blue with a slow shimmer for the cloak, amber for the
+  armour. A sweep for the armour going on and a shimmer for the cloak.
+- In the suit Q and E are its modes (not the last weapon and the reflex),
+  and you start with the bow in your hands; the number row is bow, rifle,
+  suppressed pistol, marksman, shotgun, grenade, C4, rocket launcher,
+  railgun, banana.
+- Sources, checked: the first game's four modes and the second's Nanosuit 2
+  keeping armour and cloak as modes with strength and agility contextual
+  (Wikipedia, Crysis; Crysis wiki, Armor); Q armour and E cloak, B visor and
+  N Nano Vision in the remastered PC controls (magicgameworld); the third
+  game's bow firing from the cloak for a portion of the energy, with draw
+  weights (Game Informer, E3 previews). The numbers are ours.
+- Checks (hunt, new, 12): the mode is on the title card with its note; a run
+  puts grounds in the district held the way camps are, and starts you in the
+  suit with the bow; cloaked, a guard looking straight at you from 22 m has
+  no suspicion after six seconds and the edge of the screen is blue, but
+  walking into him he knows; the same guard without it is sure in under two
+  seconds; the bow from the cloak costs 22 and keeps it, a rifle drops it
+  with the suit empty; armour takes a 40 point hit down to 8 for 17.6
+  energy; Shift covers 9.7 m in a second against 2.6 walking; Space held
+  goes 2.34 m up against 0.57 for a tap; F puts a man down for 30. Unit
+  (107 now): the suit's arithmetic on its own. hunt-01-cloak.png.
+
+## 102. The visor, Nano Vision, and the bow's draw weights
+
+- B in the suit puts the visor up (src/ui/visor.js): the view narrows to
+  42 degrees, a frame and a count go round the middle, and the one of theirs
+  nearest the middle within 9 percent of the half width, 260 m and in sight
+  is scanned, a ring filling round him over 0.45 s, then tagged. A tag is a
+  red marker with the distance over his head, drawn whether or not he can be
+  seen and with the visor down, until he dies. Soldiers, drones, mechs of
+  theirs and their vehicles can all be tagged.
+- N is Nano Vision: a filter on the frame (grey, darkened, contrasted and
+  turned blue) and a warm shape, white through orange, drawn over every one
+  of theirs that is in sight, sized from where his feet and head land on the
+  screen; 6 energy a second, and it drops when the suit is empty. Head or
+  chest in sight counts, so a man behind crates with his head over them
+  shows; the visor's scan takes the same rule.
+- The bow has draw weights, on X in the suit: medium, strong (damage 1.6,
+  arrow speed 1.3, time to the next 1.6, and it carries the man four times
+  as hard back along the arrow) and light (0.65, 0.8, 0.55). The HUD says
+  BOW STRONG FIRE and so on. And a fifth head in every mode, shock: 0.7 of
+  the arrow's damage, and everybody within 5 m of where it lands takes 70
+  and is put down for 2.4 s, with sparks over them.
+- Keys in the suit are the remastered PC ones where the games have them (B
+  visor, N Nano Vision); X for the draw is ours. The Crysis 3 bow's draw
+  weights: a strong draw with the carbon tip pins a man to a wall and a low
+  draw wounds rather than kills (two TrueTrophies guides, Stick Around and
+  Arrow to the Knee); a medium setting is in one search summary but I found
+  no page that confirms it, so it is ours as much as the numbers are. The
+  electric head is in the launch review and the E3 previews (GamesBeat,
+  Destructoid). Game pages could not be opened from here, only searched.
+- Checks (hunt, 17 now): B narrows the view and a guard held in the middle
+  is tagged; the tag is still drawn with the visor down and with every line
+  of sight in the world answering no; N filters the frame, shows the guard
+  warm and costs energy; X goes medium, strong, light with the time between
+  arrows longer and then shorter; a shock arrow puts down and hurts the two
+  men beside where it lands and leaves one twenty metres off alone. Unit
+  (111 now): Nano Vision's drain and drop, the draw rows, the heads, and the
+  weapon cycling draws for a bow and having none for a rifle.
+  hunt-02-visor.png, hunt-03-nano.png.
+
+## 103. Theirs at the hunting grounds, and the end of a hunt
+
+- When a ground is manned in The Hunt (`tactics.onManned`), every third
+  guard is made a grunt (`makeGrunt`: look 5, 1.22 times a man, 300
+  health, the soldier's own rifle and mind), and one stalker per level, one
+  to three, is put down six metres from the middle (`DEMON.stalker`, code 6:
+  240 health, 8.6 m/s, a 15 m/s charge from 6 to 26 m, a blow of 20 that
+  sets your vertical speed to 7.5 m/s). It is `dormant`: it turns where it
+  stands until its ground is alerted, it sees you within 26 m (the cloak
+  counts at once, not on the sight rota) or it is hurt, and records which
+  (`wokeBy`).
+- From level one, or at the last ground still held in a district, an enemy
+  Heron stands twelve metres from the middle with half again its health and
+  a ping: every 6 s, within 50 m, an EMP ring, 30 damage less up to half
+  with distance, and the suit emptied with armour, cloak and Nano Vision
+  off and nothing back on for 2.5 s. `run.alpha` keeps the ground held
+  while it stands; standing the ground down takes it away.
+- Drawn on the soldier body as the demons are, codes 5 and 6 in the shader:
+  a dark shell (blue black for the grunt, grey for the stalker) with light
+  in the seams, cyan and violet, metallic, and eyes to match; the grunt
+  keeps its rifle, the stalker does not. A pooled soldier forgets `ceph`,
+  `look` and `dormant` when it is spawned again.
+- The end card says The hunt is over, Grounds cleared and Of theirs killed
+  (`state.cephKilled`, counted in `creditTarget` for grunts, stalkers and
+  the walker); a new hunt says the grounds are held again.
+- Sources, checked by search (the pages themselves could not be opened from
+  here): grunts as infantry, stalkers as fast light units that knock the
+  player into the air, the Pinger as a tall tripod walker whose ping is an
+  EMP reaching fifty metres (Crysis wiki, Ceph; Crysis 2 guides). The
+  numbers are ours, and the walker is one of our own chassis.
+- Checks (hunt, 24 now): a ground holds grunts and dormant stalkers and no
+  walker at level nought; a stalker waits through a cloaked man 18 m off
+  for three seconds and closes when the alarm goes; a stalker's blow hurts
+  and lifts you more than a metre; from level one a walker stands over the
+  ground, its ping empties the suit with the armour on, and the ground stays
+  held with every man down until the walker is too; every ground cleared
+  puts the end card up. The cloak check now clears the arrows of the draw
+  check first: one still in the air broke the next ground's alarm box and
+  woke the stalker through a silent alarm. hunt-04-ceph.png,
+  hunt-05-end.png.
+
+## CI: the combat checks find their lines instead of assuming them
+
+- The browser checks in CI have been red since phase 92 on two combat
+  checks that pass here: the Gate stopping a shot, and the weapon firing in
+  the memorial. CI builds the city from the live Overpass extract and this
+  container from the synthetic one (Overpass and the Pages site cannot be
+  reached from here), and since the Gate became walkable in phase 87 where
+  its walls and passages fall, and how tall the stelae stand near the middle
+  of the memorial, depend on which. The Gate check now walks z out from the
+  Gate's landmark until a level shot west from the square stops within ten
+  metres of it, and the memorial check puts its drone out over the stelae in
+  the first of sixteen directions with a clear line from the eye.
+- And the next one along in CI, the city check that a shell opens the wall:
+  it read the hole from the first mark in the ring, and in the live city the
+  blast sets off something else (a car, a tree) that puts its own mark there
+  first. It now takes the mark that punches.
+- And a third, in the cheats: overkill's skeleton was asked for more than
+  twenty bones, out of thirty three pieces each bone four times in five with
+  later bursts taking the oldest slots of a full pool. CI drew exactly
+  twenty. It asks for twelve now, a skeleton's worth.

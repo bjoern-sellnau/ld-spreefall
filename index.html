@@ -41,6 +41,7 @@
       <button class="diff mode" data-mode="walk">Just a Walk</button>
       <button class="diff mode" data-mode="tactics">Tactics</button>
       <button class="diff mode" data-mode="slayer">Slayer</button>
+      <button class="diff mode" data-mode="hunt">The Hunt</button>
     </div>
     <p class="diffnote" id="modenote">A walk through the real city, with the real fight in it.</p>
     <div id="opssetup" class="hidden">
@@ -126,6 +127,8 @@
   <div id="healthbars"></div>
   <div id="gunmark" class="hidden"></div>
   <div id="blastcharge" class="hidden"></div>
+  <canvas id="visorhud" class="hidden"></canvas>
+  <canvas id="cockpithud" class="hidden"></canvas>
   <canvas id="compassbar" class="hidden"></canvas>
   <div id="streetname" class="hidden"></div>
   <div id="hitmarker"></div>
@@ -147,6 +150,12 @@
     </div>
   </div>
   <div id="powers"></div>
+  <div id="suitfx"></div>
+  <div id="suit" class="hidden">
+    <div class="label">suit</div>
+    <div class="ebar"><i id="suitbar"></i></div>
+    <div class="modes"><span id="suitarmor"><b>Q</b>armour</span><span id="suitcloak"><b>E</b>cloak</span><span id="suitvisor"><b>B</b>visor</span><span id="suitnano"><b>N</b>heat</span></div>
+  </div>
   <div id="vehicle" class="hidden">
     <span id="vehiclename"></span>
     <div class="vhull"><i id="vehiclehull"></i></div>
@@ -182,7 +191,7 @@
         <span class="mcell"><b id="mechdash">ready</b><i>dash</i></span>
       </div>
       <b id="mechwarn" class="hidden"></b>
-      <em>the number row or the wheel changes weapon, V changes the view, F to get out</em>
+      <em>the number row or the wheel changes weapon, Y changes the view, F to get out</em>
     </div>
   </div>
   <div id="bossbar" class="hidden"><b id="bossname"></b><div class="track"><div id="bossfill"></div><span class="notch" style="left:66%"></span><span class="notch" style="left:33%"></span></div></div>
@@ -248,7 +257,7 @@
     <tr><td>W A S D, arrows</td><td>walk</td></tr>
     <tr><td>Shift</td><td>run</td></tr>
     <tr><td>Space</td><td>jump onto kerbs and low walls, or leap while reflexes are on</td></tr>
-    <tr><td>E, or right Shift</td><td>reflexes: the city slows down and you do not</td></tr>
+    <tr><td>E, or right Shift</td><td>reflexes: the city slows down and you do not; in The Hunt, E is the cloak, Shift the suit's sprint, Space held a higher jump, F a punch, B the visor, N Nano Vision, X the bow's draw weight</td></tr>
     <tr><td>Mouse, or drag on the right of the screen</td><td>look</td></tr>
     <tr><td>P</td><td>photo mode, hides the interface and unlocks the clock</td></tr>
     <tr><td>R</td><td>reload; with the bow, change the arrow head: fire, poison, explosive</td></tr>
@@ -284,8 +293,8 @@
     <tr><td>K</td><td>mech killer: an EMP warhead with a charge behind it, which
       locks on, stops anything with a motor and is enough to take a mech apart</td></tr>
     <tr><td>Right mouse with the launcher</td><td>hold the sight on a target to lock, then the rocket chases it</td></tr>
-    <tr><td>Q</td><td>back to the last weapon</td></tr>
-    <tr><td>T</td><td>blow the C4 you have put down</td></tr>
+    <tr><td>Q</td><td>back to the last weapon; in The Hunt, the suit's armour</td></tr>
+    <tr><td>T</td><td>blow the C4 you have put down, and any vehicle rigged with a remote bomb</td></tr>
     <tr><td>G</td><td>holster the weapon, for walking and for photographs</td></tr>
     <tr><td>C</td><td>cheats</td></tr>
     <tr><td>V</td><td>free travel: pick a place on the map and fly there</td></tr>
@@ -368,6 +377,15 @@
     <div class="wordmark">All eleven found</div>
     <p class="blurb" id="completiontext"></p>
     <button id="completionclose">keep walking</button>
+  </div>
+</div>
+
+<div id="vbomb" class="hidden">
+  <b>Rig it as a bomb?</b>
+  <div class="vbombbuttons">
+    <button id="vbombtimed"><kbd>1</kbd> Time bomb, 10 s</button>
+    <button id="vbombremote"><kbd>2</kbd> Remote, blown with T</button>
+    <button id="vbombno"><kbd>3</kbd> No</button>
   </div>
 </div>
 

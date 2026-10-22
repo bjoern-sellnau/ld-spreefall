@@ -1547,28 +1547,21 @@ html, body {
 }
 /* In the cockpit the ordinary crosshair is in the way of the mech's own. */
 #hud.piloting #crosshair { display: none; }
-/* Sitting inside it, the frame of the canopy is drawn round the edge of the
-   screen. It is a shadow rather than a model: eight metres of machine between
-   you and the city reads as a darker border and a line of struts, and that is
-   cheaper and steadier than any geometry hung off the camera. */
-#hud.cockpit #mechhud::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  box-shadow: inset 0 0 120px 30px rgba(6, 8, 11, 0.72),
-    inset 0 -26px 60px 0 rgba(6, 8, 11, 0.6);
+/* Sitting inside it, the inside of the canopy is a canvas over the whole
+   frame (src/ui/cockpit.js): struts, a dashboard with a radar and the
+   systems, brackets on what is out there. The mech's own model is not drawn
+   from in here. The status box it replaces is hidden, and the loadout keeps
+   its place down the right, inside the pillar. */
+#cockpithud {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
 }
-/* And the sill of it along the bottom, which is the one edge of a canopy you
-   would actually see from a seat behind the glass. */
-#hud.cockpit #mechhud::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 9%;
-  background: linear-gradient(180deg,
-    rgba(10, 12, 16, 0) 0%, rgba(10, 12, 16, 0.5) 55%, rgba(10, 12, 16, 0.82) 100%);
-  border-top: 1px solid rgba(226, 201, 141, 0.16);
-}
+#cockpithud.hidden { display: none; }
+#hud.canopy #mechstatus,
+#hud.canopy #combat,
+#hud.canopy #controls,
+#hud.canopy #threat { display: none; }
+#hud.canopy #mecharms { right: calc(16vw + 8px); }
 
 /* Operations: Tactics and Slayer. The setup under the mode buttons, the line
    at the top of the screen, and the journal on J. */
@@ -1659,6 +1652,23 @@ html, body {
 #bossbar.tyrant .notch { display: none; }
 @media (max-width: 640px) { #bossbar { top: 78px; font-size: 10px; letter-spacing: 0.18em; } }
 
+/* Getting out of a vehicle: rig it or not. */
+#vbomb {
+  position: fixed; left: 50%; top: 24%; transform: translateX(-50%); z-index: 35;
+  padding: 14px 18px; background: rgba(12, 14, 18, 0.92); border: 1px solid rgba(255, 90, 60, 0.45);
+  font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; color: var(--ink); text-align: center;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+#vbomb.hidden { display: none; }
+#vbomb b { display: block; margin-bottom: 10px; color: #ff8a6a; letter-spacing: 0.12em; text-transform: uppercase; font-size: 12px; }
+.vbombbuttons { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.vbombbuttons button {
+  padding: 7px 12px; background: rgba(255, 255, 255, 0.06); color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.2); cursor: pointer; font: inherit;
+}
+.vbombbuttons button:hover { background: rgba(255, 120, 80, 0.2); }
+.vbombbuttons kbd { color: var(--accent); margin-right: 4px; font-family: inherit; font-weight: 700; }
+
 /* The end of an operation: what you did, and again or back to the title. */
 #opsendstats { list-style: none; padding: 0; margin: 14px 0 18px; font: 13px/1.8 ui-sans-serif, system-ui, sans-serif;
   color: var(--ink); letter-spacing: 0.04em; }
@@ -1690,3 +1700,64 @@ html, body {
 #scope i { position: absolute; background: rgba(0, 0, 0, 0.85); }
 #scope i:nth-child(1) { left: 50%; top: 15vh; bottom: 15vh; width: 1px; }
 #scope i:nth-child(2) { top: 50%; left: 15vw; right: 15vw; height: 1px; }
+
+/* The suit, in The Hunt: one bar of energy over the vitals, the two modes
+   beside it lit while they are on, and the edge of the screen tinted for
+   them, blue and shimmering for the cloak, amber and heavy for the armour. */
+#suit {
+  position: absolute;
+  left: 22px; bottom: 124px;
+  width: 188px;
+  font: 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--dim);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+#suit.hidden { display: none; }
+#suit .label { font-size: 9.5px; letter-spacing: 0.24em; margin-bottom: 5px; }
+#suit .ebar { height: 6px; background: rgba(255, 255, 255, 0.1); }
+#suit .ebar i { display: block; height: 100%; width: 100%; background: #7fe0ff; box-shadow: 0 0 8px rgba(127, 224, 255, 0.6); }
+#suit.low .ebar i { background: #ff6a4a; box-shadow: 0 0 8px rgba(255, 106, 74, 0.6); }
+#suit.sprint .ebar i { background: #ffe17a; }
+#suit .modes { display: flex; gap: 10px; margin-top: 6px; }
+#suit .modes span { opacity: 0.55; }
+#suit .modes b { margin-right: 4px; color: var(--ink); }
+#suit .modes span.on { opacity: 1; color: #7fe0ff; }
+#suit #suitarmor.on { color: #ffc46a; }
+#suitfx {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+#suitfx.cloak {
+  opacity: 1;
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 220, 255, 0.035) 0 2px, transparent 2px 5px),
+    radial-gradient(ellipse at center, rgba(40, 140, 200, 0) 45%, rgba(40, 150, 220, 0.38) 100%);
+  animation: cloakshimmer 2.4s linear infinite;
+}
+#suitfx.armor {
+  opacity: 1;
+  background: radial-gradient(ellipse at center, rgba(255, 170, 60, 0) 55%, rgba(255, 160, 50, 0.26) 100%);
+}
+@keyframes cloakshimmer {
+  0% { background-position: 0 0, center; }
+  100% { background-position: 0 40px, center; }
+}
+@media (max-width: 720px) {
+  #suit { left: 12px; bottom: 160px; }
+}
+
+/* The visor's scan and its tags, and the heat over the bodies in Nano
+   Vision, on one canvas over the frame. Nano Vision turns the frame itself
+   cold and blue underneath them. */
+#visorhud {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+#visorhud.hidden { display: none; }
+canvas.nano { filter: grayscale(1) brightness(0.62) contrast(1.4) sepia(1) hue-rotate(175deg) saturate(2.4); }
+#suit .modes { flex-wrap: wrap; gap: 6px 10px; }
+#suit #suitvisor.on { color: #9ee8ff; }
+#suit #suitnano.on { color: #ffb15a; }
