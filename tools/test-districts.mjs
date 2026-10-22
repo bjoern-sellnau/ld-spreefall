@@ -45,6 +45,7 @@ async function run() {
   });
   const page = await browser.newPage({ viewport: { width: 1024, height: 576 } });
   page.setDefaultTimeout(180000);
+  if (process.env.THROTTLE) { const cdp = await page.context().newCDPSession(page); await cdp.send("Emulation.setCPUThrottlingRate", { rate: +process.env.THROTTLE }); }
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)); });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
@@ -527,6 +528,7 @@ async function run() {
       // drawn would be a hole in Berlin, and a coarse district is the whole
       // point of the overflight build.
       let card = 0, overBuilt = 0, overNothing = 0, sawCoarse = 0, peakMB = 0;
+      const holes = [];
       for (let i = 0; i < 1800; i++) {
         await new Promise((r) => requestAnimationFrame(r));
         if (s.crossingShown()) card++;
@@ -534,7 +536,20 @@ async function run() {
         const under = s.world.entryAt(c[0], c[2]);
         if (under && s.world.isBuilt(under)) {
           overBuilt++;
-          if (s.drawnGround(c[0], c[2]) === null) overNothing++;
+          if (s.drawnGround(c[0], c[2]) === null) {
+            overNothing++;
+            // What was under it, so a failure says which kind of nothing.
+            const index = s.world.tileIndex(c[0], c[2]);
+            const rec = index >= 0 ? s.world.tiles[index] : null;
+            const m = rec ? s.tileMeshForTest(index) : null;
+            if (holes.length < 4) {
+              holes.push(`frame ${i} ${s.state.mode} at ${Math.round(c[0])},${Math.round(c[2])}`
+                + ` ${Math.round(c[1])} m up over ${under.id}`
+                + ` (${s.world.loaded(under.id) ? (s.world.isOverflight(under.id) ? 'coarse' : 'fine') : 'not in'},`
+                + ` tile ${rec ? `${m.vCount} vertices` : 'none'},`
+                + ` ${Math.round(Math.hypot(c[0] - tx, c[2] - tz))} m from the landing)`);
+            }
+          }
         }
         if (s.world.loadedIds.some((id) => s.world.isOverflight(id))) sawCoarse++;
         peakMB = Math.max(peakMB, s.world.residentBytes / 1e6);
@@ -547,7 +562,7 @@ async function run() {
         started,
         loadedAtStart,
         corridor,
-        card, overBuilt, overNothing, sawCoarse,
+        card, overBuilt, overNothing, sawCoarse, holes,
         peakMB: Math.round(peakMB * 10) / 10,
         ceiling: Math.round(s.streamCeiling / 1e6),
         coarseAfter: s.world.loadedIds.filter((id) => s.world.isOverflight(id)),
@@ -713,7 +728,8 @@ async function run() {
       flight.card === 0, `${flight.card} frames of card`);
     check('and never passes over a built district with nothing drawn under it',
       flight.overNothing === 0,
-      `${flight.overBuilt - flight.overNothing} of ${flight.overBuilt} frames over drawn ground`);
+      `${flight.overBuilt - flight.overNothing} of ${flight.overBuilt} frames over drawn ground`
+      + (flight.holes.length ? `; ${flight.holes.join('; ')}` : ''));
     check('the corridor comes down as the overflight build',
       flight.sawCoarse > 0 || flight.corridor.length === 0,
       flight.corridor.length
