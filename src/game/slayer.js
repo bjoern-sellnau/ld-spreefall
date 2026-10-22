@@ -58,6 +58,7 @@ export class Slayer {
     this.spawn = spawn;
     this.despawn = despawn;
     this.live = new Map();      // site id -> runtime
+    this.extreme = 0;           // waves a nest holds with extreme enemies on, 0 for the usual
     this.onWake = null;         // fn(site, run)
     this.onWave = null;         // fn(site, run) a wave begins
     this.onHeavy = null;        // fn(site, run, kind, body) a brute or worse arrives
@@ -88,11 +89,19 @@ export class Slayer {
   /** The waves a nest at this level holds, with the boss if it is owed one. */
   plan(site, withBoss, final = false) {
     const k = 1 + SLAYER.perLevel * (site.level || 0);
-    const waves = SLAYER.waves.map((w) => {
+    // With extreme enemies on, as many waves as the cheat menu says: the
+    // three as they are, and every one past the last a little bigger than
+    // the one before it.
+    const extreme = this.extremeFrom ? this.extremeFrom() : this.extreme;
+    const count = extreme > 0 ? extreme : SLAYER.waves.length;
+    const waves = [];
+    for (let i = 0; i < count; i++) {
+      const w = SLAYER.waves[Math.min(i, SLAYER.waves.length - 1)];
+      const grow = 1 + 0.15 * Math.max(0, i - (SLAYER.waves.length - 1));
       const out = {};
-      for (const kind of Object.keys(w)) out[kind] = Math.max(1, Math.round(w[kind] * k));
-      return out;
-    });
+      for (const kind of Object.keys(w)) out[kind] = Math.max(1, Math.round(w[kind] * k * grow));
+      waves.push(out);
+    }
     if (withBoss) waves.push({ ...SLAYER.boss });
     if (withBoss && final) waves.push({ ...SLAYER.final });
     return waves;

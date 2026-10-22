@@ -49,6 +49,9 @@ export const TACTICS = {
   waves: 2,
   waveGap: 38,
   waveSize: 3,
+  // Extreme enemies: as many waves as the cheat menu says, this much closer
+  // together and this many more men in each.
+  extreme: { gap: 20, extra: 2 },
   // Walked away from with the alarm on: it stands down after this long.
   forget: 40,
 };
@@ -94,6 +97,7 @@ export class Tactics {
     this.onAlarm = null;        // fn(site, run) the siren starts
     this.onSpotted = null;      // fn(site, run, guard, how) somebody is sure
     this.onCall = null;         // fn(site, run, count) a wave of help is sent
+    this.extreme = 0;           // waves of help with extreme enemies on, 0 for the usual
     this.onRadio = null;        // fn(site, run) the radio is in pieces
     this.onBox = null;          // fn(site, run, wasSounding) the alarm box is broken
     this.onBody = null;         // fn(site, run, finder) a body is found
@@ -403,12 +407,14 @@ export class Tactics {
       // The alarm is on and the radio works: help is called, in waves.
       if (r.alarm) {
         r.alarmTime += dt;
-        if (r.radioUp && r.waves < TACTICS.waves) {
+        const waves = this.extreme > 0 ? this.extreme : TACTICS.waves;
+        if (r.radioUp && r.waves < waves) {
           r.nextWave -= dt;
           if (r.nextWave <= 0) {
             r.waves++;
-            r.nextWave = TACTICS.waveGap;
-            if (this.onCall) this.onCall(site, r, TACTICS.waveSize + (site.level || 0));
+            r.nextWave = this.extreme > 0 ? TACTICS.extreme.gap : TACTICS.waveGap;
+            const size = TACTICS.waveSize + (site.level || 0) + (this.extreme > 0 ? TACTICS.extreme.extra : 0);
+            if (this.onCall) this.onCall(site, r, size);
           }
         }
       }

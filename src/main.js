@@ -51,6 +51,7 @@ import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
 import { Grab, GRAB } from './game/grab.js';
+import { Grime, GRIME } from './ui/grime.js';
 import { Nanosuit, SUIT } from './game/nanosuit.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -75,7 +76,7 @@ const el = {
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   mapUnmark: $('mapunmark'), compassBar: $('compassbar'), cockpitHud: $('cockpithud'),
   suit: $('suit'), suitBar: $('suitbar'), suitArmor: $('suitarmor'), suitCloak: $('suitcloak'), suitFx: $('suitfx'),
-  suitVisor: $('suitvisor'), suitNano: $('suitnano'), visorHud: $('visorhud'),
+  suitVisor: $('suitvisor'), suitNano: $('suitnano'), visorHud: $('visorhud'), grime: $('grime'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -700,6 +701,14 @@ async function main() {
       tactics.hitBox(x, y, z, splash.damage || 50, splash.radius * 0.8 + 1);
     }
     strikeField(x, y, z, splash.radius);
+    // Dust across the glass, the closer and the bigger the more.
+    if (grime.enabled) {
+      const reach = splash.radius + GRIME.dustReach;
+      if (dist < reach) {
+        grime.dust((1 - dist / reach) * Math.min(1, 0.35 + splash.radius / 14), sideOf(x, z));
+        state.grimeDust = (state.grimeDust || 0) + 1;
+      }
+    }
     if (splash.fusion) {
       // A mech's reactor: the warhead's code path at a fiftieth of the
       // volume, in blue and neon green, and a flash that washes the frame
@@ -1248,6 +1257,10 @@ async function main() {
   function creditTarget(target, core, kind) {
     const dist = Math.hypot(target.x - player.x, target.z - player.z);
     combat.creditKill(core, dist);
+    // A kill close enough to get on you does.
+    if (grime.enabled && dist < 9 && !target.machine) {
+      grime.blood((1 - dist / 9) * (cheats.bleeding ? 1 : 0.6), sideOf(target.x, target.z));
+    }
     if (target.ceph || (target.dspec && target.dspec.ceph) || target.pinger) state.cephKilled = (state.cephKilled || 0) + 1;
     // A body that came apart does not also catch fire.
     if (!target.gibbed) effects.explode(target.x, target.y, target.z);
@@ -2313,6 +2326,16 @@ async function main() {
   // an incendiary leaves, kept here rather than in the fire module, because
   // that one is about trees and this one is about people.
   const burning = [];
+
+  // Crazy reality: the glass you look through gets dirty.
+  const grime = new Grime(el.grime);
+  /** Which side of the view a point is on, -1 left to 1 right. */
+  function sideOf(x, z) {
+    const dx = x - player.x, dz = z - player.z;
+    const l = Math.hypot(dx, dz) || 1;
+    const rx = Math.cos(camera.yaw), rz = -Math.sin(camera.yaw);
+    return Math.max(-1, Math.min(1, (dx * rx + dz * rz) / l));
+  }
 
   // --- arrow heads ----------------------------------------------------------------
   /** The weapon's name on the HUD, with the head on the next arrow for a bow. */
@@ -3982,6 +4005,11 @@ async function main() {
     // The comic book draws its blood in a red you can see from orbit.
     effects.comic = !!cheats.comicGore;
     soldiers.boneTime = cheats.value('boneTime');
+    // Wave after wave of help, and of demons, with extreme enemies on.
+    tactics.extreme = cheats.extremeEnemies ? cheats.value('extremeWaves') : 0;
+    // And the glass you look through gets dirty with crazy reality on.
+    grime.enabled = !!cheats.crazyReality;
+    if (!grime.enabled) grime.clear();
     el.cheatMark.classList.toggle('hidden', !cheats.used);
     for (const sw of cheatRows) sw.el.classList.toggle('on', !!cheats[sw.id]);
   }
@@ -4082,8 +4110,28 @@ async function main() {
         // the menu should say so rather than making you work it out.
         num.textContent = v === 0 && spec.unit === 's' ? 'never' : `${v} ${spec.unit}`;
       };
+      // And a box to type a number into, for the settings that have one.
+      let box = null;
+      if (spec.box) {
+        box = document.createElement('input');
+        box.type = 'number';
+        box.min = String(spec.min);
+        box.max = String(spec.max);
+        box.step = String(spec.step);
+        box.value = String(cheats.value(spec.id));
+        box.addEventListener('change', () => {
+          const v = parseFloat(box.value);
+          if (!Number.isFinite(v)) { box.value = String(cheats.value(spec.id)); return; }
+          cheats.setValue(spec.id, v);
+          slider.value = String(cheats.value(spec.id));
+          box.value = String(cheats.value(spec.id));
+          show();
+          applyCheats();
+        });
+      }
       slider.addEventListener('input', () => {
         cheats.setValue(spec.id, parseFloat(slider.value));
+        if (box) box.value = String(cheats.value(spec.id));
         show();
         applyCheats();
       });
@@ -4095,9 +4143,10 @@ async function main() {
       row.appendChild(num);
       row.appendChild(note);
       row.appendChild(slider);
+      if (box) row.appendChild(box);
       el.cheatValues.appendChild(row);
       show();
-      settingShown.push({ spec, slider, show });
+      settingShown.push({ spec, slider, box, show });
     }
     for (const [list, host, gore] of [[SWITCHES, el.cheatSwitches, false],
       [GORE, el.cheatGore, true]]) {
@@ -4390,6 +4439,7 @@ async function main() {
     cheats.reset();
     for (const row of settingShown) {
       row.slider.value = String(cheats.value(row.spec.id));
+      if (row.box) row.box.value = String(cheats.value(row.spec.id));
       row.show();
     }
     applyCheats();
@@ -5343,6 +5393,13 @@ async function main() {
     camera.walkBasis(basis);
     const right = dir.x * basis[2] + dir.z * basis[3];
     const fwd = dir.x * basis[0] + dir.z * basis[1];
+    // And blood on the glass from that side.
+    // Not every frame of standing in a fire: once a second or so at most.
+    const nowMs = performance.now();
+    if (grime.enabled && nowMs - (state.grimeHurtAt || 0) > 1200) {
+      state.grimeHurtAt = nowMs;
+      grime.blood(0.45, Math.max(-1, Math.min(1, right)));
+    }
     el.damage.style.setProperty('--dx', `${50 + right * 46}%`);
     el.damage.style.setProperty('--dy', `${50 - fwd * 30}%`);
     el.damage.classList.add('on');
@@ -5667,6 +5724,26 @@ async function main() {
       out.push({ body: v, x: v.x, y: v.y, z: v.z, h: v.type === 'tank' ? 3 : 2.2, kind: 'vehicle' });
     }
     return out;
+  }
+  /** The dirt on the glass: soot when fire is close, and a frame of it drawn. */
+  function grimeStep() {
+    const wall = performance.now() / 1000;
+    const dt = Math.min(0.1, Math.max(0, wall - (state.grimeWall || wall)));
+    state.grimeWall = wall;
+    if (grime.enabled) {
+      state.sootIn = (state.sootIn || 0) - dt;
+      if (state.sootIn <= 0) {
+        state.sootIn = 0.5;
+        const pouring = weapon.id === 'flamer' && input.fire && !weapon.holstered;
+        let near = pouring ? 0.5 : 0;
+        for (const b of burning) {
+          const d = Math.hypot(b.x - player.x, b.z - player.z);
+          if (d < b.radius + 5) near = Math.max(near, 1 - Math.max(0, d - b.radius) / 5);
+        }
+        if (near > 0) grime.soot(near);
+      }
+    }
+    grime.draw(dt, !photo.active && (state.mode === 'walk'));
   }
   function visorStep() {
     const wall = performance.now() / 1000;
@@ -6144,6 +6221,8 @@ async function main() {
         soldiers._retire(b);
       }
     });
+  // A nest holds as many waves as extreme enemies says, read when it wakes.
+  slayer.extremeFrom = () => (cheats.extremeEnemies ? cheats.value('extremeWaves') : 0);
   slayer.onWake = (site) => {
     toast('the nest wakes');
     feed(`<b>nest</b> ${world.nameAt(site.x, site.z)} wakes`);
@@ -7856,8 +7935,10 @@ async function main() {
       cockpitStep();
       suitHud();
       visorStep();
+      grimeStep();
     } else {
       cockpitHud.hide();
+      grime.draw(0, false);
     }
 
     if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
@@ -7961,7 +8042,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
+    compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grime, grimeSpec: GRIME, grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
     setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
@@ -8011,6 +8092,7 @@ async function main() {
     },
     cheatMenu(on) { toggleCheatMenu(on); },
     setCheat(id, on) { const ok = cheats.set(id, on); applyCheats(); return ok; },
+    cheatValue(id) { return cheats.value(id); },
     cheatAction(id) { runCheatAction(id); },
     spawnWave(kind, count) { return spawnWave(kind, count); },
     rainTick(dt) { rainTick(dt); },

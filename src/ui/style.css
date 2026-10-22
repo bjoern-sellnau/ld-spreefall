@@ -778,6 +778,20 @@ html, body {
   width: 100%;
   accent-color: var(--accent);
 }
+/* A slider with a box beside it for typing the number in. */
+#cheatvalues .val input[type="range"]:has(+ input[type="number"]) { grid-column: 1 / 2; }
+#cheatvalues .val input[type="number"] {
+  grid-column: 2 / 3;
+  width: 64px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text, #fff);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
 
 #cardhost { position: absolute; left: 0; bottom: 92px; width: min(430px, 82vw); }
 
@@ -1757,6 +1771,13 @@ html, body {
   pointer-events: none;
 }
 #visorhud.hidden { display: none; }
+/* Crazy reality: dust, blood and soot on the glass, over the HUD itself and
+   under the menus. */
+#grime {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 38;
+}
+#grime.hidden { display: none; }
 canvas.nano { filter: grayscale(1) brightness(0.62) contrast(1.4) sepia(1) hue-rotate(175deg) saturate(2.4); }
 #suit .modes { flex-wrap: wrap; gap: 6px 10px; }
 #suit #suitvisor.on { color: #9ee8ff; }

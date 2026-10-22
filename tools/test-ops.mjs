@@ -485,6 +485,46 @@ async function run() {
   check('the radio can be shot to pieces', radio.down && radio.shots === 2 && radio.drawn && radio.drawn.radioDown,
     `${radio.shots} rounds`);
   check('and once it is down nobody else is called', radio.wavesAfter === radio.waves, `${radio.waves} wave`);
+
+  // --- extreme enemies: wave after wave of help -------------------------------
+  // Set through the cheat menu itself: the switch, and the number typed into
+  // the box beside the waves slider.
+  await page.evaluate(() => window.spreefall.cheatMenu(true));
+  await page.click('[data-cheat="extremeEnemies"]');
+  await page.fill('[data-setting="extremeWaves"] input[type="number"]', '5');
+  await page.dispatchEvent('[data-setting="extremeWaves"] input[type="number"]', 'change');
+  const extremeUi = await page.evaluate(() => ({
+    waves: window.spreefall.cheatValue('extremeWaves'),
+    slider: document.querySelector('[data-setting="extremeWaves"] input[type="range"]').value,
+    on: document.querySelector('[data-cheat="extremeEnemies"]').classList.contains('on'),
+  }));
+  await page.evaluate(() => window.spreefall.cheatMenu(false));
+  await fresh();
+  const extreme = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
+    s.teleport(site.x + 60, site.z);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const run = s.tactics.live.get(site.id);
+    s.setCheat('godmode', true);
+    s.tactics.raiseAlarm(run);
+    const sizes = [];
+    const real = s.tactics.onCall;
+    // Counted, not sent: five waves of jeeps and tanks shelling the street
+    // would leave it in no state for the convoy checks further down.
+    s.tactics.onCall = (st, r, n) => { sizes.push(n); };
+    const gap = s.tacticsSpec.extreme.gap;
+    for (let i = 0; i < 60 * (s.tacticsSpec.callDelay + gap * 6 + 2); i++) s.fixedForTest(1 / 60);
+    s.tactics.onCall = real;
+    s.setCheat('godmode', false);
+    return { waves: run.waves, sizes, gap };
+  });
+  await page.evaluate(() => { const s = window.spreefall; s.setCheat('extremeEnemies', false); s.clearConvoys && s.clearConvoys(); });
+  check('extreme enemies is a switch in the cheat menu, with a slider and a box for how many waves',
+    extremeUi.on && extremeUi.waves === 5 && extremeUi.slider === '5', JSON.stringify(extremeUi));
+  check('and with it on a call brings that many waves, bigger and closer together',
+    extreme.waves === 5 && extreme.sizes.length === 5 && extreme.sizes.every((n) => n >= 5) && extreme.gap < 38,
+    JSON.stringify(extreme));
   await page.evaluate(() => {
     const s = window.spreefall;
     const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
@@ -644,6 +684,10 @@ async function run() {
     const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
     const run = s.tactics.live.get(site.id);
     s.vehicles.reset();
+    // On your feet, and staying there: the crew that comes with the tank
+    // shoots as well, and a man they have killed is not shelled.
+    s.combat.revive();
+    s.setCheat('godmode', true);
     s.teleport(site.x + 40, site.z + 20);
     for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
     // The second wave: serious.
@@ -661,6 +705,9 @@ async function run() {
     out.dist = Math.round(Math.hypot(tank.v.x - s.player.x, tank.v.z - s.player.z));
     out.speed = +Math.abs(tank.v.speed).toFixed(1);
     out.hostile = tank.v.hostile;
+    out.health = Math.round(s.combat.health);
+    out.laid = tank.v.ai ? +Math.abs(tank.v.ai.turretAim - (tank.v.yaw + tank.v.turret)).toFixed(2) : null;
+    s.setCheat('godmode', false);
     // Stood down with the run: nothing of theirs is left in the street.
     s.tactics.clear();
     out.cleared = s.convoys.length === 0 && !s.vehicles.active.some((v) => v.hostile) && !s.vehicles.active.includes(tank.v);

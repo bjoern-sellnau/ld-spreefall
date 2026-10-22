@@ -68,3 +68,16 @@ test('with bosses off there is no tyrant and no Warlord', () => {
   sl._wake(r);
   assert.ok(!r.waves.some((w) => w.tyrant || w.warlord));
 });
+
+test('with extreme enemies a nest holds as many waves as the setting, each past the third bigger', () => {
+  const sl = new Slayer(new Campaign(), null, () => null, () => {});
+  const plain = sl.plan({ level: 0 }, false);
+  assert.equal(plain.length, SLAYER.waves.length);
+  sl.extremeFrom = () => 7;
+  const many = sl.plan({ level: 0 }, false);
+  assert.equal(many.length, 7);
+  const size = (w) => Object.values(w).reduce((a, b) => a + b, 0);
+  assert.ok(size(many[6]) > size(many[2]), `${size(many[6])} against ${size(many[2])}`);
+  sl.extremeFrom = () => 0;
+  assert.equal(sl.plan({ level: 0 }, false).length, SLAYER.waves.length);
+});

@@ -25,7 +25,8 @@ export const OVERKILL_SCALE = 12;
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'everyWeapon', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
-  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore'];
+  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore',
+  'extremeEnemies', 'crazyReality'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -46,6 +47,13 @@ export const SWITCHES = [
   { id: 'wreckGround', label: 'Ground can be cratered', note: 'warheads dig a hole where they land; off keeps the street level', def: true },
   { id: 'lastKill', label: 'Slow motion on the last kill', note: 'killing the last one standing near you drops the world to a crawl for a moment' },
   { id: 'showDamage', label: 'Show what a building has left', note: 'what the frontage you are aiming at has taken, and how much more it takes to bring it down' },
+  // Help that does not stop coming: a camp or a hunting ground that calls
+  // for it gets as many waves as the setting below says, bigger and closer
+  // together, and a nest in Slayer as many waves of demons.
+  { id: 'extremeEnemies', label: 'Extreme enemies', note: 'a call for help brings wave after wave of it, as many as the setting says; a Slayer nest holds that many waves too' },
+  // The screen as a lens you are looking through: dust off every blast near
+  // you, blood when you are hit or something dies close, soot from fire.
+  { id: 'crazyReality', label: 'Crazy reality', note: 'the screen gets dirty: dust off blasts near you, blood when you are hit or a kill is close, soot from fire; it clears slowly' },
 ];
 
 export const GORE = [
@@ -122,6 +130,13 @@ export const SETTINGS = [
     id: 'mechKillerOdds', label: 'Machines with a mech killer', unit: '%',
     note: 'how many of them carry one, when they are allowed to at all',
     min: 5, max: 100, step: 5, def: 25,
+  },
+  {
+    // How many waves extreme enemies sends. The box beside the slider takes
+    // a number typed in, for the same range.
+    id: 'extremeWaves', label: 'Extreme enemies: waves', unit: 'waves',
+    note: 'how many waves of help a call brings with extreme enemies on, and how many a Slayer nest holds',
+    min: 1, max: 50, step: 1, def: 6, box: true,
   },
   {
     id: 'boneTime', label: 'Skeletons collapse after', unit: 's',

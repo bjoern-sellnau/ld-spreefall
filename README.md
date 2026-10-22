@@ -296,6 +296,8 @@ visits.
 | Comic carnage | overkill drawn as a comic book: bright red blood by the bucket from every hit, heads that pop, blood rain, splashes on the screen, the word in yellow |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 | Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
+| Extreme enemies | a camp or hunting ground that calls for help gets wave after wave of it, as many as the waves setting says (a slider and a box to type the number in, 1 to 50, 6 to start with), 20 s apart instead of 38 and two more men in each; a Slayer nest holds that many waves of demons, each past the third a little bigger |
+| Crazy reality | the screen gets dirty: dust off every blast near you, from the side it went off and settling low, blood when you are hit (from that side, and it runs) or a kill is close, soot from fire at your feet or the flamethrower; it clears by itself in a quarter of a minute or so |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not

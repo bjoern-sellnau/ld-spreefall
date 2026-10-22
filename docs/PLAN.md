@@ -4283,6 +4283,51 @@ So there are two cities now, and a profile picks which:
   in a column that went is never above the wall beside it and lies on the
   heap; one outside the site is not touched.
 
+## 105. Extreme enemies: wave after wave of help
+
+- A switch in the cheat menu, and a setting beside it with a slider and a
+  box to type the number into (1 to 50, 6 to start with; the box is the
+  menu's first, and a setting can now ask for one with `box: true`).
+- With it on, a camp or a hunting ground that raises the alarm with its
+  radio up calls as many waves as the setting says instead of two, 20 s
+  apart instead of 38, with two more men in each (`tactics.extreme`,
+  `TACTICS.extreme`). From the second wave they are a convoy with a tank,
+  as before. A Slayer nest holds that many waves of demons: the three as
+  they are, and each past the last 15 percent bigger than the one before
+  (`slayer.extremeFrom`, read when the nest plans its waves, because the
+  cheats are applied at start up before the nests exist).
+- Checks (ops, 93 now): the switch and the number typed into the box reach
+  the setting and move the slider; with it on and five waves set, an alarm
+  brings five calls of six men 20 s apart. The calls are counted rather than
+  sent: five convoys with tanks shelling the street left it in no state for
+  the convoy checks after them. And the tank check now stands you up with
+  god mode on first: the crew that comes with it shoots too, and once they
+  had killed you the tank had nobody to shell.
+
+## 106. Crazy reality: the glass gets dirty
+
+- A switch in the cheat menu. With it on, one canvas over the HUD and under
+  the menus (src/ui/grime.js) takes:
+  - dust off a blast within its radius and 45 m, more the closer and the
+    bigger, from the side it went off and settling in the lower half: soft
+    tan smudges with grit in them;
+  - blood when you are hit, from the side the shot came from, once a
+    second at most (standing in fire is a hit every frame), and when a kill
+    is within 9 m: a ragged splat with droplets round it and a run or two
+    that crawls down the glass;
+  - soot round the edges from fire within five metres of its edge, or from
+    pouring the flamethrower.
+- It fades over 16 to 26 s by kind, and no kind keeps more than so many
+  (50 dust, 18 blood, 16 soot) so a fight does not paint the glass red all
+  over. The first try of it did exactly that, from a fire at the feet, and
+  was turned down after the screenshot.
+- Checks (cheats, 123 now): off, a blast beside you leaves the glass clean;
+  on, a blast, a hit and fire at your feet put dust, blood and soot on it;
+  and it clears by itself. Unit tests (3): nothing sticks while it is off,
+  a closer blast throws more dust and a hit puts blood on its own side, no
+  kind fills the glass and the runs grow and it all clears.
+  cheat-09-crazy-reality.png.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
