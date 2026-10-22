@@ -2658,7 +2658,11 @@ async function main() {
     v.ai = null;
     if (state.inVehicle === v) leaveVehicle(true);
     const air = v.spec.kind === 'air';
-    wrecks.push({ v, left: air ? WRECK.airLimit : WRECK.burn, flame: 0, air });
+    // The pool hands the same object out again after a reset, so the entry
+    // is for this wreck and not whatever is in the slot by the time it runs.
+    const token = {};
+    v.wreck = token;
+    wrecks.push({ v, token, left: air ? WRECK.airLimit : WRECK.burn, flame: 0, air });
     // It catches: a burst of flame and a crack, smaller than what is coming.
     effects.flame(v.x, v.y + 1.0, v.z, 2.4, 1);
     effects.flash(v.x, v.y + 1.2, v.z, 3, 1.0, 0.6, 0.25, 0.25);
@@ -2698,6 +2702,8 @@ async function main() {
     for (let i = wrecks.length - 1; i >= 0; i--) {
       const w = wrecks[i];
       const v = w.v;
+      // Gone, or the slot is something else now.
+      if (!v.alive || v.wreck !== w.token || v.health > 0) { wrecks.splice(i, 1); continue; }
       w.left -= dt;
       // The fire grows the longer it has burnt.
       w.flame -= dt;
