@@ -462,7 +462,11 @@ across the city, to be taken one at a time. Pick one district or all of
 Berlin, the district you start in (the game flies you there) and how many
 camps a district holds; camps are put down on open ground the first time a
 district is in memory, always in the same places, and the campaign is kept
-in the browser.
+in the browser. With one under way the play button says so (Continue, and
+how many are taken) and a second button beside it starts a new operation,
+or a new hunt, from nothing. Dying and coming back clears the street but
+not the camps: they stand down and are manned again in full, never counted
+as taken because nobody is left standing in them.
 
 - A camp is a ring of sandbags with tents, crates, a flag, a siren and a
   radio on a table with a mast. Within 280 m it is manned: five guards and

@@ -657,6 +657,28 @@ async function run() {
     && /Grounds cleared/.test(over.stats), JSON.stringify(over));
   await page.evaluate(() => document.getElementById('opsend').classList.add('hidden'));
 
+  // Dying and coming back clears the street. It used to clear the guards out
+  // of a ground near you with it, and the ground then counted as taken with
+  // nobody having taken it: a run that opened with grounds already cleared.
+  const respawn = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.tactics.clear();
+    s.campaign.reset({});
+    const site = s.campaign.allSites()[0];
+    s.teleport(site.x + 40, site.z);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const r = s.tactics.live.get(site.id);
+    const manned = !!(r && r.manned && r.guards.length);
+    const freeBefore = s.campaign.summary([]).free;
+    document.getElementById('downbtn').click();
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    const r2 = s.tactics.live.get(site.id);
+    return { manned, freeBefore, freeAfter: s.campaign.summary([]).free, held: site.state !== 1,
+      again: !!(r2 && r2.manned && r2.guards.some((g) => g.alive && g.health > 0)) };
+  });
+  check('coming back after dying leaves the grounds held, and manned again', respawn.manned && respawn.held
+    && respawn.freeAfter === respawn.freeBefore && respawn.again, JSON.stringify(respawn));
+
   // The picture: cloaked, a guard in front of you who has no idea.
   await guard();
   await page.keyboard.press('KeyE');
@@ -670,6 +692,25 @@ async function run() {
   });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(SHOTS, 'hunt-01-cloak.png') });
+
+  // On the title a hunt under way says so: the play button carries on with
+  // it and a second one starts a new one from nothing.
+  const title = await page.evaluate(() => {
+    const s = window.spreefall;
+    const site = s.campaign.allSites()[0];
+    s.campaign.free(site, {});
+    s.showOps();
+    const play = document.getElementById('playbtn').textContent;
+    const fresh = document.getElementById('playnew');
+    const offered = !fresh.classList.contains('hidden') ? fresh.textContent : null;
+    fresh.click();
+    return { play, offered, after: s.campaign.summary([]), playAfter: document.getElementById('playbtn').textContent,
+      held: s.campaign.allSites().every((x) => x.state !== 1) };
+  });
+  check('a hunt under way is carried on from the title, or started again with New hunt',
+    /^Continue: 1 of \d+ grounds taken$/.test(title.play) && title.offered === 'New hunt'
+      && title.after.free === 0 && title.after.score === 0 && title.held && title.playAfter === 'Press to walk',
+    JSON.stringify(title));
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

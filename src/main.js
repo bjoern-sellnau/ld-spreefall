@@ -61,7 +61,7 @@ import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from '.
 const $ = (id) => document.getElementById(id);
 const el = {
   canvas: $('view'), loading: $('loading'), loadbar: $('loadbar'), loadnote: $('loadnote'),
-  title: $('title'), play: $('playbtn'), hud: $('hud'), minimap: $('minimap'),
+  title: $('title'), play: $('playbtn'), playNew: $('playnew'), hud: $('hud'), minimap: $('minimap'),
   compass: $('compasslabel'), cards: $('cardhost'), toast: $('toast'), overkill: $('overkill'), debug: $('debug'),
   found: $('found'), total: $('total'), district: $('district'), photo: $('photo'), tod: $('tod'), doy: $('doy'),
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
@@ -5475,6 +5475,11 @@ async function main() {
     combat.revive();
     weapon.reset();
     drones.reset();
+    // The camps and nests stand down before the street is cleared, so they
+    // are manned again when you come back rather than counted as taken
+    // because nobody is standing in them.
+    tactics.clear();
+    slayer.clear();
     soldiers.reset();
     jets.reset();
     projectiles.clear();
@@ -5538,6 +5543,8 @@ async function main() {
   /** The setup under the mode buttons on the title card. */
   function showOps() {
     el.opsSetup.classList.toggle('hidden', !campaign.active);
+    el.play.textContent = 'Press to walk';
+    el.playNew.classList.add('hidden');
     if (!campaign.active) return;
     const set = campaign.settings;
     for (const b of el.opsSetup.querySelectorAll('[data-scope]')) {
@@ -5572,7 +5579,22 @@ async function main() {
         + (sum.level ? `, level ${sum.level + 1}` : '')
       : `Nothing taken yet. The ${opsWord()}s are put down the first time you are in a district.`;
     el.opsWipe.textContent = 'start this campaign again';
+    // A campaign is kept between runs, so the play button carries on with
+    // it. Said so on the button, with a new one beside it, because a run
+    // that opened with grounds already taken looked like a fault.
+    if (sum.free > 0 || sum.score > 0) {
+      el.play.textContent = `Continue: ${sum.free} of ${sum.total} ${opsWord()}s taken`;
+      el.playNew.textContent = campaign.mode === 'hunt' ? 'New hunt' : 'New operation';
+      el.playNew.classList.remove('hidden');
+    }
   }
+  el.playNew.addEventListener('click', () => {
+    campaign.wipe();
+    tactics.clear();
+    slayer.clear();
+    showOps();
+    beginWalk();
+  });
   for (const b of el.opsSetup.querySelectorAll('[data-scope]')) {
     b.addEventListener('click', () => { campaign.set('scope', b.dataset.scope); showOps(); });
   }

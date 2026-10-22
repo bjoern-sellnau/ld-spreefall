@@ -4422,6 +4422,27 @@ So there are two cities now, and a profile picks which:
   pitch, so its arrow is along the line of sight; hunt-07 and hunt-08 show
   it.
 
+## 111. A hunt that opened with grounds already taken
+
+- The report: a new round of The Hunt, and some grounds were already
+  taken. Two causes, both real.
+  - Dying and coming back cleared the street with `soldiers.reset()`, the
+    guards of a ground near you with it. Tactics saw a manned ground with
+    nobody standing in it and paid it out as taken. Reproduced in the hunt
+    suite: two grounds freed by one respawn. Now the respawn stands every
+    camp and nest down first, and Tactics itself never pays for guards that
+    left the street without being killed (not alive, health above nothing):
+    that ground stands down and is manned again in full.
+  - The campaign is kept between runs on purpose, and the title said so
+    only in a small line of the setup. The play button now says
+    "Continue: 2 of 4 grounds taken" when there is progress, and a "New
+    hunt" (or "New operation") button beside it wipes the campaign and
+    starts.
+- Checks (hunt, 31 now): a respawn beside a manned ground leaves it held and
+  manned again (without the fix: two freed); with a ground taken the title
+  offers Continue and New hunt, and New hunt leaves nothing taken and no
+  score. Ops (93) and UI (35) unchanged and passing.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

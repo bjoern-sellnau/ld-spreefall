@@ -120,6 +120,11 @@ html, body {
 }
 .play:hover { transform: translateY(-1px); background: #f0dba8; }
 .play:active { transform: translateY(0); }
+/* With a campaign under way: carry on, or start it again from nothing. */
+.playbuttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.play.quiet { background: transparent; color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.3); }
+.play.quiet:hover { background: rgba(255, 255, 255, 0.08); }
+.play.hidden { display: none; }
 
 .hint { color: #7d7a73; font-size: 12px; margin-top: 1.6rem; }
 .hint b { color: var(--dim); font-weight: 600; }
@@ -1689,8 +1694,6 @@ html, body {
 #opsendstats b { color: var(--accent); font-variant-numeric: tabular-nums; margin-left: 6px; }
 .opsendbuttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 .opsendbuttons .play { margin-top: 0.4rem; }
-#opsendmenu.quiet { background: transparent; color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.3); }
-#opsendmenu.quiet:hover { background: rgba(255, 255, 255, 0.08); }
 
 /* The compass across the top: heading, sites and your own mark. */
 #compassbar {
