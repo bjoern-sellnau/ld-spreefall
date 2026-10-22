@@ -288,6 +288,9 @@ async function run() {
     s.soldiers.enabled = false;
     s.teleport(81, 0);
     window.T.bar = window.T.park(-30, 5, 0);
+    // A tougher one: since phase 117 a round to the middle of an ordinary
+    // drone takes all of it, and this is about what is left after a hit.
+    window.T.bar.maxHealth = window.T.bar.health = 300;
     // And one behind you, which is not on the screen and gets no bar.
     window.T.park(30, 5, 0);
     window.T.aimAt(window.T.bar);
@@ -313,7 +316,7 @@ async function run() {
   const hit = await readBars();
   await page.evaluate(() => {
     const s = window.spreefall;
-    for (let i = 0; i < 6 && window.T.bar.health > 0; i++) {
+    for (let i = 0; i < 12 && window.T.bar.health > 0; i++) {
       window.T.aimAt(window.T.bar); s.weapon.spread = 0; s.weapon.cooldown = 0; s.shoot();
     }
   });
