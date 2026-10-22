@@ -250,6 +250,103 @@ async function run() {
   check('F punches with the suit\'s strength, for energy', !punch.skip && punch.hit && punch.dead && punch.cost >= 25,
     JSON.stringify(punch));
 
+  // --- by the throat, and thrown ------------------------------------------------------
+  const thrown = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.suit.reset();
+    s.soldiers.reset();
+    s.soldiers.enabled = false;
+    s.projectiles.clear();
+    s.teleport(81, 0);
+    // Parked at random on every load, and a jeep on the line would take the throw.
+    for (const v of [...s.vehicles.active]) {
+      if (Math.hypot(v.x - s.player.x, v.z - s.player.z) < 60) s.vehicles.remove(v);
+    }
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    // Level, and the camera's own vectors brought up to date: the throw goes
+    // where the camera points, and that is only worked out when it is drawn.
+    s.look(90, 0); s.camera.update(16 / 9);
+    const fx = -Math.sin(s.camera.yaw), fz = -Math.cos(s.camera.yaw);
+    const put = (d) => {
+      const t = s.spawnSoldier(0, 0);
+      t.x = s.player.x + fx * d; t.z = s.player.z + fz * d; t.y = s.world.groundHeight(t.x, t.z); t.rise = 0;
+      t.state = 1;
+      return t;
+    };
+    const g = put(1.8);
+    const other = put(9);
+    const e0 = s.suit.energy;
+    const took = s.suitGrab();
+    const out = { took, held: s.grab.held === g, cost: +(e0 - s.suit.energy).toFixed(1) };
+    // Held: in front of you and off his feet, and he fires nothing.
+    const shotsBefore = s.combat.health;
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    out.ahead = +Math.hypot(g.x - s.player.x, g.z - s.player.z).toFixed(2);
+    out.up = +(g.y - s.world.groundHeight(g.x, g.z)).toFixed(2);
+    out.holstered = s.weapon.holstered;
+    out.unhurt = s.combat.health >= shotsBefore;
+    // The trigger held for a full wind-up, then let go.
+    s.input.fire = true;
+    for (let i = 0; i < 70; i++) s.fixedForTest(1 / 60);
+    out.charge = +s.grab.charge.toFixed(2);
+    s.input.fire = false;
+    s.fixedForTest(1 / 60);
+    // The man behind has not stood still for the wind-up: put him back on
+    // the line, eight metres out.
+    other.x = s.player.x + fx * 8; other.z = s.player.z + fz * 8; other.y = s.world.groundHeight(other.x, other.z);
+    out.flying = s.grab.flying.length;
+    out.free = !s.grab.held;
+    for (let i = 0; i < 300 && s.grab.flying.length; i++) s.fixedForTest(1 / 60);
+    out.landed = s.grab.flying.length === 0;
+    out.gDead = g.health <= 0 || g.state === 5 || !g.alive;
+    out.otherHurt = other.health < 100 || other.state === 5 || !other.alive;
+    out.hits = s.state.thrownHits || 0;
+    out.what = s.state.thrownWhat;
+    out.flew = +Math.hypot(g.x - s.player.x, g.z - s.player.z).toFixed(1);
+    s.soldiers.enabled = true;
+    return out;
+  });
+  check('F takes a man in reach by the throat and holds him up in front of you, gun away',
+    thrown.took && thrown.held && thrown.cost >= 10 && thrown.ahead < 1.6 && thrown.up > 0.1 && thrown.holstered && thrown.unhurt,
+    JSON.stringify(thrown));
+  check('the trigger held winds up a throw, and he goes through the man behind him',
+    thrown.charge >= 0.99 && thrown.free && thrown.landed && thrown.gDead && thrown.otherHurt && thrown.hits >= 1 && thrown.flew > 6,
+    JSON.stringify(thrown));
+
+  // A picture of one held up, the street behind him.
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.soldiers.enabled = false;
+    s.look(90, -4);
+    const fx = -Math.sin(s.camera.yaw), fz = -Math.cos(s.camera.yaw);
+    const t = s.spawnSoldier(0, 0);
+    t.x = s.player.x + fx * 1.6; t.z = s.player.z + fz * 1.6; t.y = s.world.groundHeight(t.x, t.z); t.rise = 0;
+    s.suit.reset();
+    s.suitGrab();
+    for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
+  });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-06-grab.png') });
+  await page.evaluate(() => { const s = window.spreefall; s.suitGrab(); s.soldiers.enabled = true; });
+
+  // --- a grenade off the belt -----------------------------------------------------------
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.projectiles.clear();
+    s.weapon.select('bow');
+    s.weapon.quickCooldown = 0;
+    window.huntGren = s.weapon.grenadesLeft;
+  });
+  await page.keyboard.press('KeyG');
+  const gren = await page.evaluate(() => {
+    const s = window.spreefall;
+    return { before: window.huntGren, after: s.weapon.grenadesLeft, weapon: s.weapon.id, inAir: s.projectiles.count,
+      holstered: !!s.state.holstered };
+  });
+  check('G in the suit throws a grenade without putting the bow away',
+    gren.after === gren.before - 1 && gren.weapon === 'bow' && gren.inAir >= 1 && !gren.holstered, JSON.stringify(gren));
+  await page.evaluate(() => window.spreefall.projectiles.clear());
+
   // --- the visor and Nano Vision ----------------------------------------------------
   // A guard who will not see you, in the middle of the screen, twenty metres off.
   const lookAtGuard = () => page.evaluate(() => {

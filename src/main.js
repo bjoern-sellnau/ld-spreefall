@@ -50,6 +50,7 @@ import { Visor, VISOR } from './ui/visor.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
+import { Grab, GRAB } from './game/grab.js';
 import { Nanosuit, SUIT } from './game/nanosuit.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -5545,6 +5546,89 @@ async function main() {
     state.punches = (state.punches || 0) + 1;
     return true;
   }
+  // The suit's strength, the first game's: F takes a man in reach by the
+  // throat, the trigger throws him (held for a harder throw), F again lets
+  // him drop. He is hurt by what he hits, and so is whoever he hits.
+  const grab = new Grab();
+  function suitGrab() {
+    if (!suited()) return false;
+    if (grab.held) {
+      const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+      grab.release(dir, 0);
+      toast('let go');
+      return true;
+    }
+    const facing = { x: -Math.sin(camera.yaw), z: -Math.cos(camera.yaw) };
+    const t = grab.pick({ x: player.x, z: player.z }, facing, soldiers.active);
+    if (!t) return false;
+    if (!suit.strength(GRAB.cost)) { toast('not enough energy'); audio.dryFire(); return true; }
+    grab.take(t);
+    audio.whoomp(0);
+    effects.shake = Math.min(1.2, effects.shake + 0.25);
+    if (tactics.enabled) soldiers.hear(player.x, player.z, 10);
+    toast('hold the trigger to throw him, F to let go');
+    feed('<b>by the throat</b>');
+    state.grabs = (state.grabs || 0) + 1;
+    return true;
+  }
+  /** Whatever a held man was thrown into, and what the landing did to him. */
+  function grabStep(dt) {
+    // Gone from under you: retired by a stand down, or killed in your hand.
+    if (grab.held && (!grab.held.alive || grab.held.state === 5 || !soldiers.active.includes(grab.held))) {
+      grab.held.held = false;
+      grab.held = null;
+    }
+    if (grab.held && (!suited() || suit.energy <= 0)) {
+      const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+      grab.release(dir, 0);
+    }
+    grab.step(dt, {
+      world,
+      bodies: soldiers.active,
+      onStrike: (f, other, speed) => {
+        const k = speed * 0.06;
+        const killed = soldiers.damage(other, speed * GRAB.impact * 0.8, { x: f.vx * k, y: 0.3 + Math.abs(f.vy) * k, z: f.vz * k });
+        effects.blood(other.x, other.y + 1.2, other.z, f.vx / (speed || 1), 0.3, f.vz / (speed || 1), cheats.goreScale);
+        audio.whoomp(0);
+        if (killed) creditTarget(other, false, 'soldier');
+        state.thrownHits = (state.thrownHits || 0) + 1;
+      },
+      onLand: (f, speed, what) => {
+        const s = f.s;
+        const k = speed * 0.05;
+        const hard = what === 'wall' ? 1.3 : 1;
+        const killed = soldiers.damage(s, speed * GRAB.impact * hard, { x: f.vx * k, y: 0.2, z: f.vz * k });
+        if (what !== 'time') {
+          effects.blood(s.x, s.y + 1.0, s.z, -f.vx / (speed || 1), 0.4, -f.vz / (speed || 1), cheats.goreScale);
+          effects.shake = Math.min(1.2, effects.shake + Math.min(0.4, speed * 0.01));
+        }
+        if (killed) creditTarget(s, false, 'soldier');
+        else {
+          // Got up again: back on his feet where he came down.
+          s.lean = 0; s.roll = 0;
+          s.y = world.groundHeight(s.x, s.z);
+        }
+        if (tactics.enabled) soldiers.hear(s.x, s.z, 30);
+        state.thrownLanded = (state.thrownLanded || 0) + 1;
+        state.thrownWhat = what;
+      },
+    });
+  }
+  /** G in the suit: a grenade off the belt, whatever is in your hands. */
+  function quickGrenade() {
+    if (!suited() || photo.active) return false;
+    const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+    const g = weapon.quickGrenade(eye, dir);
+    if (!g) {
+      if (weapon.grenadesLeft <= 0) { toast('no grenades left'); audio.dryFire(); }
+      return true;
+    }
+    audio.swap();
+    feed(`<b>grenade</b> ${weapon.grenadesLeft} left`);
+    state.quickGrenades = (state.quickGrenades || 0) + 1;
+    return true;
+  }
   // The visor (B) and Nano Vision (N).
   const visor = new Visor(el.visorHud);
   visor.onTag = (body) => {
@@ -5694,6 +5778,7 @@ async function main() {
   /** A run starting: the start district, if one is set, is flown to once the intro is over. */
   function startOps() {
     suit.reset();
+    grab.reset();
     visor.reset();
     tactics.clear();
     slayer.clear();
@@ -5866,7 +5951,7 @@ async function main() {
     const fx = camera.forward[0], fz = camera.forward[2];
     const fl = Math.hypot(fx, fz) || 1;
     for (const s of soldiers.active) {
-      if (!s.alive || s.civilian || s.health <= 0 || s.state === 5 || s.rise > 0) continue;
+      if (!s.alive || s.civilian || s.health <= 0 || s.state === 5 || s.rise > 0 || s.held) continue;
       // A demon reeling is a finisher, from further off and whatever it was doing.
       if (s.demon) {
         if (!(s.staggered > 0)) continue;
@@ -6879,10 +6964,12 @@ async function main() {
         else weapon.startReload();
         break;
       case 'KeyG':
+        // In the suit G is the grenade, as it is in the games.
+        if (quickGrenade()) break;
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
-      case 'KeyF': if (!takedown() && !suitPunch()) toggleVehicle(); break;
+      case 'KeyF': if (!takedown() && !suitGrab() && !suitPunch()) toggleVehicle(); break;
       case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(true); else openTravel(); break;
@@ -7159,7 +7246,7 @@ async function main() {
       let speed = input.run ? PLAYER.runSpeed : PLAYER.walkSpeed;
       // The suit's sprint and the weight of its armour.
       if (suited()) {
-        speed *= suit.update(selfDt, { speed: Math.hypot(player.vx || 0, player.vz || 0), sprint: input.run });
+        speed *= suit.update(selfDt, { speed: Math.hypot(player.vx || 0, player.vz || 0), sprint: input.run, holding: !!grab.held });
       }
       wishX = (basis[0] * input.moveZ + basis[2] * input.moveX) * speed;
       wishZ = (basis[1] * input.moveZ + basis[3] * input.moveX) * speed;
@@ -7204,8 +7291,10 @@ async function main() {
     // The cheat menu and the target map are both modal: the mouse belongs to
     // them, so nothing fires while either is up.
     const paused = state.targeting || !el.cheats.classList.contains('hidden');
+    // Both hands full: somebody held by the throat.
+    const holding = !!grab.held;
     const holstered = state.holstered || photo.active
-      || combat.health <= 0 || paused;
+      || combat.health <= 0 || paused || holding;
     weapon.setHolstered(holstered);
     // A flamethrower has nothing to aim down. Its second trigger throws a
     // wall of fire instead, once per press rather than while it is held.
@@ -7220,8 +7309,27 @@ async function main() {
       weapon.altFire(eye, dir);
     }
     state.altWasDown = input.secondary;
-    const wantFire = input.fire && !photo.active && combat.health > 0 && !paused;
+    const wantFire = input.fire && !photo.active && combat.health > 0 && !paused && !holding;
     weapon.update(dt, wantFire, eye, dir);
+    // With a man in your hand the trigger winds up a throw and letting go
+    // of it throws him.
+    if (holding) {
+      if (input.fire && !paused) grab.windUp(dt);
+      else if (state.grabFireWas && grab.charge > 0) {
+        const power = grab.charge;
+        if (suit.strength(GRAB.throwCost * (0.5 + power * 0.5))) {
+          grab.release(dir, power);
+          audio.whoomp(0);
+          feed(`<b>thrown</b> ${Math.round(power * 100)}%`);
+          state.throws = (state.throws || 0) + 1;
+        } else {
+          grab.release(dir, 0);
+        }
+      }
+      if (grab.held) grab.hold(dt, eye, camera.yaw, state.time);
+    }
+    state.grabFireWas = input.fire;
+    grabStep(dt);
     // Recoil composes with looking around here, in one place. It is carried as
     // an offset: whatever the last frame added is taken back before this
     // frame's is applied, so when the spring settles the view is exactly where
@@ -7731,8 +7839,14 @@ async function main() {
         : (mechs.nearest(player.x, player.z, 9) || vehicles.nearest(player.x, player.z, 7));
       // A man who has not seen you, within arm's reach, comes before any car.
       const quietKill = (state.inVehicle || state.inMech) ? null : takedownTarget();
-      el.rideHint.classList.toggle('hidden', !near && !quietKill);
+      // And in the suit, a man in reach to take by the throat, or the one
+      // already in your hand to let go of.
+      const grabbable = suited() && !quietKill
+        ? (grab.held || grab.pick({ x: player.x, z: player.z }, { x: -Math.sin(camera.yaw), z: -Math.cos(camera.yaw) }, soldiers.active))
+        : null;
+      el.rideHint.classList.toggle('hidden', !near && !quietKill && !grabbable);
       if (quietKill) el.rideHintName.textContent = quietKill.demon ? 'Finish' : 'Takedown';
+      else if (grabbable) el.rideHintName.textContent = grab.held ? 'Let go' : 'Grab';
       else if (near) el.rideHintName.textContent = near.spec.name;
       // The scope: a picture of one, and no rifle in the way of it.
       const scoped = !!weapon.spec.scope && weapon.aimBlend > 0.85 && !weapon.holstered;
@@ -7847,7 +7961,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(),
+    compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
     setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),

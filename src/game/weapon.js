@@ -50,6 +50,7 @@ export class Weapon {
     this.state = STATE.READY;
     this.cooldown = 0;
     this.reloadLeft = 0;
+    this.quickCooldown = 0;
     this.spread = WEAPONS.m16.spreadHip;
     this.aiming = false;
     this.aimBlend = 0;
@@ -140,6 +141,7 @@ export class Weapon {
     this.state = STATE.READY;
     this.cooldown = 0;
     this.reloadLeft = 0;
+    this.quickCooldown = 0;
     this.spread = this.spec.spreadHip;
     this.aiming = false;
     this.aimBlend = 0;
@@ -284,6 +286,7 @@ export class Weapon {
     this._updateLock(dt, spec, eye, dir);
 
     if (this.cooldown > 0) this.cooldown -= dt;
+    if (this.quickCooldown > 0) this.quickCooldown -= dt;
 
     if (this.state === STATE.RELOADING) {
       this.reloadLeft -= dt;
@@ -764,6 +767,41 @@ export class Weapon {
     if (!splash) return splash;
     if (this.damageScale === 1) return splash;
     return { ...splash, damage: splash.damage * this.damageScale };
+  }
+
+  /**
+   * A grenade off the belt, whatever is in your hands: the suit's quick
+   * throw. It comes out of the grenades you carry, magazine first, and it
+   * goes the way you are looking with the same lob the grenade itself has.
+   *
+   * @returns {object|null} the grenade in the air, or null with none left
+   */
+  quickGrenade(eye, dir) {
+    if (!this.projectiles || this.quickCooldown > 0) return null;
+    const slot = this.carried.grenade;
+    if (!slot) return null;
+    if (!this.infiniteAmmo) {
+      if (slot.ammo > 0) slot.ammo--;
+      else if (slot.reserve > 0) slot.reserve--;
+      else return null;
+    }
+    const spec = WEAPONS.grenade;
+    this.quickCooldown = 0.7;
+    return this.projectiles.launch(spec.projectile, {
+      x: eye.x + dir.x * 0.6, y: eye.y + dir.y * 0.6 - 0.12, z: eye.z + dir.z * 0.6,
+      vx: dir.x * spec.muzzleSpeed,
+      vy: dir.y * spec.muzzleSpeed + 3.4,
+      vz: dir.z * spec.muzzleSpeed,
+      fuse: spec.fuse,
+      splash: this._scaledSplash(spec.splash),
+      weapon: 'grenade',
+    });
+  }
+
+  /** How many grenades there are to throw, the magazine and the reserve. */
+  get grenadesLeft() {
+    const slot = this.carried.grenade;
+    return slot ? slot.ammo + slot.reserve : 0;
   }
 
   /** Blow every piece of C4 you have put down. */

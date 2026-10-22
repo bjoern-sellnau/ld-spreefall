@@ -103,7 +103,7 @@ district by hand. A comparison of the same street at either tier is in
 | T | blow the C4 you have put down, and every vehicle rigged with a remote bomb |
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight |
-| G | holster the weapon, for walking and for photographs |
+| G | holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt |
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | F1 F2 F3 | quality tier: low, medium, high |
@@ -537,8 +537,16 @@ and you in a suit with one bar of energy that everything it does runs on.
   fired from it drops it and empties the suit.
 - **Shift** is the suit's sprint, 1.75 times a run, while the energy lasts.
   **Space** held puts the suit's strength into the jump and goes about four
-  times as high. **F** with one of theirs in front of you is a punch that
-  puts him down, for 30 energy.
+  times as high. **F** with one of theirs in reach takes him by the throat
+  and holds him up in front of you, off his feet and with your gun away,
+  for 12 energy and 5 a second while you hold him (a grunt is fine, a
+  stalker or anything bigger is not). Hold the trigger to wind up a throw,
+  up to 0.9 s for the hardest, and let go: he flies at 11 to 30 m/s, and
+  whoever he goes through on the way is hurt by how fast he was going, and
+  so is he when he lands or hits a wall. F again lets him drop. What is too
+  big to lift gets a punch instead, for 30 energy.
+- **G** throws a grenade off the belt without putting away what is in your
+  hands, out of the grenades you carry.
 - **B** the visor: a narrower view with a scan over the middle; hold one
   of theirs there for half a second and he is tagged, and the tag (a red
   marker with the distance) stays over him wherever he goes, through walls
@@ -577,8 +585,13 @@ and cloak as modes on Q and E and made the strength and the speed things the
 suit does when asked; the third added a bow that can be fired from the cloak
 for a share of the energy rather than all of it; the aliens of the second
 are infantry grunts, quick stalkers that knock you into the air, and a tall
-tripod walker whose ping is an EMP reaching fifty metres
+tripod walker whose ping is an EMP reaching fifty metres; the first game's
+strength mode threw objects and enemies, and a grab held longer before the
+release throws harder; G is the grenade in the series' default keys
 ([Wikipedia: Crysis](https://en.wikipedia.org/wiki/Crysis),
+[Wikipedia: Crysis (video game)](https://en.wikipedia.org/wiki/Crysis_(video_game)),
+[Siliconera on the nanosuit](https://www.siliconera.com/how-crysis-2s-nanosuit-makes-you-feel-like-a-superhero/),
+[Steam: Crysis key bindings](https://steamcommunity.com/app/17300/discussions/0/846960481952725653/?ctp=2),
 [Crysis wiki: Ceph](https://crysis.fandom.com/wiki/Ceph),
 [Crysis wiki: Armor](https://crysis.fandom.com/wiki/Armor),
 [Game Informer on the bow](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2012/06/06/crysis-3-bringing-a-bow-to-a-gunfight.aspx),

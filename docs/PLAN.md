@@ -4221,6 +4221,45 @@ So there are two cities now, and a profile picks which:
   woke the stalker through a silent alarm. hunt-04-ceph.png,
   hunt-05-end.png.
 
+## 104. By the throat, thrown, and a grenade off the belt
+
+- In The Hunt F takes the nearest of theirs within 2.4 m and in front by
+  the throat (`Grab`, src/game/grab.js; the numbers in `SUIT.grab`): not a
+  civilian, not a machine, not a boss and nothing more than 1.3 times a man,
+  for 12 energy. He is held 1.45 m out and 0.35 m to the right, lifted off
+  his feet and facing you, and kicks; `s.held` keeps the soldier pool off
+  him, so he neither walks nor fires. Your gun goes away while he is held,
+  and holding costs 5 energy a second; run the energy out, get into
+  something or take the suit off and he is let go.
+- The trigger held winds the throw up over 0.9 s; let go and he goes along
+  the view at 11 to 30 m/s with a lift of 0.22 of that, for 8 to 16 energy.
+  F again lets him drop. In the air he is a body in flight (gravity 19, a
+  tumble): whoever he passes within 1.1 m of takes 0.8 of 9 times his speed
+  and the throw loses four tenths of its speed; a wall stops him where it
+  stands, the ground takes him when he comes down, and either hurts him by
+  9 times his speed (a wall 1.3 times that). Whoever is not killed gets up
+  where he came down. A held man is no takedown, and the prompt says Grab
+  or Let go.
+- G in the suit throws a grenade from the grenades you carry (`weapon.
+  quickGrenade`: magazine first, then the reserve, 0.7 s apart) with the
+  grenade's own speed and lob, without putting away what is in your hands.
+  Outside the suit G still holsters.
+- Sources: the first game's strength mode threw objects and enemies
+  (Wikipedia: Crysis (video game)); a grab held longer before the release
+  throws harder (Siliconera on the nanosuit); G is the grenade in the
+  series' default keys (Steam discussion of the Crysis key map, and the
+  Remastered key list). Grab on F is ours: the search found no source that
+  names the original game's key for it.
+- Checks (hunt, 27 now): F takes a man in reach and holds him up 1.5 m out
+  and off his feet with the gun away and nothing hurting you; a full
+  wind-up throws him through the man eight metres behind, who is hurt, and
+  he dies where he lands; G throws a grenade without putting the bow away.
+  Unit tests for who can be taken, the wind-up and the cost of holding, the
+  flight through a man and onto the ground, and a wall. The throw checks
+  bring the camera's vectors up to date after turning it, because the
+  throw goes where the camera points and that is only worked out when it
+  is drawn. hunt-06-grab.png.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

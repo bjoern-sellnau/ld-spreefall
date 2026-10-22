@@ -45,6 +45,15 @@ export const SUIT = {
   // drain for as long as it is up.
   nano: { drain: 6 },
   punch: { cost: 30, damage: 260, reach: 2.6, force: 16 },
+  // The first game's strength: a man in reach taken by the throat (F), held
+  // up off his feet for as long as the suit can pay for it, and thrown (the
+  // trigger, held for a harder throw). What he hits on the way is hurt by
+  // how fast he was going, and so is he.
+  grab: {
+    reach: 2.4, cost: 12, holdDrain: 5, maxScale: 1.3,
+    charge: 0.9, minSpeed: 11, maxSpeed: 30, throwCost: 16, lift: 0.22,
+    impact: 9, hitRadius: 1.1, gravity: 19,
+  },
   // How long it waits before trying again after being emptied.
   stall: 1.2,
 };
@@ -111,7 +120,7 @@ export class Nanosuit {
   /**
    * A step of the suit.
    * @param {number} dt
-   * @param {{speed:number, sprint:boolean}} body how fast you are going, and whether you want to sprint
+   * @param {{speed:number, sprint:boolean, holding?:boolean}} body how fast you are going, whether you want to sprint, and whether you have somebody by the throat
    * @returns {number} what to multiply your speed by
    */
   update(dt, body) {
@@ -121,6 +130,7 @@ export class Nanosuit {
     const moving = body.speed > 0.6;
     if (this.armor) drain += moving ? SUIT.armor.drainMove : SUIT.armor.drainStill;
     if (this.nano) drain += SUIT.nano.drain;
+    if (body.holding) drain += SUIT.grab.holdDrain;
     if (this.cloak) {
       drain += body.speed > 5 ? SUIT.cloak.drainRun : moving ? SUIT.cloak.drainWalk : SUIT.cloak.drainStill;
     }
@@ -182,6 +192,13 @@ export class Nanosuit {
     if (this.energy < SUIT.jump.cost || this.stalled > 0) return 1;
     this._spend(SUIT.jump.cost);
     return SUIT.jump.boost;
+  }
+
+  /** Anything else the suit's strength does: true if there was energy for it. */
+  strength(cost) {
+    if (this.energy < cost || this.stalled > 0) return false;
+    this._spend(cost);
+    return true;
   }
 
   /** A strength punch: true if there was energy for it. */
