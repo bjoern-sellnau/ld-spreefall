@@ -4260,6 +4260,29 @@ So there are two cities now, and a profile picks which:
   throw goes where the camera points and that is only worked out when it
   is drawn. hunt-06-grab.png.
 
+## 107. A roof whose column went comes down with it
+
+- From the user's screenshot (Steglitz, a block at stage 1 of 4): dark
+  slabs hanging in the air over a ruin. A building is walls round the edge
+  and a roof over the inside, and the roof is cut on the four metre column
+  lines like everything else. Each column of it came down only as far as
+  its column was cut back, so over the inside, where there is no wall under
+  it, a partly fallen block left a staircase of roof pieces in the air at
+  each column's own height. Reproduced here with three heavy hits into a
+  frontage, and gone after.
+- A face pointing up (normal more than half up) in the top quarter of its
+  building is a roof, and in a column that has started to go it is cut back
+  to nothing: it lands on the heap with the rest, in the shader and in the
+  bake alike (`applyCollapse`, `settle`). The walls in the same column keep
+  their cut, so a frontage standing to half its height is a frontage with
+  its roof fallen in behind it.
+- Checks (city, 90 now): after shells landing beside each other and after a
+  warhead, no up facing piece that came down is left above the heap (the
+  street before the blast, plus the most rubble a site of that size leaves
+  and a metre and a bit): 0 of 1063 and 0 of 20252. Unit (2 more): a roof
+  in a column that went is never above the wall beside it and lies on the
+  heap; one outside the site is not touched.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
