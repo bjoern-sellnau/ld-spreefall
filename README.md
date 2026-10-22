@@ -73,8 +73,8 @@ district by hand. A comparison of the same street at either tier is in
 
 | | |
 |---|---|
-| W A S D, arrow keys | walk |
-| Shift | run |
+| W A S D, arrow keys | walk, at 3.5 m/s |
+| Shift | run, at 5.6 m/s |
 | Space | jump onto kerbs and low walls |
 | Mouse | look, with pointer lock |
 | Touch | drag left to walk, drag right to look |

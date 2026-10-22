@@ -4443,6 +4443,21 @@ So there are two cities now, and a profile picks which:
   offers Continue and New hunt, and New hunt leaves nothing taken and no
   score. Ops (93) and UI (35) unchanged and passing.
 
+## 112. A brisker walk
+
+- The ask: the normal pace is a little slow. It was 2.6 m/s, already twice
+  what a person walks at (preferred walking speed is about 1.25 m/s in the
+  laboratory studies, eLife and the PMC tables collected in the search),
+  but a shooter's pace without the run key is faster still: Counter-Strike
+  moves at 250 units a second, 4.8 or 6.35 m/s depending on how a unit is
+  converted (cs.money, profilerr). Now 3.5 m/s, a third more, with the run
+  left at 5.6, so running is still clearly the faster thing.
+- It stays under the 4 m/s at which a guard counts you as running and
+  notices you 1.7 times as fast (`playerSpeed > 4` in the soldiers), so
+  creeping up on a camp at the walk is as quiet as it was.
+- Checks: hunt, ops, combat and districts suites run with it, and the unit
+  tests.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

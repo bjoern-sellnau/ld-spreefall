@@ -86,7 +86,10 @@ export const PLAYER = {
   radius: 0.35,
   height: 1.8,
   eye: 1.7,
-  walkSpeed: 2.6,
+  // Not a walk in the street's sense (that is about 1.25 m/s): the pace a
+  // shooter moves at without the run key, which there is nearer five. This
+  // is a brisk jog, and it stays under the 4 m/s a guard counts as running.
+  walkSpeed: 3.5,
   runSpeed: 5.6,
   jumpSpeed: 5.2,
   gravity: 22.0,
