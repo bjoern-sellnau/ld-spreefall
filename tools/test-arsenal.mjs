@@ -791,6 +791,38 @@ async function run() {
   await page.waitForTimeout(3000);
   await page.screenshot({ path: path.join(SHOTS, 'combat-05-soldiers.png') });
 
+  // --- the report, measured --------------------------------------------------
+  // Rendered offline, so what is measured is the synth and not the speakers:
+  // how loud the first fifty milliseconds are, how much is down under 120 Hz
+  // in the first hundred and fifty, and that the sum never reaches full scale.
+  const shots = await page.evaluate(async () => {
+    const { Audio } = await import('/src/game/audio.js');
+    const out = {};
+    for (const kind of ['rifle', 'shotgun', 'pistol']) {
+      const sr = 48000;
+      const ctx = new OfflineAudioContext(1, sr, sr);
+      const a = new Audio(null);
+      a.ctx = ctx; a.enabled = true;
+      a.master = ctx.createGain(); a.master.gain.value = 0.85; a.master.connect(ctx.destination);
+      a._noiseBuffer = a._makeNoise(4);
+      a.gunshot(kind);
+      const d = (await ctx.startRendering()).getChannelData(0);
+      let peak = 0, e = 0, low = 0, y = 0;
+      const k = 1 - Math.exp(-2 * Math.PI * 120 / sr);
+      for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+      for (let i = 0; i < sr * 0.05; i++) e += d[i] * d[i];
+      for (let i = 0; i < sr * 0.15; i++) { y += k * (d[i] - y); low += y * y; }
+      const db = (x) => +(20 * Math.log10(Math.max(1e-9, x))).toFixed(1);
+      out[kind] = { peak: db(peak), first50: db(Math.sqrt(e / (sr * 0.05))), low150: db(Math.sqrt(low / (sr * 0.15))) };
+    }
+    return out;
+  });
+  check('a rifle shot has weight: loud in its first fifty milliseconds and low under it, and never clips',
+    shots.rifle.first50 > -12 && shots.rifle.low150 > -21 && shots.rifle.peak < -1 && shots.shotgun.peak < -1,
+    JSON.stringify(shots));
+  check('and a suppressed pistol is still a cough', shots.pistol.first50 < shots.rifle.first50 - 15,
+    `${shots.pistol.first50} dB against the rifle's ${shots.rifle.first50}`);
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

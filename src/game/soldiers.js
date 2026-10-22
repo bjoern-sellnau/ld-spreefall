@@ -126,6 +126,8 @@ class Soldier {
     this.ceph = null;
     this.look = 0;
     this.dormant = false;
+    // Not in somebody's hand, nor in the air from one.
+    this.held = false;
     return this;
   }
 }
@@ -638,6 +640,10 @@ export class Soldiers {
       const s = this.active[i];
       s.stateTime += dt;
       s.hitFlash = Math.max(0, s.hitFlash - dt * 4);
+
+      // Held by the throat, or in the air after being thrown: the suit moves
+      // him, not his legs, and nobody fires a rifle from there.
+      if (s.held) { s.walk = 0; continue; }
 
       // An EMP has it: nothing moves, nothing shoots, and whatever you do to
       // it next lands four times as hard.

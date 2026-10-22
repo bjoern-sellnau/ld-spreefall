@@ -103,7 +103,7 @@ district by hand. A comparison of the same street at either tier is in
 | T | blow the C4 you have put down, and every vehicle rigged with a remote bomb |
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight |
-| G | holster the weapon, for walking and for photographs |
+| G | holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt |
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | F1 F2 F3 | quality tier: low, medium, high |
@@ -296,6 +296,8 @@ visits.
 | Comic carnage | overkill drawn as a comic book: bright red blood by the bucket from every hit, heads that pop, blood rain, splashes on the screen, the word in yellow |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 | Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
+| Extreme enemies | a camp or hunting ground that calls for help gets wave after wave of it, as many as the waves setting says (a slider and a box to type the number in, 1 to 50, 6 to start with), 20 s apart instead of 38 and two more men in each; a Slayer nest holds that many waves of demons, each past the third a little bigger |
+| Crazy reality | the screen gets dirty: dust off every blast near you, from the side it went off and settling low, blood when you are hit (from that side, and it runs) or a kill is close, soot from fire at your feet or the flamethrower; it clears by itself in a quarter of a minute or so |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not
@@ -537,8 +539,16 @@ and you in a suit with one bar of energy that everything it does runs on.
   fired from it drops it and empties the suit.
 - **Shift** is the suit's sprint, 1.75 times a run, while the energy lasts.
   **Space** held puts the suit's strength into the jump and goes about four
-  times as high. **F** with one of theirs in front of you is a punch that
-  puts him down, for 30 energy.
+  times as high. **F** with one of theirs in reach takes him by the throat
+  and holds him up in front of you, off his feet and with your gun away,
+  for 12 energy and 5 a second while you hold him (a grunt is fine, a
+  stalker or anything bigger is not). Hold the trigger to wind up a throw,
+  up to 0.9 s for the hardest, and let go: he flies at 11 to 30 m/s, and
+  whoever he goes through on the way is hurt by how fast he was going, and
+  so is he when he lands or hits a wall. F again lets him drop. What is too
+  big to lift gets a punch instead, for 30 energy.
+- **G** throws a grenade off the belt without putting away what is in your
+  hands, out of the grenades you carry.
 - **B** the visor: a narrower view with a scan over the middle; hold one
   of theirs there for half a second and he is tagged, and the tag (a red
   marker with the distance) stays over him wherever he goes, through walls
@@ -577,8 +587,13 @@ and cloak as modes on Q and E and made the strength and the speed things the
 suit does when asked; the third added a bow that can be fired from the cloak
 for a share of the energy rather than all of it; the aliens of the second
 are infantry grunts, quick stalkers that knock you into the air, and a tall
-tripod walker whose ping is an EMP reaching fifty metres
+tripod walker whose ping is an EMP reaching fifty metres; the first game's
+strength mode threw objects and enemies, and a grab held longer before the
+release throws harder; G is the grenade in the series' default keys
 ([Wikipedia: Crysis](https://en.wikipedia.org/wiki/Crysis),
+[Wikipedia: Crysis (video game)](https://en.wikipedia.org/wiki/Crysis_(video_game)),
+[Siliconera on the nanosuit](https://www.siliconera.com/how-crysis-2s-nanosuit-makes-you-feel-like-a-superhero/),
+[Steam: Crysis key bindings](https://steamcommunity.com/app/17300/discussions/0/846960481952725653/?ctp=2),
 [Crysis wiki: Ceph](https://crysis.fandom.com/wiki/Ceph),
 [Crysis wiki: Armor](https://crysis.fandom.com/wiki/Armor),
 [Game Informer on the bow](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2012/06/06/crysis-3-bringing-a-bow-to-a-gunfight.aspx),
@@ -589,6 +604,32 @@ The numbers and everything else here are ours.
 ![The visor, one tagged](docs/screenshots/hunt-02-visor.png)
 ![Nano Vision](docs/screenshots/hunt-03-nano.png)
 ![A grunt and a stalker at a hunting ground](docs/screenshots/hunt-04-ceph.png)
+
+### Two bows
+
+The bow in your hands has two looks. In The Hunt it is the **Tech Bow**, a
+compound bow for a man in a nanosuit: a riser in black carbon with its
+middle cut away, split limbs short and steep, a cam at each tip with the
+cables running between them, a stabiliser, and a strip of cyan light down
+the riser that flares as the arrow goes. Everywhere else it is the
+**Tactic Bow**, a takedown recurve: an olive riser with windows cut in it,
+long black limbs that curl forward at the tips, the stock two pin sight
+with bright fibre ends, a rest and a short stabiliser. The HUD names the
+one you hold. The cheat menu's **Bow** row puts either in your hands in
+every mode, or leaves it to the mode; it is a look, so it does not mark the
+run. What a bow does (heads, draw weights, the cloak) is the same in both.
+
+They are ours, drawn from what the two game bows are described as: the
+hunter's composite bow of Crysis 3, with an adjustable draw weight
+([Game Informer](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2012/06/06/crysis-3-bringing-a-bow-to-a-gunfight.aspx),
+[GamesBeat](https://gamesbeat.com/crysis-3-review/)), and the Far Cry 3
+recurve with its two pin stock sight
+([Far Cry wiki: the bow in first person](https://farcry.fandom.com/wiki/File:FC3BD_Bow_First-Person_View.png)).
+The two pictures given as the brief could not be fetched from here, so
+nothing is copied from them.
+
+![The tech bow in The Hunt](docs/screenshots/hunt-07-tech-bow.png)
+![The tactic bow, chosen in the cheat menu](docs/screenshots/hunt-08-tactic-bow.png)
 
 ## The end of an operation
 

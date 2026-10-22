@@ -220,6 +220,7 @@
   <div id="toast"></div>
   <div id="overkill" aria-hidden="true"></div>
   <div id="splatter" aria-hidden="true"></div>
+  <canvas id="grime" class="hidden" aria-hidden="true"></canvas>
   <div id="progress">
     <span id="found">0</span> of <span id="total">11</span> landmarks
   </div>
@@ -257,7 +258,7 @@
     <tr><td>W A S D, arrows</td><td>walk</td></tr>
     <tr><td>Shift</td><td>run</td></tr>
     <tr><td>Space</td><td>jump onto kerbs and low walls, or leap while reflexes are on</td></tr>
-    <tr><td>E, or right Shift</td><td>reflexes: the city slows down and you do not; in The Hunt, E is the cloak, Shift the suit's sprint, Space held a higher jump, F a punch, B the visor, N Nano Vision, X the bow's draw weight</td></tr>
+    <tr><td>E, or right Shift</td><td>reflexes: the city slows down and you do not; in The Hunt, E is the cloak, Shift the suit's sprint, Space held a higher jump, F takes a man in reach by the throat (the trigger held throws him, F again lets go) or punches what is too big to lift, G a grenade, B the visor, N Nano Vision, X the bow's draw weight</td></tr>
     <tr><td>Mouse, or drag on the right of the screen</td><td>look</td></tr>
     <tr><td>P</td><td>photo mode, hides the interface and unlocks the clock</td></tr>
     <tr><td>R</td><td>reload; with the bow, change the arrow head: fire, poison, explosive</td></tr>
@@ -295,7 +296,7 @@
     <tr><td>Right mouse with the launcher</td><td>hold the sight on a target to lock, then the rocket chases it</td></tr>
     <tr><td>Q</td><td>back to the last weapon; in The Hunt, the suit's armour</td></tr>
     <tr><td>T</td><td>blow the C4 you have put down, and any vehicle rigged with a remote bomb</td></tr>
-    <tr><td>G</td><td>holster the weapon, for walking and for photographs</td></tr>
+    <tr><td>G</td><td>holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt</td></tr>
     <tr><td>C</td><td>cheats</td></tr>
     <tr><td>V</td><td>free travel: pick a place on the map and fly there</td></tr>
     <tr><td>Esc</td><td>release the mouse</td></tr>
@@ -325,6 +326,10 @@
   <div class="group">
     <div class="grouplabel">their mechs, when they come for you</div>
     <div class="row chips" id="cheatfoe"></div>
+  </div>
+  <div class="group">
+    <div class="grouplabel">the bow</div>
+    <div class="row chips" id="cheatbow"></div>
   </div>
   <div class="group">
     <div class="grouplabel">numbers you can turn</div>

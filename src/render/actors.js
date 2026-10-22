@@ -530,6 +530,100 @@ export function buildBowMesh() {
   return m;
 }
 
+/**
+ * The tech bow, after the hunter's compound bow of the nanosuit games: a
+ * riser in black carbon with its middle cut away, split limbs short and
+ * steep, a cam at each tip with the cables running back between them, a
+ * stabiliser forward and a strip of light down the riser that is brighter
+ * the moment after a shot. Ours, drawn from the descriptions: a compound
+ * bow, utilitarian, for a man who fires it from the cloak.
+ */
+export function buildTechBowMesh() {
+  const m = new MeshBuild();
+  // The riser: two rails with a gap between them, a grip and a shelf.
+  m.box(0, 0.075, -0.402, 0.024, 0.090, 0.030, 31);
+  m.box(0, -0.075, -0.402, 0.024, 0.090, 0.030, 31);
+  m.box(0, 0.000, -0.418, 0.020, 0.070, 0.012, 31);      // the spine behind the cut out
+  m.box(0, -0.010, -0.396, 0.030, 0.056, 0.040, 2);      // grip
+  m.box(0.012, 0.016, -0.410, 0.020, 0.008, 0.036, 31);  // the shelf the arrow rests on
+  // The light down the face of it.
+  m.box(-0.0135, 0.075, -0.402, 0.003, 0.070, 0.006, 32);
+  m.box(-0.0135, -0.075, -0.402, 0.003, 0.070, 0.006, 32);
+  for (const sgn of [1, -1]) {
+    // Split limbs: two thin blades side by side, steep and short.
+    for (const off of [-0.009, 0.009]) {
+      m.box(off, sgn * 0.150, -0.392, 0.008, 0.070, 0.014, 31);
+      m.box(off, sgn * 0.205, -0.372, 0.008, 0.050, 0.012, 31);
+    }
+    // The cam, a wheel on its side across the tip, with its axle.
+    m.cylinder(-0.011, sgn * 0.238, -0.356, 0.024, 0.024, 0.022, 14, 3, 'x');
+    m.box(0, sgn * 0.238, -0.356, 0.030, 0.006, 0.006, 3);
+    m.box(-0.0135, sgn * 0.238, -0.356, 0.002, 0.014, 0.014, 32);   // a point of light in the cam
+  }
+  // The string, tip to tip, pulled back to the nock, and the two cables
+  // running between the cams.
+  m.box(0, 0.135, -0.300, 0.0025, 0.230, 0.0025, 3);
+  m.box(0, -0.135, -0.300, 0.0025, 0.230, 0.0025, 3);
+  m.box(0.006, 0, -0.352, 0.002, 0.470, 0.002, 3);
+  m.box(-0.006, 0, -0.348, 0.002, 0.470, 0.002, 3);
+  // A stabiliser forward of the grip, a short sight on the riser.
+  m.cylinder(0, -0.040, -0.420, 0.007, 0.007, -0.170, 8, 31, 'z');
+  m.cylinder(0, -0.040, -0.590, 0.013, 0.013, -0.030, 10, 3, 'z');
+  m.box(0.020, 0.050, -0.420, 0.014, 0.024, 0.010, 3);
+  m.box(0.020, 0.050, -0.426, 0.004, 0.004, 0.002, 32);
+  // The arrow on the rest, nocked on the string: a black shaft and a
+  // broadhead.
+  m.cylinder(0.010, 0.008, -0.210, 0.0035, 0.0035, -0.560, 6, 31, 'z');
+  m.cylinder(0.010, 0.008, -0.770, 0.009, 0.0, -0.050, 6, 3, 'z');
+  m.box(0.010, 0.018, -0.240, 0.002, 0.018, 0.060, 32);
+  return m;
+}
+
+/**
+ * The tactic bow, after the modern takedown recurve of the jungle shooters:
+ * a machined riser in olive with windows cut in it, long black limbs that
+ * sweep back and then curl forward at the tips, a pin sight with two
+ * bright fibre pins on the left of the window, an arrow rest and a short
+ * stabiliser. Ours too: a recurve with the stock two pin sight, which is
+ * what the descriptions agree on.
+ */
+export function buildTacticBowMesh() {
+  const m = new MeshBuild();
+  // The riser: a long olive bar with two windows cut out of it.
+  m.box(0, 0.060, -0.400, 0.024, 0.060, 0.034, 33);
+  m.box(0, -0.060, -0.400, 0.024, 0.060, 0.034, 33);
+  m.box(0, 0.000, -0.412, 0.024, 0.060, 0.010, 33);
+  m.box(0, -0.008, -0.394, 0.032, 0.060, 0.040, 2);      // grip, wrapped
+  for (const sgn of [1, -1]) {
+    // Limbs in four pieces: back, back, and then the tip curling forward.
+    m.box(0, sgn * 0.118, -0.396, 0.034, 0.060, 0.014, 2);
+    m.box(0, sgn * 0.180, -0.380, 0.030, 0.070, 0.012, 2);
+    m.box(0, sgn * 0.240, -0.360, 0.026, 0.060, 0.011, 2);
+    m.box(0, sgn * 0.282, -0.374, 0.022, 0.034, 0.010, 2);   // the recurve
+    m.box(0, sgn * 0.300, -0.390, 0.018, 0.018, 0.010, 3);   // tip and string groove
+    // Limb bolts.
+    m.cylinder(-0.013, sgn * 0.090, -0.400, 0.007, 0.007, 0.004, 8, 3, 'x');
+  }
+  // The string to the curled tips, pulled back to the nock.
+  m.box(0, 0.150, -0.340, 0.0025, 0.300, 0.0025, 3);
+  m.box(0, -0.150, -0.340, 0.0025, 0.300, 0.0025, 3);
+  // The sight: a bracket out to the left and two fibre pins in it.
+  m.box(-0.026, 0.030, -0.412, 0.030, 0.008, 0.010, 33);
+  m.box(-0.040, 0.034, -0.412, 0.004, 0.044, 0.016, 3);
+  for (const y of [0.044, 0.026]) {
+    m.box(-0.032, y, -0.412, 0.012, 0.003, 0.003, 3);
+    m.box(-0.026, y, -0.412, 0.003, 0.003, 0.003, 34);   // the bright end
+  }
+  // A rest, and a short stabiliser.
+  m.box(0.012, 0.016, -0.408, 0.016, 0.004, 0.020, 3);
+  m.cylinder(0, -0.050, -0.418, 0.009, 0.009, -0.120, 8, 33, 'z');
+  // The arrow on the rest: a carbon shaft, a field point and fletching.
+  m.cylinder(0.010, 0.008, -0.210, 0.0035, 0.0035, -0.560, 6, 1, 'z');
+  m.cylinder(0.010, 0.008, -0.770, 0.009, 0.0, -0.050, 6, 3, 'z');
+  m.box(0.010, 0.018, -0.240, 0.002, 0.018, 0.060, 2);
+  return m;
+}
+
 /** A marksman's rifle: a long receiver, a suppressor as long again, a scope. */
 export function buildMarksmanMesh() {
   const m = new MeshBuild();
@@ -1324,6 +1418,8 @@ export class Actors {
       splinter: this._uploadMesh(buildSplinterMesh(), 0, 0),
       sdpistol: this._uploadMesh(buildPistolMesh(), 0, 0),
       bow: this._uploadMesh(buildBowMesh(), 0, 0),
+      bowTech: this._uploadMesh(buildTechBowMesh(), 0, 0),
+      bowTactic: this._uploadMesh(buildTacticBowMesh(), 0, 0),
       marksman: this._uploadMesh(buildMarksmanMesh(), 0, 0),
       doublebarrel: this._uploadMesh(buildDoubleBarrelMesh(), 0, 0),
       chainsaw: this._uploadMesh(buildChainsawMesh(), 0, 0),

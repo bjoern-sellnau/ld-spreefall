@@ -1658,6 +1658,53 @@ async function run() {
   await page.waitForTimeout(700);
   await page.screenshot({ path: path.join(SHOTS, 'cheat-04-gore.png') });
 
+  // --- crazy reality: the glass gets dirty ---------------------------------------
+  const grime = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const frames = (n) => new Promise((done) => {
+      let i = 0;
+      const step = () => (++i >= n ? done() : requestAnimationFrame(step));
+      requestAnimationFrame(step);
+    });
+    s.cheats.reset(); s.gibs.clear(); s.effects.clear(); s.soldiers.reset(); s.projectiles.clear();
+    s.teleport(81, 0); s.look(90, -2);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const out = {};
+    // Off: a blast beside you leaves the glass clean.
+    s.explode(s.player.x - 14, s.player.y + 1, s.player.z - 3, { radius: 8, damage: 0 }, { weapon: 'rpg' });
+    await frames(3);
+    out.off = s.grime.dirt.total;
+    s.setCheat('crazyReality', true);
+    s.setCheat('godmode', true);
+    s.explode(s.player.x - 14, s.player.y + 1, s.player.z - 3, { radius: 8, damage: 0 }, { weapon: 'rpg' });
+    s.combat.hurt(20, s.player.x + 10, s.player.z, s.player.x, s.player.z);
+    // Fire at your feet.
+    s.burningGround.push({ x: s.player.x + 2, y: s.player.y, z: s.player.z, radius: 4, left: 3, damagePerSecond: 0 });
+    await frames(40);
+    s.burningGround.length = 0;
+    const d = s.grime.dirt;
+    out.dust = +d.dust.toFixed(2); out.blood = +d.blood.toFixed(2); out.soot = +d.soot.toFixed(2);
+    out.shown = !document.getElementById('grime').classList.contains('hidden');
+    out.splats = s.grime.splats.length;
+    s.setCheat('godmode', false);
+    return out;
+  });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-09-crazy-reality.png') });
+  const cleared = await page.evaluate(async () => {
+    const s = window.spreefall;
+    // A quarter of a minute and more: it has cleared by itself.
+    s.grime.draw(40, true);
+    const later = s.grime.dirt.total;
+    const hidden = document.getElementById('grime').classList.contains('hidden');
+    s.setCheat('crazyReality', false);
+    return { later, hidden };
+  });
+  check('crazy reality off leaves the glass clean', grime.off === 0, JSON.stringify(grime));
+  check('on, a blast beside you throws dust on it, a hit puts blood on it and fire puts soot on it',
+    grime.dust > 0.5 && grime.blood > 0.3 && grime.soot > 0.1 && grime.shown, JSON.stringify(grime));
+  check('and it clears by itself', cleared.later === 0 && cleared.hidden, JSON.stringify(cleared));
+
   await page.evaluate(() => {
     const s = window.spreefall;
     s.cheats.reset(); s.gibs.clear(); s.effects.clear();

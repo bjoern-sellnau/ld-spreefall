@@ -25,7 +25,8 @@ export const OVERKILL_SCALE = 12;
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'everyWeapon', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
-  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore'];
+  'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore',
+  'extremeEnemies', 'crazyReality'];
 
 /** The switches, in the order the menu shows them. */
 export const SWITCHES = [
@@ -46,6 +47,13 @@ export const SWITCHES = [
   { id: 'wreckGround', label: 'Ground can be cratered', note: 'warheads dig a hole where they land; off keeps the street level', def: true },
   { id: 'lastKill', label: 'Slow motion on the last kill', note: 'killing the last one standing near you drops the world to a crawl for a moment' },
   { id: 'showDamage', label: 'Show what a building has left', note: 'what the frontage you are aiming at has taken, and how much more it takes to bring it down' },
+  // Help that does not stop coming: a camp or a hunting ground that calls
+  // for it gets as many waves as the setting below says, bigger and closer
+  // together, and a nest in Slayer as many waves of demons.
+  { id: 'extremeEnemies', label: 'Extreme enemies', note: 'a call for help brings wave after wave of it, as many as the setting says; a Slayer nest holds that many waves too' },
+  // The screen as a lens you are looking through: dust off every blast near
+  // you, blood when you are hit or something dies close, soot from fire.
+  { id: 'crazyReality', label: 'Crazy reality', note: 'the screen gets dirty: dust off blasts near you, blood when you are hit or a kill is close, soot from fire; it clears slowly' },
 ];
 
 export const GORE = [
@@ -124,10 +132,28 @@ export const SETTINGS = [
     min: 5, max: 100, step: 5, def: 25,
   },
   {
+    // How many waves extreme enemies sends. The box beside the slider takes
+    // a number typed in, for the same range.
+    id: 'extremeWaves', label: 'Extreme enemies: waves', unit: 'waves',
+    note: 'how many waves of help a call brings with extreme enemies on, and how many a Slayer nest holds',
+    min: 1, max: 50, step: 1, def: 6, box: true,
+  },
+  {
     id: 'boneTime', label: 'Skeletons collapse after', unit: 's',
     note: 'a burnt body falls to pieces after this long; nought leaves them standing for good',
     min: 0, max: 120, step: 1, def: 18,
   },
+];
+
+/**
+ * The two bows, and which one is in your hands. By mode is the tech bow in
+ * The Hunt, where it belongs to the suit, and the tactic bow everywhere
+ * else. A choice, like the mechs: it does not mark the run.
+ */
+export const BOWS = [
+  { id: 'mode', label: 'By mode', note: 'the tech bow in The Hunt, the tactic bow everywhere else' },
+  { id: 'tech', label: 'Tech Bow', note: 'a compound bow in black carbon with cams at the tips and a light down the riser' },
+  { id: 'tactic', label: 'Tactic Bow', note: 'a takedown recurve in olive and black with a two pin sight' },
 ];
 
 /** Things to get into, parked where you are standing. */
@@ -156,6 +182,8 @@ export class Cheats {
     // rather than a cheat: it does not mark the run, and all off leaves it
     // where you put it.
     this.mechs = { mine: CHASSIS[0].id, foe: CHASSIS[0].id };
+    // Which bow: by mode, or one of the two whatever the mode.
+    this.bow = 'mode';
     // Ultra plasma: how many, how wide, from which way and how steep. Kept
     // with the choices rather than the switches, for the same reason.
     this.ultra = { ...ULTRA.defaults };
@@ -257,6 +285,21 @@ export class Cheats {
     return true;
   }
 
+  /** Pick a bow. @returns {boolean} whether it was one there is */
+  chooseBow(id) {
+    if (!BOWS.some((b) => b.id === id)) return false;
+    this.bow = id;
+    this.save();
+    if (this.onChange) this.onChange('bow', id);
+    return true;
+  }
+
+  /** Which of the two bows is in your hands in this mode. */
+  bowFor(mode) {
+    if (this.bow === 'tech' || this.bow === 'tactic') return this.bow;
+    return mode === 'hunt' ? 'tech' : 'tactic';
+  }
+
   /** Set one of ultra plasma's four numbers, held to what it may be. */
   setUltra(key, v) {
     if (!(key in ULTRA.defaults)) return false;
@@ -294,7 +337,7 @@ export class Cheats {
 
   save() {
     try {
-      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra, storm: this.storm };
+      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra, storm: this.storm, bow: this.bow };
       for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
@@ -324,6 +367,7 @@ export class Cheats {
           if (saved.storm[k] !== undefined) this.storm[k] = clampUltra(k, saved.storm[k], VOID_STORM);
         }
       }
+      if (saved.bow && BOWS.some((b) => b.id === saved.bow)) this.bow = saved.bow;
       if (saved.mechs) {
         if (CHASSIS.some((c) => c.id === saved.mechs.mine)) this.mechs.mine = saved.mechs.mine;
         if (saved.mechs.foe === 'random' || CHASSIS.some((c) => c.id === saved.mechs.foe)) {

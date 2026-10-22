@@ -872,23 +872,38 @@ async function run() {
     const read = (index) => {
       const rec = w.tiles[index]; if (!rec) return null;
       const m = W.tileMesh(rec); const [ox, oz] = w.tileOrigin(index);
-      const v = m.view; const pos = []; const ground = [];
+      const v = m.view; const pos = []; const ground = []; const up = [];
       for (let i = 0; i < m.vCount; i++) {
         const o = m.vOff + i * C.VERTEX_STRIDE;
         pos.push([v.getInt16(o, true) / C.POS_SCALE + ox, v.getInt16(o + 2, true) / C.POS_SCALE, v.getInt16(o + 4, true) / C.POS_SCALE + oz]);
         ground.push((v.getUint8(o + 17) & C.FACADE_FLAG.GROUND) !== 0);
+        up.push(v.getInt8(o + 7) / 127);
       }
       const idx = m.i32 ? new Uint32Array(m.buffer, m.iOff, m.iCount) : new Uint16Array(m.buffer, m.iOff, m.iCount);
-      return { pos, ground, idx: Array.from(idx) };
+      return { pos, ground, up, idx: Array.from(idx) };
     };
     const out = [];
     const runCase = (name, blasts, cx, cz, reach) => {
+      // The street before anything went off, and how high the heap can be:
+      // a roof that came down lies on the rubble, and over a warhead's
+      // crater that rubble is above the bottom of the hole.
+      const streetY = w.groundHeight(cx, cz);
+      const heapTop = Math.min(3.5, blasts[blasts.length - 1][2] * 0.11) * 1.1 + 1.3;
       for (const [x, z, r, d] of blasts) {
         const g = w.groundHeight(x, z);
         s.demolition.blast(x, g + 2, z, r, d);
       }
       let frames = 0;
       while (s.refineJobs.length && frames < 400) { s.refineStep(); frames++; }
+      // How high the heap can be is the site's to say, not the last blast's:
+      // shells landing beside each other merge into one site whose radius,
+      // and so whose rubble, grows with every one. A roof that came down lies
+      // at most the site's rubble (with its jitter) and a metre of slide over
+      // where the site stands.
+      const sites = s.demolition.sites.filter((x) => !x.craterOnly && x.level > 0
+        && Math.hypot(x.x - cx, x.z - cz) < reach + x.radius);
+      const heapAt = sites.length
+        ? Math.max(...sites.map((x) => x.y + x.rubble * 1.1 + 1.0)) - streetY + 0.3 : heapTop;
       // Snapshot after every refine, before anything has moved.
       const tiles = new Set();
       w.forEachSegmentTile(cx - reach, cz - reach, cx + reach, cz + reach, (a, b, index) => tiles.add(index));
@@ -896,7 +911,7 @@ async function run() {
       for (const t of tiles) { const r = read(t); if (r) snap.set(t, r); }
       for (let i = 0; i < 60 * 14; i++) s.fixedForTest(1 / 60);
       s.demolition.bakeAll();
-      let sheets = 0, tris = 0; const where = [];
+      let sheets = 0, tris = 0, roofs = 0, roofsDown = 0, highest = 0; const where = [];
       const cell = (v) => Math.floor(v / 4);
       for (const [t, before] of snap) {
         const after = read(t);
@@ -906,6 +921,17 @@ async function run() {
           if (vs.some((v) => v >= before.pos.length || before.ground[v])) continue;
           tris++;
           const P = vs.map((v) => before.pos[v]);
+          // A roof that came down with its column and still hangs above the
+          // heap, over the inside of the building where nothing holds it:
+          // what a partly fallen block left over Steglitz.
+          if (vs.every((v) => before.up[v] > 0.5)) {
+            const dropped = vs.map((v) => before.pos[v][1] - after.pos[v][1]);
+            if (Math.min(...dropped) > 0.5) {
+              roofsDown++;
+              const up = Math.min(...vs.map((v) => after.pos[v][1] - streetY));
+              if (up > heapAt) { roofs++; highest = Math.max(highest, up); }
+            }
+          }
           const sameCell = P.every((p) => cell(p[0]) === cell(P[0][0]) && cell(p[2]) === cell(P[0][2]));
           if (sameCell) continue;
           const fall = vs.map((v) => before.pos[v][1] - after.pos[v][1]);
@@ -919,7 +945,7 @@ async function run() {
         }
       }
       const R = blasts[blasts.length - 1][2];
-      out.push({ name, frames, sheets, tris, refineMs: Math.round(s.state.refineMs || 0), where: where.sort((a, b) => a - b), R });
+      out.push({ name, frames, sheets, roofs, roofsDown, heap: +heapAt.toFixed(2), highest: +highest.toFixed(2), tris, refineMs: Math.round(s.state.refineMs || 0), where: where.sort((a, b) => a - b), R });
     };
     // Shells landing beside each other, so the site grows.
     runCase('grown', [[300, -60, 10, 900], [312, -52, 10, 900], [322, -66, 10, 900], [306, -74, 10, 900], [316, -60, 12, 1400]], 312, -62, 70);
@@ -932,6 +958,10 @@ async function run() {
     grown && grown.sheets <= 2, JSON.stringify(grown));
   check('and nor does a warhead, cut a few tiles a frame', warhead && warhead.sheets === 0 && warhead.frames > 1,
     JSON.stringify(warhead));
+  check('and a roof whose column went comes down to the heap rather than hanging over the inside',
+    grown && warhead && grown.roofsDown + warhead.roofsDown > 0 && grown.roofs === 0 && warhead.roofs === 0,
+    `${grown && grown.roofs} and ${warhead && warhead.roofs} roof pieces left above the heap, `
+      + `of ${grown && grown.roofsDown} and ${warhead && warhead.roofsDown} that came down`);
   await page.evaluate(() => { const s = window.spreefall; s.soldiers.enabled = true; s.drones.enabled = true; });
 
   const fly = await page.evaluate(async () => {

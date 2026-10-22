@@ -4221,6 +4221,180 @@ So there are two cities now, and a profile picks which:
   woke the stalker through a silent alarm. hunt-04-ceph.png,
   hunt-05-end.png.
 
+## 104. By the throat, thrown, and a grenade off the belt
+
+- In The Hunt F takes the nearest of theirs within 2.4 m and in front by
+  the throat (`Grab`, src/game/grab.js; the numbers in `SUIT.grab`): not a
+  civilian, not a machine, not a boss and nothing more than 1.3 times a man,
+  for 12 energy. He is held 1.45 m out and 0.35 m to the right, lifted off
+  his feet and facing you, and kicks; `s.held` keeps the soldier pool off
+  him, so he neither walks nor fires. Your gun goes away while he is held,
+  and holding costs 5 energy a second; run the energy out, get into
+  something or take the suit off and he is let go.
+- The trigger held winds the throw up over 0.9 s; let go and he goes along
+  the view at 11 to 30 m/s with a lift of 0.22 of that, for 8 to 16 energy.
+  F again lets him drop. In the air he is a body in flight (gravity 19, a
+  tumble): whoever he passes within 1.1 m of takes 0.8 of 9 times his speed
+  and the throw loses four tenths of its speed; a wall stops him where it
+  stands, the ground takes him when he comes down, and either hurts him by
+  9 times his speed (a wall 1.3 times that). Whoever is not killed gets up
+  where he came down. A held man is no takedown, and the prompt says Grab
+  or Let go.
+- G in the suit throws a grenade from the grenades you carry (`weapon.
+  quickGrenade`: magazine first, then the reserve, 0.7 s apart) with the
+  grenade's own speed and lob, without putting away what is in your hands.
+  Outside the suit G still holsters.
+- Sources: the first game's strength mode threw objects and enemies
+  (Wikipedia: Crysis (video game)); a grab held longer before the release
+  throws harder (Siliconera on the nanosuit); G is the grenade in the
+  series' default keys (Steam discussion of the Crysis key map, and the
+  Remastered key list). Grab on F is ours: the search found no source that
+  names the original game's key for it.
+- Checks (hunt, 27 now): F takes a man in reach and holds him up 1.5 m out
+  and off his feet with the gun away and nothing hurting you; a full
+  wind-up throws him through the man eight metres behind, who is hurt, and
+  he dies where he lands; G throws a grenade without putting the bow away.
+  Unit tests for who can be taken, the wind-up and the cost of holding, the
+  flight through a man and onto the ground, and a wall. The throw checks
+  bring the camera's vectors up to date after turning it, because the
+  throw goes where the camera points and that is only worked out when it
+  is drawn. hunt-06-grab.png.
+
+## 107. A roof whose column went comes down with it
+
+- From the user's screenshot (Steglitz, a block at stage 1 of 4): dark
+  slabs hanging in the air over a ruin. A building is walls round the edge
+  and a roof over the inside, and the roof is cut on the four metre column
+  lines like everything else. Each column of it came down only as far as
+  its column was cut back, so over the inside, where there is no wall under
+  it, a partly fallen block left a staircase of roof pieces in the air at
+  each column's own height. Reproduced here with three heavy hits into a
+  frontage, and gone after.
+- A face pointing up (normal more than half up) in the top quarter of its
+  building is a roof, and in a column that has started to go it is cut back
+  to nothing: it lands on the heap with the rest, in the shader and in the
+  bake alike (`applyCollapse`, `settle`). The walls in the same column keep
+  their cut, so a frontage standing to half its height is a frontage with
+  its roof fallen in behind it.
+- Checks (city, 90 now): after shells landing beside each other and after a
+  warhead, no up facing piece that came down is left above the heap (the
+  street before the blast, plus the most rubble a site of that size leaves
+  and a metre and a bit): 0 of 1063 and 0 of 20252. Unit (2 more): a roof
+  in a column that went is never above the wall beside it and lies on the
+  heap; one outside the site is not touched.
+
+- CI follow up: on the live Berlin extract the check found 67 of 2477
+  roof pieces over its line after the shells. The line was the last
+  blast's rubble (12 m, 1.3 m of it), but shells landing beside each other
+  merge into one site whose radius, and so whose rubble, grows with each:
+  17.6 m and 1.9 m here, more over real blocks. A roof on that heap is
+  where it should be. The line is now the site's own (its ground, its
+  rubble with the jitter, the metre a piece slides, and 0.3 m), and the
+  log says how high it is and how high the highest piece left over it.
+  Still sharp: with the roof rule taken out it fails at 405 and 4998.
+
+## 105. Extreme enemies: wave after wave of help
+
+- A switch in the cheat menu, and a setting beside it with a slider and a
+  box to type the number into (1 to 50, 6 to start with; the box is the
+  menu's first, and a setting can now ask for one with `box: true`).
+- With it on, a camp or a hunting ground that raises the alarm with its
+  radio up calls as many waves as the setting says instead of two, 20 s
+  apart instead of 38, with two more men in each (`tactics.extreme`,
+  `TACTICS.extreme`). From the second wave they are a convoy with a tank,
+  as before. A Slayer nest holds that many waves of demons: the three as
+  they are, and each past the last 15 percent bigger than the one before
+  (`slayer.extremeFrom`, read when the nest plans its waves, because the
+  cheats are applied at start up before the nests exist).
+- Checks (ops, 93 now): the switch and the number typed into the box reach
+  the setting and move the slider; with it on and five waves set, an alarm
+  brings five calls of six men 20 s apart. The calls are counted rather than
+  sent: five convoys with tanks shelling the street left it in no state for
+  the convoy checks after them. And the tank check now stands you up with
+  god mode on first: the crew that comes with it shoots too, and once they
+  had killed you the tank had nobody to shell.
+
+## 106. Crazy reality: the glass gets dirty
+
+- A switch in the cheat menu. With it on, one canvas over the HUD and under
+  the menus (src/ui/grime.js) takes:
+  - dust off a blast within its radius and 45 m, more the closer and the
+    bigger, from the side it went off and settling in the lower half: soft
+    tan smudges with grit in them;
+  - blood when you are hit, from the side the shot came from, once a
+    second at most (standing in fire is a hit every frame), and when a kill
+    is within 9 m: a ragged splat with droplets round it and a run or two
+    that crawls down the glass;
+  - soot round the edges from fire within five metres of its edge, or from
+    pouring the flamethrower.
+- It fades over 16 to 26 s by kind, and no kind keeps more than so many
+  (50 dust, 18 blood, 16 soot) so a fight does not paint the glass red all
+  over. The first try of it did exactly that, from a fire at the feet, and
+  was turned down after the screenshot.
+- Checks (cheats, 123 now): off, a blast beside you leaves the glass clean;
+  on, a blast, a hit and fire at your feet put dust, blood and soot on it;
+  and it clears by itself. Unit tests (3): nothing sticks while it is off,
+  a closer blast throws more dust and a hit puts blood on its own side, no
+  kind fills the glass and the runs grow and it all clears.
+  cheat-09-crazy-reality.png.
+
+## 108. More punch in a shot
+
+- The guides on weapon sound for games say a shot that sounds weak is
+  usually missing a layer: a transient, a body, a low end kept dry, the
+  mechanics just ahead of the report, and a short tail (Splice, Violet
+  Recording, designingsound.org on Chuck Russom). We had the transient (snap
+  and crack), the body and the tail (the street's echoes); two are new.
+  - **Kick**: a dry sine that drops from 110 to 50 Hz in 45 ms and decays
+    over a little more than a tenth of a second, kept out of the soft clip.
+  - **Mech**: a click of band passed noise round 4 kHz, the action, 6 ms
+    ahead of the report.
+  Both are numbers per voice in `Audio.SHOT`, as the rest are, and none on
+  the bow, the throw or the plasma's mechanics.
+- The bus: everything but the kick goes through a gentle clip (tanh at 1.6)
+  at 1.12 times the level it had, and the kick and that are summed into a
+  ceiling that rounds the top off at 98 percent, so a thump under a report
+  never adds up past full scale. The quiet ones have a level of their own
+  (pistol 0.4, suppressed 0.45, bow and throw 0.6) so the louder bus does
+  not make them loud.
+- Measured offline, before and after: the rifle's first 50 ms from -15.3
+  to -9.7 dB and its low end under 120 Hz in the first 150 ms from -25.6 to
+  -19.0 dB; the shotgun -10.4 to -6.4 and -18.0 to -13.1; the double barrel
+  -9.3 to -5.6 and -15.6 to -11.0; the mech cannon -7.6 to -5.6 and -9.4 to
+  -5.7. Every peak is at -2 dB or under (the first try without the ceiling
+  peaked at +3). The suppressed pistol is where it was, -33 to -32.
+- Checks (arsenal, 48 now): a rifle shot rendered offline is louder than
+  -12 dB in its first 50 ms and over -21 dB under 120 Hz, and neither it
+  nor the shotgun reaches -1 dB; the suppressed pistol is more than 15 dB
+  under the rifle.
+
+## 109. Two bows: a Tech Bow and a Tactic Bow
+
+- The ask: two designs for the bow, after two pictures (a Crysis 3 bow and
+  the Far Cry 3 bow). Neither picture could be fetched from here (the image
+  host refused the proxy, the other did not resolve), so the designs come
+  from what the sources say the two bows are.
+  - Crysis 3: the hunter's composite bow, a permanent part of the kit, with
+    a draw weight you set (Game Informer, GamesBeat). Ours: a compound
+    bow, a carbon riser with a cut out, split limbs, cams and cables, a
+    stabiliser, a short sight and a cyan strip that flares on the shot.
+  - Far Cry 3: a recurve whose stock sight has two pins (voicetube on the
+    bows, the Far Cry wiki's first person picture). Ours: an olive riser
+    with windows, black limbs curling forward at the tips, limb bolts, the
+    two pin sight with green fibre ends, a rest and a stabiliser.
+- Four new viewmodel materials: carbon (31, a fine weave in the shading),
+  cyan glow (32, brighter with the muzzle term), olive anodised (33) and the
+  fibre pin (34).
+- Which one: the tech bow in The Hunt, the tactic bow everywhere else, and
+  a **Bow** row in the cheat menu (by mode, tech, tactic) that is saved
+  with the rest and does not mark the run. The HUD says TECH BOW or TACTIC
+  BOW in place of BOW. Nothing about how the bow plays changes.
+- Checks (hunt, 28 now): in The Hunt the viewmodel is the tech bow and the
+  HUD says so; chosen in the menu it is the tactic bow. Screenshots
+  hunt-07-tech-bow and hunt-08-tactic-bow. The draw weight check now waits
+  a moment after the menu closes, since the menu holsters the weapon while
+  it is up.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

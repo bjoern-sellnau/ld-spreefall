@@ -157,6 +157,11 @@ float applyCollapse(inout vec3 p, inout vec3 n, bool isGround, float height) {
     if (above <= 0.001) continue;
     float full = max(height, above);
     float cut = full * (1.0 - level);
+    // A roof has no wall under it but at the edge: inside, the column it
+    // stands in is air from the roof to the street. A column that has
+    // started to go takes its roof all the way down to the heap, or the
+    // inside of a ruin is a stack of roofs hanging at each column's height.
+    if (n.y > 0.5 && above > full * 0.75) cut = 0.0;
     if (above <= cut) continue;
 
     float jitter = collapseHash(vec3(cell.x, 0.0, cell.y));

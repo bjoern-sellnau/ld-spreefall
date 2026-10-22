@@ -98,7 +98,7 @@ export function craterShape(x, z, site, level) {
  * @returns {number} how far gone it is, 0 to 1, which decides whether it is
  *   marked as rubble
  */
-export function settle(p, isGround, height, site) {
+export function settle(p, isGround, height, site, up = 0) {
   if (!(site.level > 0)) return 0;
   // A site made while the buildings switch was off carries the crater and
   // nothing else: the hole is written into the street and every wall around
@@ -123,7 +123,12 @@ export function settle(p, isGround, height, site) {
   const above = p.y - site.y;
   if (above <= 0.001) return 0;
   const full = Math.max(height, above);
-  const cut = full * (1 - level);
+  let cut = full * (1 - level);
+  // A roof has no wall under it but at the edge: inside, the column it
+  // stands in is air from the roof to the street. A column that has started
+  // to go takes its roof all the way down to the heap, as the shader does,
+  // or the inside of a ruin is a stack of roofs at each column's height.
+  if (up > 0.5 && above > full * 0.75) cut = 0;
   if (above <= cut) return 0;
 
   const jitter = collapseHash(cx, 0, cz);
@@ -275,7 +280,7 @@ export function bakeSite(world, site) {
         // Rubble a site before this one put down stays where it lies, as it
         // does in the shader.
         if (!isGround && (flags & FACADE_FLAG.RUBBLE) !== 0) continue;
-        const fall = settle(p, isGround, height, site);
+        const fall = settle(p, isGround, height, site, view.getInt8(o + 7) / 127);
         if (burntNow) touched++;
         if (fall <= 0 && p.y === startY) continue;
         view.setInt16(o, clampI16(Math.round((p.x - ox) * POS_SCALE)), true);
