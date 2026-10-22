@@ -1791,7 +1791,10 @@ export class Actors {
       // other. A train's yaw is along its track, (sin, cos), and a carriage
       // is the same either way round, so it takes pi less it.
       d[o + 3] = v.type === 'train' ? Math.PI - v.yaw : -v.yaw;
-      d[o + 4] = v.pitch; d[o + 5] = v.roll; d[o + 6] = v.hitFlash;
+      // Burning, it goes black over a couple of seconds; the flash channel
+      // carries that below nought.
+      d[o + 4] = v.pitch; d[o + 5] = v.roll;
+      d[o + 6] = v.health > 0 ? v.hitFlash : -Math.min(1, 0.25 + (v.dying || 0) / 2.5);
       // A fighter has no rotor: the channel says whether its wheels are down,
       // as two or nought, the same way an enemy jet sends its afterburner in
       // nought to one, which leaves the gear of those always up.

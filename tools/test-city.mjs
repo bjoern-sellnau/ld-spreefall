@@ -1037,9 +1037,11 @@ async function run() {
   const caught = await page.evaluate(() => {
     const s = window.spreefall;
     s.vehicles.reset();
-    const jeep = s.vehicles.spawn('jeep', s.player.x - 26, s.player.z, 0);
+    // Clear air for the picture: the tank before this one leaves its smoke.
+    s.effects.clear();
+    const jeep = s.vehicles.spawn('jeep', s.player.x - 16, s.player.z, 0);
     if (!jeep) return { skip: true };
-    s.look(90, -4);
+    s.look(90, -8);
     const was = { caught: s.state.wrecksCaught || 0, blown: s.state.wrecksBlown || 0, fire: s.burningGround.length };
     s.vehicles.damage(jeep, 99999);
     return { skip: false, was, caught: (s.state.wrecksCaught || 0) - was.caught, blownAtOnce: (s.state.wrecksBlown || 0) - was.blown };

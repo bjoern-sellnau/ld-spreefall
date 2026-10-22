@@ -4609,6 +4609,16 @@ So there are two cities now, and a profile picks which:
   flames thrown round it and 7.5 m of burning road for 20 s.
 - A vehicle rigged as a bomb still goes at once, and then burns and goes up
   again as its tank does.
+- And it looks burnt: the hit flash channel of the vehicle instances carries
+  below nought how burnt it is (a quarter at once, all of it over two and a
+  half seconds), and the shader takes the paint to all but black by that
+  much. Before, a destroyed jeep stood in its own fireball as green as it
+  was parked.
+- Found by the city check on the way: `vehicles.reset()` puts the objects
+  back in a pool, and the burning list kept the object, so the tank shot down
+  in the check before set fire to the jeep spawned into the same slot. The
+  entry now carries a token the wreck holds, and a vehicle from the pool
+  starts with no driver, bomb, fire or runaway left over.
 - Checks (city): a jeep at no health is alight and not blown at once, not
   blown 1.5 s later, blown by 4 s with more burning ground than before;
   a parked car is not gone after a second and is by four. Screenshots
