@@ -351,7 +351,8 @@ What the seven gore switches actually are:
   bright comic red in drops twice the size, every hit gushes, a head shot
   that kills takes the head, every kill brings a red rain down over the
   street round it and a taller, longer fountain, the word is yellow with a
-  red outline, and a kill close to you throws splashes on the screen.
+  red outline, a kill close to you throws splashes on the screen, and the
+  walls round a kill are left with the blood running down them.
 
 And the last kill:
 

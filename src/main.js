@@ -634,6 +634,13 @@ async function main() {
           -shot.end.nx, Math.abs(shot.end.ny) * 0.4 + 0.3, -shot.end.nz,
           cheats.goreScale * (shot.core ? 1.8 : 1));
         if (cheats.comicGore) {
+          // Out of the far side and onto whatever wall is behind them.
+          const bx = -shot.end.nx, bz = -shot.end.nz, bl = Math.hypot(bx, bz) || 1;
+          const behind = world.raycast(shot.end.x, shot.end.y, shot.end.z, bx / bl, -0.1, bz / bl, 6);
+          if (behind && behind.kind === 'wall') {
+            renderer.addBloodSplat(behind.x, behind.y, behind.z, 0.6 + Math.random() * 0.6);
+            state.wallSplats = (state.wallSplats || 0) + 1;
+          }
           // Every hit gushes for a moment, out of the far side.
           gushes.push({ x: shot.end.x, y: shot.end.y, z: shot.end.z, nx: -shot.end.nx, nz: -shot.end.nz, life: 0.7 });
           // And a head shot that kills takes the head with it.
@@ -3441,6 +3448,11 @@ async function main() {
       const hit = world.raycast(s.x, s.y + 1.2, s.z, Math.cos(a), 0, Math.sin(a), 9);
       if (!hit || hit.kind === 'ground') continue;
       effects.blood(hit.x + hit.nx * 0.15, hit.y, hit.z + hit.nz * 0.15, hit.nx, 0.15, hit.nz, 3);
+      // The comic book leaves it there: a splat on the wall that runs.
+      if (cheats.comicGore) {
+        renderer.addBloodSplat(hit.x, hit.y + (Math.random() - 0.3) * 0.8, hit.z, 1.2 + Math.random() * 1.3);
+        state.wallSplats = (state.wallSplats || 0) + 1;
+      }
     }
     // The clock stops for a beat, which is what makes the word land.
     state.goreStop = Math.max(state.goreStop, 0.5);

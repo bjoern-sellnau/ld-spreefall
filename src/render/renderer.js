@@ -114,6 +114,11 @@ export class Renderer {
     this.fireInfo = new Float32Array(MAX_FIRES * 2);
     this.fireCount = 0;
     this.MAX_SCARS = 16;
+    // Blood splats on walls and streets, a ring of their own.
+    this.MAX_BLOOD = 24;
+    this.blood = new Float32Array(this.MAX_BLOOD * 4);
+    this.bloodCount = 0;
+    this._bloodNext = 0;
     this.scars = new Float32Array(this.MAX_SCARS * 4);
     this.scarInfo = new Float32Array(this.MAX_SCARS * 4);
     this.scarCount = 0;
@@ -356,6 +361,16 @@ export class Renderer {
     this.scars.fill(0);
     this.scarInfo.fill(0);
   }
+
+  /** A splat of blood against a wall or the street. */
+  addBloodSplat(x, y, z, radius) {
+    const i = this._bloodNext;
+    this.blood[i * 4] = x; this.blood[i * 4 + 1] = y; this.blood[i * 4 + 2] = z; this.blood[i * 4 + 3] = radius;
+    this._bloodNext = (i + 1) % this.MAX_BLOOD;
+    this.bloodCount = Math.min(this.MAX_BLOOD, this.bloodCount + 1);
+  }
+
+  clearBlood() { this.blood.fill(0); this.bloodCount = 0; this._bloodNext = 0; }
 
   _uploadScars() {
     const gl = this.gl;
@@ -650,6 +665,11 @@ export class Renderer {
     this.progWorld.use();
     this.progWorld.int('uDebugMode', this.debugMode);
     this._uploadScars();
+    this.progWorld.int('uBloodCount', this.bloodCount);
+    if (this.bloodCount) {
+      const bl = this.progWorld.loc('uBlood');
+      if (bl) this.gl.uniform4fv(bl, this.blood);
+    }
     this._uploadCollapses(this.progWorld);
     for (const tile of visible) {
       if (!tile.vao) continue;

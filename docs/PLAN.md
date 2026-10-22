@@ -3966,3 +3966,18 @@ So there are two cities now, and a profile picks which:
   four hundred buildings at random places and turns. The wall hole check now
   clears the scorch mark ring first, since it reads the first mark in it.
 
+## 97. Comic carnage throws the blood against the walls
+
+- With comic carnage on, the blood stays where it lands on a wall: every
+  kill throws it along eight rays at chest height and every wall within nine
+  metres gets a splat a metre or two across where its ray met it, and every
+  hit puts one on whatever wall is within six metres behind the one hit.
+- A splat is its own ring of twenty four in the world shader (uBlood), apart
+  from the sixteen blast marks so it never pushes the soot out: a ragged
+  blob from the facade noise with drops round it, running down the wall in
+  streaks further than it reaches up, wet (low roughness), and the red of a
+  comic book. On the street it is a splat without the runs.
+- Checks (cheats, 120 now): a comic kill two metres in front of the long
+  face of the Brandenburg Gate's cross wall leaves its blood on the wall.
+  cheat-08-comic-wall.png.
+
