@@ -953,8 +953,20 @@ async function run() {
     s.teleport(mine.x + 3, mine.z);
     s.toggleVehicle();
     const inIt = s.state.inMech === mine;
-    // Walk it, looking the way it is already facing.
-    s.look(mine.torso * 180 / Math.PI, 0);
+    // Walk it, the way the street is open longest: whichever way it was put
+    // down facing can be a frontage ten metres off, depending on the extract.
+    let heading = mine.torso, clear = -1;
+    for (let k = 0; k < 16; k++) {
+      const a = mine.torso + k / 16 * Math.PI * 2;
+      const dx = -Math.sin(a), dz = -Math.cos(a);
+      const y = s.world.groundHeight(mine.x, mine.z) + 3;
+      const hit = s.world.raycast(mine.x + dx * 4, y, mine.z + dz * 4, dx, 0, dz, 60);
+      const t = hit ? hit.t : 60;
+      if (t > clear) { clear = t; heading = a; }
+    }
+    s.look(heading * 180 / Math.PI, 0);
+    // The legs come round under the torso before it sets off.
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
     const was = { x: mine.x, z: mine.z };
     s.input.keys.add('KeyW');
     for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
@@ -1566,21 +1578,28 @@ async function run() {
     const near = s.spawnMech('reaper', 52);
     theirs.health = theirs.maxHealth;
     const hp0 = theirs.health;
-    const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+    let eye = null;
     // Somewhere it can be seen from here, on ground near the level of the
     // street you are standing in: by this point in the suite half the
-    // district is a crater and the other half is a ruin.
+    // district is a crater and the other half is a ruin. Where "here" is
+    // depends on where the checks before this one left you, so if nothing
+    // is clear from there it looks again from the square by the Gate.
     let spot = null;
-    for (let step = 0; step < 28 && !spot; step++) {
-      const a = (step % 2 ? 1 : -1) * Math.floor(step / 2) * 0.3;
-      const d = 40 + (step % 3) * 7;
-      const px = s.player.x - Math.sin(s.camera.yaw + a) * d;
-      const pz = s.player.z - Math.cos(s.camera.yaw + a) * d;
-      const dx = px - eye.x, dz = pz - eye.z;
-      const len = Math.hypot(dx, dz) || 1;
-      const blocked = s.world.raycast(eye.x, eye.y, eye.z, dx / len, 0, dz / len, len);
-      if (!blocked && Math.abs(s.world.groundHeight(px, pz) - s.player.y) < 4) {
-        spot = { x: px, z: pz };
+    for (const from of [null, { x: 81, z: 0 }]) {
+      if (spot) break;
+      if (from) { s.teleport(from.x, from.z); s.look(90, 0); s.fixedForTest(1 / 60); }
+      eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+      for (let step = 0; step < 28 && !spot; step++) {
+        const a = (step % 2 ? 1 : -1) * Math.floor(step / 2) * 0.3;
+        const d = 40 + (step % 3) * 7;
+        const px = s.player.x - Math.sin(s.camera.yaw + a) * d;
+        const pz = s.player.z - Math.cos(s.camera.yaw + a) * d;
+        const dx = px - eye.x, dz = pz - eye.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const blocked = s.world.raycast(eye.x, eye.y, eye.z, dx / len, 0, dz / len, len);
+        if (!blocked && Math.abs(s.world.groundHeight(px, pz) - s.player.y) < 4) {
+          spot = { x: px, z: pz };
+        }
       }
     }
     if (!spot) { s.machines.active = modeWas; return { skip: true }; }
