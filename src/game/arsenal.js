@@ -384,6 +384,8 @@ export const LOADOUT = [
 export const KITS = {
   tactics: ['sdpistol', 'bow', 'marksman', 'm16', 'shotgun', 'rpg', 'grenade', 'c4', 'banana', 'railgun'],
   slayer: ['doublebarrel', 'm16', 'plasma', 'rpg', 'railgun', 'shieldsaw', 'flail', 'chainsaw', 'flak', 'void'],
+  // The bow first: in the suit it is the one thing you can fire from the cloak.
+  hunt: ['bow', 'm16', 'sdpistol', 'marksman', 'shotgun', 'grenade', 'c4', 'rpg', 'railgun', 'banana'],
 };
 
 export function weaponBySlot(slot) {

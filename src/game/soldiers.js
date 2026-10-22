@@ -191,6 +191,9 @@ export class Soldiers {
     // the numbers, how fast you are moving, and who to tell when he has.
     this.stealth = null;          // {range, cone, near, fill, decay, run}
     this.playerSpeed = 0;
+    // The suit's cloak: inside this many metres you are seen anyway, and
+    // nought when it is off.
+    this.cloak = 0;
     this.onSpot = null;           // fn(soldier, how) 'seen', 'heard' or 'hit'
     this.onDown = null;           // fn(soldier) the moment one is killed
     // Slayer: a demon's claws, its fire and its charge, which the game layer
@@ -708,7 +711,8 @@ export class Soldiers {
       // to yours, so a parked car of a building really does hide you.
       if (time > s.lastSeen + 0.24) {
         s.lastSeen = time;
-        s.canSee = !playerSafe && dist < SPEC.sight
+        // Cloaked, you are not there to be seen until they walk into you.
+        s.canSee = !playerSafe && dist < SPEC.sight && !(this.cloak && dist > this.cloak)
           && w.lineOfSight(s.x, s.y + 1.6, s.z, player.x, player.y, player.z);
       }
 

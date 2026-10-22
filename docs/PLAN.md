@@ -4092,3 +4092,51 @@ So there are two cities now, and a profile picks which:
   now): the radar puts what is ahead straight up and what is to your right to
   the right, whichever way you face, and the projection lands where clip
   space says and nowhere behind you. mech-05-cockpit.png.
+
+## 101. The Hunt, and the suit
+
+- A third operation on the title card, The Hunt (campaign mode `hunt`, its
+  own book in the save, 1200 a ground, 1800 for one cleared without an
+  alarm, 450 a level). It runs on the Tactics camps: `tactics.enabled` is now
+  `campaign.camps`, true for both, so the guards, the stealth, the alarm, the
+  radio, the alarm box and the convoys all come with it. The line at the top
+  says The Hunt and grounds; the journal is titled from the operation's own
+  name.
+- The suit (src/game/nanosuit.js), one bar of energy, 100: Q armour (80
+  percent of a hit into the energy at 0.55 a point, 0.88 speed, 1.2 a second
+  standing and 3.5 moving), E cloak (0.35 s to come up; 2.5, 7 and 20 a
+  second standing, walking and running; inside 3.2 m they see you anyway),
+  Shift a sprint at 1.75 times a run for 15 a second, Space held a jump that
+  goes again at 1.75 times jump speed a moment after leaving the ground for
+  22, F a punch for 30 that does 260. The energy comes back at 24 a second
+  1.4 s after the last draw; emptied, whatever was on drops and nothing comes
+  back on for 1.2 s. The bow fires from the cloak for 22 and leaves it up;
+  any other shot drops it and empties the suit.
+- The cloak reaches the soldiers and the drones as a distance (`cloak`):
+  beyond it `canSee` stays false, so suspicion never fills, and a fight
+  already going loses you and goes looking. The armour reaches you through a
+  hook in `combat.hurt` (`absorb`), before the shield.
+- On the screen: a SUIT bar over the vitals with the two modes lit while they
+  are on, the bar yellow while sprinting and red when low, and the edge of
+  the screen tinted, blue with a slow shimmer for the cloak, amber for the
+  armour. A sweep for the armour going on and a shimmer for the cloak.
+- In the suit Q and E are its modes (not the last weapon and the reflex),
+  and you start with the bow in your hands; the number row is bow, rifle,
+  suppressed pistol, marksman, shotgun, grenade, C4, rocket launcher,
+  railgun, banana.
+- Sources, checked: the first game's four modes and the second's Nanosuit 2
+  keeping armour and cloak as modes with strength and agility contextual
+  (Wikipedia, Crysis; Crysis wiki, Armor); Q armour and E cloak, B visor and
+  N Nano Vision in the remastered PC controls (magicgameworld); the third
+  game's bow firing from the cloak for a portion of the energy, with draw
+  weights (Game Informer, E3 previews). The numbers are ours.
+- Checks (hunt, new, 12): the mode is on the title card with its note; a run
+  puts grounds in the district held the way camps are, and starts you in the
+  suit with the bow; cloaked, a guard looking straight at you from 22 m has
+  no suspicion after six seconds and the edge of the screen is blue, but
+  walking into him he knows; the same guard without it is sure in under two
+  seconds; the bow from the cloak costs 22 and keeps it, a rifle drops it
+  with the suit empty; armour takes a 40 point hit down to 8 for 17.6
+  energy; Shift covers 9.7 m in a second against 2.6 walking; Space held
+  goes 2.34 m up against 0.57 for a tap; F puts a man down for 30. Unit
+  (107 now): the suit's arithmetic on its own. hunt-01-cloak.png.

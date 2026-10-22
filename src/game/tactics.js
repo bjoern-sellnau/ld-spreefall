@@ -268,7 +268,7 @@ export class Tactics {
     return most;
   }
 
-  get enabled() { return this.campaign.mode === 'tactics'; }
+  get enabled() { return this.campaign.camps; }
 
   /** The runtime record for a site, made the first time it is asked for. */
   run(site) {

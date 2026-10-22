@@ -49,6 +49,7 @@ import { CockpitHud, project as projectPoint } from './ui/cockpit.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
+import { Nanosuit, SUIT } from './game/nanosuit.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
 import { Slayer, SLAYER } from './game/slayer.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
@@ -70,6 +71,7 @@ const el = {
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   mapUnmark: $('mapunmark'), compassBar: $('compassbar'), cockpitHud: $('cockpithud'),
+  suit: $('suit'), suitBar: $('suitbar'), suitArmor: $('suitarmor'), suitCloak: $('suitcloak'), suitFx: $('suitfx'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -612,6 +614,7 @@ async function main() {
     // A shotgun reports every pellet. One bang, one flash, one kick, but a
     // tracer and an impact each, because that spray is the whole weapon.
     const first = !shot.pellet;
+    if (first && suited()) suit.fired(weapon.id === 'bow');
     if (first) {
       audio.gunshot(spec.sound);
       effects.shake = Math.min(1, effects.shake + (spec.kind === 'hitscan' ? 0.07 : 0.16));
@@ -5408,7 +5411,7 @@ async function main() {
 
   // --- operations: Tactics and Slayer ---------------------------------------
   const builtDistricts = () => world.catalogue.filter((d) => world.isBuilt(d));
-  const opsWord = () => (campaign.mode === 'slayer' ? 'nest' : 'camp');
+  const opsWord = () => (campaign.mode === 'slayer' ? 'nest' : campaign.mode === 'hunt' ? 'ground' : 'camp');
 
   /** The setup under the mode buttons on the title card. */
   function showOps() {
@@ -5435,10 +5438,10 @@ async function main() {
     el.opsCount.max = String(hi);
     el.opsCount.value = String(set.perDistrict[campaign.mode]);
     el.opsCountNum.textContent = String(set.perDistrict[campaign.mode]);
-    el.opsCountLabel.textContent = `${opsWord() === 'nest' ? 'Nests' : 'Camps'} per district`;
+    el.opsCountLabel.textContent = `${opsWord()[0].toUpperCase()}${opsWord().slice(1)}s per district`;
     el.opsQuiet.checked = set.quietBonus;
     el.opsBosses.checked = set.bosses;
-    for (const r of el.opsSetup.querySelectorAll('.opstactics')) r.classList.toggle('hidden', campaign.mode !== 'tactics');
+    for (const r of el.opsSetup.querySelectorAll('.opstactics')) r.classList.toggle('hidden', !campaign.camps);
     for (const r of el.opsSetup.querySelectorAll('.opsslayer')) r.classList.toggle('hidden', campaign.mode !== 'slayer');
     const sum = campaign.summary(list.map((d) => d.id));
     el.opsProgress.textContent = sum.total
@@ -5470,8 +5473,61 @@ async function main() {
     showOps();
   });
 
+  // --- the suit, in The Hunt -------------------------------------------------------
+  const suit = new Nanosuit();
+  /** Wearing it: The Hunt, on foot, in the street. */
+  const suited = () => campaign.mode === 'hunt' && state.mode === 'walk' && !state.inVehicle && !state.inMech;
+  suit.onEmpty = (what) => { toast(`suit energy empty: ${what.join(' and ')} off`); audio.powerEnd(); };
+  suit.onBreak = () => { toast('cloak broken'); feed('<b>cloak</b> broken by the shot'); };
+  combat.absorb = (amount) => (suited() ? suit.absorb(amount) : amount);
+  function suitMode(which) {
+    const on = which === 'armor' ? suit.toggleArmor() : suit.toggleCloak();
+    const now = which === 'armor' ? suit.armor : suit.cloak;
+    if (!now && !on && suit.energy < 5) { toast('not enough energy'); audio.dryFire(); return; }
+    toast(`${which === 'armor' ? 'armour' : 'cloak'} ${now ? 'on' : 'off'}`);
+    audio.suit(which, now);
+  }
+  /** A punch with the suit's strength, at whatever of theirs is in front of you. */
+  function suitPunch() {
+    if (!suited()) return false;
+    const fx = -Math.sin(camera.yaw), fz = -Math.cos(camera.yaw);
+    let best = null, bestD = SUIT.punch.reach;
+    for (const t of soldiers.active) {
+      if (!t.alive || t.health <= 0 || t.civilian || t.state === 5) continue;
+      const dx = t.x - player.x, dz = t.z - player.z;
+      const d = Math.hypot(dx, dz);
+      if (d > bestD || (fx * dx + fz * dz) / (d || 1) < 0.5) continue;
+      best = t; bestD = d;
+    }
+    if (!best || !suit.punch()) return false;
+    const k = SUIT.punch.force;
+    const killed = soldiers.damage(best, SUIT.punch.damage, { x: fx * k, y: 0.45 * k, z: fz * k });
+    effects.shake = Math.min(1.2, effects.shake + 0.4);
+    effects.blood(best.x, best.y + 1.3, best.z, fx, 0.4, fz, cheats.goreScale);
+    audio.whoomp(0);
+    if (tactics.enabled) soldiers.hear(player.x, player.z, 18);
+    if (killed) creditTarget(best, false, 'soldier');
+    feed('<b>suit punch</b>');
+    state.punches = (state.punches || 0) + 1;
+    return true;
+  }
+  /** The bar, the two modes, and the edge of the screen while they are on. */
+  function suitHud() {
+    const on = suited();
+    el.suit.classList.toggle('hidden', !on);
+    el.suitFx.classList.toggle('cloak', on && suit.cloak);
+    el.suitFx.classList.toggle('armor', on && suit.armor && !suit.cloak);
+    if (!on) return;
+    el.suitBar.style.width = `${Math.round(suit.energy / SUIT.energy * 100)}%`;
+    el.suit.classList.toggle('low', suit.energy < 25);
+    el.suit.classList.toggle('sprint', suit.sprinting);
+    el.suitArmor.classList.toggle('on', suit.armor);
+    el.suitCloak.classList.toggle('on', suit.cloak);
+  }
+
   /** A run starting: the start district, if one is set, is flown to once the intro is over. */
   function startOps() {
+    suit.reset();
     tactics.clear();
     slayer.clear();
     state.opsEnded = false;
@@ -5585,7 +5641,7 @@ async function main() {
     }
     if (campaign.mode === 'slayer') slayer.update(dt, player);
     opsEndCheck(dt);
-    if (campaign.mode === 'tactics') {
+    if (campaign.camps) {
       soldiers.playerSpeed = Math.hypot(player.vx || 0, player.vz || 0);
       tactics.update(dt, player);
       // The siren, as loud as the nearest one that is going.
@@ -6165,7 +6221,7 @@ async function main() {
     const list = (here && campaign.sitesIn(here)) || [];
     const free = list.filter((x) => x.state === SITE.FREE).length;
     const sum = campaign.summary(builtDistricts().map((d) => d.id));
-    el.opsTitle.textContent = campaign.mode === 'slayer' ? 'Slayer' : 'Tactics';
+    el.opsTitle.textContent = campaign.mode === 'slayer' ? 'Slayer' : campaign.mode === 'hunt' ? 'The Hunt' : 'Tactics';
     const fight = campaign.mode === 'slayer' ? slayer.active(player.x, player.z) : null;
     el.opsLine.textContent = !campaign.inScope(here)
       ? `outside the operation  ·  score ${sum.score.toLocaleString()}`
@@ -6177,7 +6233,7 @@ async function main() {
         : `${world.nameAt(player.x, player.z)} ${free}/${list.length} ${opsWord()}s  ·  `
           + `${sum.done}/${sum.districts} districts  ·  score ${sum.score.toLocaleString()}`;
     let alert = '';
-    if (campaign.mode === 'tactics') {
+    if (campaign.camps) {
       for (const r of tactics.live.values()) {
         if (!r.manned) continue;
         if (r.alarm) { alert = r.radioUp ? 'alarm' : 'alarm, radio down'; break; }
@@ -6196,10 +6252,10 @@ async function main() {
   function showOpsPanel() {
     const list = builtDistricts();
     const sum = campaign.summary(list.map((d) => d.id));
-    el.opsPanelTitle.textContent = campaign.mode === 'slayer' ? 'Spree Fall Slayer' : 'Spree Fall Tactics';
+    el.opsPanelTitle.textContent = campaign.spec.name;
     el.opsPanelLine.textContent = `Score ${sum.score.toLocaleString()}, level ${sum.level + 1}, `
       + `${sum.free} of ${sum.total} ${opsWord()}s taken`
-      + (campaign.mode === 'tactics' ? `, ${sum.quiet} without an alarm.` : '.');
+      + (campaign.camps ? `, ${sum.quiet} without an alarm.` : '.');
     el.opsList.textContent = '';
     for (const d of list) {
       if (!campaign.inScope(d.id)) continue;
@@ -6250,6 +6306,8 @@ async function main() {
     weapon.reset();
     // Tactics and Slayer have a number row of their own.
     weapon.setKit(campaign.active ? campaign.mode : null);
+    // In the suit you start with the bow in your hands: it is what the cloak is for.
+    if (campaign.mode === 'hunt') weapon.select('bow');
     pickups.reset();
     gibs.clear();
     demolition.reset();
@@ -6282,7 +6340,9 @@ async function main() {
   const showMode = () => {
     const now = modeNow();
     for (const b of modeButtons) b.classList.toggle('on', b.dataset.mode === now);
-    el.modeNote.textContent = now === 'tactics'
+    el.modeNote.textContent = now === 'hunt'
+      ? 'Hunting grounds held by squads in black, and you in the suit: Q armour, E cloak, Shift a sprint and Space held a jump that both run on its energy, F a punch. The bow fires from the cloak; a gun drops it.'
+      : now === 'tactics'
       ? 'Armed camps across the city, to be taken one at a time. Take one without anybody raising the alarm for the bonus; break the radio and nobody comes to help them.'
       : now === 'slayer'
         ? 'The city has been overrun. Every district has nests that fill with demons as you fight; kill them all and the presence there is broken.'
@@ -6605,6 +6665,12 @@ async function main() {
         return;
       }
     }
+    // In the suit, Q and E are its two modes, the way the later games had
+    // them, rather than the last weapon and the reflex.
+    if (suited() && !photo.active && (code === 'KeyQ' || code === 'KeyE')) {
+      suitMode(code === 'KeyQ' ? 'armor' : 'cloak');
+      return;
+    }
     switch (code) {
       case 'KeyP': togglePhoto(); break;
       case 'KeyM':
@@ -6629,7 +6695,7 @@ async function main() {
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
-      case 'KeyF': if (!takedown()) toggleVehicle(); break;
+      case 'KeyF': if (!takedown() && !suitPunch()) toggleVehicle(); break;
       case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(true); else openTravel(); break;
@@ -6806,6 +6872,7 @@ async function main() {
       storm.update(worldDt, stormLive());
       opsStep(worldDt);
       drones.update(worldDt, eye, state.time);
+      soldiers.cloak = drones.cloak = suited() && suit.hidden ? SUIT.cloak.near : 0;
       soldiers.update(worldDt, eye, state.time);
       jets.update(worldDt, { ...eye, vx: 0, vz: 0 }, state.time);
       audio.setTimeScale(scale);
@@ -6901,7 +6968,11 @@ async function main() {
     let wishX = 0, wishZ = 0;
     if (!photo.active) {
       camera.walkBasis(basis);
-      const speed = input.run ? PLAYER.runSpeed : PLAYER.walkSpeed;
+      let speed = input.run ? PLAYER.runSpeed : PLAYER.walkSpeed;
+      // The suit's sprint and the weight of its armour.
+      if (suited()) {
+        speed *= suit.update(selfDt, { speed: Math.hypot(player.vx || 0, player.vz || 0), sprint: input.run });
+      }
       wishX = (basis[0] * input.moveZ + basis[2] * input.moveX) * speed;
       wishZ = (basis[1] * input.moveZ + basis[3] * input.moveX) * speed;
     }
@@ -6915,6 +6986,19 @@ async function main() {
       if (boost > 1) audio.leap();
     }
     player.step(selfDt, wishX, wishZ, jumped, boost);
+    // Held, the suit puts its strength into the jump: a moment after leaving
+    // the ground, still rising, it goes most of the way up again.
+    if (jumped && boost === 1) state.suitJump = { t: 0, done: false };
+    if (state.suitJump && suited()) {
+      const j = state.suitJump;
+      j.t += selfDt;
+      if (!j.done && input.jumpHeld && j.t >= SUIT.jump.hold && player.vy > 0) {
+        j.done = true;
+        const k = suit.powerJump();
+        if (k > 1) { player.vy = PLAYER.jumpSpeed * k; audio.leap(); state.powerJumps = (state.powerJumps || 0) + 1; }
+      }
+      if (player.onGround && j.t > 0.05) state.suitJump = null;
+    }
     player.vx = wishX; player.vz = wishZ;
     if (!wasGround && player.onGround) audio.land(player.surface);
 
@@ -7013,6 +7097,7 @@ async function main() {
     titanTick(worldDt);
     machinesTick(worldDt);
     drones.update(worldDt, eye, state.time);
+    soldiers.cloak = drones.cloak = suited() && suit.hidden ? SUIT.cloak.near : 0;
     soldiers.update(worldDt, eye, state.time);
     jets.update(worldDt, { ...eye, vx: player.vx, vz: player.vz }, state.time);
 
@@ -7465,6 +7550,7 @@ async function main() {
       rideHud();
       mechHud();
       cockpitStep();
+      suitHud();
     } else {
       cockpitHud.hide();
     }
@@ -7570,7 +7656,8 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    compassBar, cockpitHud, setMark: (at) => setMark(at),
+    compassBar, cockpitHud, suit, suitSpec: SUIT, suited: () => suited(), suitPunch: () => suitPunch(),
+    setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
     // Help for a camp: on its feet, or still in the back of a jeep.

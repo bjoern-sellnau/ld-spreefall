@@ -1700,3 +1700,51 @@ html, body {
 #scope i { position: absolute; background: rgba(0, 0, 0, 0.85); }
 #scope i:nth-child(1) { left: 50%; top: 15vh; bottom: 15vh; width: 1px; }
 #scope i:nth-child(2) { top: 50%; left: 15vw; right: 15vw; height: 1px; }
+
+/* The suit, in The Hunt: one bar of energy over the vitals, the two modes
+   beside it lit while they are on, and the edge of the screen tinted for
+   them, blue and shimmering for the cloak, amber and heavy for the armour. */
+#suit {
+  position: absolute;
+  left: 22px; bottom: 124px;
+  width: 188px;
+  font: 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--dim);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+#suit.hidden { display: none; }
+#suit .label { font-size: 9.5px; letter-spacing: 0.24em; margin-bottom: 5px; }
+#suit .ebar { height: 6px; background: rgba(255, 255, 255, 0.1); }
+#suit .ebar i { display: block; height: 100%; width: 100%; background: #7fe0ff; box-shadow: 0 0 8px rgba(127, 224, 255, 0.6); }
+#suit.low .ebar i { background: #ff6a4a; box-shadow: 0 0 8px rgba(255, 106, 74, 0.6); }
+#suit.sprint .ebar i { background: #ffe17a; }
+#suit .modes { display: flex; gap: 10px; margin-top: 6px; }
+#suit .modes span { opacity: 0.55; }
+#suit .modes b { margin-right: 4px; color: var(--ink); }
+#suit .modes span.on { opacity: 1; color: #7fe0ff; }
+#suit #suitarmor.on { color: #ffc46a; }
+#suitfx {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+#suitfx.cloak {
+  opacity: 1;
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 220, 255, 0.035) 0 2px, transparent 2px 5px),
+    radial-gradient(ellipse at center, rgba(40, 140, 200, 0) 45%, rgba(40, 150, 220, 0.38) 100%);
+  animation: cloakshimmer 2.4s linear infinite;
+}
+#suitfx.armor {
+  opacity: 1;
+  background: radial-gradient(ellipse at center, rgba(255, 170, 60, 0) 55%, rgba(255, 160, 50, 0.26) 100%);
+}
+@keyframes cloakshimmer {
+  0% { background-position: 0 0, center; }
+  100% { background-position: 0 40px, center; }
+}
+@media (max-width: 720px) {
+  #suit { left: 12px; bottom: 160px; }
+}

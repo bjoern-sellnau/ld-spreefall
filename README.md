@@ -88,7 +88,7 @@ district by hand. A comparison of the same street at either tier is in
 | Z | flamethrower, right mouse throws a wall of fire that runs across the ground |
 | B | incendiary bomb |
 | X | EMP, which stops the machines where they stand |
-| E, or right Shift | reflexes: the city slows and you do not |
+| E, or right Shift | reflexes: the city slows and you do not; in The Hunt, E is the suit's cloak |
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
@@ -99,7 +99,7 @@ district by hand. A comparison of the same street at either tier is in
 | flying | it flies where you look; W S throttle (a fighter holds it), A D turn, Space climbs, right mouse drops |
 | F4 | debug overlay |
 | V | free travel: pick a place on the map and fly there |
-| Q | back to the weapon you had before |
+| Q | back to the weapon you had before; in The Hunt, the suit's armour |
 | T | blow the C4 you have put down, and every vehicle rigged with a remote bomb |
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight |
@@ -520,6 +520,45 @@ all of them, a start district, how many nests, and bosses on or off.
   everywhere when it does, and the fuel comes back slowly), flak and the
   void cannon. A demon low on its feet reels and glows; F finishes it, and
   gives you thirty health.
+
+## Spree Fall: The Hunt
+
+The third operation, in the manner of the nanosuit shooters: hunting grounds
+held by squads in black, on the same camps as Tactics underneath (the
+stealth, the alarm, the radio, the alarm box and the help that drives in),
+and you in a suit with one bar of energy that everything it does runs on.
+
+- **Q** armour: most of a hit (80 percent) goes into the energy instead of
+  into you, at a little over half a point of energy a point; a little slower
+  on your feet, and a trickle of energy while it is on.
+- **E** cloak: a moment to come up, and then a guard looking straight at you
+  does not see you until he walks into you (3 m). It drains faster the faster
+  you move. The **bow** fires from it for 22 energy and leaves it up; any gun
+  fired from it drops it and empties the suit.
+- **Shift** is the suit's sprint, 1.75 times a run, while the energy lasts.
+  **Space** held puts the suit's strength into the jump and goes about four
+  times as high. **F** with one of theirs in front of you is a punch that
+  puts him down, for 30 energy.
+- The energy comes back by itself 1.4 s after the last thing that drew on it.
+  Run it out and whatever was on goes off, and it will not come back on for
+  a moment.
+- You start with the bow in your hands. The number row is bow, rifle,
+  suppressed pistol, marksman rifle, shotgun, grenade, C4, rocket launcher,
+  railgun, banana. A ground cleared without anybody raising the alarm pays
+  1800 on top of the 1200 it is worth.
+
+Where the ideas come from, for the record: the first game had four suit
+modes, armour, speed, strength and cloak; the second and third kept armour
+and cloak as modes on Q and E and made the strength and the speed things the
+suit does when asked; the third added a bow that can be fired from the cloak
+for a share of the energy rather than all of it
+([Wikipedia: Crysis](https://en.wikipedia.org/wiki/Crysis),
+[Crysis wiki: Armor](https://crysis.fandom.com/wiki/Armor),
+[Game Informer on the bow](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2012/06/06/crysis-3-bringing-a-bow-to-a-gunfight.aspx),
+[Crysis 2 Remastered PC controls](https://www.magicgameworld.com/crysis-2-remastered-pc-controls/)).
+The numbers and everything else here are ours.
+
+![Cloaked in front of a guard](docs/screenshots/hunt-01-cloak.png)
 
 ## The end of an operation
 

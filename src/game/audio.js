@@ -1490,6 +1490,32 @@ export class Audio {
   }
 
   /**
+   * The suit changing mode: a sweep and a low hum for the armour, a thin
+   * rising shimmer for the cloak, the same played downwards when it goes off.
+   */
+  suit(which, on) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const armor = which === 'armor';
+    const [a, b] = armor ? [140, 260] : [900, 2400];
+    const o = ctx.createOscillator();
+    o.type = armor ? 'sawtooth' : 'sine';
+    o.frequency.setValueAtTime(on ? a : b, t);
+    o.frequency.exponentialRampToValueAtTime(on ? b : a, t + 0.32);
+    const f = ctx.createBiquadFilter();
+    f.type = armor ? 'lowpass' : 'bandpass';
+    f.frequency.value = armor ? 900 : 1800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(armor ? 0.09 : 0.05, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    o.connect(f).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.5);
+  }
+
+  /**
    * Entering and leaving the slow: a swept filter on everything, so the city
    * goes underwater, plus a sub tone that sits under the whole thing. The
    * master chain grows a lowpass the first time this is called, which keeps the

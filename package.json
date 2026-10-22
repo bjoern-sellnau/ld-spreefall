@@ -24,6 +24,7 @@
     "test:districts": "node tools/test-districts.mjs",
     "test:machines": "node tools/test-machines.mjs",
     "test:ops": "node tools/test-ops.mjs",
+    "test:hunt": "node tools/test-hunt.mjs",
     "clip": "node tools/capture-walk.mjs",
     "all": "npm run world && npm run test && npm run build"
   },
