@@ -895,6 +895,15 @@ async function run() {
       }
       let frames = 0;
       while (s.refineJobs.length && frames < 400) { s.refineStep(); frames++; }
+      // How high the heap can be is the site's to say, not the last blast's:
+      // shells landing beside each other merge into one site whose radius,
+      // and so whose rubble, grows with every one. A roof that came down lies
+      // at most the site's rubble (with its jitter) and a metre of slide over
+      // where the site stands.
+      const sites = s.demolition.sites.filter((x) => !x.craterOnly && x.level > 0
+        && Math.hypot(x.x - cx, x.z - cz) < reach + x.radius);
+      const heapAt = sites.length
+        ? Math.max(...sites.map((x) => x.y + x.rubble * 1.1 + 1.0)) - streetY + 0.3 : heapTop;
       // Snapshot after every refine, before anything has moved.
       const tiles = new Set();
       w.forEachSegmentTile(cx - reach, cz - reach, cx + reach, cz + reach, (a, b, index) => tiles.add(index));
@@ -902,7 +911,7 @@ async function run() {
       for (const t of tiles) { const r = read(t); if (r) snap.set(t, r); }
       for (let i = 0; i < 60 * 14; i++) s.fixedForTest(1 / 60);
       s.demolition.bakeAll();
-      let sheets = 0, tris = 0, roofs = 0, roofsDown = 0; const where = [];
+      let sheets = 0, tris = 0, roofs = 0, roofsDown = 0, highest = 0; const where = [];
       const cell = (v) => Math.floor(v / 4);
       for (const [t, before] of snap) {
         const after = read(t);
@@ -920,7 +929,7 @@ async function run() {
             if (Math.min(...dropped) > 0.5) {
               roofsDown++;
               const up = Math.min(...vs.map((v) => after.pos[v][1] - streetY));
-              if (up > heapTop) roofs++;
+              if (up > heapAt) { roofs++; highest = Math.max(highest, up); }
             }
           }
           const sameCell = P.every((p) => cell(p[0]) === cell(P[0][0]) && cell(p[2]) === cell(P[0][2]));
@@ -936,7 +945,7 @@ async function run() {
         }
       }
       const R = blasts[blasts.length - 1][2];
-      out.push({ name, frames, sheets, roofs, roofsDown, tris, refineMs: Math.round(s.state.refineMs || 0), where: where.sort((a, b) => a - b), R });
+      out.push({ name, frames, sheets, roofs, roofsDown, heap: +heapAt.toFixed(2), highest: +highest.toFixed(2), tris, refineMs: Math.round(s.state.refineMs || 0), where: where.sort((a, b) => a - b), R });
     };
     // Shells landing beside each other, so the site grows.
     runCase('grown', [[300, -60, 10, 900], [312, -52, 10, 900], [322, -66, 10, 900], [306, -74, 10, 900], [316, -60, 12, 1400]], 312, -62, 70);

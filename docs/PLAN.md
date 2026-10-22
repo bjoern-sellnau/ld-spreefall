@@ -4283,6 +4283,16 @@ So there are two cities now, and a profile picks which:
   in a column that went is never above the wall beside it and lies on the
   heap; one outside the site is not touched.
 
+- CI follow up: on the live Berlin extract the check found 67 of 2477
+  roof pieces over its line after the shells. The line was the last
+  blast's rubble (12 m, 1.3 m of it), but shells landing beside each other
+  merge into one site whose radius, and so whose rubble, grows with each:
+  17.6 m and 1.9 m here, more over real blocks. A roof on that heap is
+  where it should be. The line is now the site's own (its ground, its
+  rubble with the jitter, the metre a piece slides, and 0.3 m), and the
+  log says how high it is and how high the highest piece left over it.
+  Still sharp: with the roof rule taken out it fails at 405 and 4998.
+
 ## 105. Extreme enemies: wave after wave of help
 
 - A switch in the cheat menu, and a setting beside it with a slider and a
