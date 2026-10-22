@@ -751,6 +751,24 @@ export class Audio {
   }
 
   /** Somebody in a camp is sure of you: a short rising sting, high and thin. */
+  /** A bomb ticking: a short hard beep, higher as it runs out. */
+  bombBeep(distance = 0, urgent = false) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(urgent ? 2300 : 1750, t);
+    const g = ctx.createGain();
+    const level = 0.09 * Math.max(0.08, 1 - distance / 90);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.1);
+  }
+
   spotted() {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;

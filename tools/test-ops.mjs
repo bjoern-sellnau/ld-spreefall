@@ -1338,6 +1338,86 @@ async function run() {
   check('and walking back in finds it whole', !!memorial && memorial.back.open && memorial.back.stone === 1
     && memorial.back.ground === 0, JSON.stringify(memorial && memorial.back));
 
+  // A vehicle rigged as a bomb on the way out: asked, timed, remote, disarmed.
+  const rigOut = () => page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.teleport(81, 0);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    const j = s.vehicles.spawn('jeep', s.player.x + 4, s.player.z, 0);
+    s.teleport(j.x + 1.5, j.z);
+    s.toggleVehicle();
+    const inside = s.state.inVehicle === j;
+    s.toggleVehicle();
+    return { inside, asked: !!s.rigging() && s.rigging().v === j, weapon: s.weapon.id,
+      shown: !document.getElementById('vbomb').classList.contains('hidden') };
+  });
+  const timed0 = await rigOut();
+  await page.keyboard.press('Digit1');
+  const timed = await page.evaluate(() => {
+    const s = window.spreefall;
+    const j = s.vehicles.active[0];
+    const out = { closed: !s.rigging() && document.getElementById('vbomb').classList.contains('hidden'),
+      bomb: j.bomb && j.bomb.kind, weapon: s.weapon.id };
+    const bombs0 = s.state.vehicleBombs || 0;
+    s.teleport(j.x + 30, j.z);
+    for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
+    out.halfway = j.health > 0;
+    for (let i = 0; i < 60 * 6; i++) s.fixedForTest(1 / 60);
+    out.gone = j.health <= 0;
+    out.bombs = (s.state.vehicleBombs || 0) - bombs0;
+    return out;
+  });
+  check('getting out of a vehicle asks whether to rig it',
+    timed0.inside && timed0.asked && timed0.shown, JSON.stringify(timed0));
+  check('one picks the time bomb, and does not change the weapon',
+    timed.closed && timed.bomb === 'timed' && timed.weapon === timed0.weapon,
+    JSON.stringify({ ...timed, before: timed0.weapon }));
+  check('the time bomb waits its ten seconds and then goes',
+    timed.halfway && timed.gone && timed.bombs === 1, JSON.stringify(timed));
+  await rigOut();
+  await page.keyboard.press('Digit2');
+  const remote = await page.evaluate(() => {
+    const s = window.spreefall;
+    const j = s.vehicles.active[0];
+    const out = { bomb: j.bomb && j.bomb.kind };
+    s.teleport(j.x + 30, j.z);
+    for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
+    out.waited = j.health > 0;
+    return out;
+  });
+  await page.keyboard.press('KeyT');
+  const remoteAfter = await page.evaluate(() => {
+    const s = window.spreefall;
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    return { gone: s.vehicles.active[0].health <= 0 };
+  });
+  check('the remote bomb waits for T, and T blows it',
+    remote.bomb === 'remote' && remote.waited && remoteAfter.gone, JSON.stringify({ ...remote, ...remoteAfter }));
+  await rigOut();
+  await page.keyboard.press('Digit3');
+  const declined = await page.evaluate(() => {
+    const s = window.spreefall;
+    const j = s.vehicles.active[0];
+    const out = { closed: !s.rigging(), bomb: !!j.bomb };
+    // Rigged, then got back into: disarmed.
+    s.rigVehicle(j, 'timed');
+    s.teleport(j.x + 1.5, j.z);
+    s.toggleVehicle();
+    out.disarmed = !j.bomb;
+    s.toggleVehicle();
+    if (s.rigging()) s.rigging().left = 0;
+    for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
+    out.standing = j.health > 0;
+    return out;
+  });
+  check('three says no, and getting back in disarms one',
+    declined.closed && !declined.bomb && declined.disarmed && declined.standing, JSON.stringify(declined));
+  await rigOut();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: path.join(SHOTS, 'ops-14-vehicle-bomb.png') });
+  await page.keyboard.press('Escape');
+
   // The pictures: broken from inside, then whole again after a step outside.
   const shellsInside = () => page.evaluate(() => {
     const s = window.spreefall;

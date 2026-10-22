@@ -1659,6 +1659,23 @@ html, body {
 #bossbar.tyrant .notch { display: none; }
 @media (max-width: 640px) { #bossbar { top: 78px; font-size: 10px; letter-spacing: 0.18em; } }
 
+/* Getting out of a vehicle: rig it or not. */
+#vbomb {
+  position: fixed; left: 50%; top: 24%; transform: translateX(-50%); z-index: 35;
+  padding: 14px 18px; background: rgba(12, 14, 18, 0.92); border: 1px solid rgba(255, 90, 60, 0.45);
+  font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; color: var(--ink); text-align: center;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+#vbomb.hidden { display: none; }
+#vbomb b { display: block; margin-bottom: 10px; color: #ff8a6a; letter-spacing: 0.12em; text-transform: uppercase; font-size: 12px; }
+.vbombbuttons { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.vbombbuttons button {
+  padding: 7px 12px; background: rgba(255, 255, 255, 0.06); color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.2); cursor: pointer; font: inherit;
+}
+.vbombbuttons button:hover { background: rgba(255, 120, 80, 0.2); }
+.vbombbuttons kbd { color: var(--accent); margin-right: 4px; font-family: inherit; font-weight: 700; }
+
 /* The end of an operation: what you did, and again or back to the title. */
 #opsendstats { list-style: none; padding: 0; margin: 14px 0 18px; font: 13px/1.8 ui-sans-serif, system-ui, sans-serif;
   color: var(--ink); letter-spacing: 0.04em; }

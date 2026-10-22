@@ -256,6 +256,13 @@ export class Vehicles {
     if (throttle > 0) v.speed += s.accel * throttle * dt;
     else if (throttle < 0) v.speed += s.accel * 0.7 * throttle * dt;
     if (c && c.brake) v.speed -= Math.sign(v.speed) * s.brake * dt;
+    // Nobody at the wheel: the handbrake. With the drag as low as it is since
+    // the jeep got its speed, one left at full throttle used to roll on for a
+    // hundred metres after you got out, and took a rigged bomb with it.
+    if (!c && v.speed !== 0) {
+      const slow = s.brake * 1.5 * dt;
+      v.speed = Math.abs(v.speed) <= slow ? 0 : v.speed - Math.sign(v.speed) * slow;
+    }
     // Drag, always.
     v.speed -= v.speed * s.drag * dt;
     if (Math.abs(v.speed) < 0.05) v.speed = 0;

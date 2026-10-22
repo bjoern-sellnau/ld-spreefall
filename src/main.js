@@ -60,6 +60,7 @@ const el = {
   todLabel: $('todlabel'), doyLabel: $('doylabel'), shoot: $('shoot'), copylink: $('copylink'),
   photoClose: $('photoclose'), help: $('helppanel'), helpClose: $('helpclose'),
   splatter: $('splatter'),
+  vbomb: $('vbomb'), vbombTimed: $('vbombtimed'), vbombRemote: $('vbombremote'), vbombNo: $('vbombno'),
   completion: $('completion'), completionText: $('completiontext'), completionClose: $('completionclose'),
   opsEnd: $('opsend'), opsEndTitle: $('opsendtitle'), opsEndText: $('opsendtext'), opsEndStats: $('opsendstats'),
   opsEndAgain: $('opsendagain'), opsEndMenu: $('opsendmenu'),
@@ -2694,6 +2695,7 @@ async function main() {
     const near = vehicles.nearest(player.x, player.z, 7);
     if (!near) { toast('nothing to get into'); return; }
     if (!vehicles.enter(near)) return;
+    if (near.bomb) { near.bomb = null; toast('bomb disarmed'); }
     state.inVehicle = near;
     state.holstered = true;
     el.hud.classList.add('driving');
@@ -2962,6 +2964,98 @@ async function main() {
     if (thrown) {
       combat.hurt(22, v.x, v.z, out.x, out.z);
       toast('thrown clear');
+    } else if (v.alive && v.health > 0 && state.mode === 'walk') {
+      askToRig(v);
+    }
+  }
+
+  // --- a vehicle rigged as a bomb ---------------------------------------------------
+  //
+  // Getting out, you are asked whether to leave something in it: a time bomb
+  // that goes in ten seconds, beeping faster as it runs out, or a charge
+  // that goes when you press T, with the C4. Getting back in disarms it, and
+  // one shot to pieces first goes up with its bomb.
+  const VBOMB = {
+    seconds: 10,
+    ask: 8,
+    blast: {
+      jeep: { radius: 20, damage: 1300, force: 22 },
+      tank: { radius: 26, damage: 2200, force: 26 },
+      heli: { radius: 22, damage: 1500, force: 22 },
+      jet: { radius: 32, damage: 2600, force: 30 },
+    },
+  };
+  let rigging = null;
+  function askToRig(v) {
+    rigging = { v, left: VBOMB.ask };
+    el.vbomb.classList.remove('hidden');
+    input.exitLock();
+  }
+  // Only an answer is a gesture the browser takes the mouse back on; the
+  // question running out by itself leaves the click to look round again.
+  function closeRig(answered) {
+    rigging = null;
+    el.vbomb.classList.add('hidden');
+    if (answered && !isTouch && state.mode === 'walk' && !minimap.big) input.requestLock();
+  }
+  function rig(v, kind) {
+    if (!v || !v.alive || v.health <= 0) return false;
+    v.bomb = kind === 'timed' ? { kind, left: VBOMB.seconds, beep: 0 } : { kind: 'remote' };
+    feed(kind === 'timed' ? `<b>${v.spec.name.toLowerCase()}</b> rigged, ${VBOMB.seconds} s`
+      : `<b>${v.spec.name.toLowerCase()}</b> rigged, T to blow it`);
+    toast(kind === 'timed' ? `time bomb: ${VBOMB.seconds} seconds` : 'remote bomb set: T to blow it');
+    audio.bombBeep(0, false);
+    return true;
+  }
+  function choose(kind) {
+    const v = rigging && rigging.v;
+    if (kind && v) rig(v, kind);
+    closeRig(true);
+  }
+  el.vbombTimed.addEventListener('click', () => choose('timed'));
+  el.vbombRemote.addEventListener('click', () => choose('remote'));
+  el.vbombNo.addEventListener('click', () => choose(null));
+
+  /** Blows a rigged vehicle. */
+  function blowVehicle(v) {
+    const bomb = v.bomb;
+    v.bomb = null;
+    const b = VBOMB.blast[v.type] || VBOMB.blast.jeep;
+    explode(v.x, v.y + 1.2, v.z, { ...b, crater: true }, { weapon: 'vehiclebomb' });
+    if (v.alive && v.health > 0) vehicles.damage(v, 1e7);
+    feed(`<b>${v.spec.name.toLowerCase()} bomb</b> ${bomb && bomb.kind === 'timed' ? 'went off' : 'blown'}`);
+    state.vehicleBombs = (state.vehicleBombs || 0) + 1;
+  }
+
+  /** Blows every remote one; the count, for the toast. */
+  function blowRemote() {
+    let n = 0;
+    for (const v of [...vehicles.active]) {
+      if (v.bomb && v.bomb.kind === 'remote') { blowVehicle(v); n++; }
+    }
+    return n;
+  }
+
+  function bombStep(dt) {
+    if (rigging) {
+      rigging.left -= dt;
+      const v = rigging.v;
+      if (rigging.left <= 0 || !v.alive || Math.hypot(player.x - v.x, player.z - v.z) > 25) closeRig();
+    }
+    for (const v of [...vehicles.active]) {
+      const bomb = v.bomb;
+      if (!bomb) continue;
+      // Shot to pieces with a bomb in it: it goes up with the bomb.
+      if (!v.alive || v.health <= 0) { blowVehicle(v); continue; }
+      if (bomb.kind !== 'timed') continue;
+      bomb.left -= dt;
+      bomb.beep -= dt;
+      if (bomb.beep <= 0) {
+        bomb.beep = Math.max(0.08, Math.min(1, bomb.left * 0.11));
+        audio.bombBeep(Math.hypot(player.x - v.x, player.z - v.z), bomb.left < 3);
+        effects.flash(v.x, v.y + 1.8, v.z, 1.2, 1.0, 0.1, 0.05, 0.08);
+      }
+      if (bomb.left <= 0) blowVehicle(v);
     }
   }
 
@@ -6215,6 +6309,13 @@ async function main() {
   });
 
   input.onKeyPress = (code) => {
+    // The question on getting out of a vehicle takes the number row while it
+    // stands, so a one does not also put the first weapon in your hands.
+    if (rigging) {
+      if (code === 'Digit1') { choose('timed'); return; }
+      if (code === 'Digit2') { choose('remote'); return; }
+      if (code === 'Digit3' || code === 'Escape') { choose(null); return; }
+    }
     if (code === 'Escape') {
       el.help.classList.add('hidden');
       // One step back rather than straight out: if a target is armed, Escape
@@ -6313,7 +6414,7 @@ async function main() {
       case 'KeyX': weapon.select('emp'); break;
       case 'KeyK': weapon.select('mechkiller'); break;
       case 'KeyT': {
-        const n = weapon.detonate();
+        const n = weapon.detonate() + blowRemote();
         if (n) toast(`${n} charge${n === 1 ? '' : 's'} blown`);
         break;
       }
@@ -6466,6 +6567,7 @@ async function main() {
       warlordStep(worldDt);
       memorialStep();
       refineStep();
+      bombStep(worldDt);
       updateCarBlasts();
       trains.update(worldDt, player);
       ion.update(worldDt);
@@ -6661,6 +6763,7 @@ async function main() {
     warlordStep(worldDt);
     memorialStep();
     refineStep();
+    bombStep(worldDt);
     updateCarBlasts();
     trains.update(worldDt, player);
     ion.update(worldDt);
@@ -7226,6 +7329,8 @@ async function main() {
     compassBar, setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
+    rigVehicle: (v, kind) => rig(v, kind), blowRemote: () => blowRemote(), rigging: () => rigging,
+    leaveVehicle: (thrown) => leaveVehicle(!!thrown),
     refineJobs, refineStep: () => refineStep(),
     bloodRain, gushes,
     poisonClouds, burningCount: () => burning.length,

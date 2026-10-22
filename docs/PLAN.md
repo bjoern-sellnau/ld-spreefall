@@ -3981,3 +3981,32 @@ So there are two cities now, and a profile picks which:
   face of the Brandenburg Gate's cross wall leaves its blood on the wall.
   cheat-08-comic-wall.png.
 
+
+## 98. A vehicle rigged as a bomb
+
+- Getting out of a vehicle on foot, whole and not thrown clear, puts a
+  question on the screen: rig it as a bomb? 1 is a time bomb of ten seconds,
+  2 a remote bomb that goes with T along with the C4, 3 or Escape is no. The
+  question takes the number row while it stands, so the one does not also
+  change the weapon, and it goes by itself after eight seconds or once you
+  are 25 m away.
+- A time bomb beeps from the vehicle, a square wave falling off with distance,
+  faster as it runs out (every tenth of the time left, never under 0.08 s),
+  higher in the last three seconds, with a red flash on the roof each beep.
+- The blast is the vehicle's own: 20 m for a jeep, 26 for a tank, 22 for a
+  helicopter, 32 for a fighter, with a crater, and the vehicle goes with it.
+  One shot to pieces with a bomb in it goes up with the bomb. Getting back in
+  disarms it.
+- A vehicle nobody is driving now has its handbrake on. Since the drag was
+  lowered in phase 90 a jeep left at full throttle rolled on for a hundred
+  metres after you got out, which took the bomb away with it and was why the
+  city check on the ride hint had started to fail: the jeep it stood next to
+  had gone. It now stops within two metres. Two tank checks in the city
+  suite took their place from wherever that jeep was left, which now is
+  where it stopped and sometimes a kerb away from a wall, so they start on
+  the open square instead.
+- Checks (ops, 86 now): the question comes on getting out; one picks the time
+  bomb without changing the weapon; the jeep stands at five seconds and is
+  gone at eleven; the remote one stands for twelve seconds and goes on T;
+  three says no, and a rigged one is disarmed by getting back in.
+  ops-14-vehicle-bomb.png.
