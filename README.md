@@ -619,6 +619,16 @@ one you hold. The cheat menu's **Bow** row puts either in your hands in
 every mode, or leaves it to the mode; it is a look, so it does not mark the
 run. What a bow does (heads, draw weights, the cloak) is the same in both.
 
+Both are held the way an archer holds one rather than the way a rifle is:
+upright in the left hand, left of the crosshair, with the arrow lying along
+the line of sight so that it points at the crosshair, from the hip and
+aimed alike. Crysis 3 aims its bow by the crosshair and a trajectory line
+([Kotaku](https://kotaku.com/video-games-have-become-obsessed-with-bows-and-arrows-5991211)),
+and an archer draws to an anchor at the face with the arrow just under the
+aiming eye
+([Human Kinetics](https://us.humankinetics.com/blogs/excerpt/using-the-side-of-face-anchor));
+the pose itself is ours.
+
 They are ours, drawn from what the two game bows are described as: the
 hunter's composite bow of Crysis 3, with an adjustable draw weight
 ([Game Informer](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2012/06/06/crysis-3-bringing-a-bow-to-a-gunfight.aspx),

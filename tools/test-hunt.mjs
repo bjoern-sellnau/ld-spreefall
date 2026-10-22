@@ -439,6 +439,18 @@ async function run() {
   // after it closes.
   await page.evaluate(() => { window.spreefall.cheatMenu(false); document.activeElement.blur(); });
   await page.waitForTimeout(400);
+  // Held as an archer holds one: left of the crosshair and upright, with
+  // the arrow along the line of sight, so it points at the crosshair.
+  // The pose as set, from the hip and aimed; the turn of the head sways
+  // it about for a moment, which is not how it is held.
+  bows.pose = await page.evaluate(() => {
+    const s = window.spreefall;
+    const { hold, aimHold } = s.weapon.spec;
+    return { x: +s.renderer.viewmodel.x.toFixed(3), hold, aimHold };
+  });
+  const along = (p) => p && p.x < -0.05 && p.yaw === 0 && p.pitch === 0 && p.roll > 0 && p.roll < 0.3;
+  check('the bow is held upright left of the crosshair, its arrow along the line of sight',
+    bows.pose.x < -0.05 && along(bows.pose.hold) && along(bows.pose.aimHold), JSON.stringify(bows.pose));
   check('in The Hunt the bow is the tech bow, and the cheat menu can hand you the tactic bow instead',
     bows.hunt.model === 'bowTech' && /TECH BOW/.test(bows.hunt.label)
       && bows.chosen.model === 'bowTactic' && /TACTIC BOW/.test(bows.chosen.label), JSON.stringify(bows));

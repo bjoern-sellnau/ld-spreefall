@@ -4395,6 +4395,33 @@ So there are two cities now, and a profile picks which:
   a moment after the menu closes, since the menu holsters the weapon while
   it is up.
 
+## 110. The bow held the way an archer holds one
+
+- The ask: hold the bow as in Crysis, because it aims better. Until now it
+  was held like a rifle at the hip, down and to the right and turned in,
+  so from the eye it was a stick lying across the right of the screen and
+  the arrow pointed nowhere in particular. (A second hold for it at the
+  foot of the arsenal, from an older phase, overrode the one in its spec;
+  it is gone.)
+- What the sources say: Crysis 3 aims the bow with the crosshair and a
+  trajectory line, the left trigger to zoom and the right to draw
+  (Kotaku); an archer holds the bow upright in the bow hand and draws to an
+  anchor at the face, with the arrow just under the aiming eye (Human
+  Kinetics on the side of face anchor). How the game draws its first
+  person model is not written down anywhere found, so the pose is ours.
+- The pose: upright in the left hand, left of the crosshair, the string
+  towards the face, the top leaning a little left so the upper limb never
+  stands over what you aim at. The arrow lies parallel to the line of
+  sight: a line parallel to the view meets the middle of the screen however
+  far off to the side it lies, so the arrow points at the crosshair from
+  the hip and aimed. Aiming has a pose of its own for the bow (the rifles
+  share one, the sight on the centre line): closer and nearer the middle,
+  still left of it.
+- Checks (hunt, 29 now): the bow's pose from the hip and aimed is left of
+  the crosshair, leaning less than a sixth of a turn, with no yaw and no
+  pitch, so its arrow is along the line of sight; hunt-07 and hunt-08 show
+  it.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

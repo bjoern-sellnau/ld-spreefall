@@ -7806,8 +7806,10 @@ async function main() {
       // is actually for.
       // Each weapon may sit differently in the hand; the aim pose is shared,
       // because aiming means putting the sight on the centre line whatever you
-      // are holding.
+      // are holding. Except a bow, which is not aimed down a sight but along
+      // the arrow, and has an aim pose of its own.
       const hip = weapon.spec.hold ? { ...VM_HIP, ...weapon.spec.hold } : VM_HIP;
+      const aimed = weapon.spec.aimHold ? { ...VM_AIM, ...weapon.spec.aimHold } : VM_AIM;
       const mix = (a, b) => a + (b - a) * aim;
       // A weight left behind by the turn keeps its own orientation, so in view
       // space it rotates against the look: the translation follows the sway and
@@ -7818,12 +7820,12 @@ async function main() {
       if (state.muzzle > (state.muzzleWas || 0) + 0.25) state.muzzleSeed = Math.random();
       state.muzzleWas = state.muzzle;
       renderer.viewmodel = {
-        x: mix(hip.x, VM_AIM.x) + bobX + state.sway.x * 0.30,
-        y: mix(hip.y, VM_AIM.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
-        z: mix(hip.z, VM_AIM.z) + kick * 0.030,
-        pitch: mix(hip.pitch, VM_AIM.pitch) + kick * 0.075 - state.sway.y * 0.5 - hol * 0.95,
-        yaw: mix(hip.yaw, VM_AIM.yaw) - state.sway.x * 0.8,
-        roll: mix(hip.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
+        x: mix(hip.x, aimed.x) + bobX + state.sway.x * 0.30,
+        y: mix(hip.y, aimed.y) + bobY - state.sway.y * 0.26 - hol * 0.34,
+        z: mix(hip.z, aimed.z) + kick * 0.030,
+        pitch: mix(hip.pitch, aimed.pitch) + kick * 0.075 - state.sway.y * 0.5 - hol * 0.95,
+        yaw: mix(hip.yaw, aimed.yaw) - state.sway.x * 0.8,
+        roll: mix(hip.roll, aimed.roll) + state.sway.x * 0.45 + hol * 0.5,
         muzzle: state.muzzle * (1 - hol),
         seed: state.muzzleSeed || 0,
         // The bow is drawn as whichever of the two is in your hands.
