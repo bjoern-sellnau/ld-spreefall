@@ -164,6 +164,12 @@ export const WEAPONS = {
     // so it never stands over what you are aiming at.
     hold: { x: -0.095, y: -0.085, z: -0.140, pitch: 0, yaw: 0, roll: 0.14 },
     aimHold: { x: -0.064, y: -0.056, z: -0.100, pitch: 0, yaw: 0, roll: 0.08 },
+    // Or on its side, turned a quarter to the left so the side the arrow
+    // lies on is the top: the bow across the bottom of the view, the arrow
+    // on top of the grip running up to the crosshair. Along the line of
+    // sight as before, so it still points at what the shot hits.
+    flatHold: { x: 0.010, y: -0.125, z: -0.100, pitch: 0, yaw: 0, roll: 1.47 },
+    flatAim: { x: 0.004, y: -0.092, z: -0.070, pitch: 0, yaw: 0, roll: 1.54 },
   },
   marksman: {
     name: 'Marksman rifle', short: 'MARKSMAN', kind: KIND.HITSCAN, slot: null,

@@ -4482,6 +4482,24 @@ So there are two cities now, and a profile picks which:
   screenshot cheat-10-mech-grime. The unit checks (caps, sides, clearing)
   still hold.
 
+## 114. The bow held flat, the arrow on top
+
+- The ask: could the bow be held horizontally with the arrow on top. It can,
+  and it is now the default: the same bow turned a quarter to the left
+  (roll 1.47 from the hip, 1.54 aimed, a little short of a right angle so
+  it does not look set with a ruler), so the side of the riser the arrow
+  lies against is the top, and set low (12.5 cm under the eye from the hip,
+  9 aimed) so you look down on the limbs rather than along their edge.
+- The arrow is still parallel to the line of sight, so it still meets the
+  middle of the screen: from the flat bow it runs up from the grip to just
+  under the crosshair.
+- The upright hold from phase 110 is kept: the cheat menu's bow group has a
+  second row, Held flat and Held upright, saved with the rest and not
+  marking the run.
+- Checks (hunt, 31): held flat by default, rolled more than 1.3; Held
+  upright from the menu puts it left of the crosshair; all four poses have
+  no yaw and no pitch. hunt-07 and hunt-08 now show it flat.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

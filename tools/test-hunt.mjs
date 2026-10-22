@@ -439,18 +439,34 @@ async function run() {
   // after it closes.
   await page.evaluate(() => { window.spreefall.cheatMenu(false); document.activeElement.blur(); });
   await page.waitForTimeout(400);
-  // Held as an archer holds one: left of the crosshair and upright, with
-  // the arrow along the line of sight, so it points at the crosshair.
-  // The pose as set, from the hip and aimed; the turn of the head sways
-  // it about for a moment, which is not how it is held.
-  bows.pose = await page.evaluate(() => {
+  // Held flat by default, on its side with the arrow on top, or upright and
+  // left of the crosshair from the menu; either way with the arrow along the
+  // line of sight, so it points at the crosshair. The pose as set, from the
+  // hip and aimed: the turn of the head sways it about for a moment, which
+  // is not how it is held.
+  bows.pose = await page.evaluate(async () => {
     const s = window.spreefall;
-    const { hold, aimHold } = s.weapon.spec;
-    return { x: +s.renderer.viewmodel.x.toFixed(3), hold, aimHold };
+    const { hold, aimHold, flatHold, flatAim } = s.weapon.spec;
+    const flatRoll = +s.renderer.viewmodel.roll.toFixed(2);
+    const flatHeld = s.cheats.bowHold;
+    s.cheatMenu(true);
+    document.querySelector('[data-bowhold="upright"]').click();
+    s.cheatMenu(false);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const uprightX = +s.renderer.viewmodel.x.toFixed(3);
+    s.cheatMenu(true);
+    document.querySelector('[data-bowhold="flat"]').click();
+    s.cheatMenu(false);
+    document.activeElement.blur();
+    return { flatHeld, flatRoll, uprightX, hold, aimHold, flatHold, flatAim };
   });
-  const along = (p) => p && p.x < -0.05 && p.yaw === 0 && p.pitch === 0 && p.roll > 0 && p.roll < 0.3;
-  check('the bow is held upright left of the crosshair, its arrow along the line of sight',
-    bows.pose.x < -0.05 && along(bows.pose.hold) && along(bows.pose.aimHold), JSON.stringify(bows.pose));
+  const along = (p) => p && p.yaw === 0 && p.pitch === 0;
+  const upright = (p) => along(p) && p.x < -0.05 && p.roll > 0 && p.roll < 0.3;
+  const flat = (p) => along(p) && p.roll > 1.3 && p.roll < 1.65 && p.y < -0.04 && Math.abs(p.x) < 0.03;
+  check('the bow is held flat with the arrow on top, or upright from the menu, its arrow along the line of sight either way',
+    bows.pose.flatHeld === 'flat' && bows.pose.flatRoll > 1.3 && bows.pose.uprightX < -0.05
+      && upright(bows.pose.hold) && upright(bows.pose.aimHold) && flat(bows.pose.flatHold) && flat(bows.pose.flatAim),
+    JSON.stringify(bows.pose));
   check('in The Hunt the bow is the tech bow, and the cheat menu can hand you the tactic bow instead',
     bows.hunt.model === 'bowTech' && /TECH BOW/.test(bows.hunt.label)
       && bows.chosen.model === 'bowTactic' && /TACTIC BOW/.test(bows.chosen.label), JSON.stringify(bows));

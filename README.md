@@ -623,10 +623,11 @@ one you hold. The cheat menu's **Bow** row puts either in your hands in
 every mode, or leaves it to the mode; it is a look, so it does not mark the
 run. What a bow does (heads, draw weights, the cloak) is the same in both.
 
-Both are held the way an archer holds one rather than the way a rifle is:
-upright in the left hand, left of the crosshair, with the arrow lying along
-the line of sight so that it points at the crosshair, from the hip and
-aimed alike. Crysis 3 aims its bow by the crosshair and a trajectory line
+Both are held flat, on their side across the bottom of the view with the
+arrow lying on top of the grip, or, with the cheat menu's **Held upright**,
+the way an archer holds one: upright in the left hand, left of the
+crosshair. Either way the arrow lies along the line of sight, so it points
+at the crosshair from the hip and aimed alike. Crysis 3 aims its bow by the crosshair and a trajectory line
 ([Kotaku](https://kotaku.com/video-games-have-become-obsessed-with-bows-and-arrows-5991211)),
 and an archer draws to an anchor at the face with the arrow just under the
 aiming eye

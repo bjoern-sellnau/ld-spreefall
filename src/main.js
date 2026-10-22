@@ -25,7 +25,7 @@ import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
-import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS } from './game/cheats.js';
+import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS, BOW_HOLDS } from './game/cheats.js';
 import { CHASSIS } from './game/chassis.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
@@ -104,7 +104,7 @@ const el = {
   opsList: $('opslist'), opsReset: $('opsreset'), opsHarder: $('opsharder'), opsClose: $('opsclose'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
-  cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'), cheatBow: $('cheatbow'),
+  cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'), cheatBow: $('cheatbow'), cheatBowHold: $('cheatbowhold'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'), vehicleKeys: $('vehiclekeys'),
   vehicleHull: $('vehiclehull'), vehicleSpeed: $('vehiclespeed'),
   vehicleSpeedUnit: $('vehiclespeedunit'),
@@ -4111,6 +4111,33 @@ async function main() {
       el.cheatBow.appendChild(say);
       show();
     }
+    // And how it is held: flat with the arrow on top, or upright.
+    {
+      const say = document.createElement('div');
+      say.className = 'mechsay';
+      const chips = [];
+      const show = () => {
+        for (const c of chips) c.el.classList.toggle('on', c.id === cheats.bowHold);
+        const row = BOW_HOLDS.find((x) => x.id === cheats.bowHold);
+        say.textContent = row ? row.note : '';
+      };
+      for (const o of BOW_HOLDS) {
+        const b = document.createElement('button');
+        b.className = 'chip';
+        b.dataset.bowhold = o.id;
+        b.textContent = o.label;
+        b.title = o.note;
+        b.addEventListener('click', () => {
+          cheats.chooseBowHold(o.id);
+          show();
+          toast(`the bow ${o.label.toLowerCase()}`);
+        });
+        el.cheatBowHold.appendChild(b);
+        chips.push({ id: o.id, el: b });
+      }
+      el.cheatBowHold.appendChild(say);
+      show();
+    }
     for (const sp of SPAWNS) {
       const b = document.createElement('button');
       b.className = 'act';
@@ -7831,8 +7858,12 @@ async function main() {
       // because aiming means putting the sight on the centre line whatever you
       // are holding. Except a bow, which is not aimed down a sight but along
       // the arrow, and has an aim pose of its own.
-      const hip = weapon.spec.hold ? { ...VM_HIP, ...weapon.spec.hold } : VM_HIP;
-      const aimed = weapon.spec.aimHold ? { ...VM_AIM, ...weapon.spec.aimHold } : VM_AIM;
+      // A bow held flat has a pair of its own.
+      const flat = weapon.spec.flatHold && cheats.bowHold === 'flat';
+      const hipHold = flat ? weapon.spec.flatHold : weapon.spec.hold;
+      const aimHold = flat ? weapon.spec.flatAim : weapon.spec.aimHold;
+      const hip = hipHold ? { ...VM_HIP, ...hipHold } : VM_HIP;
+      const aimed = aimHold ? { ...VM_AIM, ...aimHold } : VM_AIM;
       const mix = (a, b) => a + (b - a) * aim;
       // A weight left behind by the turn keeps its own orientation, so in view
       // space it rotates against the look: the translation follows the sway and
