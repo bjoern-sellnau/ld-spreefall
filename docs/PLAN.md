@@ -4237,3 +4237,7 @@ So there are two cities now, and a profile picks which:
   it read the hole from the first mark in the ring, and in the live city the
   blast sets off something else (a car, a tree) that puts its own mark there
   first. It now takes the mark that punches.
+- And a third, in the cheats: overkill's skeleton was asked for more than
+  twenty bones, out of thirty three pieces each bone four times in five with
+  later bursts taking the oldest slots of a full pool. CI drew exactly
+  twenty. It asks for twelve now, a skeleton's worth.
