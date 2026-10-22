@@ -1792,24 +1792,44 @@ async function run() {
   const nightmare = await page.evaluate(() => {
     const s = window.spreefall;
     s.setCheat('nightmare', true);
+    s.soldiers.reset(); s.mechs.reset();
     s.onslaught.level = 2; s.onslaught.supers = 0; s.onslaught.clock = 0.01;
     for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
     const ion = s.state.onslaughtLast.superweapon;
     const out = { ion, firing: s.ion.firing };
-    // Look at it.
-    if (ion) s.look(Math.atan2(-(ion.x - s.player.x), -(ion.z - s.player.z)) * 180 / Math.PI, 4);
+    // Ultra plasma with a squad of theirs 60 m east of you: it still comes
+    // down on you, but on the side away from them.
+    s.soldiers.reset(); s.mechs.reset();
+    const squad = [];
+    for (const [dx, dz] of [[60, 0], [62, 5], [58, -4], [64, -2]]) {
+      const g = s.spawnSoldier(dx, dz);
+      if (g) { g.state = 0; g.rise = 0; squad.push(g); }
+    }
+    out.squad = squad.length;
+    s.onslaught.level = 4; s.onslaught.supers = 1; s.onslaught.clock = 0.01;
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    out.ultra = s.state.onslaughtLast.superweapon;
+    if (out.ultra) out.ultraWest = out.ultra.x < s.player.x;
+    s.ultra.reset && s.ultra.reset();
+    // Look at the warhead.
     s.onslaught.level = 9; s.onslaught.supers = 3; s.onslaught.clock = 0.01;
     for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
     out.nuke = s.state.onslaughtLast.superweapon;
     out.falling = s.projectiles.active.filter((p) => p.kind === 'nuke').length;
+    s.look(90, 30);
     return out;
   });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(SHOTS, 'cheat-12-nightmare.png') });
-  check('Nightmare: the ion cannon from the third wave and a warhead later, each far enough off to live through',
-    nightmare.ion && nightmare.ion.kind === 'ion' && nightmare.firing && nightmare.ion.away >= 240
-      && nightmare.nuke && nightmare.nuke.kind === 'nuke' && nightmare.falling === 1 && nightmare.nuke.away >= 230,
-    JSON.stringify(nightmare));
+  const N = { ion: 90, ultra: 30, nuke: 70 };
+  check('Nightmare: the ion cannon and a warhead come down on you, not off somewhere',
+    nightmare.ion && nightmare.ion.kind === 'ion' && nightmare.firing && nightmare.ion.away <= N.ion + 1
+      && nightmare.nuke && nightmare.nuke.kind === 'nuke' && nightmare.falling === 1 && nightmare.nuke.away <= N.nuke + 1,
+    JSON.stringify({ ion: nightmare.ion, nuke: nightmare.nuke, falling: nightmare.falling }));
+  check('and moves off you only to spare its own: ultra plasma with a squad of theirs to the east lands west of you, with none of them in it',
+    nightmare.squad >= 3 && nightmare.ultra && nightmare.ultra.kind === 'ultra' && nightmare.ultraWest
+      && nightmare.ultra.theirs === 0 && nightmare.ultra.away <= N.ultra + 1,
+    JSON.stringify({ squad: nightmare.squad, ultra: nightmare.ultra }));
   await page.evaluate(() => {
     const s = window.spreefall;
     s.setCheat('nightmare', false);

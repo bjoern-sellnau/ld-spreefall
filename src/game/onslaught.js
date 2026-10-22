@@ -10,10 +10,12 @@
 //
 // Nightmare puts the city's own super weapons on their side as well. From the
 // third wave, every other wave (and from the eighth every wave) one of them
-// comes down near you, in turn: the ion cannon, a rain of ultra plasma, a void
-// storm and a warhead. Near you rather than on you: each lands far enough off
-// that what it does reaches the street you are in without starting there, so
-// the city goes and you have the time it takes to fall to get out of the way.
+// comes down on you, in turn: the ion cannon, a rain of ultra plasma, a void
+// storm and a warhead. On you, and not on them: of the points near enough to
+// you that you are inside what it does, the one with the fewest of their own
+// inside it is the one it is aimed at, so it kills its own side only when
+// there is no point near you that does not. What you get is the time it
+// takes to charge or to fall, and a warning.
 //
 // This only decides what comes and when. The game layer sends it, with the
 // spawners and the guns it already has.
@@ -40,14 +42,46 @@ export const ONSLAUGHT = {
     from: 3,
     everyFrom: 8,           // a super weapon every wave from here
     order: ['ion', 'ultra', 'storm', 'nuke'],
-    // How far off each lands: past what it does, by this much.
-    away: { ion: [250, 320], ultra: [150, 210], storm: [150, 210], nuke: [240, 320] },
+    // How far from you the aim may be moved to spare their own, at most: a
+    // share of what it reaches, so you are inside it wherever it goes.
+    shift: { ion: 90, ultra: 30, storm: 30, nuke: 70 },
     ultra: { count: 160, radius: 70, tilt: 25 },
     storm: { count: 45, radius: 70, tilt: 20 },
   },
 };
 
 const clampN = (v, most) => Math.max(0, Math.min(most, Math.round(v)));
+
+/**
+ * Where a super weapon aimed at you comes down: you, or a point as far as
+ * `shift` from you, whichever has the fewest of their own within `reach` of
+ * it. A mech or a vehicle counts three times a man. Of the points that tie,
+ * the nearest to you.
+ *
+ * @param {{x,z}} at you
+ * @param {{x,z,weight?:number}[]} friends theirs
+ * @param {number} reach how far what it does reaches
+ * @param {number} shift how far the aim may move
+ * @returns {{x:number, z:number, cost:number, off:number}}
+ */
+export function pickStrike(at, friends, reach, shift) {
+  const tries = [[0, 0]];
+  for (const k of [1 / 3, 2 / 3, 1]) {
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      tries.push([Math.cos(a) * shift * k, Math.sin(a) * shift * k]);
+    }
+  }
+  let best = null;
+  for (const [dx, dz] of tries) {
+    const x = at.x + dx, z = at.z + dz;
+    let cost = 0;
+    for (const f of friends) if (Math.hypot(f.x - x, f.z - z) <= reach) cost += f.weight || 1;
+    const off = Math.hypot(dx, dz);
+    if (!best || cost < best.cost || (cost === best.cost && off < best.off)) best = { x, z, cost, off };
+  }
+  return best;
+}
 
 export class Onslaught {
   constructor() {

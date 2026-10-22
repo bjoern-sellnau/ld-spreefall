@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { Onslaught, ONSLAUGHT } from '../../src/game/onslaught.js';
+import { Onslaught, ONSLAUGHT, pickStrike } from '../../src/game/onslaught.js';
 
 const CHASSIS = ['lynx', 'wraith', 'heron', 'hornet', 'ram', 'mantis', 'warden', 'bruin', 'bastion', 'colossus'];
 const fixed = () => 0;
@@ -63,4 +63,25 @@ test('Nightmare: from the third wave the ion cannon, ultra plasma, a void storm 
   // eighth.
   assert.deepEqual(sent.slice(0, 7), [null, null, 'ion', null, 'ultra', null, 'storm']);
   assert.deepEqual(sent.slice(7, 12), ['nuke', 'ion', 'ultra', 'storm', 'nuke']);
+});
+
+test('Nightmare aims at you, and moves off you only to spare its own, as little as it can', () => {
+  const at = { x: 0, z: 0 };
+  // Nobody of theirs about: straight on you.
+  const alone = pickStrike(at, [], 200, 90);
+  assert.equal(alone.off, 0);
+  // A squad 60 m east and a mech with them, inside a 70 m reach of you: the
+  // aim goes west, far enough to leave them out of it.
+  const east = [{ x: 60, z: 0 }, { x: 62, z: 4 }, { x: 58, z: -3, weight: 3 }];
+  assert.equal(pickStrike(at, east, 70, 0).cost, 5);
+  const spared = pickStrike(at, east, 70, 30);
+  assert.equal(spared.cost, 0);
+  assert.ok(spared.x < 0 && spared.off <= 30 + 1e-6, JSON.stringify(spared));
+  // Theirs all round you and the reach too big to leave any of them out:
+  // still on you, at the cost of as few as it can.
+  const ring = [];
+  for (let i = 0; i < 8; i++) ring.push({ x: Math.cos(i) * 20, z: Math.sin(i) * 20 });
+  const forced = pickStrike(at, ring, 300, 90);
+  assert.equal(forced.cost, 8);
+  assert.equal(forced.off, 0);
 });

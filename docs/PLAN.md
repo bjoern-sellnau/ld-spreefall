@@ -4646,6 +4646,29 @@ So there are two cities now, and a profile picks which:
   you are 4 m from where you got out, the question is still there, 2 rigs it
   remote and T blows it.
 
+## 120a. Nightmare aims at you, not at its own
+
+- The ask: in Nightmare the enemy should try to kill you, not itself, unless
+  it has to. As built in 115 the super weapons came down 150 to 320 m off
+  you, in whichever direction, so what they mostly killed was the army sent
+  after you.
+- `pickStrike` in `onslaught.js`: you, and 36 points round you in three
+  rings out to a shift of 90 m for the ion cannon, 70 for a warhead and 30
+  for the two rains (each a share of what it reaches, so you are inside it
+  wherever the aim goes), each costed by the men of theirs inside its reach
+  and three for a mech or a vehicle; the cheapest wins, the nearest to you
+  of any that tie. With nobody of theirs about it is straight on you; with a
+  squad to one side it goes to the other; with them all round you and a
+  reach that takes them anyway, it is on you at the cost it cannot avoid.
+- The warning is a toast in capitals, the incoming sound and the feed line;
+  after that it is the ion cannon's eight second charge, the rains coming
+  down, or a warhead's four second fall. The cinematic camera still does
+  not take a warhead aimed at you.
+- Checks: unit (5, one new) on straight on, sparing a squad, and the cost
+  that cannot be helped; cheats: the ion cannon and a warhead land within
+  their shift of you, and ultra plasma with four of theirs 60 m east lands
+  west of you with none of them in it.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

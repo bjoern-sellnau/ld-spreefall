@@ -29,7 +29,7 @@ import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS, BOW_HOLDS } from './game/cheats.js';
 import { CHASSIS, mechKey } from './game/chassis.js';
-import { Onslaught, ONSLAUGHT } from './game/onslaught.js';
+import { Onslaught, ONSLAUGHT, pickStrike } from './game/onslaught.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
@@ -5459,18 +5459,6 @@ async function main() {
     get z() { return player.z; },
     level: 0,
   };
-  /** A point this far from you in some direction the map has. */
-  function aroundYou(lo, hi) {
-    for (let k = 0; k < 24; k++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = lo + Math.random() * (hi - lo);
-      const x = player.x + Math.cos(a) * r, z = player.z + Math.sin(a) * r;
-      if (x < world.minX + 20 || x > world.maxX - 20 || z < world.minZ + 20 || z > world.maxZ - 20) continue;
-      if (combat.inField && combat.inField(x, z)) continue;
-      return { x, z, a };
-    }
-    return null;
-  }
   /** A stick of bombs across the street you are in, falling one after another. */
   function bombStick(n) {
     const B = ONSLAUGHT.bombs;
@@ -5494,26 +5482,35 @@ async function main() {
     if (dropped) audio.incoming(1.2);
     return dropped;
   }
-  /** One of the city's super weapons, near you rather than on you. */
+  /** Theirs, for a super weapon of theirs to spare: men, mechs and convoys. */
+  function theirOwn() {
+    const out = [];
+    for (const sd of soldiers.active) if (sd.alive && sd.health > 0 && !sd.civilian) out.push({ x: sd.x, z: sd.z, weight: 1 });
+    for (const m of mechs.active) if (m.alive && m.health > 0 && !m.mine) out.push({ x: m.x, z: m.z, weight: 3 });
+    for (const c of convoys) if (c.v.alive && c.v.health > 0) out.push({ x: c.v.x, z: c.v.z, weight: 3 });
+    return out;
+  }
+  /** What one of the four reaches, for the aim. */
+  function superReach(kind) {
+    if (kind === 'ion') return ionRadius();
+    if (kind === 'nuke') return nukeRadius();
+    return ONSLAUGHT.nightmare[kind].radius;
+  }
+  /** One of the city's super weapons, aimed at you and not at them. */
   function onslaughtSuper(kind) {
     const N = ONSLAUGHT.nightmare;
-    const [lo, hi] = N.away[kind];
-    // A warhead or an ion blast set bigger in the menu lands as much further off.
-    const extra = kind === 'nuke' ? Math.max(0, nukeRadius() - NUKE.radius)
-      : kind === 'ion' ? Math.max(0, ionRadius() - ION.blast) : 0;
-    for (let k = 0; k < 6; k++) {
-      const at = aroundYou(lo + extra, hi + extra);
-      if (!at) continue;
-      let ok = false;
-      if (kind === 'ion') ok = ion.fire(at.x, at.z);
-      else if (kind === 'ultra') ok = ultra.fire(at.x, at.z, { ...cheats.ultra, ...N.ultra, bearing: Math.random() * 360 });
-      else if (kind === 'storm') ok = storm.fire(at.x, at.z, { ...cheats.storm, ...N.storm, bearing: Math.random() * 360 });
-      else if (kind === 'nuke') ok = dropNuke(at.x, at.z, true, true);
-      if (ok) return { kind, x: at.x, z: at.z, away: Math.round(Math.hypot(at.x - player.x, at.z - player.z)) };
-      // Busy with the last one: nothing to be gained by trying elsewhere.
-      if ((kind === 'ion' && ion.firing) || (kind === 'ultra' && ultra.active) || (kind === 'storm' && storm.active)) break;
-    }
-    return null;
+    const reach = superReach(kind);
+    const aim = pickStrike({ x: player.x, z: player.z }, theirOwn(), reach, N.shift[kind]);
+    // Kept on the map, and off the memorial, which none of them may touch.
+    const x = Math.min(world.maxX - 20, Math.max(world.minX + 20, aim.x));
+    const z = Math.min(world.maxZ - 20, Math.max(world.minZ + 20, aim.z));
+    let ok = false;
+    if (kind === 'ion') ok = ion.fire(x, z);
+    else if (kind === 'ultra') ok = ultra.fire(x, z, { ...cheats.ultra, ...N.ultra, bearing: Math.random() * 360 });
+    else if (kind === 'storm') ok = storm.fire(x, z, { ...cheats.storm, ...N.storm, bearing: Math.random() * 360 });
+    else if (kind === 'nuke') ok = dropNuke(x, z, true, true);
+    if (!ok) return null;
+    return { kind, x, z, away: Math.round(Math.hypot(x - player.x, z - player.z)), theirs: aim.cost };
   }
   const SUPER_NAMES = { ion: 'the ion cannon', ultra: 'ultra plasma', storm: 'a void storm', nuke: 'a warhead' };
   /** Send a wave, whatever it is made of, and say what came. */
@@ -5541,8 +5538,9 @@ async function main() {
     toast(`${title} wave ${w.level}: ${bits.join(', ')}`, 3500);
     if (sent.superweapon) {
       const sw = sent.superweapon;
-      feed(`<b>${SUPER_NAMES[sw.kind]}</b> ${sw.away} m off`);
-      setTimeout(() => toast(`${SUPER_NAMES[sw.kind]} incoming, ${sw.away} m off`, 3500), 1600);
+      feed(`<b>${SUPER_NAMES[sw.kind]}</b> on you${sw.away > 2 ? `, ${sw.away} m off` : ''}`);
+      toast(`${SUPER_NAMES[sw.kind].toUpperCase()} AIMED AT YOU: RUN`, 4000);
+      audio.incoming && audio.incoming(2);
     }
     state.onslaughtLast = sent;
     return sent;
