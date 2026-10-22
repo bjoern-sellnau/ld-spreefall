@@ -1282,6 +1282,50 @@ async function run() {
     view.skip ? ''
       : `${view.off} m off level, ${view.offDown} m off looking down, aiming ${view.aimAway} m out`);
 
+  // From the canopy the machine you are sitting in is not drawn, and what
+  // you see instead is the inside of it: the frame, the radar, brackets on
+  // what is out there and the glass cracking as the hull goes.
+  const canopy = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const m = s.state.inMech;
+    if (!m) return { skip: true };
+    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    if (!s.state.cockpit) s.toggleCockpit();
+    const foe = s.spawnMech('reaper', 60);
+    s.look(m.torso * 180 / Math.PI, -2);
+    for (let i = 0; i < 4; i++) await frame();
+    const hud = document.getElementById('cockpithud');
+    const out = {
+      canopy: s.state.canopy,
+      drawn: s.renderer.actors.mechStats.count,
+      live: s.mechs.active.filter((x) => x.alive).length,
+      shown: !hud.classList.contains('hidden'),
+      radar: s.cockpitHud.last ? s.cockpitHud.last.radar : 0,
+      status: getComputedStyle(document.getElementById('mechstatus')).display,
+    };
+    const hp = m.health;
+    m.health = m.maxHealth * 0.5;
+    for (let i = 0; i < 3; i++) await frame();
+    out.cracks = s.cockpitHud.last ? s.cockpitHud.last.cracks : 0;
+    m.health = hp;
+    // Over the shoulder the machine is back, and the inside of it is gone.
+    s.toggleCockpit();
+    for (let i = 0; i < 3; i++) await frame();
+    out.chaseDrawn = s.renderer.actors.mechStats.count;
+    out.chaseShown = !hud.classList.contains('hidden');
+    s.toggleCockpit();
+    for (let i = 0; i < 3; i++) await frame();
+    if (foe) { s.mechs.active.splice(s.mechs.active.indexOf(foe), 1); foe.alive = false; }
+    return out;
+  });
+  check('from the canopy your own mech is not drawn, and its cockpit is',
+    !canopy.skip && canopy.canopy && canopy.drawn === canopy.live - 1 && canopy.shown && canopy.radar >= 1
+      && canopy.status === 'none', JSON.stringify(canopy));
+  check('the glass cracks as the hull goes',
+    !canopy.skip && canopy.cracks >= 5, JSON.stringify({ cracks: canopy.cracks }));
+  check('and over the shoulder the mech is back and the cockpit gone',
+    !canopy.skip && canopy.chaseDrawn === canopy.live && !canopy.chaseShown, JSON.stringify(canopy));
+
   // The railgun. Held it charges, let go it fires, and a full charge is worth
   // several times a tap: the whole weapon is in that difference.
   const rail = await page.evaluate(async () => {
@@ -1433,9 +1477,17 @@ async function run() {
     const took = Math.round(hp0 - theirs.health);
     // And back out on foot, because what comes after this measures a mech
     // being climbed into and F would take us out of this one instead.
+    const was = s.state.inMech;
     if (s.state.inMech) s.toggleVehicle();
-    return { skip: false, took, out: s.state.inMech === null };
+    // Out of it, the machine you were sitting in is drawn again.
+    for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+    const drawn = s.renderer.actors.mechStats.count;
+    const live = s.mechs.active.filter((x) => x.alive).length;
+    const shown = !document.getElementById('cockpithud').classList.contains('hidden');
+    return { skip: false, took, out: s.state.inMech === null, mine: !!was, drawn, live, shown };
   });
+  check('climbed out of it, your mech is drawn again and the cockpit gone',
+    !splash.skip && splash.mine && splash.drawn === splash.live && !splash.shown, JSON.stringify(splash));
   check('a blast beside a mech takes a piece out of it',
     !splash.skip && splash.took > 100 && splash.out,
     splash.skip ? '' : `${splash.took} off the hull`);
@@ -2047,26 +2099,34 @@ async function run() {
     s.machines.active = false;
     for (const key of ['reaper', 'bruin-foe', 'heron-foe', 'lynx-foe', 'bastion-foe', 'hornet-foe',
       'colossus-foe', 'mantis-foe', 'ram-foe', 'wraith-foe']) {
-      s.mechs.reset(); s.projectiles.clear(); s.soldiers.reset();
-      s.burningGround.length = 0;
-      s.teleport(700, -55);
-      for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
       let taken = 0;
-      s.combat.hurt = (d) => { taken += d; return false; };
-      // Somewhere it can see you from: a mech put down behind a frontage
-      // never fires, which says nothing about whether its gun can hurt.
       let m = null;
-      for (let tries = 0; tries < 8; tries++) {
-        m = s.spawnMech(key, 34);
-        if (!m) break;
-        const ey = s.player.y + 1.5;
-        if (s.world.lineOfSight(m.x, m.y + m.spec.eye, m.z, s.player.x, ey, s.player.z)) break;
-        s.mechs.reset();
+      // Can hurt, not does every time: a placement where it walks behind a
+      // kiosk or sprays wide for twelve seconds says nothing about the gun,
+      // so each one gets three before it counts as harmless.
+      for (let round = 0; round < 3 && taken === 0; round++) {
+        s.mechs.reset(); s.projectiles.clear(); s.soldiers.reset();
+        s.burningGround.length = 0;
+        s.teleport(700, -55);
+        for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+        s.combat.hurt = (d) => { taken += d; return false; };
+        // Somewhere it can see you from: a mech put down behind a frontage
+        // never fires, which says nothing about whether its gun can hurt.
         m = null;
+        for (let tries = 0; tries < 8; tries++) {
+          m = s.spawnMech(key, 34);
+          if (!m) break;
+          const ey = s.player.y + 1.5;
+          if (s.world.lineOfSight(m.x, m.y + m.spec.eye, m.z, s.player.x, ey, s.player.z)) break;
+          s.mechs.reset();
+          m = null;
+        }
+        if (!m) break;
+        for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
+        s.combat.hurt = hurt;
       }
-      if (!m) { s.combat.hurt = hurt; out.push({ key, skip: true }); continue; }
-      for (let i = 0; i < 60 * 12; i++) s.fixedForTest(1 / 60);
       s.combat.hurt = hurt;
+      if (!m) { out.push({ key, skip: true }); continue; }
       out.push({ key, kind: m.spec.chaingun.kind || 'auto', taken: Math.round(taken) });
     }
     s.mechs.reset(); s.projectiles.clear(); s.burningGround.length = 0;

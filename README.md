@@ -751,7 +751,15 @@ legs chase the torso, the left mouse is a chaingun, the right mouse throws a
 salvo of six rockets, **Shift** dashes and **Space** jumps. The landing is a
 weapon in its own right: forty tonnes arriving opens the road and takes apart
 whatever is standing in eleven metres of it. The camera hangs behind the
-shoulders, because the thing worth looking at here is the mech.
+shoulders, because the thing worth looking at here is the mech. **Y** puts
+you in the cockpit instead: from in there your own mech is not drawn at all,
+so it never fills the screen with the back of its own head, and what you see
+is the inside of it, drawn over the view: the canopy frame, a dashboard with
+a radar that turns with the torso and the systems (hull, shield, weapon,
+rounds, pod, dash), a heading tape, brackets on what of theirs is in sight
+with the distance to the one nearest the middle, and glass that cracks as
+the hull goes. Back over the shoulder, or out of it, and the mech is drawn
+again.
 
 **Theirs**, the Reaper, walks in from two hundred metres, closes to about
 forty, sidesteps rather than standing still, and fires five rounds then waits

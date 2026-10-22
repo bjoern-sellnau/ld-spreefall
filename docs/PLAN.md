@@ -4053,3 +4053,42 @@ So there are two cities now, and a profile picks which:
   way, and a jeep driven by `follow` with the vehicle's own arithmetic gets
   round the corner, never more than 14 m off the streets, and stops 10 to
   26 m short of the goal. ops-15-convoy.png.
+
+## 100. A cockpit to sit in, with the mech not drawn round you
+
+- From the cockpit view your own mech is no longer drawn (the instance list
+  handed to the renderer leaves it out, so its shadow goes with it). That was
+  the whole of the complaint: eight metres of armour round the camera filled
+  the screen whenever it turned or stood by a wall. With nothing to see past,
+  the eye no longer has to be pushed out in front of the hull: it sits a
+  metre in front of the head (it was the chassis' own `cockpit` distance,
+  1.6 m, which put it outside the canopy and against anything close). It stays on the aim line, so the crosshair still says
+  where the shot goes, and boxed in against a frontage the view still falls
+  back to over the shoulder, which draws the mech again.
+- What you see instead is the inside of it, a canvas over the frame
+  (src/ui/cockpit.js): the canopy frame with two pillars and a top bar, a
+  faint tint toward the edges, a dashboard along the bottom quarter with a
+  radar on the left (260 m, turning with the torso, theirs in red, a sweep),
+  the systems on the right (hull, shield, weapon and rounds or reload, speed,
+  pod and dash), a heading tape in the middle and a pitch ladder either side
+  of the glass. Whatever of theirs is in sight (the health bars' line of
+  sight) gets corner brackets within 320 m, bigger for a mech or a vehicle,
+  and the one nearest the middle is held in red with its distance. The glass
+  cracks as the hull goes, a crack for every seven percent lost, nine at
+  most, and they are gone when you climb out. Under a third of the hull a
+  warning comes on, blinking below a sixth.
+- The status box, the on foot readouts, the buttons and the threat line are
+  hidden while you sit in it, because the dashboard says the same; the
+  loadout stays down the right inside the pillar. The help line in the mech
+  panel said V changes the view, which it has not done since the travel map
+  took V; it says Y now.
+- Checks (machines, 68 now): from the canopy the mech you are in is not
+  among the ones drawn and the cockpit is up with something on its radar and
+  the status box hidden; half the hull gone leaves at least five cracks; over
+  the shoulder it is drawn again and the cockpit is gone; and climbed out of
+  it, it is drawn and the cockpit is gone. Every enemy chassis now gets three
+  placements to show its gun can hurt you, since one spot where it walked
+  behind a kiosk for twelve seconds read as a gun that could not. Unit (100
+  now): the radar puts what is ahead straight up and what is to your right to
+  the right, whichever way you face, and the projection lands where clip
+  space says and nowhere behind you. mech-05-cockpit.png.

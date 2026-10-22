@@ -45,6 +45,7 @@ import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
+import { CockpitHud, project as projectPoint } from './ui/cockpit.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
@@ -68,7 +69,7 @@ const el = {
   btnMap: $('btnmap'), btnPhoto: $('btnphoto'), btnSound: $('btnsound'), btnHelp: $('btnhelp'),
   mapTools: $('maptools'), mapIn: $('mapin'), mapOut: $('mapout'),
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
-  mapUnmark: $('mapunmark'), compassBar: $('compassbar'),
+  mapUnmark: $('mapunmark'), compassBar: $('compassbar'), cockpitHud: $('cockpithud'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -355,6 +356,7 @@ async function main() {
   const ultra = new Ultra(world);
   const healthBars = new HealthBars(document.getElementById('healthbars'));
   const compassBar = new CompassBar(el.compassBar);
+  const cockpitHud = new CockpitHud(el.cockpitHud);
   // Operations: the campaign book that Tactics and Slayer keep, and the part
   // of Tactics that runs, which mans the camps near you out of the soldiers.
   const campaign = new Campaign();
@@ -2913,6 +2915,48 @@ async function main() {
     state.cockpit = !state.cockpit;
     el.hud.classList.toggle('cockpit', state.cockpit);
     toast(state.cockpit ? 'cockpit' : 'over the shoulder');
+  }
+
+  /** How far in front of the head the seat is, in metres. */
+  const CANOPY_LEAD = 1;
+
+  /**
+   * The inside of the canopy: the frame, the dashboard with its radar and
+   * systems, brackets on what is out there. Only while the view really is
+   * out of the canopy; boxed in against a wall it falls back to over the
+   * shoulder and so does this.
+   */
+  function cockpitStep() {
+    const m = state.inMech;
+    const inside = !!(m && state.canopy && m.spec.arms && !photo.active);
+    el.hud.classList.toggle('canopy', inside);
+    if (!inside) { cockpitHud.hide(); return; }
+    const W = window.innerWidth, H = window.innerHeight;
+    const blips = [], targets = [];
+    for (const e of hostiles) {
+      const kind = vehicles.active.includes(e.body) || e.kind === 'jet' ? 'vehicle'
+        : e.kind === 'mech' ? 'mech' : 'soldier';
+      blips.push({ dx: e.x - m.x, dz: e.z - m.z, kind });
+      if (e.body._hbSeen === false) continue;
+      const p = projectPoint(camera.viewProj, e.x, e.y - 1, e.z, W, H);
+      if (!p || p.x < 0 || p.x > W || p.y < 0 || p.y > H) continue;
+      targets.push({ x: p.x, y: p.y, d: Math.hypot(e.x - m.x, e.y - m.y, e.z - m.z), kind });
+    }
+    const arm = mechs.arm(m);
+    cockpitHud.draw({
+      heading: m.torso,
+      pitch: camera.pitch,
+      hull: Math.max(0, m.health) / (m.maxHealth || m.spec.health),
+      shield: m.shieldMax ? Math.max(0, m.shield) / m.shieldMax : -1,
+      speed: m.speed || 0,
+      name: m.spec.name,
+      arm: arm ? arm.name : '',
+      ammo: m.reloadLeft > 0 ? `${m.reloadLeft.toFixed(1)}s` : String(m.mags[m.arm] ?? ''),
+      pod: (m.rocketTimer || 0) > 0.08 ? `${m.rocketTimer.toFixed(1)}s` : 'ready',
+      dash: m.dashLeft > 0 ? 'now' : ((m.dashCool || 0) > 0.08 ? `${m.dashCool.toFixed(1)}s` : 'ready'),
+      blips, targets,
+      time: state.time,
+    });
   }
 
   /**
@@ -7065,6 +7109,8 @@ async function main() {
       if (p.finished) { state.mode = 'walk'; state.walking = true; }
     }
 
+    // Set again below when the view is out of a canopy.
+    state.canopy = false;
     if (state.mode === 'title' && state.deepLink) {
       camera.position[0] = player.x;
       camera.position[1] = player.y + PLAYER.eye;
@@ -7084,6 +7130,7 @@ async function main() {
       camera.pitch = p.pitch;
     } else if (state.inMech && state.cockpit && state.inMech.spec.cockpit
       && !mechEyeBoxedIn(state.inMech)) {
+      state.canopy = true;
       // Out of the canopy. The head is a point in the body's own coordinates,
       // so it turns with the torso and rides the hull: the camera is carried
       // by the machine rather than hung in the air near it.
@@ -7107,7 +7154,10 @@ async function main() {
       // the crosshair is, because every one of these points is on the aim
       // line rather than beside it.
       const eye = { x: m.x, y: m.y + ms.eye, z: m.z };
-      let lead = ms.cockpit;
+      // With the machine's own model not drawn from in here, the eye no
+      // longer has to be pushed out in front of the hull to see past it:
+      // a metre forward of the head is the seat behind the glass.
+      let lead = Math.min(ms.cockpit, CANOPY_LEAD);
       const blocked = world.raycast(eye.x, eye.y, eye.z, a.x, a.y, a.z, lead + 0.4);
       if (blocked) lead = Math.max(0, blocked.t - 0.4);
       const stride = Math.sin(m.walk * 2) * (m.onGround ? 1 : 0.2);
@@ -7314,7 +7364,10 @@ async function main() {
       renderer.actors.updatePickups(live ? pickups.live : [], camera.position);
       renderer.actors.updateGibs(live ? gibs.active : []);
       renderer.actors.updateVehicles(live ? [...vehicles.active, ...trains.cars] : []);
-      renderer.actors.updateMechs(live ? mechs.active : []);
+      // From the canopy your own machine is not drawn: it is all round the
+      // camera, and the only thing it ever did from in here was get in the way.
+      renderer.actors.updateMechs(!live ? []
+        : state.canopy ? mechs.active.filter((m) => m !== state.inMech) : mechs.active);
       renderer.actors.updateCamps(live && tactics.enabled
         ? tactics.drawList(camera.position[0], camera.position[2], 1600) : []);
       renderer.actors.updateNests(live && slayer.enabled
@@ -7411,6 +7464,9 @@ async function main() {
       el.scope.classList.toggle('hidden', !scoped);
       rideHud();
       mechHud();
+      cockpitStep();
+    } else {
+      cockpitHud.hide();
     }
 
     if (state.mode === 'walk' || state.mode === 'landing' || state.mode === 'travel'
@@ -7514,7 +7570,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
-    compassBar, setMark: (at) => setMark(at),
+    compassBar, cockpitHud, setMark: (at) => setMark(at),
     toggleMap() { minimap.toggle({ x: player.x, z: player.z }); mapTools(); return minimap.big; },
     restoreMemorial: () => restoreMemorial(),
     // Help for a camp: on its feet, or still in the back of a jeep.

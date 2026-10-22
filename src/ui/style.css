@@ -1547,28 +1547,21 @@ html, body {
 }
 /* In the cockpit the ordinary crosshair is in the way of the mech's own. */
 #hud.piloting #crosshair { display: none; }
-/* Sitting inside it, the frame of the canopy is drawn round the edge of the
-   screen. It is a shadow rather than a model: eight metres of machine between
-   you and the city reads as a darker border and a line of struts, and that is
-   cheaper and steadier than any geometry hung off the camera. */
-#hud.cockpit #mechhud::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  box-shadow: inset 0 0 120px 30px rgba(6, 8, 11, 0.72),
-    inset 0 -26px 60px 0 rgba(6, 8, 11, 0.6);
+/* Sitting inside it, the inside of the canopy is a canvas over the whole
+   frame (src/ui/cockpit.js): struts, a dashboard with a radar and the
+   systems, brackets on what is out there. The mech's own model is not drawn
+   from in here. The status box it replaces is hidden, and the loadout keeps
+   its place down the right, inside the pillar. */
+#cockpithud {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
 }
-/* And the sill of it along the bottom, which is the one edge of a canopy you
-   would actually see from a seat behind the glass. */
-#hud.cockpit #mechhud::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 9%;
-  background: linear-gradient(180deg,
-    rgba(10, 12, 16, 0) 0%, rgba(10, 12, 16, 0.5) 55%, rgba(10, 12, 16, 0.82) 100%);
-  border-top: 1px solid rgba(226, 201, 141, 0.16);
-}
+#cockpithud.hidden { display: none; }
+#hud.canopy #mechstatus,
+#hud.canopy #combat,
+#hud.canopy #controls,
+#hud.canopy #threat { display: none; }
+#hud.canopy #mecharms { right: calc(16vw + 8px); }
 
 /* Operations: Tactics and Slayer. The setup under the mode buttons, the line
    at the top of the screen, and the journal on J. */
