@@ -25,7 +25,7 @@ import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
-import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS } from './game/cheats.js';
+import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS } from './game/cheats.js';
 import { CHASSIS } from './game/chassis.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
@@ -104,7 +104,7 @@ const el = {
   opsList: $('opslist'), opsReset: $('opsreset'), opsHarder: $('opsharder'), opsClose: $('opsclose'),
   modeTime: $('modetime'), modeTimeLabel: $('modetimelabel'),
   cheatSpawns: $('cheatspawns'), cheatRides: $('cheatrides'),
-  cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'),
+  cheatMine: $('cheatmine'), cheatFoe: $('cheatfoe'), cheatBow: $('cheatbow'),
   vehiclePanel: $('vehicle'), vehicleName: $('vehiclename'), vehicleKeys: $('vehiclekeys'),
   vehicleHull: $('vehiclehull'), vehicleSpeed: $('vehiclespeed'),
   vehicleSpeedUnit: $('vehiclespeedunit'),
@@ -2342,7 +2342,9 @@ async function main() {
   function weaponLabel(spec) {
     const head = spec.heads ? ARROW_HEADS[weapon.head] : null;
     const draw = spec.draws ? ARROW_DRAWS[weapon.draw] : null;
-    return [spec.short, draw && draw.short, head && head.short].filter(Boolean).join(' ');
+    // Which bow it is, by name.
+    const name = spec.heads ? (cheats.bowFor(campaign.mode) === 'tech' ? 'TECH BOW' : 'TACTIC BOW') : spec.short;
+    return [name, draw && draw.short, head && head.short].filter(Boolean).join(' ');
   }
   weapon.onDraw = (draw) => {
     const row = ARROW_DRAWS[draw];
@@ -4079,6 +4081,34 @@ async function main() {
         chips.push({ id: o.id, el: b });
       }
       host.appendChild(say);
+      show();
+    }
+    // Which bow: a chip each, lit on the one picked, with what it is under them.
+    {
+      const say = document.createElement('div');
+      say.className = 'mechsay';
+      const chips = [];
+      const show = () => {
+        for (const c of chips) c.el.classList.toggle('on', c.id === cheats.bow);
+        const row = BOWS.find((x) => x.id === cheats.bow);
+        say.textContent = row ? row.note : '';
+      };
+      for (const o of BOWS) {
+        const b = document.createElement('button');
+        b.className = 'chip';
+        b.dataset.bow = o.id;
+        b.textContent = o.label;
+        b.title = o.note;
+        b.addEventListener('click', () => {
+          cheats.chooseBow(o.id);
+          show();
+          el.weaponname.textContent = weaponLabel(weapon.spec);
+          toast(o.id === 'mode' ? 'the bow goes with the mode' : `${o.label} in hand`);
+        });
+        el.cheatBow.appendChild(b);
+        chips.push({ id: o.id, el: b });
+      }
+      el.cheatBow.appendChild(say);
       show();
     }
     for (const sp of SPAWNS) {
@@ -7796,7 +7826,8 @@ async function main() {
         roll: mix(hip.roll, VM_AIM.roll) + state.sway.x * 0.45 + hol * 0.5,
         muzzle: state.muzzle * (1 - hol),
         seed: state.muzzleSeed || 0,
-        weapon: weapon.id,
+        // The bow is drawn as whichever of the two is in your hands.
+        weapon: weapon.id === 'bow' ? (cheats.bowFor(campaign.mode) === 'tech' ? 'bowTech' : 'bowTactic') : weapon.id,
       };
       renderer.actors.updateDrones(drones.active);
       renderer.actors.updateSoldiers(soldiers.active);

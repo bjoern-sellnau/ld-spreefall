@@ -145,6 +145,17 @@ export const SETTINGS = [
   },
 ];
 
+/**
+ * The two bows, and which one is in your hands. By mode is the tech bow in
+ * The Hunt, where it belongs to the suit, and the tactic bow everywhere
+ * else. A choice, like the mechs: it does not mark the run.
+ */
+export const BOWS = [
+  { id: 'mode', label: 'By mode', note: 'the tech bow in The Hunt, the tactic bow everywhere else' },
+  { id: 'tech', label: 'Tech Bow', note: 'a compound bow in black carbon with cams at the tips and a light down the riser' },
+  { id: 'tactic', label: 'Tactic Bow', note: 'a takedown recurve in olive and black with a two pin sight' },
+];
+
 /** Things to get into, parked where you are standing. */
 export const RIDES = [
   { id: 'jeep', label: 'Jeep', note: 'fast, open, a gun on the back' },
@@ -171,6 +182,8 @@ export class Cheats {
     // rather than a cheat: it does not mark the run, and all off leaves it
     // where you put it.
     this.mechs = { mine: CHASSIS[0].id, foe: CHASSIS[0].id };
+    // Which bow: by mode, or one of the two whatever the mode.
+    this.bow = 'mode';
     // Ultra plasma: how many, how wide, from which way and how steep. Kept
     // with the choices rather than the switches, for the same reason.
     this.ultra = { ...ULTRA.defaults };
@@ -272,6 +285,21 @@ export class Cheats {
     return true;
   }
 
+  /** Pick a bow. @returns {boolean} whether it was one there is */
+  chooseBow(id) {
+    if (!BOWS.some((b) => b.id === id)) return false;
+    this.bow = id;
+    this.save();
+    if (this.onChange) this.onChange('bow', id);
+    return true;
+  }
+
+  /** Which of the two bows is in your hands in this mode. */
+  bowFor(mode) {
+    if (this.bow === 'tech' || this.bow === 'tactic') return this.bow;
+    return mode === 'hunt' ? 'tech' : 'tactic';
+  }
+
   /** Set one of ultra plasma's four numbers, held to what it may be. */
   setUltra(key, v) {
     if (!(key in ULTRA.defaults)) return false;
@@ -309,7 +337,7 @@ export class Cheats {
 
   save() {
     try {
-      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra, storm: this.storm };
+      const out = { values: this.values, mechs: this.mechs, ultra: this.ultra, storm: this.storm, bow: this.bow };
       for (const id of KEYS) out[id] = this[id];
       localStorage.setItem(KEY, JSON.stringify(out));
     } catch { /* private mode, and it does not matter */ }
@@ -339,6 +367,7 @@ export class Cheats {
           if (saved.storm[k] !== undefined) this.storm[k] = clampUltra(k, saved.storm[k], VOID_STORM);
         }
       }
+      if (saved.bow && BOWS.some((b) => b.id === saved.bow)) this.bow = saved.bow;
       if (saved.mechs) {
         if (CHASSIS.some((c) => c.id === saved.mechs.mine)) this.mechs.mine = saved.mechs.mine;
         if (saved.mechs.foe === 'random' || CHASSIS.some((c) => c.id === saved.mechs.foe)) {

@@ -1182,6 +1182,32 @@ void main() {
     albedo = vec3(0.88, 0.74, 0.14);
     rough = 0.55;
     metal = 0.04;
+  } else if (vPart > 30.5 && vPart < 31.5) {
+    // The tech bow's carbon: black with a little blue in it, a weave you
+    // can just see, and a soft sheen rather than the shine of steel.
+    float weave = step(0.5, fract((vModel.x + vModel.y) * 140.0)) * 0.012;
+    albedo = vec3(0.028, 0.031, 0.040) + weave;
+    rough = 0.48;
+    metal = 0.15;
+  } else if (vPart > 31.5 && vPart < 32.5) {
+    // Its light: cyan, breathing slowly, and bright for a moment after it
+    // has loosed one.
+    albedo = vec3(0.02);
+    float breathe = 0.8 + 0.2 * sin(uCamPos.w * 2.2);
+    emissive = vec3(0.18, 0.85, 1.0) * (1.2 + uMuzzle * 4.0) * breathe;
+    rough = 0.2;
+    metal = 0.0;
+  } else if (vPart > 32.5 && vPart < 33.5) {
+    // The tactic bow's riser: machined aluminium anodised olive drab.
+    albedo = vec3(0.115, 0.118, 0.072);
+    rough = 0.38;
+    metal = 0.55;
+  } else if (vPart > 33.5 && vPart < 34.5) {
+    // A fibre sight pin: a bright point of green that gathers the light.
+    albedo = vec3(0.02);
+    emissive = vec3(0.35, 1.6, 0.25);
+    rough = 0.3;
+    metal = 0.0;
   } else if (vPart > 29.5 && vPart < 30.5) {
     // The void cannon's rings and cell: the same green the ball is, pulsing
     // slowly, and brighter for a moment after it fires.

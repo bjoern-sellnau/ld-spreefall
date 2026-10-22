@@ -4358,6 +4358,33 @@ So there are two cities now, and a profile picks which:
   nor the shotgun reaches -1 dB; the suppressed pistol is more than 15 dB
   under the rifle.
 
+## 109. Two bows: a Tech Bow and a Tactic Bow
+
+- The ask: two designs for the bow, after two pictures (a Crysis 3 bow and
+  the Far Cry 3 bow). Neither picture could be fetched from here (the image
+  host refused the proxy, the other did not resolve), so the designs come
+  from what the sources say the two bows are.
+  - Crysis 3: the hunter's composite bow, a permanent part of the kit, with
+    a draw weight you set (Game Informer, GamesBeat). Ours: a compound
+    bow, a carbon riser with a cut out, split limbs, cams and cables, a
+    stabiliser, a short sight and a cyan strip that flares on the shot.
+  - Far Cry 3: a recurve whose stock sight has two pins (voicetube on the
+    bows, the Far Cry wiki's first person picture). Ours: an olive riser
+    with windows, black limbs curling forward at the tips, limb bolts, the
+    two pin sight with green fibre ends, a rest and a stabiliser.
+- Four new viewmodel materials: carbon (31, a fine weave in the shading),
+  cyan glow (32, brighter with the muzzle term), olive anodised (33) and the
+  fibre pin (34).
+- Which one: the tech bow in The Hunt, the tactic bow everywhere else, and
+  a **Bow** row in the cheat menu (by mode, tech, tactic) that is saved
+  with the rest and does not mark the run. The HUD says TECH BOW or TACTIC
+  BOW in place of BOW. Nothing about how the bow plays changes.
+- Checks (hunt, 28 now): in The Hunt the viewmodel is the tech bow and the
+  HUD says so; chosen in the menu it is the tactic bow. Screenshots
+  hunt-07-tech-bow and hunt-08-tactic-bow. The draw weight check now waits
+  a moment after the menu closes, since the menu holsters the weapon while
+  it is up.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat

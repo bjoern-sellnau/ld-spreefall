@@ -605,6 +605,32 @@ The numbers and everything else here are ours.
 ![Nano Vision](docs/screenshots/hunt-03-nano.png)
 ![A grunt and a stalker at a hunting ground](docs/screenshots/hunt-04-ceph.png)
 
+### Two bows
+
+The bow in your hands has two looks. In The Hunt it is the **Tech Bow**, a
+compound bow for a man in a nanosuit: a riser in black carbon with its
+middle cut away, split limbs short and steep, a cam at each tip with the
+cables running between them, a stabiliser, and a strip of cyan light down
+the riser that flares as the arrow goes. Everywhere else it is the
+**Tactic Bow**, a takedown recurve: an olive riser with windows cut in it,
+long black limbs that curl forward at the tips, the stock two pin sight
+with bright fibre ends, a rest and a short stabiliser. The HUD names the
+one you hold. The cheat menu's **Bow** row puts either in your hands in
+every mode, or leaves it to the mode; it is a look, so it does not mark the
+run. What a bow does (heads, draw weights, the cloak) is the same in both.
+
+They are ours, drawn from what the two game bows are described as: the
+hunter's composite bow of Crysis 3, with an adjustable draw weight
+([Game Informer](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2012/06/06/crysis-3-bringing-a-bow-to-a-gunfight.aspx),
+[GamesBeat](https://gamesbeat.com/crysis-3-review/)), and the Far Cry 3
+recurve with its two pin stock sight
+([Far Cry wiki: the bow in first person](https://farcry.fandom.com/wiki/File:FC3BD_Bow_First-Person_View.png)).
+The two pictures given as the brief could not be fetched from here, so
+nothing is copied from them.
+
+![The tech bow in The Hunt](docs/screenshots/hunt-07-tech-bow.png)
+![The tactic bow, chosen in the cheat menu](docs/screenshots/hunt-08-tactic-bow.png)
+
 ## The end of an operation
 
 When every camp or nest in the operation has been taken, a card says what it

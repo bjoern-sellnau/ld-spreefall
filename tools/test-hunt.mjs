@@ -412,6 +412,37 @@ async function run() {
     s.soldiers.stealth = s.tacticsSpec.stealth;
   });
 
+  // --- the two bows ---------------------------------------------------------------------
+  // In The Hunt the bow in your hands is the tech bow; the cheat menu can put
+  // the tactic bow there instead, or either everywhere.
+  const bows = {};
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.teleport(81, 0); s.look(95, -6);
+    s.weapon.select('bow');
+    s.state.holstered = false;
+  });
+  await page.waitForTimeout(1200);
+  bows.hunt = await page.evaluate(() => ({ model: window.spreefall.renderer.viewmodel.weapon,
+    label: document.getElementById('weaponname').textContent }));
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-07-tech-bow.png') });
+  await page.evaluate(() => window.spreefall.cheatMenu(true));
+  await page.click('[data-bow="tactic"]');
+  await page.evaluate(() => window.spreefall.cheatMenu(false));
+  await page.waitForTimeout(1200);
+  bows.chosen = await page.evaluate(() => ({ model: window.spreefall.renderer.viewmodel.weapon,
+    label: document.getElementById('weaponname').textContent }));
+  await page.screenshot({ path: path.join(SHOTS, 'hunt-08-tactic-bow.png') });
+  await page.evaluate(() => window.spreefall.cheatMenu(true));
+  await page.click('[data-bow="mode"]');
+  // The menu holsters the weapon while it is up, and gives it back a frame
+  // after it closes.
+  await page.evaluate(() => { window.spreefall.cheatMenu(false); document.activeElement.blur(); });
+  await page.waitForTimeout(400);
+  check('in The Hunt the bow is the tech bow, and the cheat menu can hand you the tactic bow instead',
+    bows.hunt.model === 'bowTech' && /TECH BOW/.test(bows.hunt.label)
+      && bows.chosen.model === 'bowTactic' && /TACTIC BOW/.test(bows.chosen.label), JSON.stringify(bows));
+
   // --- the bow: draw weights and the shock head ---------------------------------------
   await page.evaluate(() => { const s = window.spreefall; s.weapon.select('bow'); s.weapon.drawWeight = 0; s.weapon.arrowHead = 0; });
   const draws = [];
