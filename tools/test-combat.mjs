@@ -283,6 +283,9 @@ async function run() {
   await page.evaluate(() => {
     const s = window.spreefall;
     s.drones.reset(); s.weapon.reset(); s.combat.reset(); s.soldiers.reset();
+    // The street sends a squad on a timer, and one walking into the frame is
+    // a bar this section did not put there.
+    s.soldiers.enabled = false;
     s.teleport(81, 0);
     window.T.bar = window.T.park(-30, 5, 0);
     // And one behind you, which is not on the screen and gets no bar.
@@ -326,6 +329,7 @@ async function run() {
     hit.length ? `${hit[0].fill}% left, ${hit[0].chip}% chip` : 'no bar');
   const barHealth = await page.evaluate(() => [window.T.bar.health, window.spreefall.drones.active.length,
     window.spreefall.soldiers.active.length, window.spreefall.mechs.active.length]);
+  await page.evaluate(() => { window.spreefall.soldiers.enabled = true; });
   check('and the dead have no bar', gone.length === 0, `${gone.length} left ${JSON.stringify(gone)} ${JSON.stringify(barHealth)}`);
 
   // --- a pretty picture of an engagement -----------------------------------
