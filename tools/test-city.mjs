@@ -1192,8 +1192,18 @@ async function run() {
   // --- and the fighter actually flies --------------------------------------
   const takeoff = await page.evaluate(async () => {
     const s = window.spreefall;
+    // The vehicles that go up in the checks before this one can kill you,
+    // and since phase 120 dying is four seconds of slow motion with the
+    // camera going round the body: the run is stood up before it flies.
+    const down = document.getElementById('down');
+    const wasDown = !!(s.state.death || (down && !down.classList.contains('hidden')));
+    if (wasDown) document.getElementById('downbtn').click();
     s.setCheat('godmode', true);
     s.vehicles.reset();
+    // And the fire the wrecks before it left on the street (phase 118) is
+    // put out, or a fighter parked in it burns before it rolls.
+    const burning = s.burningGround.length;
+    s.burningGround.length = 0;
     // Off the ground, down a street, the way a player would have to do it.
     // Down whichever way from here is clear the furthest: the checks before
     // this one leave ruins about, and a ruin is a thing that stands now
@@ -1240,12 +1250,13 @@ async function run() {
       inIt,
       aboard,
       up: Math.round(up),
+      wasDown, burning,
     };
   });
   check('a fighter can take off from the street it is parked in',
     takeoff.climbed > 60 && takeoff.speed > 60 && takeoff.health > 0,
-    `rolled ${takeoff.rolled} s, ${takeoff.climbed} m up at ${takeoff.speed} m/s`
-      + (takeoff.aboard ? '' : ', nobody got in'));
+    `rolled ${takeoff.rolled} s, ${takeoff.climbed} m up at ${takeoff.speed} m/s, hull ${Math.round(takeoff.health)}, ${takeoff.burning} fires put out first`
+      + (takeoff.aboard ? '' : ', nobody got in') + (takeoff.wasDown ? ', stood up first' : ''));
   check('and the menu hands you one already in the air',
     takeoff.inIt && takeoff.up > 100, `${takeoff.up} m up, flying`);
 
