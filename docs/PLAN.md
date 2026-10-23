@@ -5001,7 +5001,12 @@ So there are two cities now, and a profile picks which:
   and the checks before it leave heaps of rubble at knee height and ruins
   at the side of the street: neither is on that ray. The run is now the
   shortest of nine rays, at 0.7, 1.6 and 3 m, down the middle and 4.5 m
-  either side for the wings.
+  either side for the wings. Measured like that, the next run in the live
+  city showed the rest of it: where the checks before leave you there was
+  33 m of room in any direction. So the long straight streets round the
+  square (150 m and more of one line, within 900 m) are tried as well, from
+  either end, and the fighter is put at the start of the clearest of all
+  of them: 400 m offline.
 - The panel check that drives a tank for three seconds wanted the hull at
   exactly 100 percent, and a tank that drove through the fire the wrecks
   before it left on the street came out at 99. The fire is put out first,
