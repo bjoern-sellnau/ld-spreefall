@@ -4865,6 +4865,43 @@ So there are two cities now, and a profile picks which:
   doors let its passengers off once, and F takes a car from its driver.
   Screenshot backdoor-02-traffic.png.
 
+## 127. .BACKDOOR: crime in the street
+
+- Somebody near you does something they should not, one at a time: the
+  first fourteen seconds into a visit, then every 24 to 42 seconds, 35 to
+  110 m off. `src/game/crime.js` runs each one as a small machine and the
+  game layer picks who is in it, does the hitting and keeps the score.
+- Two kinds. A bag theft: the thief walks up to somebody (1.7 m/s, his
+  victim standing there with no idea), takes the bag at 1.5 m and runs
+  (4.7 m/s, you run 5.6) away from both of you; past 120 m from you after
+  six seconds of running, he is gone. A fight: one walks up to another,
+  they square up, and he lands a blow every 0.85 seconds (11 health a
+  blow), the other giving one back every third, until somebody stops it,
+  the victim is down, or a minute is up. Nothing goes on for longer than a
+  minute.
+- The phone hears of it first: a toast with what, how far and which way, a
+  line on the phone with the same while it goes on, a red diamond with the
+  distance over the offender, and pointed at him his card calls him the
+  offender, his record the crime in progress.
+- Stopping it: a takedown (F within reach) puts the offender down alive,
+  subdued, which is the best way (rep +10); Q ringing his phone in a fight
+  breaks it up (+8), and a thief stops to look at it, long enough to catch
+  him; shot dead it is stopped too, for less (+4). A thief who gets away
+  costs 5, a victim on the ground 8, and in .BACKDOOR shooting somebody who
+  was only walking down the street costs 12. A crime stopped pays 60 to
+  240 into the account. Your good name and how many you stopped are on the
+  phone and kept between visits.
+- The offender is a civilian with somewhere to be: the people in the
+  street take a directive from the crime (where to go, how fast, which way
+  to face), and a bold one ignores the panic round him but not his phone.
+- Checks: unit (5) on the theft, the getaway, subdued and killed, the fight
+  and its blows, broken up by a phone, and the time limit; browser
+  (backdoor suite, eight more): a crime starts and the phone says so, the
+  thief takes the bag and runs, the card and the mark, Q then F stop him
+  and pay, a fight with blows, broken up by a ring, a thief nobody stops
+  gets away, and an innocent shot costs your name. Screenshot
+  backdoor-03-crime.png.
+
 ## CI: the machines suite stands the run up before it aims
 
 - Since phase 120 dying is four seconds of a camera going round the body,

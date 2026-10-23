@@ -400,6 +400,9 @@ export class Soldiers {
     s.who = Math.random();
     s.profile = null;
     s.phoneLeft = 0;
+    s.directed = null;
+    s.crime = null;
+    s.subdued = false;
     this._errand(s);
     return s;
   }
@@ -449,9 +452,27 @@ export class Soldiers {
     const running = s.panicLeft > 0;
     // A phone that rang: he stops where he is and looks at it, unless
     // something has frightened him, which beats any message.
-    if (!running && s.phoneLeft > 0) {
+    // The one committing a crime is past being frightened, but not past
+    // looking at his phone.
+    if ((!running || (s.directed && s.directed.bold)) && s.phoneLeft > 0) {
       s.phoneLeft = Math.max(0, s.phoneLeft - dt);
       s.vx = 0; s.vz = 0;
+      s.y = w.groundHeight(s.x, s.z);
+      s.canSee = false;
+      return;
+    }
+    // Somebody else decides where he goes: a crime he is in. The one who
+    // started it is not put off by a noise; the one it is happening to is.
+    if (s.directed && (!running || s.directed.bold)) {
+      const d = s.directed;
+      if (d.speed > 0) {
+        s.targetX = d.x; s.targetZ = d.z;
+        this._move(s, dt, d.speed);
+        s.yaw = Math.atan2(-(s.targetX - s.x), -(s.targetZ - s.z));
+      } else {
+        s.vx = 0; s.vz = 0;
+      }
+      if (d.face !== undefined) s.yaw = d.face;
       s.y = w.groundHeight(s.x, s.z);
       s.canSee = false;
       return;

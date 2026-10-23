@@ -727,6 +727,31 @@ html, body {
 }
 #phone.low .ph-bat i { background: #ff6a4a; box-shadow: 0 0 6px rgba(255, 106, 74, 0.5); }
 #phone .ph-money { margin-top: 6px; display: flex; justify-content: space-between; font-size: 13px; color: #fff; letter-spacing: 0.04em; }
+#phone .ph-rep { margin-top: 4px; font-size: 9.5px; color: rgba(225, 245, 250, 0.6); }
+#phone .ph-crime {
+  margin-top: 7px; padding: 5px 6px; font-size: 10px; line-height: 1.35;
+  color: #fff; background: rgba(160, 24, 18, 0.55); border-left: 2px solid #ff5a4a;
+  animation: crimeblink 1s steps(2) infinite;
+}
+#phone .ph-crime.hidden { display: none; }
+@keyframes crimeblink { 50% { background: rgba(160, 24, 18, 0.3); } }
+/* The offender, wherever he is on the screen: a red diamond over his head
+   and how far he is. */
+#crimemark {
+  position: absolute; left: 0; top: 0;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  text-align: center;
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #ff6a5a;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+#crimemark.hidden { display: none; }
+#crimemark i {
+  display: block; width: 12px; height: 12px; margin: 0 auto 3px;
+  background: #ff4a3a; transform: rotate(45deg);
+  box-shadow: 0 0 10px rgba(255, 70, 50, 0.8);
+}
 #phone .ph-money em { font-style: normal; font-size: 9.5px; color: rgba(225, 245, 250, 0.6); align-self: flex-end; letter-spacing: 0.12em; }
 
 #killfeed {

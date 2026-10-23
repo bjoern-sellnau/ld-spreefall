@@ -711,10 +711,17 @@ three cells and what you have taken so far.
   bus: **Q** stops it, **E** opens its doors and lets its passengers off.
   Two that meet crash, and a car hits whoever it drives into. **F** at a
   car in the traffic throws the driver out and it is yours.
+- **Crime.** Every half minute or so somebody near you snatches a bag and
+  runs, or starts a fight. The phone tells you what, how far and which way,
+  and marks the offender. Take him down by hand (**F**) and he is subdued,
+  ring his phone (**Q**) and a fight is over or a thief stops long enough to
+  catch, or shoot him, for less. Stopping one pays and raises your good
+  name; one that gets away, a victim on the ground, or an innocent shot
+  lowers it.
 - The battery pays for every hack and fills again by itself once you leave
   it alone.
-- Coming next: crimes in the street to stop, and the city's own systems
-  (traffic lights, steam pipes, a blackout).
+- Coming next: the city's own systems (traffic lights, steam pipes, a
+  blackout).
 
 Where the ideas come from: the Watch Dogs games, whose phone profiles every
 citizen in the street and hacks the city's traffic lights, steam pipes,

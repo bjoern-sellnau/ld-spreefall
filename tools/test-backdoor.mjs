@@ -46,6 +46,8 @@ async function run() {
     const note = document.getElementById('modenote').textContent;
     document.getElementById('playbtn').click();
     s.skipToWalk();
+    // Crime is started by hand further down; none of its own meanwhile.
+    s.crimes.next = 1e9;
     s.tiles.uploadsPerFrame = 500;
     s.setQuality('low');
     s.teleport(81, 0); s.look(90, -4); s.setTime(15.4);
@@ -372,6 +374,146 @@ async function run() {
   });
   check('F at a car in the traffic throws the driver out and it is yours',
     jacked.inIt && jacked.traffic === null && jacked.driver === 1, JSON.stringify(jacked));
+
+  // --- crime ------------------------------------------------------------------------
+  // One started by hand, with the two in it put where the check can watch
+  // them, and nothing else started while it runs.
+  const crime = (kind, oAt, vAt) => page.evaluate(({ kind, oAt, vAt }) => {
+    const s = window.spreefall;
+    s.vehicles.reset(); s.soldiers.reset();
+    s.teleport(81, 0);
+    s.crimes.next = 1e9;
+    s.crimes.live = null;
+    const live = s.crimeBegin(kind);
+    if (!live) return null;
+    const put = (sd, [dx, dz]) => {
+      sd.x = s.player.x + dx; sd.z = s.player.z + dz;
+      sd.y = s.world.groundHeight(sd.x, sd.z);
+      sd.targetX = sd.x; sd.targetZ = sd.z;
+    };
+    put(live.o, oAt); put(live.v, vAt);
+    window.live = live;
+    return { toast: (document.getElementById('toast') || {}).textContent || '', rep: s.crimes.rep, money: s.phone.money };
+  }, { kind, oAt, vAt });
+  const steps = (n, also = '') => page.evaluate(({ n }) => {
+    const s = window.spreefall;
+    for (let i = 0; i < n; i++) {
+      s.fixedForTest(1 / 60);
+      for (const o of [...s.vehicles.active]) s.vehicles.remove(o);
+      for (const c of [...s.soldiers.active]) if (c.civilian && c !== window.live.o && c !== window.live.v) s.soldiers._retire(c);
+    }
+    const l = window.live;
+    return { phase: l.c.phase, over: l.c.over, oUp: l.o.alive && l.o.health > 0 && l.o.state !== 5,
+      vHealth: Math.round(l.v.health), apart: +Math.hypot(l.o.x - l.v.x, l.o.z - l.v.z).toFixed(1),
+      oFar: Math.round(Math.hypot(l.o.x - s.player.x, l.o.z - s.player.z)), live: !!s.crimes.live };
+  }, { n });
+
+  const theft = await crime('theft', [-10, 2], [-18, -3]);
+  check('a crime starts near you and the phone says so: what, how far, which way',
+    theft && /CRIME DETECTED: bag theft, \d+ m [NESW]+/.test(theft.toast), theft && theft.toast);
+  const snatched = await steps(60 * 6);
+  check('the thief walks up, takes the bag and runs', snatched.phase === 'flee' && snatched.apart > 5 && !snatched.over,
+    JSON.stringify(snatched));
+  const offenderCard = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const o = window.live.o;
+    // Held where he is while the phone is pointed at him: at a frame or two
+    // a second, a man running is out of the crosshair before it is drawn.
+    const X = o.x, Z = o.z;
+    window.pinO = setInterval(() => { o.x = X; o.z = Z; }, 0);
+    const dx = o.x - s.player.x, dz = o.z - s.player.z;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, -2);
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    return { on: !!s.hackTarget && s.hackTarget.ref === o, rec: document.getElementById('hcrec').textContent,
+      mark: !document.getElementById('crimemark').classList.contains('hidden'),
+      line: document.getElementById('phcrime').textContent };
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-03-crime.png') });
+  check('pointed at him the phone calls him the offender, a red mark over him and the crime on the phone',
+    offenderCard.on && /OFFENDER: bag theft/.test(offenderCard.rec) && offenderCard.mark && /thief running/.test(offenderCard.line),
+    JSON.stringify(offenderCard));
+  const caught = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.phone.battery = 100;
+    const rang = s.hackKey(0) && s.hackTarget && s.hackTarget.ref === window.live.o;
+    clearInterval(window.pinO);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const o = window.live.o;
+    const x0 = o.x;
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    const stood = Math.abs(o.x - x0) < 0.05;
+    // Up behind him, and F.
+    const fx = -Math.sin(o.yaw), fz = -Math.cos(o.yaw);
+    s.teleport(o.x - fx * 1.6, o.z - fz * 1.6);
+    s.look(Math.atan2(-fx, -fz) * 180 / Math.PI, -10);
+    s.camera.update(16 / 9);
+    const rep = s.crimes.rep, money = s.phone.money;
+    const took = s.takedown();
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    return { rang, stood, took, over: window.live.c.over, rep: s.crimes.rep - rep, paid: s.phone.money - money,
+      stopped: s.crimes.stopped, toast: (document.getElementById('toast') || {}).textContent || '' };
+  });
+  check('Q stops him where he is, and F takes him down: crime stopped, paid and your name better for it',
+    caught.rang && caught.stood && caught.took && caught.over === 'subdued' && caught.rep > 0 && caught.paid > 0
+      && /CRIME STOPPED/.test(caught.toast), JSON.stringify(caught));
+
+  await crime('brawl', [-9, 1], [-13, 1]);
+  const fight = await steps(60 * 5);
+  check('a fight: they square up and the one who started it lays into the other',
+    fight.phase === 'fight' && fight.vHealth < 100 && !fight.over, JSON.stringify(fight));
+  const broken = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const o = window.live.o;
+    const dx = o.x - s.player.x, dz = o.z - s.player.z;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, -2);
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    s.phone.battery = 100;
+    const rep = s.crimes.rep;
+    const rang = s.hackKey(0);
+    for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    return { rang, over: window.live.c.over, rep: s.crimes.rep - rep, oUp: o.alive && o.health > 0 };
+  });
+  check('and his phone ringing breaks it up, nobody hurt any further',
+    broken.rang && broken.over === 'brokenUp' && broken.rep > 0 && broken.oUp, JSON.stringify(broken));
+
+  await crime('theft', [-6, 1], [-8, 1]);
+  const got = await page.evaluate(() => {
+    const s = window.spreefall;
+    const rep = s.crimes.rep, failed = s.crimes.failed;
+    // You stand still and watch him go.
+    for (let i = 0; i < 60 * 45 && !window.live.c.over; i++) {
+      s.fixedForTest(1 / 60);
+      for (const o of [...s.vehicles.active]) s.vehicles.remove(o);
+    }
+    return { over: window.live.c.over, rep: s.crimes.rep - rep, failed: s.crimes.failed - failed,
+      far: Math.round(Math.hypot(window.live.o.x - s.player.x, window.live.o.z - s.player.z)) };
+  });
+  check('a thief nobody stops gets away, and that costs your good name',
+    got.over === 'escaped' && got.rep < 0 && got.failed === 1, JSON.stringify(got));
+
+  const innocent = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.soldiers.reset(); s.vehicles.reset();
+    s.crimes.live = null;
+    const c = s.soldiers.spawnCivilianNear(s.player.x, s.player.z, 4, 8);
+    const fx = -Math.sin(s.camera.yaw), fz = -Math.cos(s.camera.yaw);
+    c.x = s.player.x + fx * 6; c.z = s.player.z + fz * 6; c.y = s.world.groundHeight(c.x, c.z);
+    c.targetX = c.x; c.targetZ = c.z; c.phoneLeft = 30;
+    const rep = s.crimes.rep;
+    s.weapon.select('m16');
+    for (let k = 0; k < 12 && c.health > 0; k++) {
+      const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+      const dx = c.x - ex, dy = c.y + 1.2 - ey, dz = c.z - ez;
+      const l = Math.hypot(dx, dy, dz);
+      s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.asin(dy / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+      s.weapon.cooldown = 0; s.weapon.spread = 0; s.weapon.ammo = 30;
+      s.shoot();
+    }
+    return { dead: c.health <= 0, rep: s.crimes.rep - rep };
+  });
+  check('and somebody who was only walking down the street costs it too, shot',
+    innocent.dead && innocent.rep < 0, JSON.stringify(innocent));
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

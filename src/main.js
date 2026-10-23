@@ -59,6 +59,7 @@ import { Grime, GRIME } from './ui/grime.js';
 import { Nanosuit, SUIT } from './game/nanosuit.js';
 import { BACKDOOR, Phone, profileFor, pickTarget } from './game/backdoor.js';
 import { TRAFFIC, roadIndex, pickSpawn, nearestLane, straightNear, drive as trafficDrive } from './game/traffic.js';
+import { CRIME, newCrime, crimeStep, crimeRecord, repFor, stopped as crimeStopped } from './game/crime.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
 import { Slayer, SLAYER } from './game/slayer.js';
@@ -85,7 +86,8 @@ const el = {
   suitVisor: $('suitvisor'), suitNano: $('suitnano'), suitUps: $('suitups'), suitCat: $('suitcat'),
   hackMark: $('hackmark'), hackCard: $('hackcard'), hcName: $('hcname'), hcJob: $('hcjob'), hcFact: $('hcfact'),
   hcRec: $('hcrec'), hcActs: $('hcacts'), hcProg: $('hcprog'),
-  phone: $('phone'), phoneBat: $('phbat'), phoneMoney: $('phmoney'), phoneHacks: $('phhacks'), visorHud: $('visorhud'), grime: $('grime'), throwArc: $('throwarc'),
+  phone: $('phone'), phoneBat: $('phbat'), phoneMoney: $('phmoney'), phoneHacks: $('phhacks'),
+  phoneRep: $('phrep'), phoneCrime: $('phcrime'), crimeMark: $('crimemark'), crimeDist: $('crimedist'), visorHud: $('visorhud'), grime: $('grime'), throwArc: $('throwarc'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -1275,6 +1277,13 @@ async function main() {
       grime.blood((1 - dist / 14) * (cheats.bleeding ? 1 : 0.7), sideOf(target.x, target.z));
     }
     if (target.ceph || (target.dspec && target.dspec.ceph) || target.pinger) state.cephKilled = (state.cephKilled || 0) + 1;
+    // In .BACKDOOR somebody who was only walking down the street costs you
+    // your good name; the one committing a crime is the crime's business.
+    if (state.backdoor && target.civilian && !(target.crime && target.crime.o === target)) {
+      crimes.rep += CRIME.rep.innocent;
+      saveRep();
+      toast(`an innocent. rep ${CRIME.rep.innocent}`, 2200);
+    }
     suitKill(target.ceph || (target.dspec && target.dspec.ceph) ? 'ceph'
       : target.machine ? 'machine' : kind === true ? 'drone' : kind === 'jet' ? 'vehicle' : 'soldier');
     // A body that came apart does not also catch fire.
@@ -6164,7 +6173,9 @@ async function main() {
       el.hcName.textContent = p.name;
       el.hcJob.textContent = `${p.age} · ${p.job} · ${euro(p.income)} a year`;
       el.hcFact.textContent = p.fact;
-      el.hcRec.textContent = p.record ? `RECORD: ${p.record}` : '';
+      el.hcRec.textContent = found.ref.crime && found.ref.crime.o === found.ref
+        ? `OFFENDER: ${CRIME_NAMES[found.ref.crime.kind]} in progress`
+        : (p.record ? `RECORD: ${p.record}` : '');
     } else if (found.kind === 'car') {
       const v = found.ref;
       const owner = profileFor(v.seed || 0.5);
@@ -6395,6 +6406,164 @@ async function main() {
     }
     vehicleCrashes();
     vehicleStrikes(dt);
+  }
+
+  // --- crime, in .BACKDOOR -----------------------------------------------------
+  //
+  // One at a time, every half minute or so, somewhere near you: crime.js
+  // runs it, this picks who is in it, does the hitting and the running, and
+  // keeps the score: your good name, what you have been paid, and how many
+  // you stopped and how many got away.
+  const REP_KEY = 'spreefall.backdoor.rep';
+  const crimes = {
+    live: null, next: CRIME.first, stopped: 0, failed: 0,
+    rep: (() => { try { return parseInt(localStorage.getItem(REP_KEY) || '0', 10) || 0; } catch { return 0; } })(),
+  };
+  const CRIME_NAMES = { theft: 'bag theft', brawl: 'assault' };
+  const bearing = (dx, dz) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][
+    ((Math.round(Math.atan2(dx, -dz) / (Math.PI / 4)) % 8) + 8) % 8];
+  function saveRep() {
+    try { localStorage.setItem(REP_KEY, String(crimes.rep)); } catch { /* private mode */ }
+  }
+  const upright = (sd) => sd && sd.alive && sd.health > 0 && sd.state !== 5;
+  /** Two people near you, one to do it and one to have it done to them. */
+  function crimeBegin(kind) {
+    const [lo, hi] = CRIME.near;
+    const pool = soldiers.active.filter((sd) => sd.civilian && upright(sd) && !sd.crime && !sd.directed
+      && Math.hypot(sd.x - player.x, sd.z - player.z) >= lo && Math.hypot(sd.x - player.x, sd.z - player.z) <= hi);
+    let o = pool[Math.floor(Math.random() * pool.length)] || soldiers.spawnCivilianNear(player.x, player.z, lo, hi);
+    if (!o) return null;
+    let v = null, best = 30;
+    for (const sd of pool) {
+      if (sd === o) continue;
+      const d = Math.hypot(sd.x - o.x, sd.z - o.z);
+      if (d < best) { best = d; v = sd; }
+    }
+    if (!v) v = soldiers.spawnCivilianNear(o.x, o.z, 8, 16);
+    if (!v) return null;
+    // The phone knows him for what he is, and has been told what he is about to do.
+    const p = profileOf(o);
+    p.criminal = true;
+    p.record = `${crimeRecord(kind)}, in progress`;
+    const live = { kind, c: newCrime(kind), o, v };
+    o.crime = live; v.crime = live;
+    crimes.live = live;
+    const dx = o.x - player.x, dz = o.z - player.z;
+    toast(`CRIME DETECTED: ${CRIME_NAMES[kind]}, ${Math.round(Math.hypot(dx, dz))} m ${bearing(dx, dz)}`, 3800);
+    feed(`<b>crime detected</b> ${CRIME_NAMES[kind]}`);
+    audio.spotted();
+    return live;
+  }
+  /** It is over, one way or another. */
+  function crimeEnd(why) {
+    const live = crimes.live;
+    if (!live) return;
+    crimes.live = null;
+    crimes.next = CRIME.every[0] + Math.random() * (CRIME.every[1] - CRIME.every[0]);
+    for (const sd of [live.o, live.v]) { if (sd) { sd.directed = null; sd.crime = null; } }
+    if (upright(live.v)) soldiers.scare(live.v.x, live.v.z, 6);
+    const rep = repFor(why);
+    crimes.rep += rep;
+    saveRep();
+    if (crimeStopped(why)) {
+      crimes.stopped++;
+      const pay = Math.round((CRIME.reward[0] + Math.random() * (CRIME.reward[1] - CRIME.reward[0])) / 10) * 10;
+      phone.money += pay;
+      saveMoney();
+      const how = why === 'subdued' ? 'offender down' : why === 'brokenUp' ? 'fight broken up' : 'offender killed';
+      toast(`CRIME STOPPED: ${how}. +${euro(pay)}, rep ${rep >= 0 ? '+' : ''}${rep}`, 3200);
+      feed(`<b>crime stopped</b> ${how}`);
+      audio.hackChirp(true);
+    } else {
+      crimes.failed++;
+      const how = why === 'escaped' ? 'the thief got away' : why === 'victimDown' ? 'the victim is down' : 'it is over';
+      toast(`CRIME NOT STOPPED: ${how}. rep ${rep}`, 3200);
+      feed(`<b>crime not stopped</b> ${how}`);
+      audio.hackChirp(false);
+    }
+    state.lastCrime = { kind: live.kind, why };
+  }
+  function crimeTick(dt) {
+    const on = state.backdoor && state.mode === 'walk';
+    if (!on) {
+      if (crimes.live) {
+        for (const sd of [crimes.live.o, crimes.live.v]) { if (sd) { sd.directed = null; sd.crime = null; } }
+        crimes.live = null;
+      }
+      return;
+    }
+    const live = crimes.live;
+    if (!live) {
+      crimes.next -= dt;
+      if (crimes.next <= 0) {
+        crimes.next = 6;            // try again soon if nobody was about
+        crimeBegin(CRIME.kinds[Math.floor(Math.random() * CRIME.kinds.length)]);
+      }
+      return;
+    }
+    const { o, v } = live;
+    // Walked out of the street the city keeps: not caught, not stopped.
+    if ((!o.alive && o.health > 0) || (!v.alive && v.health > 0 && live.c.phase !== 'flee')) {
+      live.c.over = 'escaped';
+      crimeEnd('escaped');
+      return;
+    }
+    const r = crimeStep(live.c, dt, {
+      o: { x: o.x, z: o.z, up: upright(o), subdued: !!o.subdued, distracted: o.phoneLeft > 0 },
+      v: { x: v.x, z: v.z, up: upright(v) },
+      p: { x: player.x, z: player.z },
+    });
+    o.directed = r.offender ? { ...r.offender, bold: true } : (live.c.phase === 'flee' ? o.directed : null);
+    v.directed = r.victim ? { ...r.victim } : null;
+    for (const e of r.events) {
+      if (e === 'snatch') {
+        feed(`<b>bag snatched</b> from ${profileOf(v).name}`);
+        soldiers.scare(v.x, v.z, 5);
+        audio.spotted();
+      } else if (e === 'hit' || e === 'hitBack') {
+        const [a, b] = e === 'hit' ? [o, v] : [v, o];
+        const dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz) || 1;
+        // The one who started it takes nothing that would end it for him.
+        if (e === 'hit') soldiers.damage(b, CRIME.hit.damage, { x: dx / l, y: 0.1, z: dz / l });
+        b.hitFlash = 1;
+        if (cheats.bleeding && e === 'hit') effects.blood(b.x, b.y + 1.5, b.z, dx / l, 0.2, dz / l, 0.35);
+        audio.land && audio.land(player.surface);
+      } else {
+        crimeEnd(e);
+      }
+    }
+  }
+  /** The offender, taken down by hand: down, alive, and stopped. */
+  function subdue(sd) {
+    sd.subdued = true;
+    const dx = sd.x - player.x, dz = sd.z - player.z, d = Math.hypot(dx, dz) || 1;
+    soldiers.damage(sd, 9999, { x: dx / d, y: 0, z: dz / d });
+    effects.shake = Math.min(1, effects.shake + 0.12);
+    audio.hitMarker(true);
+    feed('<b>takedown</b> offender subdued');
+    state.takedowns = (state.takedowns || 0) + 1;
+  }
+  /** The live crime's marker over the offender, and its line on the phone. */
+  function crimeHud() {
+    const live = crimes.live;
+    const shown = !!live && backdoorOn();
+    el.phoneCrime.classList.toggle('hidden', !shown);
+    el.phoneRep.textContent = `rep ${crimes.rep} · ${crimes.stopped} stopped`;
+    if (!shown) { el.crimeMark.classList.add('hidden'); return; }
+    const o = live.o;
+    const dx = o.x - player.x, dz = o.z - player.z;
+    const d = Math.round(Math.hypot(dx, dz));
+    const what = live.c.phase === 'flee' ? 'thief running' : live.c.phase === 'fight' ? 'fight on' : CRIME_NAMES[live.kind];
+    el.phoneCrime.textContent = `CRIME: ${what} · ${d} m ${bearing(dx, dz)}`;
+    const at = projectPoint(camera.viewProj, o.x, o.y + 2.25, o.z, window.innerWidth, window.innerHeight);
+    if (!at || at.x < 0 || at.y < 0 || at.x > window.innerWidth || at.y > window.innerHeight) {
+      el.crimeMark.classList.add('hidden');
+      return;
+    }
+    el.crimeMark.classList.remove('hidden');
+    el.crimeMark.style.left = `${at.x}px`;
+    el.crimeMark.style.top = `${at.y}px`;
+    el.crimeDist.textContent = `${d} m`;
   }
 
   // --- the suit, in The Hunt -------------------------------------------------------
@@ -6887,6 +7056,14 @@ async function main() {
     const fx = camera.forward[0], fz = camera.forward[2];
     const fl = Math.hypot(fx, fz) || 1;
     for (const s of soldiers.active) {
+      // In .BACKDOOR the one committing a crime can be taken down, whatever
+      // he is doing and however much he knows about you.
+      if (s.alive && s.civilian && s.crime && s.crime.o === s && s.health > 0 && s.state !== 5) {
+        const dx = s.x - player.x, dz = s.z - player.z;
+        const d = Math.hypot(dx, dz);
+        if (d <= bestD + 0.4 && (dx * fx + dz * fz) / (fl * (d || 1)) >= 0.3) { best = s; bestD = d; }
+        continue;
+      }
       if (!s.alive || s.civilian || s.health <= 0 || s.state === 5 || s.rise > 0 || s.held) continue;
       // A demon reeling is a finisher, from further off and whatever it was doing.
       if (s.demon) {
@@ -7048,6 +7225,7 @@ async function main() {
     if (state.mode !== 'walk' || state.inVehicle || state.inMech) return false;
     const s = takedownTarget();
     if (!s) return false;
+    if (s.civilian && s.crime) { subdue(s); return true; }
     const dx = s.x - player.x, dz = s.z - player.z;
     const d = Math.hypot(dx, dz) || 1;
     if (s.demon) {
@@ -8287,7 +8465,7 @@ async function main() {
     }
 
     // .BACKDOOR's traffic decides its pedals and wheels before anything moves.
-    if (state.mode === 'walk') trafficStep(worldDt);
+    if (state.mode === 'walk') { trafficStep(worldDt); crimeTick(worldDt); }
     // Driving. The controls go to the vehicle instead of to your legs, and
     // you go wherever it goes.
     if (state.inVehicle) {
@@ -8903,6 +9081,7 @@ async function main() {
     arms.update(elapsed, weapon, state.mode === 'walk' && !photo.active && !state.inMech
       && !state.inVehicle && !state.death);
     backdoorStep(elapsed);
+    crimeHud();
     if (state.mode === 'walk' && !photo.active) {
       // Combat interface.
       const hp = Math.round(combat.health);
@@ -9069,6 +9248,7 @@ async function main() {
     phone, backdoorSpec: BACKDOOR, hackKey: (slot) => hackKey(slot), hackables: () => hackables(),
     trafficSpec: TRAFFIC, spawnTraffic: (type, near) => spawnTraffic(type, near), trafficRoads: () => trafficRoads(),
     get crashes() { return state.crashes; },
+    crimes, crimeSpec: CRIME, crimeBegin: (kind) => crimeBegin(kind), subdue: (sd) => subdue(sd),
     straightNear: (x, z, minLen) => straightNear(trafficRoads(), x, z, minLen),
     get hackTarget() { return state.hackTarget; }, profileOf: (sd) => profileOf(sd),
     demonSpec: DEMON, gazerSpec: GAZER,
