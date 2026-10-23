@@ -4993,6 +4993,21 @@ So there are two cities now, and a profile picks which:
   backdoor-05-steam.png, backdoor-06-night.png and
   backdoor-07-blackout.png.
 
+## CI: a runway measured the width of the wings, and the panel against the hull
+
+- The city suite's fighter rolled into something and burnt out on the
+  ground (hull 0, two metres down, no speed). Its runway was the clearest
+  of 32 directions, measured by one ray down the middle at three metres,
+  and the checks before it leave heaps of rubble at knee height and ruins
+  at the side of the street: neither is on that ray. The run is now the
+  shortest of nine rays, at 0.7, 1.6 and 3 m, down the middle and 4.5 m
+  either side for the wings.
+- The panel check that drives a tank for three seconds wanted the hull at
+  exactly 100 percent, and a tank that drove through the fire the wrecks
+  before it left on the street came out at 99. The fire is put out first,
+  as the takeoff already did, and the panel is held to what the hull really
+  is, at no less than 90 percent.
+
 ## CI: the compass lost its bearing to the crime line
 
 - The ops suite went red on the compass: facing the nearest camp, the bar
