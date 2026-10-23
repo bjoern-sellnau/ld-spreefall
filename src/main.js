@@ -62,6 +62,7 @@ import {
   TRAFFIC, SIGNALS, roadIndex, pickSpawn, nearestLane, straightNear, drive as trafficDrive,
   junctionsOf, mastsOf, lightAt,
 } from './game/traffic.js';
+import { CITY, pipesOf, pipeStep, pipeState, pipeReady, blastOn, Blackout } from './game/city.js';
 import { CRIME, newCrime, crimeStep, crimeRecord, repFor, stopped as crimeStopped } from './game/crime.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -90,7 +91,7 @@ const el = {
   hackMark: $('hackmark'), hackCard: $('hackcard'), hcName: $('hcname'), hcJob: $('hcjob'), hcFact: $('hcfact'),
   hcRec: $('hcrec'), hcActs: $('hcacts'), hcProg: $('hcprog'),
   phone: $('phone'), phoneBat: $('phbat'), phoneMoney: $('phmoney'), phoneHacks: $('phhacks'),
-  phoneRep: $('phrep'), phoneCrime: $('phcrime'), crimeMark: $('crimemark'), crimeDist: $('crimedist'), visorHud: $('visorhud'), grime: $('grime'), throwArc: $('throwarc'),
+  phoneRep: $('phrep'), phoneCrime: $('phcrime'), phoneBlack: $('phblack'), crimeMark: $('crimemark'), crimeDist: $('crimedist'), visorHud: $('visorhud'), grime: $('grime'), throwArc: $('throwarc'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -6040,6 +6041,7 @@ async function main() {
       out.push({ kind: v.type, ref: v, x: v.x, y: v.y + (v.type === 'bus' ? 2.4 : 1.2), z: v.z });
     }
     for (const m of signalMasts(BACKDOOR.reach + 10)) out.push({ kind: 'signal', ref: m.j, x: m.x, y: m.y + 2.9, z: m.z });
+    for (const c of coversNear(BACKDOOR.reach + 10)) out.push({ kind: 'pipe', ref: c.p, x: c.x, y: c.y + 0.1, z: c.z });
     return out;
   }
   /** A number plate, from the car's own seed: B for Berlin, letters and digits. */
@@ -6052,6 +6054,11 @@ async function main() {
   function hacksFor(t) {
     if (t.kind === 'signal') {
       return [{ kind: 'allRed', label: 'All red' }, { kind: 'allGreen', label: 'All green' }];
+    }
+    if (t.kind === 'pipe') {
+      const ready = pipeReady(t.ref);
+      return [{ kind: 'vent', label: 'Vent steam', off: !ready },
+        { kind: 'blow', label: ready ? 'Blow the pipe' : 'Blown', off: !ready }];
     }
     if (t.kind === 'car') {
       return [{ kind: 'stall', label: 'Stall engine' }, { kind: 'ram', label: 'Ram' }];
@@ -6112,6 +6119,28 @@ async function main() {
       if (v.traffic) { v.traffic.opened = true; v.traffic.stalled = Math.max(v.traffic.stalled || 0, 6); }
       const out = openDoors(v);
       feed(`<b>doors opened</b> ${out} off the bus`);
+    } else if (job.kind === 'vent') {
+      t.ref.vent = CITY.pipes.vent;
+      soldiers.scare(t.ref.x, t.ref.z, 6);
+      audio.hiss(away, CITY.pipes.vent);
+      feed('<b>steam vented</b> across the road');
+    } else if (job.kind === 'blow') {
+      t.ref.fuse = CITY.pipes.fuse;
+      t.ref.vent = 0;
+      // The hiss is the warning, and the people near it take it.
+      soldiers.scare(t.ref.x, t.ref.z, 9);
+      audio.hiss(away, CITY.pipes.fuse);
+    } else if (job.kind === 'blackout') {
+      if (blackout.start()) {
+        toast('BLACKOUT', 2600);
+        feed('<b>blackout</b> the power is off');
+        audio.blackout();
+        // Everybody in the street stops and looks at a phone with no signal.
+        for (const sd of soldiers.active) {
+          if (sd.civilian && sd.alive && sd.health > 0 && !sd.crime
+            && Math.hypot(sd.x - player.x, sd.z - player.z) < 160) sd.phoneLeft = 2 + Math.random() * 3;
+        }
+      }
     } else if (job.kind === 'allRed' || job.kind === 'allGreen') {
       const green = job.kind === 'allGreen';
       t.ref.hack = { kind: green ? 'green' : 'red', left: BACKDOOR.hacks[job.kind].effect };
@@ -6194,6 +6223,14 @@ async function main() {
       el.hcJob.textContent = `Registered to ${owner.name}, ${owner.job.toLowerCase()}`;
       el.hcFact.textContent = `${Math.round(Math.abs(v.speed) * 3.6)} km/h${v.traffic && v.traffic.stalled > 0 ? ', engine dead' : ''}`;
       el.hcRec.textContent = '';
+    } else if (found.kind === 'pipe') {
+      const pp = found.ref;
+      const st = pipeState(pp);
+      el.hcName.textContent = 'Steam pipe';
+      el.hcJob.textContent = `Under ${streetAt(pp.x, pp.z) || 'the road'}`;
+      el.hcFact.textContent = st === 3 ? `blown, ${Math.ceil(pp.spent)} s to a new cover`
+        : st === 2 ? 'about to go' : st === 1 ? `venting, ${Math.ceil(pp.vent)} s` : '17 bar, 180 °C';
+      el.hcRec.textContent = '';
     } else if (found.kind === 'signal') {
       const j = found.ref;
       el.hcName.textContent = 'Traffic lights';
@@ -6275,6 +6312,118 @@ async function main() {
     }
     out.sort((a, b) => a.d - b.d);
     return out;
+  }
+  // The pipes under the street and the power: where the covers are is
+  // worked out once from the same lines, beside the junctions.
+  let pipeList = [], pipeIdx = null;
+  const blackout = new Blackout();
+  state.pipesBlown = 0;
+  function cityPipes() {
+    const idx = trafficRoads();
+    if (pipeIdx !== idx) {
+      pipeList = pipesOf(idx, trafficJunctions());
+      pipeIdx = idx;
+    }
+    return pipeList;
+  }
+  /** The covers round you, nearest first, on the ground, with what each is doing. */
+  function coversNear(r = 140) {
+    if (!state.backdoor || state.mode !== 'walk') return [];
+    const out = [];
+    for (const p of cityPipes()) {
+      if (Math.abs(p.x - player.x) > r || Math.abs(p.z - player.z) > r) continue;
+      const d = Math.hypot(p.x - player.x, p.z - player.z);
+      if (d > r || (world.isLoaded && !world.isLoaded(p.x, p.z))) continue;
+      out.push({ x: p.x, y: world.groundHeight(p.x, p.z) + 0.02, z: p.z, yaw: p.yaw, p, d, light: pipeState(p) });
+    }
+    out.sort((a, b) => a.d - b.d);
+    return out;
+  }
+  /** The name of the street at a point, for the phone's card. */
+  function streetAt(x, z) {
+    let best = null, bestD = 14;
+    for (const r of world.manifest.roadLines || []) {
+      if (!r.n) continue;
+      const pts = r.pts;
+      for (let k = 2; k < pts.length; k += 2) {
+        const ax = pts[k - 2], az = pts[k - 1], dx = pts[k] - ax, dz = pts[k + 1] - az;
+        const l2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
+        const d = Math.hypot(ax + dx * t - x, az + dz * t - z);
+        if (d < bestD) { bestD = d; best = r.n; }
+      }
+    }
+    return best;
+  }
+  /** A cover goes: up with whatever is on it, and down on whoever is near it. */
+  function blowPipe(p) {
+    const y = world.groundHeight(p.x, p.z);
+    effects.steam(p.x, y, p.z, 6);
+    effects.dust(p.x, y, p.z, 5);
+    // And the pipe, open to the air, goes on pouring it out for a while.
+    p.gush = 6;
+    effects.shake = Math.min(1.4, effects.shake + Math.max(0, 0.6 - Math.hypot(p.x - player.x, p.z - player.z) / 120));
+    renderer.addScar(p.x, y, p.z, 2.2, 0.5);
+    audio.explosion();
+    let thrown = 0, down = 0;
+    for (const v of vehicles.active) {
+      if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground') continue;
+      const b = blastOn(p, v.x, v.z);
+      if (!b) continue;
+      vehicles.launch(v, b.up * (v.type === 'bus' ? 0.45 : 1), (Math.random() - 0.5) * 2.4 * b.share);
+      vehicles.damage(v, v.spec.health * CITY.blast.hull * b.share);
+      if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
+      thrown++;
+    }
+    for (const sd of soldiers.active) {
+      if (!sd.alive || sd.health <= 0 || sd.state === 5) continue;
+      const d = Math.hypot(sd.x - p.x, sd.z - p.z);
+      if (d > CITY.blast.people) continue;
+      const b = blastOn(p, sd.x, sd.z);
+      if (b && soldiers.knockDown(sd, b.dx, b.dz, CITY.blast.push * (0.4 + b.share))) down++;
+    }
+    const toYou = blastOn(p, player.x, player.z);
+    if (toYou && !state.inVehicle && combat.health > 0) combat.hurt(CITY.blast.hurt * toYou.share, p.x, p.z, player.x, player.z);
+    soldiers.scare(p.x, p.z, 30);
+    state.pipesBlown++;
+    feed(`<b>steam pipe blown</b>${thrown ? `, ${thrown} vehicle${thrown === 1 ? '' : 's'} thrown` : ''}${down ? `, ${down} knocked down` : ''}`);
+    return { thrown, down };
+  }
+  /** The pipes and the power, a step on. */
+  function cityStep(dt) {
+    const on = state.backdoor && state.mode === 'walk';
+    if (!on) {
+      if (blackout.left > 0) blackout.left = 0.001;
+    }
+    if (blackout.update(dt) === 'back') feed('<b>power back</b>');
+    renderer.blackout = blackout.out;
+    // Dark junctions while it is off.
+    const dark = blackout.on;
+    for (const j of trafficJunctions()) j.dark = dark;
+    if (!on) return;
+    for (const p of cityPipes()) {
+      if (!p.vent && !p.fuse && !p.spent) continue;
+      if (pipeStep(p, dt) === 'blow') { blowPipe(p); continue; }
+      if (p.gush > 0) p.gush -= dt;
+      // Steam out of it while it vents, a thin hissing jet while it is about
+      // to go, and a column out of the hole once it has.
+      if (Math.hypot(p.x - player.x, p.z - player.z) < 220) {
+        const y = world.groundHeight(p.x, p.z);
+        if (p.fuse > 0 && Math.random() < dt * 30) effects.steam(p.x, y, p.z, 0.5);
+        else if (p.vent > 0 && Math.random() < dt * 40) effects.steam(p.x, y, p.z, 1.4);
+        else if (p.gush > 0 && Math.random() < dt * 45) effects.steam(p.x, y, p.z, 1 + p.gush * 0.4);
+      }
+    }
+  }
+  /** B: the power to the whole street, for all the phone has. */
+  function blackoutKey() {
+    if (blackout.on) { toast('the power is already off'); audio.hackChirp(false); return false; }
+    const why = phone.start('blackout', { kind: 'city', ref: { x: player.x, z: player.z } });
+    if (why === 'battery') { toast('a blackout takes a full battery'); audio.hackChirp(false); return false; }
+    if (why) return false;
+    const res = phone.update(0, () => true);
+    if (res && res.done) applyHack(res.done);
+    return true;
   }
   const BUS_LINES = ['M41', '100', '200', 'M29', 'M85', '248', '142', 'N8', 'M19', 'TXL'];
   function spawnTraffic(type, near = null) {
@@ -6454,6 +6603,8 @@ async function main() {
     }
     for (const sd of soldiers.active) if (sd.alive && sd.health > 0) others.push({ ref: sd, x: sd.x, z: sd.z, r: 0.4 });
     if (!state.inVehicle) others.push({ ref: player, x: player.x, z: player.z, r: 0.4 });
+    // A column of steam across the road is somewhere nobody drives into.
+    for (const p of cityPipes()) if (p.vent > 0 || p.fuse > 0) others.push({ ref: p, x: p.x, z: p.z, r: 2.2 });
     for (const v of vehicles.active) {
       if (!v.traffic || !v.alive || v.health <= 0 || v === state.inVehicle) continue;
       const t = v.traffic;
@@ -6613,6 +6764,8 @@ async function main() {
     const live = crimes.live;
     const shown = !!live && backdoorOn();
     el.phoneCrime.classList.toggle('hidden', !shown);
+    el.phoneBlack.classList.toggle('hidden', !(blackout.on && backdoorOn()));
+    if (blackout.on) el.phoneBlack.textContent = `BLACKOUT · ${Math.ceil(blackout.left)} s`;
     el.phoneRep.textContent = `rep ${crimes.rep} · ${crimes.stopped} stopped`;
     if (!shown) { el.crimeMark.classList.add('hidden'); return; }
     const o = live.o;
@@ -7923,7 +8076,7 @@ async function main() {
     const now = modeNow();
     for (const b of modeButtons) b.classList.toggle('on', b.dataset.mode === now);
     el.modeNote.textContent = now === 'backdoor'
-      ? 'The city runs on one network and your phone has a way in. Point it at anybody to see who they are; Q and E get into what they carry. Nobody is hunting you, and nothing you take is ever given back.'
+      ? 'The city runs on one network and your phone has a way in. Point it at anybody, any car, bus, traffic light or steam pipe; Q and E get into it, and B cuts the power to the street. Stop the crimes you are told about. Nobody is hunting you, and nothing you take is ever given back.'
       : now === 'hunt'
       ? 'Hunting grounds held by squads in black, and you in the suit: Q armour, E cloak, Shift a sprint and Space held a jump that both run on its energy, F a punch. The bow fires from the cloak; a gun drops it.'
       : now === 'tactics'
@@ -8259,6 +8412,11 @@ async function main() {
       hackKey(code === 'KeyQ' ? 0 : 1);
       return;
     }
+    // And B the blackout, the way the game this is after keeps it on a key of its own.
+    if (backdoorOn() && code === 'KeyB') {
+      blackoutKey();
+      return;
+    }
     // In the suit, Q and E are its two modes, the way the later games had
     // them, rather than the last weapon and the reflex.
     if (suited() && !photo.active && (code === 'KeyQ' || code === 'KeyE')) {
@@ -8531,6 +8689,7 @@ async function main() {
 
     // .BACKDOOR's traffic decides its pedals and wheels before anything moves.
     if (state.mode === 'walk') { trafficStep(worldDt); crimeTick(worldDt); }
+    cityStep(worldDt);
     // Driving. The controls go to the vehicle instead of to your legs, and
     // you go wherever it goes.
     if (state.inVehicle) {
@@ -9089,6 +9248,7 @@ async function main() {
       renderer.actors.updateCamps(tactics.enabled ? tactics.drawList(player.x, player.z) : []);
       renderer.actors.updateNests(slayer.enabled ? slayer.drawList(player.x, player.z) : []);
       renderer.actors.updateSignals(signalMasts());
+      renderer.actors.updateCovers(coversNear());
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -9114,6 +9274,7 @@ async function main() {
       renderer.actors.updateNests(live && slayer.enabled
         ? slayer.drawList(camera.position[0], camera.position[2], 1600) : []);
       renderer.actors.updateSignals(live ? signalMasts() : []);
+      renderer.actors.updateCovers(live ? coversNear() : []);
       renderer.drawActors = live;
     }
 
@@ -9316,6 +9477,7 @@ async function main() {
     trafficSpec: TRAFFIC, spawnTraffic: (type, near) => spawnTraffic(type, near), trafficRoads: () => trafficRoads(),
     get crashes() { return state.crashes; },
     signalSpec: SIGNALS, junctions: () => trafficJunctions(), signalMasts: (r) => signalMasts(r),
+    citySpec: CITY, pipes: () => cityPipes(), coversNear: (r) => coversNear(r), blackout, blackoutKey: () => blackoutKey(),
     lightAt: (j, phase) => lightAt(j, phase, state.signalClock), get signalClock() { return state.signalClock; },
     crimes, crimeSpec: CRIME, crimeBegin: (kind) => crimeBegin(kind), subdue: (sd) => subdue(sd),
     straightNear: (x, z, minLen) => straightNear(trafficRoads(), x, z, minLen),

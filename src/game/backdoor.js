@@ -29,6 +29,10 @@ export const BACKDOOR = {
     // The lights at a junction.
     allRed: { name: 'All red', cost: 15, seconds: 0, effect: 10 },
     allGreen: { name: 'All green', cost: 30, seconds: 0, effect: 8 },
+    // A cover over the steam pipe, and the power to the whole street.
+    vent: { name: 'Vent steam', cost: 10, seconds: 0 },
+    blow: { name: 'Blow the pipe', cost: 35, seconds: 0 },
+    blackout: { name: 'Blackout', cost: 100, seconds: 0 },
   },
 };
 

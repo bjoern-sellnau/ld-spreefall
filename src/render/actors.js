@@ -21,6 +21,7 @@ const MAX_VEHICLES = 8;
 // Camps near enough to draw at once.
 const MAX_CAMPS = 12;
 const MAX_SIGNALS = 96;
+const MAX_COVERS = 64;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 256;
@@ -1161,6 +1162,18 @@ export function buildSignalMesh() {
   return m;
 }
 
+/**
+ * A cover in the road over the steam pipe: a flat iron disc with a rim
+ * (part 107). The instance says what it is doing, and the shader makes it
+ * glow before it goes (108) and a black hole once it has (109).
+ */
+export function buildCoverMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, 0, 0.5, 0.5, 0.03, 14, 107);
+  m.cylinder(0, 0.03, 0, 0.42, 0.4, 0.02, 14, 107);
+  return m;
+}
+
 export function buildJeepMesh() {
   const m = new MeshBuild();
   const P = 31;
@@ -1540,6 +1553,7 @@ export class Actors {
     this.nest = this._uploadMesh(buildNestMesh(), MAX_CAMPS, 2);
     // The traffic lights round you in .BACKDOOR, through the same shader.
     this.signal = this._uploadMesh(buildSignalMesh(), MAX_SIGNALS, 2);
+    this.cover = this._uploadMesh(buildCoverMesh(), MAX_COVERS, 2);
     this.vehicles = {
       car: this._uploadMesh(buildCarMesh(), 24, 2),
       bus: this._uploadMesh(buildBusMesh(), 6, 2),
@@ -2097,13 +2111,17 @@ export class Actors {
   }
 
   /** @param {{x:number,y:number,z:number,yaw:number,light:number}[]} list traffic lights to draw */
-  updateSignals(list) {
+  updateSignals(list) { this._fillStreet(this.signal, MAX_SIGNALS, list); }
+
+  /** @param {{x:number,y:number,z:number,yaw:number,light:number}[]} list covers in the road, light their state */
+  updateCovers(list) { this._fillStreet(this.cover, MAX_COVERS, list); }
+
+  _fillStreet(mesh, most, list) {
     const gl = this.gl;
-    const mesh = this.signal;
     const d = mesh.instData;
     let n = 0;
     for (const c of list) {
-      if (n >= MAX_SIGNALS) break;
+      if (n >= most) break;
       const o = n * 8;
       d[o] = c.x; d[o + 1] = c.y; d[o + 2] = c.z; d[o + 3] = -c.yaw;
       d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = 0;
@@ -2121,7 +2139,7 @@ export class Actors {
   drawCamps() {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest, this.signal]) {
+    for (const mesh of [this.camp, this.nest, this.signal, this.cover]) {
       if (!mesh.instanceCount) continue;
       this.progDrone.use();
       gl.bindVertexArray(mesh.vao);
@@ -2135,7 +2153,7 @@ export class Actors {
   drawCampShadows(lightViewProj) {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest, this.signal]) {
+    for (const mesh of [this.camp, this.nest, this.signal, this.cover]) {
       if (!mesh.instanceCount) continue;
       this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
       gl.bindVertexArray(mesh.vao);

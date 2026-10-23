@@ -735,6 +735,12 @@ html, body {
 }
 #phone .ph-crime.hidden { display: none; }
 @keyframes crimeblink { 50% { background: rgba(160, 24, 18, 0.3); } }
+/* The power off: white on black, the way a street looks with it off. */
+#phone .ph-black {
+  margin-top: 7px; padding: 5px 6px; font-size: 10px; letter-spacing: 0.08em;
+  color: #e8edf2; background: rgba(0, 0, 0, 0.75); border-left: 2px solid #e8edf2;
+}
+#phone .ph-black.hidden { display: none; }
 /* The offender, wherever he is on the screen: a red diamond over his head
    and how far he is. */
 #crimemark {

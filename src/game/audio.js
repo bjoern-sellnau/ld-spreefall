@@ -894,6 +894,50 @@ export class Audio {
     });
   }
 
+  /** Steam out of a pipe under the road: a hiss, for so long, quieter the further off. */
+  hiss(distance = 0, seconds = 1) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = 0.09 * Math.max(0.05, 1 - distance / 90);
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    n.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2400;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.08);
+    g.gain.setValueAtTime(level, t + Math.max(0.1, seconds - 0.3));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    n.connect(hp).connect(g).connect(this.master);
+    n.start(t, Math.random() * 3);
+    n.stop(t + seconds + 0.05);
+  }
+
+  /** The power going: a clunk and the hum of the street falling away under it. */
+  blackout() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(100, t);
+    o.frequency.exponentialRampToValueAtTime(24, t + 1.4);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.14, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    o.connect(lp).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 1.55);
+    this.whoomp(30);
+  }
+
   /** Somebody's phone ringing in the street, quieter the further off. */
   ringtone(distance = 0) {
     const ctx = this.ctx;

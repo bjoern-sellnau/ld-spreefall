@@ -637,6 +637,188 @@ async function run() {
   check('green both ways with a car coming each way: nobody gives way, and they crash',
     pile.crashed > 0 && pile.a && pile.b && pile.hurt, JSON.stringify(pile));
 
+  // --- the steam pipes -------------------------------------------------------------
+  // A cover with straight road behind it, and you on the pavement off to its
+  // side, looking at it.
+  const pipe = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.vehicles.reset(); s.soldiers.reset();
+    s.crimes.live = null; s.crimes.next = 1e9;
+    s.teleport(81, 0);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    const list = s.coversNear(200);
+    for (const c of list) {
+      const p = c.p;
+      const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
+      // Straight road 45 m behind it: a car put there faces it.
+      const v = s.spawnTraffic('car', { x: p.x - fx * 45, z: p.z - fz * 45, yaw: p.yaw });
+      if (!v) continue;
+      const ok = Math.cos(v.yaw - p.yaw) > 0.97 && Math.abs(Math.hypot(v.x - p.x, v.z - p.z) - 45) < 3;
+      s.vehicles.remove(v);
+      if (!ok) continue;
+      // Somewhere off to the side that can see it.
+      for (const side of [1, -1]) {
+        for (const off of [9, 7, 12]) {
+          const px = p.x + fz * off * side - fx * 8, pz = p.z - fx * off * side - fz * 8;
+          const g = s.world.groundHeight(px, pz);
+          if (!s.world.lineOfSight(px, g + 1.7, pz, p.x, s.world.groundHeight(p.x, p.z) + 0.1, p.z)) continue;
+          window.pipe = p;
+          s.teleport(px, pz);
+          for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+          const dx = p.x - s.player.x, dz = p.z - s.player.z, dy = s.world.groundHeight(p.x, p.z) + 0.1 - (s.player.y + 1.7);
+          s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
+          for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+          const t = s.hackTarget;
+          return { count: list.length, drawn: s.renderer.actors.cover.instanceCount,
+            on: !!t && t.kind === 'pipe' && t.ref === p, card: document.getElementById('hcname').textContent,
+            job: document.getElementById('hcjob').textContent, acts: document.getElementById('hcacts').textContent };
+        }
+      }
+    }
+    return { count: list.length, drawn: s.renderer.actors.cover.instanceCount, on: false };
+  });
+  check('there are covers over the steam pipe in the road, drawn, and the phone gets into one',
+    pipe.count > 3 && pipe.drawn > 3 && pipe.on && pipe.card === 'Steam pipe'
+      && /Q\s*Vent steam/.test(pipe.acts) && /E\s*Blow the pipe/.test(pipe.acts),
+    JSON.stringify(pipe));
+
+  const vent = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const p = window.pipe;
+    s.phone.battery = s.backdoorSpec.battery.most;
+    const ok = s.hackKey(0);
+    const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
+    const v = s.spawnTraffic('car', { x: p.x - fx * 45, z: p.z - fz * 45, yaw: p.yaw });
+    v.speed = 10;
+    let steam = 0;
+    for (let i = 0; i < 60 * 5; i++) {
+      s.fixedForTest(1 / 60);
+      window.keepClear([v]);
+      if (i === 60) steam = s.effects.list.filter((e) => e.alive && Math.hypot(e.ax - p.x, e.az - p.z) < 6 && e.r > 0.8).length;
+    }
+    const gap = Math.hypot(v.x - p.x, v.z - p.z);
+    const out = { ok, venting: p.vent > 0, steam, speed: +v.speed.toFixed(2), gap: +gap.toFixed(1) };
+    // And once it stops, on it goes.
+    p.vent = 0;
+    for (let i = 0; i < 60 * 5; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
+    out.past = +(((v.x - p.x) * fx + (v.z - p.z) * fz)).toFixed(1);
+    s.vehicles.remove(v);
+    return out;
+  });
+  check('Q vents steam across the road, and a car stops short of it until it stops',
+    vent.ok && vent.venting && vent.steam > 5 && vent.speed < 0.5 && vent.gap > 2.5 && vent.past > 3, JSON.stringify(vent));
+
+  const blow = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const p = window.pipe;
+    s.phone.battery = s.backdoorSpec.battery.most;
+    while (p.spent > 0 || p.fuse > 0) { p.spent = 0; p.fuse = 0; }
+    const ok = s.hackKey(1);
+    // A car that has stopped right on it, and somebody on the kerb beside it.
+    const v = s.spawnTraffic('car', { x: p.x, z: p.z, yaw: p.yaw });
+    v.x = p.x; v.z = p.z; v.speed = 0; v.traffic.stalled = 99;
+    const c = s.soldiers.spawnCivilianNear(p.x, p.z, 2, 8);
+    const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
+    c.x = p.x + fz * 3.5; c.z = p.z - fx * 3.5; c.y = s.world.groundHeight(c.x, c.z);
+    c.targetX = c.x; c.targetZ = c.z;
+    const hull = v.health;
+    let high = 0, floored = false, glow = false;
+    for (let i = 0; i < 60 * 3.2; i++) {
+      s.fixedForTest(1 / 60);
+      for (const o of [...s.vehicles.active]) if (o !== v) s.vehicles.remove(o);
+      if (s.coversNear(200).some((k) => k.p === p && k.light === 2)) glow = true;
+      high = Math.max(high, v.y - s.world.groundHeight(v.x, v.z));
+      if (c.state === 4) floored = true;
+      if (i === Math.round(60 * 1.45)) {
+        for (let k = 0; k < 2; k++) await new Promise((r) => requestAnimationFrame(r));
+        window.shotNow = true;
+      }
+    }
+    return { ok, glow, high: +high.toFixed(2), hull: Math.round(hull), left: Math.round(v.health), down: v.airborne === false,
+      floored, civilianUp: c.health > 0, spent: p.spent > 0, blown: s.state.pipesBlown };
+  });
+  check('E blows it: a car on it goes up in the air and comes down hurt, and somebody beside it is knocked flat',
+    blow.ok && blow.glow && blow.high > 1 && blow.left < blow.hull && blow.down && blow.floored && blow.civilianUp && blow.spent,
+    JSON.stringify(blow));
+
+  // The moment it goes, for the screenshot: again, with a fresh cover, from where you stand.
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    const p = window.pipe;
+    p.spent = 0; p.fuse = 0;
+    s.vehicles.reset();
+    const v = s.spawnTraffic('car', { x: p.x, z: p.z, yaw: p.yaw });
+    v.x = p.x; v.z = p.z; v.speed = 0; v.traffic.stalled = 99;
+    s.phone.battery = s.backdoorSpec.battery.most;
+    s.hackKey(1);
+    for (let i = 0; i < 60 * 1.35; i++) { s.fixedForTest(1 / 60); for (const o of [...s.vehicles.active]) if (o !== v) s.vehicles.remove(o); }
+    for (let k = 0; k < 2; k++) await new Promise((r) => requestAnimationFrame(r));
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-05-steam.png') });
+
+  // --- the blackout --------------------------------------------------------------
+  // At night, looking down the street at the windows: B, and the light goes.
+  const lum = () => page.evaluate(() => new Promise((res) => {
+    const s = window.spreefall;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const gl = s.renderer.gl;
+      const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+      const buf = new Uint8Array(w * h * 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      let sum = 0, n = 0;
+      // The upper two thirds, where the fronts are, not the HUD along the bottom.
+      for (let y = Math.floor(h * 0.35); y < h; y += 2) {
+        for (let x = 0; x < w; x += 2) {
+          const o = (y * w + x) * 4;
+          sum += 0.2126 * buf[o] + 0.7152 * buf[o + 1] + 0.0722 * buf[o + 2]; n++;
+        }
+      }
+      res(sum / n);
+    }));
+  }));
+  const before = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.vehicles.reset(); s.soldiers.reset();
+    s.teleport(81, 0); s.look(270, 6); s.setTime(1);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 6; i++) await new Promise((r) => requestAnimationFrame(r));
+    return { night: +s.renderer.night.toFixed(2), out: s.renderer.blackout };
+  });
+  const lit = await lum();
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-06-night.png') });
+  const cut = await page.evaluate(async () => {
+    const s = window.spreefall;
+    for (let k = 0; k < 6; k++) s.soldiers.spawnCivilianNear(s.player.x, s.player.z, 10, 40);
+    s.phone.battery = s.backdoorSpec.battery.most;
+    const ok = s.blackoutKey();
+    for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    const j = s.junctions()[0];
+    return { ok, out: +s.renderer.blackout.toFixed(2), light: j ? s.lightAt(j, 0) : null,
+      masts: s.signalMasts(200).every((m) => m.light === 4),
+      looking: s.soldiers.active.filter((c) => c.civilian && c.phoneLeft > 0).length,
+      line: document.getElementById('phblack').textContent,
+      again: s.blackoutKey(), battery: Math.round(s.phone.battery) };
+  });
+  const dark = await lum();
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-07-blackout.png') });
+  check('B at night: the windows and the lamps go out, the street gets darker, the lights at the junctions go dark',
+    before.night > 0.95 && cut.ok && cut.out > 0.95 && cut.light === 'off' && cut.masts && dark < lit * 0.8,
+    JSON.stringify({ before, lit: +lit.toFixed(1), dark: +dark.toFixed(1), out: cut.out, light: cut.light }));
+  check('and everybody stops to look at a phone with no signal; it takes the whole battery, once at a time',
+    cut.looking >= 3 && /BLACKOUT/.test(cut.line) && cut.again === false && cut.battery < 5,
+    JSON.stringify({ looking: cut.looking, line: cut.line, again: cut.again, battery: cut.battery }));
+  const back = await page.evaluate(async () => {
+    const s = window.spreefall;
+    for (let i = 0; i < 60 * (s.citySpec.blackout.seconds + 3); i++) s.fixedForTest(1 / 60);
+    const j = s.junctions()[0];
+    return { on: s.blackout.on, out: s.renderer.blackout, light: j ? s.lightAt(j, 0) : null };
+  });
+  const relit = await lum();
+  check('and after a quarter of a minute the power comes back',
+    !back.on && back.out === 0 && back.light !== 'off' && relit > dark * 1.25, JSON.stringify({ ...back, relit: +relit.toFixed(1) }));
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

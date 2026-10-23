@@ -160,6 +160,8 @@ export class Renderer {
     // before, so the sky loses its blue, the horizon goes the colour of a
     // fire a long way off, and the light that is left is orange and thin.
     this.armageddon = 0;
+    // How much of the light in the windows and the lamps is out, 0 to 1 (.BACKDOOR).
+    this.blackout = 0;
     this.shadowsEnabled = true;
 
     this.setQuality('high');
@@ -479,7 +481,8 @@ export class Renderer {
     c[OFF.fog + 2] = 26.0;
     c[OFF.fog + 3] = camera.far;
     c[OFF.misc] = this.exposure;
-    c[OFF.misc + 1] = clamp(night * 1.1 + dusk * 0.35, 0, 1);
+    // The lit windows and the lamps, unless the power is off.
+    c[OFF.misc + 1] = clamp(night * 1.1 + dusk * 0.35, 0, 1) * (1 - clamp(this.blackout || 0, 0, 1));
     c[OFF.misc + 2] = this.quality === 'low' ? 0 : this.quality === 'medium' ? 1 : 2;
     c[OFF.misc + 3] = 1.0;
     this.night = night;
@@ -741,7 +744,8 @@ export class Renderer {
       draws += this.actors.drawCamps();
       tris += this.actors.camp.instanceCount * (this.actors.camp.count / 3)
         + this.actors.nest.instanceCount * (this.actors.nest.count / 3)
-        + this.actors.signal.instanceCount * (this.actors.signal.count / 3);
+        + this.actors.signal.instanceCount * (this.actors.signal.count / 3)
+        + this.actors.cover.instanceCount * (this.actors.cover.count / 3);
       for (const type in this.actors.vehicles) {
         const mesh = this.actors.vehicles[type];
         tris += mesh.instanceCount * (mesh.count / 3);

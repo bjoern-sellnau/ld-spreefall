@@ -723,9 +723,15 @@ three cells and what you have taken so far.
   Pointed at a mast, the phone shows the junction and what each way shows:
   **Q** turns it red both ways and the traffic piles up, **E** turns it
   green both ways and nobody gives way to anybody.
+- **Steam pipes.** A cover in the road every so far: **Q** vents steam
+  across the road and the traffic stops for it, **E** blows it after a
+  second of hiss, and whatever is standing on it goes up in the air and
+  whoever is near it is knocked off their feet.
+- **B** is the **blackout**: the whole battery for fifteen seconds without
+  power. The windows and the street lamps go out, the lights at the
+  junctions go dark, and everybody stops to look at a phone with no signal.
 - The battery pays for every hack and fills again by itself once you leave
   it alone.
-- Coming next: steam pipes under the street, and a blackout.
 
 Where the ideas come from: the Watch Dogs games, whose phone profiles every
 citizen in the street and hacks the city's traffic lights, steam pipes,

@@ -198,6 +198,9 @@ export class Vehicles {
     // Traffic's driver and paint, which the pool would otherwise hand on.
     v.traffic = null;
     v.paint = 0;
+    v.airborne = false;
+    v.lift = 0;
+    v.tumble = 0;
     this.active.push(v);
     return v;
   }
@@ -232,6 +235,18 @@ export class Vehicles {
     const x = v.x + Math.cos(side) * (v.spec.radius + 1.4);
     const z = v.z + Math.sin(side) * (v.spec.radius + 1.4);
     return { x, z, y: this.world.groundHeight(x, z) };
+  }
+
+  /**
+   * Thrown up off the road by something under it: a ground vehicle goes up
+   * at so many metres a second, turning over a little, and comes down where
+   * it comes down, still rolling the way it was.
+   */
+  launch(v, up, tumble = 0) {
+    if (!v.alive || v.spec.kind !== KIND.GROUND) return;
+    v.airborne = true;
+    v.lift = Math.max(v.lift || 0, up);
+    v.tumble = tumble;
   }
 
   damage(v, amount) {
@@ -343,8 +358,26 @@ export class Vehicles {
       }
     }
 
-    // Follow the ground, and refuse anything steeper than it can climb.
+    // Off the road: up and over, and down again, the ground no use to it
+    // until it is back on it.
     const g = this.world.groundHeight(v.x, v.z);
+    if (v.airborne) {
+      v.lift -= 16 * dt;
+      v.y += v.lift * dt;
+      v.pitch += v.tumble * dt;
+      v.roll += v.tumble * 0.6 * dt;
+      if (v.y <= g) {
+        const hard = -v.lift;
+        v.y = g;
+        v.airborne = false;
+        v.lift = 0;
+        v.speed *= 0.5;
+        if (this.onLand) this.onLand(v, hard);
+      }
+      return;
+    }
+
+    // Follow the ground, and refuse anything steeper than it can climb.
     const rise = g - v.y;
     if (rise > s.climb) {
       // Too steep: back off and lose the speed into it.

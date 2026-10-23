@@ -4947,6 +4947,50 @@ So there are two cities now, and a profile picks which:
   a car short of the junction, E lets it through, and two cars from two
   ways crash on green both ways. Screenshot backdoor-04-lights.png.
 
+## 129. .BACKDOOR: steam pipes under the street, and a blackout
+
+- A cover over the steam pipe in the road, every 85 m along every
+  carriageway, on its line, never in a junction or within 10 m of one and
+  never two within 14 m (two lines down the same street would otherwise
+  give two of everything). `src/game/city.js` works out where they are from
+  the same centrelines as the traffic and the lights, the same every time.
+  A cast iron disc on the road, drawn through the actor shader like the
+  masts; red hot while it is about to go, a black hole once it has.
+- The phone, pointed at a cover: Q vents steam (10 battery) for eight
+  seconds, a white column across the road that the traffic stops short of
+  and the people near it walk away from; E blows it (35 battery): a hiss and
+  a red glow for 1.2 seconds, which is the warning and which the people
+  near it take, then the blast. Anything on four wheels within 7 m goes up,
+  at 9 m/s at the middle and less towards the edge (a bus half that),
+  turning over a little, comes down where it comes down, and is hurt by up
+  to 45 percent of its hull; anybody within 6 m is knocked off their feet
+  and slid along the ground, and gets up again; you, if you are that near,
+  take up to 20. The hole pours steam for six seconds and is a cover again
+  after forty.
+- Ground vehicles can leave the ground now (`vehicles.launch`): up, a
+  little tumble, gravity, down, half the speed gone. People can be knocked
+  down without a banana (`soldiers.knockDown`), and passers by now get up
+  from a fall the way soldiers always did; the slide is one function for
+  both.
+- B is the blackout, on a key of its own, as in the game this is after:
+  it takes the whole battery and cuts the power for fifteen seconds. The
+  lit windows and the lamps go out (the renderer's night window light, the
+  one the lamp glass uses too, times what is left of the power), the
+  lights at every junction go dark and the traffic crawls through them,
+  everybody within 160 m stops and looks at a phone with no signal, and the
+  phone says how long is left. It comes back over a second and a half with
+  a flicker.
+- Checks: unit (4) on where the covers are and are not, the vent, the
+  fuse, the blast and the spent cover, the blast falling off to its edge,
+  and the blackout's clock with the flicker coming back; browser (backdoor
+  suite, six more): the covers are there, drawn and hackable, Q stops a car
+  short of the steam and lets it go after, E throws a car on it 2.2 m up
+  and knocks a man beside it flat, and B at one in the morning takes the
+  street from 49.6 to 15.0 in mean brightness, darkens every mast, stops
+  the people, cannot be done twice, and comes back. Screenshots
+  backdoor-05-steam.png, backdoor-06-night.png and
+  backdoor-07-blackout.png.
+
 ## CI: the machines suite stands the run up before it aims
 
 - Since phase 120 dying is four seconds of a camera going round the body,

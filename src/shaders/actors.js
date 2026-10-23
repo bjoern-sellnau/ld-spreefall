@@ -75,6 +75,13 @@ void main() {
       || (part > 102.5 && st == 2);
     if (lit) part += 3.0;
   }
+  // A cover in the road: red hot and hissing before it goes, a black hole
+  // where it was after.
+  if (part > 106.5 && part < 107.5) {
+    int st = int(iState.w + 0.5);
+    if (st == 2) part = 108.0;
+    else if (st == 3) part = 109.0;
+  }
   // A camp's three switches, in the rotor channel: taken, radio down, alarm.
   if (part > 63.5 && part < 72.5) {
     int st = int(iState.w + 0.5);
@@ -438,6 +445,19 @@ void main() {
     else if (k == 96) { albedo = vec3(0.86, 0.66, 0.05); rough = 0.4; metal = 0.25; }
     else if (k == 97) { albedo = vec3(0.04, 0.04, 0.045); rough = 0.7; metal = 0.2; }
     else if (k == 98) { albedo = vec3(0.1); emissive = vec3(1.6, 0.9, 0.1); rough = 0.3; }
+  } else if (vPart > 106.5 && vPart < 109.5) {
+    // The cover: cast iron with a raised grid you can see, red hot about to
+    // go, and a hole once it has.
+    int k = int(vPart + 0.5);
+    float grid = step(0.5, fract(vWorld.x * 5.0)) * step(0.5, fract(vWorld.z * 5.0));
+    albedo = vec3(0.075, 0.07, 0.066) * (0.8 + 0.5 * grid);
+    rough = 0.55; metal = 0.75;
+    if (k == 108) {
+      albedo = vec3(0.12, 0.03, 0.01);
+      emissive = vec3(2.6, 0.45, 0.04) * (0.6 + 0.4 * sin(uCamPos.w * 22.0));
+    } else if (k == 109) {
+      albedo = vec3(0.008); rough = 1.0; metal = 0.0;
+    }
   } else if (vPart > 99.5 && vPart < 106.5) {
     // A traffic light: the mast and the housing near black, three lamps
     // dark, and lit. The tonemapper keeps a colour only if the other

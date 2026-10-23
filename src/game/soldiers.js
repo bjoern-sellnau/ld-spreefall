@@ -378,6 +378,21 @@ export class Soldiers {
     return null;
   }
 
+  /**
+   * Off his feet and on his back, pushed along the ground, and up again a
+   * few seconds later: the same fall a banana gives, without the banana.
+   */
+  knockDown(s, dx, dz, push = 6) {
+    if (!s.alive || s.health <= 0 || s.state === STATE.DYING) return false;
+    s.state = STATE.SLIPPED;
+    s.stateTime = 0;
+    s.slipLeft = 2.6;
+    s.vx = dx * push; s.vz = dz * push;
+    s.spin = (Math.random() < 0.5 ? -1 : 1) * (1.5 + Math.random() * 2);
+    s.lean = -0.25;
+    return true;
+  }
+
   /** How many of the people about the place are the ones who live here. */
   get civilianCount() {
     let n = 0;
@@ -444,6 +459,26 @@ export class Soldiers {
    * A passer by, in full. Away from whatever frightened him while it is
    * still ringing in his ears, and otherwise about his business.
    */
+  /** On the ground and sliding, until he is up again and back to what he was doing. */
+  _slide(s, dt, then) {
+    s.slipLeft -= dt;
+    // Backwards, not forwards: the legs come up and the back goes down,
+    // all the way flat, and he turns as he slides.
+    s.lean = Math.max(-1.62, s.lean - dt * 6.5);
+    s.roll = (s.roll || 0) + (s.spin || 0) * dt * 0.35;
+    s.yaw += (s.spin || 0) * dt;
+    s.x += s.vx * dt; s.z += s.vz * dt;
+    s.vx *= 0.93; s.vz *= 0.93;
+    s.y = this.world.groundHeight(s.x, s.z);
+    if (s.slipLeft <= 0) {
+      s.state = then;
+      s.stateTime = 0;
+      s.lean = 0;
+      s.roll = 0;
+      s.spin = 0;
+    }
+  }
+
   _civilianStep(s, dt, player) {
     const w = this.world;
     // The ones behind you are somebody else's neighbours now. Without this
@@ -454,6 +489,11 @@ export class Soldiers {
       return;
     }
     s.panicLeft = Math.max(0, (s.panicLeft || 0) - dt);
+    // Knocked off his feet: down first, and frightened once he is up.
+    if (s.state === STATE.SLIPPED) {
+      this._slide(s, dt, STATE.PATROL);
+      return;
+    }
     const running = s.panicLeft > 0;
     // A phone that rang: he stops where he is and looks at it, unless
     // something has frightened him, which beats any message.
@@ -805,22 +845,7 @@ export class Soldiers {
       }
 
       if (s.state === STATE.SLIPPED) {
-        s.slipLeft -= dt;
-        // Backwards, not forwards: the legs come up and the back goes down,
-        // all the way flat, and he turns as he slides.
-        s.lean = Math.max(-1.62, s.lean - dt * 6.5);
-        s.roll = (s.roll || 0) + (s.spin || 0) * dt * 0.35;
-        s.yaw += (s.spin || 0) * dt;
-        s.x += s.vx * dt; s.z += s.vz * dt;
-        s.vx *= 0.93; s.vz *= 0.93;
-        s.y = w.groundHeight(s.x, s.z);
-        if (s.slipLeft <= 0) {
-          s.state = STATE.ADVANCE;
-          s.stateTime = 0;
-          s.lean = 0;
-          s.roll = 0;
-          s.spin = 0;
-        }
+        this._slide(s, dt, STATE.ADVANCE);
         continue;
       }
 
