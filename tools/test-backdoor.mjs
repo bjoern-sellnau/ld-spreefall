@@ -777,16 +777,31 @@ async function run() {
       res(sum / n);
     }));
   }));
-  const before = await page.evaluate(async () => {
+  await page.evaluate(async () => {
     const s = window.spreefall;
     s.vehicles.reset(); s.soldiers.reset();
-    s.teleport(81, 0); s.look(270, 6); s.setTime(1);
+    s.teleport(81, 0); s.setTime(1);
     for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
-    for (let i = 0; i < 6; i++) await new Promise((r) => requestAnimationFrame(r));
-    return { night: +s.renderer.night.toFixed(2), out: s.renderer.blackout };
   });
-  const lit = await lum();
-  await page.screenshot({ path: path.join(SHOTS, 'backdoor-06-night.png') });
+  // At one in the morning what light there is comes out of the windows, so
+  // the way to look is the brightest way round: the live city and the
+  // offline one have their buildings in different places.
+  let lit = -1, facing = 0;
+  for (let yaw = 0; yaw < 360; yaw += 45) {
+    await page.evaluate(async (yaw) => {
+      window.spreefall.look(yaw, 6);
+      for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+    }, yaw);
+    const l = await lum();
+    if (l > lit) { lit = l; facing = yaw; }
+  }
+  const before = await page.evaluate(async (yaw) => {
+    const s = window.spreefall;
+    s.look(yaw, 6);
+    for (let i = 0; i < 6; i++) await new Promise((r) => requestAnimationFrame(r));
+    return { night: +s.renderer.night.toFixed(2), out: s.renderer.blackout, facing: yaw };
+  }, facing);
+  lit = await lum();
   const cut = await page.evaluate(async () => {
     const s = window.spreefall;
     for (let k = 0; k < 6; k++) s.soldiers.spawnCivilianNear(s.player.x, s.player.z, 10, 40);
@@ -802,7 +817,6 @@ async function run() {
       again: s.blackoutKey(), battery: Math.round(s.phone.battery) };
   });
   const dark = await lum();
-  await page.screenshot({ path: path.join(SHOTS, 'backdoor-07-blackout.png') });
   check('B at night: the windows and the lamps go out, the street gets darker, the lights at the junctions go dark',
     before.night > 0.95 && cut.ok && cut.out > 0.95 && cut.light === 'off' && cut.masts && dark < lit * 0.8,
     JSON.stringify({ before, lit: +lit.toFixed(1), dark: +dark.toFixed(1), out: cut.out, light: cut.light }));
@@ -818,6 +832,22 @@ async function run() {
   const relit = await lum();
   check('and after a quarter of a minute the power comes back',
     !back.on && back.out === 0 && back.light !== 'off' && relit > dark * 1.25, JSON.stringify({ ...back, relit: +relit.toFixed(1) }));
+
+  // The pair for the record: down the street, at night, and then without the power.
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.look(270, 6);
+    for (let i = 0; i < 6; i++) await new Promise((r) => requestAnimationFrame(r));
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-06-night.png') });
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.phone.battery = s.backdoorSpec.battery.most;
+    s.blackoutKey();
+    for (let i = 0; i < 20; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-07-blackout.png') });
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

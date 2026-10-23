@@ -4985,9 +4985,11 @@ So there are two cities now, and a profile picks which:
   and the blackout's clock with the flicker coming back; browser (backdoor
   suite, six more): the covers are there, drawn and hackable, Q stops a car
   short of the steam and lets it go after, E throws a car on it 2.2 m up
-  and knocks a man beside it flat, and B at one in the morning takes the
-  street from 49.6 to 15.0 in mean brightness, darkens every mast, stops
-  the people, cannot be done twice, and comes back. Screenshots
+  and knocks a man beside it flat, and B at one in the morning, looking
+  the brightest way round (the live city and the offline one have their
+  buildings in different places), takes the view from 81.3 to 4.0 in mean
+  brightness, darkens every mast, stops the people, cannot be done twice,
+  and comes back. Screenshots
   backdoor-05-steam.png, backdoor-06-night.png and
   backdoor-07-blackout.png.
 
