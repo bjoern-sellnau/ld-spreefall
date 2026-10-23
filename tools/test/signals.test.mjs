@@ -136,3 +136,25 @@ test('with the lights out a car crawls through rather than stopping', () => {
   assert.ok(through, 'and is through');
   assert.ok(slowest > 1 && slowest < 7, `at ${slowest.toFixed(1)} m/s in the junction`);
 });
+
+test('a street across an avenue is one crossing: both carriageways on one timing, and hacked together', () => {
+  // Two carriageways forty metres apart, the way Unter den Linden has them,
+  // and a street across both.
+  const lines = [
+    { cls: 'primary', w: 12, pts: [-300, -20, 300, -20], n: 'Unter den Linden' },
+    { cls: 'primary', w: 12, pts: [300, 20, -300, 20], n: 'Unter den Linden' },
+    { cls: 'secondary', w: 10, pts: [0, -200, 0, 200], n: 'Wilhelmstrasse' },
+  ];
+  const js = junctionsOf(roadIndex(lines));
+  const north = js.find((j) => Math.hypot(j.x, j.z + 20) < 3), south = js.find((j) => Math.hypot(j.x, j.z - 20) < 3);
+  assert.ok(north && south, js.map((j) => `${j.x},${j.z}`).join(' '));
+  assert.equal(north.group, south.group, 'one crossing');
+  assert.equal(north.offset, south.offset);
+  assert.equal(north.axis, south.axis);
+  // A car going up the street sees the same light at both.
+  for (let t = 0; t < 30; t += 0.5) assert.equal(lightAt(north, phaseOf(north, 0), t), lightAt(south, phaseOf(south, 0), t));
+  // And one too far off to be part of it is not.
+  const far = junctionsOf(roadIndex([...lines, { cls: 'secondary', w: 10, pts: [200, -200, 200, 200] }]));
+  const east = far.find((j) => Math.abs(j.x - 200) < 3);
+  assert.ok(east && !east.group.includes(far.find((j) => Math.abs(j.x) < 3)));
+});

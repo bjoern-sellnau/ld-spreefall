@@ -248,9 +248,23 @@ async function run() {
   const aimAt = (h = 1.2) => page.evaluate(async (h) => {
     const s = window.spreefall;
     const v = window.lastCar;
-    const dx = v.x - s.player.x, dz = v.z - s.player.z, dy = v.y + h - (s.player.y + 1.7);
-    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
-    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    const aim = async () => {
+      const dx = v.x - s.player.x, dz = v.z - s.player.z, dy = v.y + h - (s.player.y + 1.7);
+      s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
+      for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    };
+    await aim();
+    // Something on the pavement in the way (a parked car, a lamp, a tree in
+    // the live city): step up to the kerb beside it, as anybody would.
+    if (!(s.hackTarget && s.hackTarget.ref === v) && window.road) {
+      const r = window.road;
+      for (const side of [1, -1]) {
+        s.teleport(v.x - r.uz * side * 6, v.z + r.ux * side * 6);
+        await aim();
+        if (s.hackTarget && s.hackTarget.ref === v) break;
+      }
+    }
+    const dx = v.x - s.player.x, dz = v.z - s.player.z;
     const t = s.hackTarget;
     return { on: !!t && t.ref === v, kind: t && t.kind, card: document.getElementById('hcname').textContent,
       job: document.getElementById('hcjob').textContent, acts: document.getElementById('hcacts').textContent,
@@ -536,11 +550,16 @@ async function run() {
     s.teleport(px, pz);
     for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
     window.mast = m;
-    // Its order over a cycle and a bit, both ways, off the clock the traffic runs.
+    // Its order over a cycle and a bit, both ways, off the clock the traffic
+    // runs: wherever in the cycle it starts, every change is the next one in
+    // the German order, and it goes all the way round.
     const seq = [], both = [];
+    const next = { green: 'amber', amber: 'red', red: 'redAmber', redAmber: 'green' };
+    let wrong = 0;
     for (let i = 0; i < 60 * 34; i++) {
       s.fixedForTest(1 / 60);
       const a = s.lightAt(j, 0), b = s.lightAt(j, 1);
+      if (seq.length && seq[seq.length - 1] !== a && next[seq[seq.length - 1]] !== a) wrong++;
       if (seq[seq.length - 1] !== a) seq.push(a);
       if (a === 'green' && b === 'green') both.push(i);
     }
@@ -548,14 +567,15 @@ async function run() {
     for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
     const masts = s.signalMasts(80).filter((k) => k.j === j);
     return { names: j.names, legs: j.legs.length, r: +j.r.toFixed(1), masts: masts.length,
-      drawn: s.renderer.actors.signal.instanceCount, seq: seq.join('>'), both: both.length,
+      drawn: s.renderer.actors.signal.instanceCount, seq: seq.join('>'), both: both.length, wrong,
+      round: ['green', 'amber', 'red', 'redAmber'].every((l) => seq.includes(l)),
       lit: masts.map((k) => k.light) };
   });
   check('junctions where a bigger road meets another have lights, a mast for every way in, drawn',
     !!junction && junction.legs >= 4 && junction.masts === junction.legs && junction.drawn >= junction.masts,
     JSON.stringify(junction && { names: junction.names, legs: junction.legs, masts: junction.masts, drawn: junction.drawn }));
   check('and they change the German way: green, amber, red, red and amber, never green both ways',
-    !!junction && /green>amber>red>redAmber>green/.test(junction.seq) && junction.both === 0,
+    !!junction && junction.round && junction.wrong === 0 && junction.seq.split('>').length >= 5 && junction.both === 0,
     junction && junction.seq);
 
   const aimMast = () => page.evaluate(async () => {
@@ -597,7 +617,7 @@ async function run() {
     const green = [s.lightAt(j, 0), s.lightAt(j, 1)];
     for (let i = 0; i < 60 * 5; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
     const past = (v.x - j.x) * l.dx + (v.z - j.z) * l.dz;
-    j.hack = null;
+    for (const k of j.group || [j]) k.hack = null;
     return { ok, both, held, r: j.r, ok2, green, past: +past.toFixed(1) };
   });
   check('Q turns it red both ways, and a car coming up to it waits short of it',
@@ -622,7 +642,7 @@ async function run() {
     A.x = P.x - fa[0] * 32; A.z = P.z - fa[1] * 32;
     B.x = P.x - fb[0] * 32; B.z = P.z - fb[1] * 32;
     A.speed = B.speed = 9;
-    j.hack = { kind: 'green', left: 8 };
+    for (const k of j.group || [j]) k.hack = { kind: 'green', left: 8 };
     const crashes = s.crashes;
     let closest = Infinity;
     for (let i = 0; i < 60 * 6 && s.crashes === crashes; i++) {
@@ -630,7 +650,7 @@ async function run() {
       window.keepClear([A, B]);
       closest = Math.min(closest, Math.hypot(A.x - B.x, A.z - B.z));
     }
-    j.hack = null;
+    for (const k of j.group || [j]) k.hack = null;
     return { crashed: s.crashes - crashes, a: !!A.traffic.crashed, b: !!B.traffic.crashed,
       hurt: A.health < A.spec.health && B.health < B.spec.health, closest: +closest.toFixed(1) };
   });
@@ -685,6 +705,11 @@ async function run() {
   const vent = await page.evaluate(async () => {
     const s = window.spreefall;
     const p = window.pipe;
+    // What this is about is the steam: any lights on the way are held green
+    // for it, or a car waiting at a red one would pass for one waiting for
+    // the steam.
+    const held = s.junctions().filter((j) => Math.hypot(j.x - p.x, j.z - p.z) < 120);
+    for (const j of held) j.hack = { kind: 'green', left: 1e9 };
     s.phone.battery = s.backdoorSpec.battery.most;
     const ok = s.hackKey(0);
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
@@ -703,6 +728,7 @@ async function run() {
     for (let i = 0; i < 60 * 5; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
     out.past = +(((v.x - p.x) * fx + (v.z - p.z) * fz)).toFixed(1);
     s.vehicles.remove(v);
+    for (const j of held) j.hack = null;
     return out;
   });
   check('Q vents steam across the road, and a car stops short of it until it stops',

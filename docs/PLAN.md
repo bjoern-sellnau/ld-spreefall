@@ -4993,6 +4993,31 @@ So there are two cities now, and a profile picks which:
   backdoor-05-steam.png, backdoor-06-night.png and
   backdoor-07-blackout.png.
 
+## CI: .BACKDOOR in the live city, where an avenue has two carriageways
+
+- The first run of the .BACKDOOR suite against the live extract failed
+  five checks, and four of them were one thing the offline city does not
+  have: Unter den Linden is two carriageways forty metres apart, so a street
+  across it meets two lines and makes two junctions, each with lights of
+  its own timing. A car through the one it was let through met the other
+  at red; two cars sent at each other on green both ways stopped short of
+  each other; a car let go after the steam stopped waited at a light down
+  the road. Real lights at such a crossing are one installation, and so are
+  these now: junctions within 45 m of each other are one crossing, with the
+  axis of the widest road among them, one timing, and a hack on any mast of
+  it is a hack on all of it. A unit check holds an avenue's two
+  carriageways to one light.
+- The fifth: pointed at a car in the traffic, the phone got the steam cover
+  in front of it, because a car parked at the kerb hid the middle of the
+  one in the road. A vehicle counts as seen now if its roof is (a car
+  1.55 m up, a bus 4.3 m), and the check steps up to the kerb if something
+  is still in the way.
+- The order of the lights is checked as every change being the next in the
+  German order and the whole round seen, wherever the clock happens to be
+  when the check starts; the live run began at amber. The steam check holds
+  any lights within 120 m green, so a car waiting at red cannot pass for a
+  car waiting for the steam.
+
 ## CI: a runway measured the width of the wings, and the panel against the hull
 
 - The city suite's fighter rolled into something and burnt out on the

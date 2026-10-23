@@ -295,6 +295,7 @@ export const SIGNALS = {
   green: 10, amber: 3, allRed: 2, redAmber: 1,
   meet: 6,                      // how close two lines come to meet
   merge: 15,                    // and two meetings this close are one junction
+  link: 45,                     // and junctions this close one crossing: both carriageways of an avenue
   stop: 2,                      // where a car waits, short of the junction
   look: 18,                     // how far ahead a driver watches for a light
   near: 260,                    // junctions run and drawn round you
@@ -447,6 +448,36 @@ export function junctionsOf(index) {
     const names = [...new Set(legs.map((l) => l.name).filter(Boolean))];
     const seed = Math.abs(Math.sin(g.x * 12.9898 + g.z * 78.233) * 43758.5453) % 1;
     out.push({ x: g.x, z: g.z, r, axis, legs, names, offset: seed * 2 * (S.green + S.amber + S.allRed), hack: null, dark: false });
+  }
+  // Junctions this close are one crossing with one set of lights: a street
+  // across an avenue meets each of its carriageways, and lights that ran
+  // apart would stop a car between the two on its own green. They share the
+  // axis of the widest road among them, one timing, and whatever is done to
+  // one of them.
+  const parent = out.map((_, i) => i);
+  const root = (i) => (parent[i] === i ? i : (parent[i] = root(parent[i])));
+  for (let a = 0; a < out.length; a++) {
+    for (let b = a + 1; b < out.length; b++) {
+      if (Math.hypot(out[a].x - out[b].x, out[a].z - out[b].z) <= S.link) parent[root(a)] = root(b);
+    }
+  }
+  const crossings = new Map();
+  out.forEach((j, i) => {
+    const k = root(i);
+    if (!crossings.has(k)) crossings.set(k, []);
+    crossings.get(k).push(j);
+  });
+  for (const group of crossings.values()) {
+    let widest = null;
+    for (const j of group) for (const l of j.legs) if (!widest || l.w > widest.w) widest = l;
+    const axis = headingTo(widest.dx, widest.dz);
+    const offset = group[0].offset;
+    for (const j of group) {
+      j.axis = axis;
+      j.offset = offset;
+      j.group = group;
+      for (const l of j.legs) l.phase = Math.abs(Math.cos(l.yaw - axis)) >= Math.SQRT1_2 ? 0 : 1;
+    }
   }
   return out;
 }

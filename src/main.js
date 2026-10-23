@@ -6038,7 +6038,10 @@ async function main() {
     }
     for (const v of vehicles.active) {
       if (!v.alive || !v.traffic || v.health <= 0 || v === state.inVehicle) continue;
-      out.push({ kind: v.type, ref: v, x: v.x, y: v.y + (v.type === 'bus' ? 2.4 : 1.2), z: v.z });
+      // The roof as well as the middle: a car behind one parked at the kerb
+      // still shows its roof, and that is enough to get into it.
+      out.push({ kind: v.type, ref: v, x: v.x, y: v.y + (v.type === 'bus' ? 2.4 : 1.2), z: v.z,
+        roof: v.y + (v.type === 'bus' ? 4.3 : 1.55) });
     }
     for (const m of signalMasts(BACKDOOR.reach + 10)) out.push({ kind: 'signal', ref: m.j, x: m.x, y: m.y + 2.9, z: m.z });
     for (const c of coversNear(BACKDOOR.reach + 10)) out.push({ kind: 'pipe', ref: c.p, x: c.x, y: c.y + 0.1, z: c.z });
@@ -6143,7 +6146,8 @@ async function main() {
       }
     } else if (job.kind === 'allRed' || job.kind === 'allGreen') {
       const green = job.kind === 'allGreen';
-      t.ref.hack = { kind: green ? 'green' : 'red', left: BACKDOOR.hacks[job.kind].effect };
+      // The whole crossing, both carriageways of an avenue included.
+      for (const j of t.ref.group || [t.ref]) j.hack = { kind: green ? 'green' : 'red', left: BACKDOOR.hacks[job.kind].effect };
       feed(`<b>${green ? 'all green' : 'all red'}</b> ${junctionName(t.ref)}`);
     } else if (job.kind === 'bank') {
       const p = profileOf(t.ref);
@@ -6175,7 +6179,9 @@ async function main() {
     for (let k = 0; k < 3 && cands.length; k++) {
       const p = pickTarget(eye, dir, cands);
       if (!p) break;
-      if (world.lineOfSight(eye.x, eye.y, eye.z, p.thing.x, p.thing.y, p.thing.z)) { found = p.thing; break; }
+      const t = p.thing;
+      if (world.lineOfSight(eye.x, eye.y, eye.z, t.x, t.y, t.z)
+        || (t.roof !== undefined && world.lineOfSight(eye.x, eye.y, eye.z, t.x, t.roof, t.z))) { found = t; break; }
       cands = cands.filter((c) => c !== p.thing);
     }
     state.hackTarget = found;
