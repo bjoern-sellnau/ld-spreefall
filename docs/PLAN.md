@@ -4805,6 +4805,11 @@ So there are two cities now, and a profile picks which:
   and the convoy is measured in god mode. The interface check that 6 is the
   banana now presses 4 through the thrown things to it, since 6 is the
   close group from phase 121.
+- And the death camera's own check sampled by the clock, so on a CI runner
+  that draws a frame or two a second its first look came before the first
+  frame of the orbit, with the camera still in your head. It now waits for
+  the orbit to get 0.1, 0.6 and 1.6 s round, and reads the slow motion from
+  the time scale (a fifth) rather than from the death clock.
 
 ## CI: the combat checks find their lines instead of assuming them
 
