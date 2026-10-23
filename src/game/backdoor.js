@@ -22,6 +22,10 @@ export const BACKDOOR = {
     // A passer by.
     distract: { name: 'Distract', cost: 12, seconds: 0, effect: 6 },
     bank: { name: 'Empty account', cost: 25, seconds: 1.4 },
+    // A car or a bus in the traffic.
+    stall: { name: 'Stall engine', cost: 20, seconds: 0, effect: 9 },
+    ram: { name: 'Ram', cost: 30, seconds: 0, effect: 3.5 },
+    doors: { name: 'Open the doors', cost: 15, seconds: 0 },
   },
 };
 

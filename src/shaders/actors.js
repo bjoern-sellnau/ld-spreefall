@@ -63,6 +63,9 @@ void main() {
     nrm = t * nrm;
     part = part < 45.5 ? 31.0 : (part < 46.5 ? 8.0 : 2.0);
   }
+  // A city car's paint, one of six by the rotor channel, which a car has no
+  // other use for.
+  if (part > 89.5 && part < 90.5) part = 90.0 + clamp(floor(iState.w + 0.5), 0.0, 5.0);
   // A camp's three switches, in the rotor channel: taken, radio down, alarm.
   if (part > 63.5 && part < 72.5) {
     int st = int(iState.w + 0.5);
@@ -409,6 +412,23 @@ void main() {
     }
     // Reeling: it glows from inside, which is the cue to finish it.
     emissive += vec3(1.4, 0.55, 0.08) * vStun * (0.6 + 0.4 * sin(uCamPos.w * 12.0));
+  } else if (vPart > 89.5 && vPart < 99.5) {
+    // The city's traffic: six car paints (white, black, silver, blue, red
+    // and the ivory of a Berlin taxi), the bus's yellow, its dark skirt, its
+    // lit destination board, and red tail lights on both.
+    int k = int(vPart + 0.5);
+    rough = 0.32; metal = 0.45;
+    albedo = vec3(0.5);
+    if (k == 90) albedo = vec3(0.72, 0.73, 0.74);
+    else if (k == 91) albedo = vec3(0.025, 0.026, 0.03);
+    else if (k == 92) albedo = vec3(0.36, 0.37, 0.39);
+    else if (k == 99) { albedo = vec3(0.2, 0.01, 0.01); emissive = vec3(0.9, 0.04, 0.02); rough = 0.3; }
+    else if (k == 93) albedo = vec3(0.05, 0.09, 0.2);
+    else if (k == 94) albedo = vec3(0.42, 0.05, 0.04);
+    else if (k == 95) albedo = vec3(0.78, 0.72, 0.56);
+    else if (k == 96) { albedo = vec3(0.86, 0.66, 0.05); rough = 0.4; metal = 0.25; }
+    else if (k == 97) { albedo = vec3(0.04, 0.04, 0.045); rough = 0.7; metal = 0.2; }
+    else if (k == 98) { albedo = vec3(0.1); emissive = vec3(1.6, 0.9, 0.1); rough = 0.3; }
   } else if (vPart > 84.5 && vPart < 87.5) {
     // A camp's alarm box: yellow and black, a red lamp, the lamp lit and
     // flashing while the alarm sounds.

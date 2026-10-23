@@ -4822,6 +4822,49 @@ So there are two cities now, and a profile picks which:
   account once and the money is kept, looking away loses it, a flat battery
   says so and fills again. Screenshot backdoor-01-profiler.png.
 
+## 126. .BACKDOOR: traffic, and the phone in it
+
+- Cars and buses on the real streets. `src/game/traffic.js` decides what
+  each driver does: drive a centreline in the right hand lane (27 percent
+  of the road's width right of the line, at most 2.4 m), steer for a point
+  9 m ahead, at the end of a line take another that begins or ends within
+  14 m of it, at random, or turn round if there is none. It waits behind
+  whatever is in its lane (its own frame: ahead, and within 1.4 m across),
+  passes what is coming the other way in the other lane, stops for anybody
+  standing in the road, and a bus pulls in every 260 m for five seconds.
+  Twelve cars and two buses round you, put on a stretch of road 45 to
+  170 m off and let go past 210 m. Only carriageways are driven.
+- Two new vehicles. A car (36 m/s at most, 320 hull), in one of six paints
+  the instance picks through the channel a car has no rotor for (white,
+  black, silver, blue, red, and the ivory of a Berlin taxi), and a yellow
+  double decker bus (20 m/s, 1100 hull, twelve metres) with its line on a
+  lit board. Neither has a gun; the vehicle panel hides its gun row.
+- Traffic keeps off the buildings: a car or bus in the traffic does not
+  smash through a wall unless the phone has its throttle. Two ground
+  vehicles whose footprints overlap (boxes, by separating axes, not
+  circles, since two cars in their own lanes pass closer than their
+  circles and a bus is twelve metres) are pushed apart, and if they were
+  closing faster than 3 m/s both stop, both are hurt by how fast, there
+  are sparks and dust and a crash in the feed. A ground vehicle faster
+  than 4 m/s hits whoever it drives into.
+- The phone: a car in the traffic shows its plate (B for Berlin) and who
+  it is registered to; Q stalls it (20 battery, dead for nine seconds) and
+  E takes its throttle (30 battery): flat out for three and a half
+  seconds at the nearest vehicle or person ahead of it, through a wall if
+  one is in the way. A bus shows its line and how many are aboard; Q stops
+  it and E opens its doors (15 battery, once a bus), and up to four get off
+  onto the pavement. F at a car in the traffic throws the driver out and
+  it is yours. A hack that takes no time goes through on the key.
+- Checks: unit (7) on the roads indexed, the lane on the right, the next
+  road at a junction and turning round, a car round a corner in its lane,
+  waiting for its lane and a person and passing the other lane, the stall
+  and the bus stop, and where a new one is put; browser (backdoor suite,
+  nine more): the streets fill with cars and buses that drive, a car goes
+  on along a street on the carriageway and stops for a man in its lane,
+  the card, Q stalls it, E rams it into another and both are hurt, a bus's
+  doors let its passengers off once, and F takes a car from its driver.
+  Screenshot backdoor-02-traffic.png.
+
 ## CI: the machines suite stands the run up before it aims
 
 - Since phase 120 dying is four seconds of a camera going round the body,

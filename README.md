@@ -702,11 +702,19 @@ three cells and what you have taken so far.
   few seconds. **E** empties their bank account into yours, which takes a
   moment and wants the phone kept on them; look away and it is lost, and the
   battery with it. What you take is kept between visits.
+- **Traffic.** Cars and yellow double deckers drive the real streets round
+  you in the right hand lane, take the next street at the end of one, keep
+  their distance, stop for anybody standing in the road, and the buses pull
+  in every so often. Pointed at a car, the phone shows its plate and who it
+  is registered to: **Q** stalls it dead in the road, **E** takes its
+  throttle and sends it flat out at whatever is ahead of it. Pointed at a
+  bus: **Q** stops it, **E** opens its doors and lets its passengers off.
+  Two that meet crash, and a car hits whoever it drives into. **F** at a
+  car in the traffic throws the driver out and it is yours.
 - The battery pays for every hack and fills again by itself once you leave
   it alone.
-- Coming next: traffic and buses you can get into, crimes in the street to
-  stop, and the city's own systems (traffic lights, steam pipes, a
-  blackout).
+- Coming next: crimes in the street to stop, and the city's own systems
+  (traffic lights, steam pipes, a blackout).
 
 Where the ideas come from: the Watch Dogs games, whose phone profiles every
 citizen in the street and hacks the city's traffic lights, steam pipes,
