@@ -871,6 +871,93 @@ export class Audio {
     o.stop(t + 0.1);
   }
 
+  /**
+   * The phone getting into something: two quick data chirps, the second
+   * higher, and a lower one when it is a hack that failed or was lost.
+   */
+  hackChirp(ok = true) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const notes = ok ? [1480, 2220] : [620, 410];
+    notes.forEach((hz, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(hz, t + i * 0.07);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + i * 0.07);
+      g.gain.exponentialRampToValueAtTime(0.05, t + i * 0.07 + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.07 + 0.06);
+      o.connect(g).connect(this.master);
+      o.start(t + i * 0.07);
+      o.stop(t + i * 0.07 + 0.07);
+    });
+  }
+
+  /** Steam out of a pipe under the road: a hiss, for so long, quieter the further off. */
+  hiss(distance = 0, seconds = 1) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = 0.09 * Math.max(0.05, 1 - distance / 90);
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    n.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2400;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(level, t + 0.08);
+    g.gain.setValueAtTime(level, t + Math.max(0.1, seconds - 0.3));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    n.connect(hp).connect(g).connect(this.master);
+    n.start(t, Math.random() * 3);
+    n.stop(t + seconds + 0.05);
+  }
+
+  /** The power going: a clunk and the hum of the street falling away under it. */
+  blackout() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(100, t);
+    o.frequency.exponentialRampToValueAtTime(24, t + 1.4);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.14, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    o.connect(lp).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 1.55);
+    this.whoomp(30);
+  }
+
+  /** Somebody's phone ringing in the street, quieter the further off. */
+  ringtone(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = 0.05 * Math.max(0.1, 1 - distance / 60);
+    for (let k = 0; k < 6; k++) {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(k % 2 ? 1320 : 1760, t + k * 0.11);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + k * 0.11);
+      g.gain.exponentialRampToValueAtTime(level, t + k * 0.11 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.11 + 0.1);
+      o.connect(g).connect(this.master);
+      o.start(t + k * 0.11);
+      o.stop(t + k * 0.11 + 0.11);
+    }
+  }
+
   spotted() {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;

@@ -20,6 +20,8 @@ const MAX_JETS = 6;
 const MAX_VEHICLES = 8;
 // Camps near enough to draw at once.
 const MAX_CAMPS = 12;
+const MAX_SIGNALS = 96;
+const MAX_COVERS = 64;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 256;
@@ -1088,6 +1090,90 @@ export function buildNestMesh() {
   return m;
 }
 
+/**
+ * A city car: a saloon of no make in particular. The paint is part 90,
+ * which the shader turns into one of six colours by the instance, so a
+ * street of them is not one car twenty times; one of the six is the ivory
+ * of a Berlin taxi, which also gets the sign on the roof.
+ */
+export function buildCarMesh() {
+  const m = new MeshBuild();
+  const P = 90;
+  m.box(0, 0.62, 0, 1.76, 0.5, 4.4, P);                     // the body
+  m.box(0, 0.42, -2.18, 1.7, 0.22, 0.12, 2);                // bumpers
+  m.box(0, 0.42, 2.18, 1.7, 0.22, 0.12, 2);
+  // The cabin, narrower than the body, with a raked screen front and back.
+  m.box(0, 1.15, 0.25, 1.56, 0.52, 2.1, P);
+  m.plate([[-0.76, 0.9, -0.8], [0.76, 0.9, -0.8], [0.72, 1.38, -0.55], [-0.72, 1.38, -0.55]], 0.04, 24);
+  m.plate([[-0.76, 0.9, 1.45], [0.76, 0.9, 1.45], [0.72, 1.38, 1.22], [-0.72, 1.38, 1.22]], 0.04, 24);
+  for (const side of [-1, 1]) {
+    m.box(side * 0.79, 1.15, 0.28, 0.04, 0.38, 1.8, 24);    // side windows
+    for (const z of [-1.35, 1.35]) {
+      m.cylinder(side * 0.72, 0.36, z, 0.36, 0.36, side * 0.2, 14, 32, 'x');
+      m.cylinder(side * 0.93, 0.36, z, 0.17, 0.17, side * 0.02, 10, 39, 'x');
+    }
+    m.box(side * 0.6, 0.68, -2.22, 0.3, 0.12, 0.04, 34);     // headlights
+    m.box(side * 0.62, 0.7, 2.22, 0.3, 0.12, 0.04, 99);      // tail lights
+  }
+  return m;
+}
+
+/**
+ * A Berlin double decker in the city's yellow (part 96), black window bands
+ * along both decks and a dark skirt (97).
+ */
+export function buildBusMesh() {
+  const m = new MeshBuild();
+  const Y = 96;
+  m.box(0, 2.25, 0, 2.5, 3.9, 11.6, Y);                      // the body, both decks
+  m.box(0, 0.42, 0, 2.48, 0.5, 11.4, 97);                    // the skirt
+  for (const side of [-1, 1]) {
+    m.box(side * 1.255, 1.55, 0.2, 0.02, 0.9, 10.4, 24);     // lower deck windows
+    m.box(side * 1.255, 3.25, 0, 0.02, 0.9, 10.9, 24);       // upper deck windows
+    for (const z of [-3.9, 4.0]) {
+      m.cylinder(side * 1.08, 0.5, z, 0.5, 0.5, side * 0.2, 16, 32, 'x');
+      m.cylinder(side * 1.3, 0.5, z, 0.24, 0.24, side * 0.02, 10, 39, 'x');
+    }
+    m.box(side * 0.9, 0.8, -5.82, 0.32, 0.16, 0.04, 34);     // headlights
+    m.box(side * 0.95, 0.9, 5.82, 0.22, 0.3, 0.04, 99);      // tail lights
+  }
+  m.box(0, 1.6, -5.81, 2.3, 1.4, 0.04, 24);                  // windscreen
+  m.box(0, 3.3, -5.81, 2.3, 0.9, 0.04, 24);                  // upper front window
+  m.box(0, 4.0, -5.82, 1.6, 0.26, 0.05, 98);                 // the destination board, lit
+  m.box(0, 4.26, 0, 2.4, 0.08, 11.4, 97);                    // roof
+  return m;
+}
+
+/**
+ * A traffic light on its mast, Berlin style: a dark housing on a thin pole
+ * with red, amber and green (parts 101 to 103) facing whoever is coming,
+ * each under a visor. Which are lit the instance says, in the rotor
+ * channel: 0 red, 1 red and amber, 2 green, 3 amber, 4 dark.
+ */
+export function buildSignalMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, 0, 0.075, 0.06, 3.5, 8, 100);                // the mast
+  m.box(0, 2.9, 0, 0.34, 1.02, 0.26, 100);                      // the housing
+  m.box(0, 2.9, 0.15, 0.52, 1.2, 0.03, 100);                    // the board behind it
+  for (const [y, part] of [[3.22, 101], [2.9, 102], [2.58, 103]]) {
+    m.icosphere(0, y, -0.12, 0.1, 10, 6, part);                 // the lamp
+    m.box(0, y + 0.13, -0.2, 0.26, 0.025, 0.14, 100);           // its visor
+  }
+  return m;
+}
+
+/**
+ * A cover in the road over the steam pipe: a flat iron disc with a rim
+ * (part 107). The instance says what it is doing, and the shader makes it
+ * glow before it goes (108) and a black hole once it has (109).
+ */
+export function buildCoverMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, 0, 0.5, 0.5, 0.03, 14, 107);
+  m.cylinder(0, 0.03, 0, 0.42, 0.4, 0.02, 14, 107);
+  return m;
+}
+
 export function buildJeepMesh() {
   const m = new MeshBuild();
   const P = 31;
@@ -1465,7 +1551,12 @@ export class Actors {
     this.camp = this._uploadMesh(buildCampMesh(), MAX_CAMPS, 2);
     // Slayer's nests, through the same shader.
     this.nest = this._uploadMesh(buildNestMesh(), MAX_CAMPS, 2);
+    // The traffic lights round you in .BACKDOOR, through the same shader.
+    this.signal = this._uploadMesh(buildSignalMesh(), MAX_SIGNALS, 2);
+    this.cover = this._uploadMesh(buildCoverMesh(), MAX_COVERS, 2);
     this.vehicles = {
+      car: this._uploadMesh(buildCarMesh(), 24, 2),
+      bus: this._uploadMesh(buildBusMesh(), 6, 2),
       jeep: this._uploadMesh(buildJeepMesh(), MAX_VEHICLES, 2),
       tank: this._uploadMesh(buildTankMesh(), MAX_VEHICLES, 2),
       heli: this._uploadMesh(buildHeliMesh(), MAX_VEHICLES, 2),
@@ -1852,7 +1943,7 @@ export class Actors {
 
   updateVehicles(list) {
     const gl = this.gl;
-    const counts = { jeep: 0, tank: 0, heli: 0, jet: 0, train: 0 };
+    const counts = { car: 0, bus: 0, jeep: 0, tank: 0, heli: 0, jet: 0, train: 0 };
     for (const v of list) {
       const mesh = this.vehicles[v.type];
       if (!v.alive || !mesh || counts[v.type] >= mesh.maxInstances) continue;
@@ -1877,8 +1968,9 @@ export class Actors {
       // nought to one, which leaves the gear of those always up.
       // A tank sends its turret's angle on the hull instead, which the shader
       // turns the turret's own parts by.
+      // A car has neither, and sends which of the six paints it wears.
       d[o + 7] = v.type === 'jet' ? (v.gearDown === false ? 0 : 2)
-        : (v.type === 'tank' ? (v.turret || 0) : v.rotor);
+        : (v.type === 'tank' ? (v.turret || 0) : (v.type === 'car' ? (v.paint || 0) : v.rotor));
       counts[v.type]++;
     }
     for (const type in this.vehicles) {
@@ -2018,10 +2110,36 @@ export class Actors {
     }
   }
 
+  /** @param {{x:number,y:number,z:number,yaw:number,light:number}[]} list traffic lights to draw */
+  updateSignals(list) { this._fillStreet(this.signal, MAX_SIGNALS, list); }
+
+  /** @param {{x:number,y:number,z:number,yaw:number,light:number}[]} list covers in the road, light their state */
+  updateCovers(list) { this._fillStreet(this.cover, MAX_COVERS, list); }
+
+  _fillStreet(mesh, most, list) {
+    const gl = this.gl;
+    const d = mesh.instData;
+    let n = 0;
+    for (const c of list) {
+      if (n >= most) break;
+      const o = n * 8;
+      d[o] = c.x; d[o + 1] = c.y; d[o + 2] = c.z; d[o + 3] = -c.yaw;
+      d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = 0;
+      d[o + 7] = c.light;
+      n++;
+    }
+    mesh.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
   drawCamps() {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest]) {
+    for (const mesh of [this.camp, this.nest, this.signal, this.cover]) {
       if (!mesh.instanceCount) continue;
       this.progDrone.use();
       gl.bindVertexArray(mesh.vao);
@@ -2035,7 +2153,7 @@ export class Actors {
   drawCampShadows(lightViewProj) {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest]) {
+    for (const mesh of [this.camp, this.nest, this.signal, this.cover]) {
       if (!mesh.instanceCount) continue;
       this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
       gl.bindVertexArray(mesh.vao);

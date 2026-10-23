@@ -1132,6 +1132,9 @@ async function run() {
     });
     const frame = () => new Promise((r) => requestAnimationFrame(r));
     s.vehicles.reset();
+    // The fire the wrecks before this left on the street (phase 118) is put
+    // out, or the tank drives through it and the panel is right to say so.
+    s.burningGround.length = 0;
     s.teleport(81, 0);
     s.look(0, 0);
     // A tank, driven, then shot at, then fired.
@@ -1150,6 +1153,8 @@ async function run() {
     await frame();
     const driving = read();
     driving.topSpeed = topSpeed;
+    // What the panel should say: whatever the street did to it on the way.
+    driving.actual = `${Math.round(t.health / t.maxHealth * 100)}%`;
     s.vehicles.damage(t, t.maxHealth * 0.9);
     s.input.fire = true;
     for (let i = 0; i < 4; i++) s.fixedForTest(1 / 60);
@@ -1176,8 +1181,9 @@ async function run() {
     return { driving, hurt, critical, flying, onFoot };
   });
   check('what you are driving says what it is and what is left of it',
-    hud.driving.shown && /Tank/.test(hud.driving.name) && hud.driving.hull === '100%',
-    `${hud.driving.name}, hull ${hud.driving.hull}`);
+    hud.driving.shown && /Tank/.test(hud.driving.name) && hud.driving.hull === hud.driving.actual
+      && parseInt(hud.driving.hull, 10) >= 90,
+    `${hud.driving.name}, hull ${hud.driving.hull} of ${hud.driving.actual}`);
   check('and how fast it is going and whether the gun is ready',
     hud.driving.topSpeed > 12 && hud.hurt.gun !== 'ready',
     `up to ${hud.driving.topSpeed} km/h, gun ${hud.hurt.gun} after firing`);
@@ -1205,18 +1211,51 @@ async function run() {
     const burning = s.burningGround.length;
     s.burningGround.length = 0;
     // Off the ground, down a street, the way a player would have to do it.
-    // Down whichever way from here is clear the furthest: the checks before
-    // this one leave ruins about, and a ruin is a thing that stands now
-    // rather than a ramp you could roll up, so west was not always open.
-    let bestYaw = -Math.PI / 2, bestRun = 0;
+    // The run is measured the width of the wings and from knee height up,
+    // since a heap of rubble from the checks before is low and a wall at the
+    // side of a street is only in the way of a wing tip: one ray down the
+    // middle at three metres missed both, and a fighter rolled into one.
+    const clearRun = (x, z, dx, dz) => {
+      const g0 = s.world.groundHeight(x, z);
+      let run = 400;
+      for (const side of [-4.5, 0, 4.5]) {
+        for (const up of [0.7, 1.6, 3]) {
+          const hit = s.world.raycast(x - dz * side, g0 + up, z + dx * side, dx, 0, dz, 400);
+          if (hit) run = Math.min(run, hit.t);
+        }
+      }
+      return run;
+    };
+    // And from where: where you stand is wherever the checks before this one
+    // left you, among their ruins, and in the live city that was 33 m of
+    // room at best. So the long straight streets round the square are tried
+    // too, from either end, and the fighter is put at the start of the
+    // clearest of all of them.
+    let best = { x: s.player.x, z: s.player.z, yaw: -Math.PI / 2, run: 0 };
+    const tryRun = (x, z, dx, dz) => {
+      if (s.world.isLoaded && !s.world.isLoaded(x, z)) return;
+      const run = clearRun(x, z, dx, dz);
+      if (run > best.run) best = { x, z, yaw: Math.atan2(-dx, -dz), run };
+    };
     for (let i = 0; i < 32; i++) {
       const a = (i / 32) * Math.PI * 2;
-      const dx = Math.cos(a), dz = Math.sin(a);
-      const g0 = s.world.groundHeight(s.player.x, s.player.z);
-      const hit = s.world.raycast(s.player.x, g0 + 3, s.player.z, dx, 0, dz, 400);
-      const run = hit ? hit.t : 400;
-      if (run > bestRun) { bestRun = run; bestYaw = Math.atan2(-dx, -dz); }
+      tryRun(s.player.x, s.player.z, Math.cos(a), Math.sin(a));
     }
+    for (const road of s.trafficRoads().roads) {
+      for (let k = 2; k < road.pts.length; k += 2) {
+        const ax = road.pts[k - 2], az = road.pts[k - 1], bx = road.pts[k], bz = road.pts[k + 1];
+        const len = Math.hypot(bx - ax, bz - az);
+        if (len < 150 || Math.hypot((ax + bx) / 2 - 81, (az + bz) / 2) > 900) continue;
+        const ux = (bx - ax) / len, uz = (bz - az) / len;
+        tryRun(ax + ux * 5, az + uz * 5, ux, uz);
+        tryRun(bx - ux * 5, bz - uz * 5, -ux, -uz);
+      }
+    }
+    if (best.run > 0 && (best.x !== s.player.x || best.z !== s.player.z)) {
+      s.teleport(best.x, best.z);
+      for (let i = 0; i < 10; i++) s.fixedForTest(1 / 60);
+    }
+    const bestYaw = best.yaw, bestRun = best.run;
     const j = s.vehicles.spawn('jet', s.player.x, s.player.z, bestYaw, 0);
     s.teleport(j.x + 2, j.z);
     s.toggleVehicle();
@@ -1250,12 +1289,12 @@ async function run() {
       inIt,
       aboard,
       up: Math.round(up),
-      wasDown, burning,
+      wasDown, burning, run: Math.round(bestRun),
     };
   });
   check('a fighter can take off from the street it is parked in',
     takeoff.climbed > 60 && takeoff.speed > 60 && takeoff.health > 0,
-    `rolled ${takeoff.rolled} s, ${takeoff.climbed} m up at ${takeoff.speed} m/s, hull ${Math.round(takeoff.health)}, ${takeoff.burning} fires put out first`
+    `rolled ${takeoff.rolled} s on a ${takeoff.run} m run, ${takeoff.climbed} m up at ${takeoff.speed} m/s, hull ${Math.round(takeoff.health)}, ${takeoff.burning} fires put out first`
       + (takeoff.aboard ? '' : ', nobody got in') + (takeoff.wasDown ? ', stood up first' : ''));
   check('and the menu hands you one already in the air',
     takeoff.inIt && takeoff.up > 100, `${takeoff.up} m up, flying`);

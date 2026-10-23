@@ -687,6 +687,59 @@ nothing is copied from them.
 ![The tech bow in The Hunt](docs/screenshots/hunt-07-tech-bow.png)
 ![The tactic bow, chosen in the cheat menu](docs/screenshots/hunt-08-tactic-bow.png)
 
+## .BACKDOOR
+
+The city runs on one network, and your phone has a way into it. Nobody is
+hunting you here: it is the peaceful city, with nearly twice as many people
+in the streets as Just a Walk, and a phone in the corner with a battery in
+three cells and what you have taken so far.
+
+- **Point it at somebody** and it profiles them: a bracket round them, red if
+  they have a record, and a card with their name, age, job and what it pays,
+  and one thing about them they would rather you did not know. The same
+  person is the same person every time you look.
+- **Q** rings their phone: they stop where they stand and look at it for a
+  few seconds. **E** empties their bank account into yours, which takes a
+  moment and wants the phone kept on them; look away and it is lost, and the
+  battery with it. What you take is kept between visits.
+- **Traffic.** Cars and yellow double deckers drive the real streets round
+  you in the right hand lane, take the next street at the end of one, keep
+  their distance, stop for anybody standing in the road, and the buses pull
+  in every so often. Pointed at a car, the phone shows its plate and who it
+  is registered to: **Q** stalls it dead in the road, **E** takes its
+  throttle and sends it flat out at whatever is ahead of it. Pointed at a
+  bus: **Q** stops it, **E** opens its doors and lets its passengers off.
+  Two that meet crash, and a car hits whoever it drives into. **F** at a
+  car in the traffic throws the driver out and it is yours.
+- **Crime.** Every half minute or so somebody near you snatches a bag and
+  runs, or starts a fight. The phone tells you what, how far and which way,
+  and marks the offender. Take him down by hand (**F**) and he is subdued,
+  ring his phone (**Q**) and a fight is over or a thief stops long enough to
+  catch, or shoot him, for less. Stopping one pays and raises your good
+  name; one that gets away, a victim on the ground, or an innocent shot
+  lowers it.
+- **Traffic lights** at the junctions of the bigger roads, in the German
+  order (red, red and amber, green, amber), and the traffic stops for them.
+  Pointed at a mast, the phone shows the junction and what each way shows:
+  **Q** turns it red both ways and the traffic piles up, **E** turns it
+  green both ways and nobody gives way to anybody.
+- **Steam pipes.** A cover in the road every so far: **Q** vents steam
+  across the road and the traffic stops for it, **E** blows it after a
+  second of hiss, and whatever is standing on it goes up in the air and
+  whoever is near it is knocked off their feet.
+- **B** is the **blackout**: the whole battery for fifteen seconds without
+  power. The windows and the street lamps go out, the lights at the
+  junctions go dark, and everybody stops to look at a phone with no signal.
+- The battery pays for every hack and fills again by itself once you leave
+  it alone.
+
+Where the ideas come from: the Watch Dogs games, whose phone profiles every
+citizen in the street and hacks the city's traffic lights, steam pipes,
+phones and cars, and can black out everything electric nearby for a short
+while. The people, names, facts and numbers here are ours. The lights keep
+German time: three seconds of amber where the limit is 50 km/h, and one
+second of red and amber before green, as the RiLSA 2015 sets it.
+
 ## The end of an operation
 
 When every camp or nest in the operation has been taken, a card says what it

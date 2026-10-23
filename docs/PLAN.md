@@ -4785,6 +4785,285 @@ So there are two cities now, and a profile picks which:
   suit; three metres over a Lynx, F kills it with no reactor left running,
   takes 35 energy, and you go up. Screenshot hunt-09-mech-takedown.png.
 
+## 125. .BACKDOOR: the profiler and the phone
+
+- The ask: a new mode, .BACKDOOR, where you hack your way into the city
+  the way the Watch Dogs games do it: passers by, cars, buses, crimes like
+  theft and brawls, and a great many things to hack. Built in four phases:
+  this one is the mode and the phone, then traffic, then crime, then the
+  city's own systems.
+- What the games do, checked against the coverage of the first one (the
+  PlayStation blog, the Watch Dogs wiki and reviews, found through a web
+  search): a phone that profiles every citizen in the street, an app that
+  finds crimes about to happen, and hacks on traffic lights, steam pipes,
+  blockers, bridges, phones and cars, and a blackout of everything electric
+  nearby for a short while. The names, facts and numbers here are ours.
+- `src/game/backdoor.js`: `profileFor(seed)` is who somebody is (a name out
+  of Berlin's mix, an age, a job and what it pays, one fact they would rather
+  you did not know, and a record for about one in nine), the same person for
+  the same seed every time. `pickTarget` is what the phone is pointed at:
+  the nearest to the crosshair within 48 m and a cone that narrows a little
+  with distance. `Phone` is the battery (100, back at 10 a second after
+  0.8 s of rest), and a hack under way that wants the phone kept on its
+  target until it is done and is lost, battery spent, if it is not.
+- The mode: a button on the title card, the peaceful city with 18 people
+  about where Just a Walk has 10, and the phone in the corner (battery in
+  three cells, what you have taken, how many hacks). Pointed at somebody:
+  a bracket round them, red for a record, and a card beside it with who
+  they are and the two hacks, Q and E in place of the last weapon and the
+  reflex. Q rings their phone (12 battery): they stop where they are and
+  look at it for six seconds. E empties their account into yours (25
+  battery, 1.4 s with the phone on them). The money is kept between visits.
+- Checks: unit (4) on the same person for the same seed, the share with a
+  record, the aim, and the battery and the lost hack; browser
+  (tools/test-backdoor.mjs, 11, in CI as its own step): the button and its
+  note, the street and the phone, the card and its hacks, nothing when
+  pointed at nobody, Q stops a man on his way somewhere, E empties his
+  account once and the money is kept, looking away loses it, a flat battery
+  says so and fills again. Screenshot backdoor-01-profiler.png.
+
+## 126. .BACKDOOR: traffic, and the phone in it
+
+- Cars and buses on the real streets. `src/game/traffic.js` decides what
+  each driver does: drive a centreline in the right hand lane (27 percent
+  of the road's width right of the line, at most 2.4 m), steer for a point
+  9 m ahead, at the end of a line take another that begins or ends within
+  14 m of it, at random, or turn round if there is none. It waits behind
+  whatever is in its lane (its own frame: ahead, and within 1.4 m across),
+  passes what is coming the other way in the other lane, stops for anybody
+  standing in the road, and a bus pulls in every 260 m for five seconds.
+  Twelve cars and two buses round you, put on a stretch of road 45 to
+  170 m off and let go past 210 m. Only carriageways are driven.
+- Two new vehicles. A car (36 m/s at most, 320 hull), in one of six paints
+  the instance picks through the channel a car has no rotor for (white,
+  black, silver, blue, red, and the ivory of a Berlin taxi), and a yellow
+  double decker bus (20 m/s, 1100 hull, twelve metres) with its line on a
+  lit board. Neither has a gun; the vehicle panel hides its gun row.
+- Traffic keeps off the buildings: a car or bus in the traffic does not
+  smash through a wall unless the phone has its throttle. Two ground
+  vehicles whose footprints overlap (boxes, by separating axes, not
+  circles, since two cars in their own lanes pass closer than their
+  circles and a bus is twelve metres) are pushed apart, and if they were
+  closing faster than 3 m/s both stop, both are hurt by how fast, there
+  are sparks and dust and a crash in the feed. A ground vehicle faster
+  than 4 m/s hits whoever it drives into.
+- The phone: a car in the traffic shows its plate (B for Berlin) and who
+  it is registered to; Q stalls it (20 battery, dead for nine seconds) and
+  E takes its throttle (30 battery): flat out for three and a half
+  seconds at the nearest vehicle or person ahead of it, through a wall if
+  one is in the way. A bus shows its line and how many are aboard; Q stops
+  it and E opens its doors (15 battery, once a bus), and up to four get off
+  onto the pavement. F at a car in the traffic throws the driver out and
+  it is yours. A hack that takes no time goes through on the key.
+- Checks: unit (7) on the roads indexed, the lane on the right, the next
+  road at a junction and turning round, a car round a corner in its lane,
+  waiting for its lane and a person and passing the other lane, the stall
+  and the bus stop, and where a new one is put; browser (backdoor suite,
+  nine more): the streets fill with cars and buses that drive, a car goes
+  on along a street on the carriageway and stops for a man in its lane,
+  the card, Q stalls it, E rams it into another and both are hurt, a bus's
+  doors let its passengers off once, and F takes a car from its driver.
+  Screenshot backdoor-02-traffic.png.
+
+## 127. .BACKDOOR: crime in the street
+
+- Somebody near you does something they should not, one at a time: the
+  first fourteen seconds into a visit, then every 24 to 42 seconds, 35 to
+  110 m off. `src/game/crime.js` runs each one as a small machine and the
+  game layer picks who is in it, does the hitting and keeps the score.
+- Two kinds. A bag theft: the thief walks up to somebody (1.7 m/s, his
+  victim standing there with no idea), takes the bag at 1.5 m and runs
+  (4.7 m/s, you run 5.6) away from both of you; past 120 m from you after
+  six seconds of running, he is gone. A fight: one walks up to another,
+  they square up, and he lands a blow every 0.85 seconds (11 health a
+  blow), the other giving one back every third, until somebody stops it,
+  the victim is down, or a minute is up. Nothing goes on for longer than a
+  minute.
+- The phone hears of it first: a toast with what, how far and which way, a
+  line on the phone with the same while it goes on, a red diamond with the
+  distance over the offender, and pointed at him his card calls him the
+  offender, his record the crime in progress.
+- Stopping it: a takedown (F within reach) puts the offender down alive,
+  subdued, which is the best way (rep +10); Q ringing his phone in a fight
+  breaks it up (+8), and a thief stops to look at it, long enough to catch
+  him; shot dead it is stopped too, for less (+4). A thief who gets away
+  costs 5, a victim on the ground 8, and in .BACKDOOR shooting somebody who
+  was only walking down the street costs 12. A crime stopped pays 60 to
+  240 into the account. Your good name and how many you stopped are on the
+  phone and kept between visits.
+- The offender is a civilian with somewhere to be: the people in the
+  street take a directive from the crime (where to go, how fast, which way
+  to face), and a bold one ignores the panic round him but not his phone.
+- Checks: unit (5) on the theft, the getaway, subdued and killed, the fight
+  and its blows, broken up by a phone, and the time limit; browser
+  (backdoor suite, eight more): a crime starts and the phone says so, the
+  thief takes the bag and runs, the card and the mark, Q then F stop him
+  and pay, a fight with blows, broken up by a ring, a thief nobody stops
+  gets away, and an innocent shot costs your name. Screenshot
+  backdoor-03-crime.png.
+
+## 128. .BACKDOOR: traffic lights, and the phone in them
+
+- Lights where a bigger road (primary, secondary, tertiary, trunk) meets
+  another, crossing it or ending on it, with at least three ways out in two
+  directions. The map fetch keeps the roads and not the signal nodes, so
+  `junctionsOf` in `src/game/traffic.js` works them out from where the
+  centrelines meet: two segments that cross, or the end of one within 6 m
+  of another, merged within 15 m, and the ways out read off the lines that
+  pass (both ways) or end there (one way). The axis is the widest road's;
+  whatever crosses it is the other direction. On the offline Mitte that is
+  39 junctions, among them Unter den Linden at Wilhelmstrasse, Glinkastrasse
+  and Friedrichstrasse; two quiet streets crossing get none.
+- The German order, checked against sources: green for ten seconds, amber
+  for three (the time for 50 km/h), red, and red and amber together for the
+  last second before green, which the RiLSA 2015 sets at one second; two
+  seconds of red both ways between the two directions. Each junction is
+  offset from the next so a street does not change all at once.
+- A driver watches for the light ahead (18 m plus his speed): at red, or at
+  red and amber, he stops 2 m short of the junction; at amber he stops if
+  he still can at 5 m/s2 and goes on if he cannot; over the line he goes on
+  whatever it shows. A dark junction is crawled through at 5 m/s.
+- A mast for every way in, on the right of whoever is coming, facing them:
+  a thin pole, a near black housing with a board behind it and three lamps
+  under visors, lit by the shader from what the instance says it shows.
+  Up to 96 drawn, the nearest first.
+- The phone: pointed at a mast it shows the junction by its streets and
+  what each direction shows. Q turns it red both ways for ten seconds (15
+  battery) and the traffic piles up at it; E turns it green both ways for
+  eight (30 battery), and a driver who has green both ways pays no
+  attention to anybody crossing, which is how the crash happens.
+- Fixed on the way: a passer by appeared through the sphere of light that
+  machines and soldiers arrive in, and everybody within 35 m of it ran,
+  which in .BACKDOOR (eighteen people, topped up all the time) meant
+  somebody was always running. `spawnNear` now takes whether it arrives,
+  and `spawnCivilianNear` says no, as its comment always said it did. It
+  showed up as a crime victim who walked off mid crime.
+- Checks: unit (5 signals, 1 civilians) on where the lights are and are
+  not, the order and the amber time, never green both ways, a car that
+  waits at red and goes on green, two that meet on green both ways, held
+  on red both ways, a crawl through a dark junction, and a passer by who
+  frightens nobody; browser (backdoor suite, six more): the masts are
+  there and drawn, the German order off the game clock, the card, Q holds
+  a car short of the junction, E lets it through, and two cars from two
+  ways crash on green both ways. Screenshot backdoor-04-lights.png.
+
+## 129. .BACKDOOR: steam pipes under the street, and a blackout
+
+- A cover over the steam pipe in the road, every 85 m along every
+  carriageway, on its line, never in a junction or within 10 m of one and
+  never two within 14 m (two lines down the same street would otherwise
+  give two of everything). `src/game/city.js` works out where they are from
+  the same centrelines as the traffic and the lights, the same every time.
+  A cast iron disc on the road, drawn through the actor shader like the
+  masts; red hot while it is about to go, a black hole once it has.
+- The phone, pointed at a cover: Q vents steam (10 battery) for eight
+  seconds, a white column across the road that the traffic stops short of
+  and the people near it walk away from; E blows it (35 battery): a hiss and
+  a red glow for 1.2 seconds, which is the warning and which the people
+  near it take, then the blast. Anything on four wheels within 7 m goes up,
+  at 9 m/s at the middle and less towards the edge (a bus half that),
+  turning over a little, comes down where it comes down, and is hurt by up
+  to 45 percent of its hull; anybody within 6 m is knocked off their feet
+  and slid along the ground, and gets up again; you, if you are that near,
+  take up to 20. The hole pours steam for six seconds and is a cover again
+  after forty.
+- Ground vehicles can leave the ground now (`vehicles.launch`): up, a
+  little tumble, gravity, down, half the speed gone. People can be knocked
+  down without a banana (`soldiers.knockDown`), and passers by now get up
+  from a fall the way soldiers always did; the slide is one function for
+  both.
+- B is the blackout, on a key of its own, as in the game this is after:
+  it takes the whole battery and cuts the power for fifteen seconds. The
+  lit windows and the lamps go out (the renderer's night window light, the
+  one the lamp glass uses too, times what is left of the power), the
+  lights at every junction go dark and the traffic crawls through them,
+  everybody within 160 m stops and looks at a phone with no signal, and the
+  phone says how long is left. It comes back over a second and a half with
+  a flicker.
+- Checks: unit (4) on where the covers are and are not, the vent, the
+  fuse, the blast and the spent cover, the blast falling off to its edge,
+  and the blackout's clock with the flicker coming back; browser (backdoor
+  suite, six more): the covers are there, drawn and hackable, Q stops a car
+  short of the steam and lets it go after, E throws a car on it 2.2 m up
+  and knocks a man beside it flat, and B at one in the morning, looking
+  the brightest way round (the live city and the offline one have their
+  buildings in different places), takes the view from 81.3 to 4.0 in mean
+  brightness, darkens every mast, stops the people, cannot be done twice,
+  and comes back. Screenshots
+  backdoor-05-steam.png, backdoor-06-night.png and
+  backdoor-07-blackout.png.
+
+## CI: the EMP check clears the street in front of the launcher
+
+- The machines suite's EMP launcher check fired at a group of four at 54 m
+  and the warhead went off a fifth of a second out, a metre off the ground:
+  something just in front of you that the world's own ray cannot see. The
+  mode keeps its own mechs, drones and vehicles about, and they are now
+  taken off the street with the soldiers before the shot; and the line is
+  tested from where the barrel is (lower, and to either side) as well as
+  from the eye.
+
+## CI: .BACKDOOR in the live city, where an avenue has two carriageways
+
+- The first run of the .BACKDOOR suite against the live extract failed
+  five checks, and four of them were one thing the offline city does not
+  have: Unter den Linden is two carriageways forty metres apart, so a street
+  across it meets two lines and makes two junctions, each with lights of
+  its own timing. A car through the one it was let through met the other
+  at red; two cars sent at each other on green both ways stopped short of
+  each other; a car let go after the steam stopped waited at a light down
+  the road. Real lights at such a crossing are one installation, and so are
+  these now: junctions within 45 m of each other are one crossing, with the
+  axis of the widest road among them, one timing, and a hack on any mast of
+  it is a hack on all of it. A unit check holds an avenue's two
+  carriageways to one light.
+- The fifth: pointed at a car in the traffic, the phone got the steam cover
+  in front of it, because a car parked at the kerb hid the middle of the
+  one in the road. A vehicle counts as seen now if its roof is (a car
+  1.55 m up, a bus 4.3 m), and the check steps up to the kerb if something
+  is still in the way.
+- The order of the lights is checked as every change being the next in the
+  German order and the whole round seen, wherever the clock happens to be
+  when the check starts; the live run began at amber. The steam check holds
+  any lights within 120 m green, so a car waiting at red cannot pass for a
+  car waiting for the steam.
+
+## CI: a runway measured the width of the wings, and the panel against the hull
+
+- The city suite's fighter rolled into something and burnt out on the
+  ground (hull 0, two metres down, no speed). Its runway was the clearest
+  of 32 directions, measured by one ray down the middle at three metres,
+  and the checks before it leave heaps of rubble at knee height and ruins
+  at the side of the street: neither is on that ray. The run is now the
+  shortest of nine rays, at 0.7, 1.6 and 3 m, down the middle and 4.5 m
+  either side for the wings. Measured like that, the next run in the live
+  city showed the rest of it: where the checks before leave you there was
+  33 m of room in any direction. So the long straight streets round the
+  square (150 m and more of one line, within 900 m) are tried as well, from
+  either end, and the fighter is put at the start of the clearest of all
+  of them: 400 m offline.
+- The panel check that drives a tank for three seconds wanted the hull at
+  exactly 100 percent, and a tank that drove through the fire the wrecks
+  before it left on the street came out at 99. The fire is put out first,
+  as the takeoff already did, and the panel is held to what the hull really
+  is, at no less than 90 percent.
+
+## CI: the compass lost its bearing to the crime line
+
+- The ops suite went red on the compass: facing the nearest camp, the bar
+  put it behind you, and facing your own mark, off to one side. Phase 127
+  gave the crime line a little helper for the eight points of the compass
+  (how a toast says "92 m SW") and called it `bearing`, inside the same
+  function as everything else in `main.js`, where it hid the compass's own
+  `bearing` in degrees, imported from `ui/compassbar.js`. The compass was
+  handed "SW" for an angle. The helper is `pointOf` now; every other name
+  the .BACKDOOR phases added was checked for the same thing and none
+  clashes.
+- The suit pips check in The Hunt read the HUD after a fixed 400 ms, and on
+  a slow runner the frame that draws them had not come yet (master's run
+  after the merge of #22 read 0 percent). It waits for that frame now, up
+  to eight seconds.
+
 ## CI: the machines suite stands the run up before it aims
 
 - Since phase 120 dying is four seconds of a camera going round the body,

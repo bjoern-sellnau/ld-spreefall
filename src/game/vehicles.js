@@ -15,6 +15,26 @@
 export const KIND = { GROUND: 'ground', AIR: 'air' };
 
 export const VEHICLE = {
+  // .BACKDOOR's traffic: what the city drives when it is not at war. No gun
+  // on either, a car quick off the lights and a bus slow and heavy.
+  car: {
+    name: 'Car', kind: KIND.GROUND,
+    topSpeed: 36, reverse: 10, accel: 15, brake: 26, drag: 0.4,
+    turn: 1.7, turnAtSpeed: 0.6,
+    health: 320, mass: 1,
+    eye: 1.25, chase: 8.5, chaseUp: 3.0,
+    radius: 1.35, length: 4.5, width: 1.8,
+    climb: 0.6,
+  },
+  bus: {
+    name: 'Bus', kind: KIND.GROUND,
+    topSpeed: 20, reverse: 6, accel: 6, brake: 12, drag: 0.4,
+    turn: 1.0, turnAtSpeed: 0.5,
+    health: 1100, mass: 3,
+    eye: 2.5, chase: 17, chaseUp: 6,
+    radius: 1.6, length: 12, width: 2.5,
+    climb: 0.6,
+  },
   jeep: {
     name: 'Jeep', kind: KIND.GROUND,
     // Drag takes speed times drag off every second, so what it can reach on
@@ -105,7 +125,8 @@ export class Vehicles {
     this.world = world;
     this.isSanctuary = isSanctuary || (() => false);
     this.pool = [];
-    for (let i = 0; i < 24; i++) this.pool.push(new Vehicle());
+    // Room for the traffic as well as what you call in yourself.
+    for (let i = 0; i < 40; i++) this.pool.push(new Vehicle());
     this.active = [];
     this.driving = null;        // the one you are in, if any
     this.onFire = null;         // fn(vehicle, shot) for the gun
@@ -174,6 +195,12 @@ export class Vehicles {
     v.hostile = false;
     v.wreck = null;
     delete v.runaway;
+    // Traffic's driver and paint, which the pool would otherwise hand on.
+    v.traffic = null;
+    v.paint = 0;
+    v.airborne = false;
+    v.lift = 0;
+    v.tumble = 0;
     this.active.push(v);
     return v;
   }
@@ -208,6 +235,18 @@ export class Vehicles {
     const x = v.x + Math.cos(side) * (v.spec.radius + 1.4);
     const z = v.z + Math.sin(side) * (v.spec.radius + 1.4);
     return { x, z, y: this.world.groundHeight(x, z) };
+  }
+
+  /**
+   * Thrown up off the road by something under it: a ground vehicle goes up
+   * at so many metres a second, turning over a little, and comes down where
+   * it comes down, still rolling the way it was.
+   */
+  launch(v, up, tumble = 0) {
+    if (!v.alive || v.spec.kind !== KIND.GROUND) return;
+    v.airborne = true;
+    v.lift = Math.max(v.lift || 0, up);
+    v.tumble = tumble;
   }
 
   damage(v, amount) {
@@ -319,8 +358,26 @@ export class Vehicles {
       }
     }
 
-    // Follow the ground, and refuse anything steeper than it can climb.
+    // Off the road: up and over, and down again, the ground no use to it
+    // until it is back on it.
     const g = this.world.groundHeight(v.x, v.z);
+    if (v.airborne) {
+      v.lift -= 16 * dt;
+      v.y += v.lift * dt;
+      v.pitch += v.tumble * dt;
+      v.roll += v.tumble * 0.6 * dt;
+      if (v.y <= g) {
+        const hard = -v.lift;
+        v.y = g;
+        v.airborne = false;
+        v.lift = 0;
+        v.speed *= 0.5;
+        if (this.onLand) this.onLand(v, hard);
+      }
+      return;
+    }
+
+    // Follow the ground, and refuse anything steeper than it can climb.
     const rise = g - v.y;
     if (rise > s.climb) {
       // Too steep: back off and lose the speed into it.

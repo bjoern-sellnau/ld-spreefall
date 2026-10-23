@@ -631,6 +631,35 @@ export class Effects {
   }
 
   /**
+   * Steam out of a cover in the road: white, fast, straight up, spreading as
+   * it goes and gone in a second or two. Called every step while it vents,
+   * with more of it for a blast.
+   */
+  steam(x, y, z, strength = 1) {
+    const n = Math.max(1, Math.round(3 * strength));
+    for (let i = 0; i < n; i++) {
+      const s = this._get();
+      s.alive = true;
+      s.kind = 1;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * 0.35;
+      s.ax = x + Math.cos(a) * r;
+      s.ay = y + 0.1 + Math.random() * 0.4;
+      s.az = z + Math.sin(a) * r;
+      const out = 0.6 + strength * 0.8;
+      s.vx = Math.cos(a) * out * Math.random();
+      s.vy = 5 + Math.random() * 4 * Math.min(2, strength);
+      s.vz = Math.sin(a) * out * Math.random();
+      s.gravity = -0.6;
+      s.maxLife = 0.9 + Math.random() * 1.1;
+      s.life = s.maxLife;
+      s.r = 0.86; s.g = 0.87; s.b = 0.88;
+      s.size = 0.7 + Math.random() * 0.9 * Math.min(2.5, strength);
+      s.bx = 0; s.by = 0; s.bz = 0;
+    }
+  }
+
+  /**
    * A cloud of poison: low, slow, sickly green, hanging where it was let out.
    */
   gas(x, y, z, radius, strength = 1) {

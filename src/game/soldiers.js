@@ -343,8 +343,13 @@ export class Soldiers {
     return null;
   }
 
-  /** Puts one on the ground out of sight, between minR and maxR of the player. */
-  spawnNear(px, pz, minR, maxR) {
+  /**
+   * Puts one on the ground out of sight, between minR and maxR of the
+   * player. One that arrives comes through a sphere of light, which the
+   * street runs from; one that does not (somebody who lives here) just walks
+   * in.
+   */
+  spawnNear(px, pz, minR, maxR, arrive = true) {
     const s = this.free();
     if (!s) return null;
     const w = this.world;
@@ -367,10 +372,25 @@ export class Soldiers {
       if (boxed) continue;
       s.spawn(x, g, z, this.tier);
       this.active.push(s);
-      if (this.onArrive) this.onArrive(s);
+      if (arrive && this.onArrive) this.onArrive(s);
       return s;
     }
     return null;
+  }
+
+  /**
+   * Off his feet and on his back, pushed along the ground, and up again a
+   * few seconds later: the same fall a banana gives, without the banana.
+   */
+  knockDown(s, dx, dz, push = 6) {
+    if (!s.alive || s.health <= 0 || s.state === STATE.DYING) return false;
+    s.state = STATE.SLIPPED;
+    s.stateTime = 0;
+    s.slipLeft = 2.6;
+    s.vx = dx * push; s.vz = dz * push;
+    s.spin = (Math.random() < 0.5 ? -1 : 1) * (1.5 + Math.random() * 2);
+    s.lean = -0.25;
+    return true;
   }
 
   /** How many of the people about the place are the ones who live here. */
@@ -386,7 +406,7 @@ export class Soldiers {
    * street like anybody else.
    */
   spawnCivilianNear(px, pz, minR, maxR) {
-    const s = this.spawnNear(px, pz, minR, maxR);
+    const s = this.spawnNear(px, pz, minR, maxR, false);
     if (!s) return null;
     s.civilian = true;
     s.rise = 0;
@@ -394,8 +414,15 @@ export class Soldiers {
     s.health = CIVIL.health;
     s.maxHealth = CIVIL.health;
     s.panicLeft = 0;
-    // Which coat he has on, which the shader reads out of the fraction.
+    // Which coat he has on, which the shader reads out of the fraction, and
+    // who he is to a phone that profiles him (.BACKDOOR): the slot is reused,
+    // so whatever was known about the last one in it goes.
     s.who = Math.random();
+    s.profile = null;
+    s.phoneLeft = 0;
+    s.directed = null;
+    s.crime = null;
+    s.subdued = false;
     this._errand(s);
     return s;
   }
@@ -432,6 +459,26 @@ export class Soldiers {
    * A passer by, in full. Away from whatever frightened him while it is
    * still ringing in his ears, and otherwise about his business.
    */
+  /** On the ground and sliding, until he is up again and back to what he was doing. */
+  _slide(s, dt, then) {
+    s.slipLeft -= dt;
+    // Backwards, not forwards: the legs come up and the back goes down,
+    // all the way flat, and he turns as he slides.
+    s.lean = Math.max(-1.62, s.lean - dt * 6.5);
+    s.roll = (s.roll || 0) + (s.spin || 0) * dt * 0.35;
+    s.yaw += (s.spin || 0) * dt;
+    s.x += s.vx * dt; s.z += s.vz * dt;
+    s.vx *= 0.93; s.vz *= 0.93;
+    s.y = this.world.groundHeight(s.x, s.z);
+    if (s.slipLeft <= 0) {
+      s.state = then;
+      s.stateTime = 0;
+      s.lean = 0;
+      s.roll = 0;
+      s.spin = 0;
+    }
+  }
+
   _civilianStep(s, dt, player) {
     const w = this.world;
     // The ones behind you are somebody else's neighbours now. Without this
@@ -442,7 +489,39 @@ export class Soldiers {
       return;
     }
     s.panicLeft = Math.max(0, (s.panicLeft || 0) - dt);
+    // Knocked off his feet: down first, and frightened once he is up.
+    if (s.state === STATE.SLIPPED) {
+      this._slide(s, dt, STATE.PATROL);
+      return;
+    }
     const running = s.panicLeft > 0;
+    // A phone that rang: he stops where he is and looks at it, unless
+    // something has frightened him, which beats any message.
+    // The one committing a crime is past being frightened, but not past
+    // looking at his phone.
+    if ((!running || (s.directed && s.directed.bold)) && s.phoneLeft > 0) {
+      s.phoneLeft = Math.max(0, s.phoneLeft - dt);
+      s.vx = 0; s.vz = 0;
+      s.y = w.groundHeight(s.x, s.z);
+      s.canSee = false;
+      return;
+    }
+    // Somebody else decides where he goes: a crime he is in. The one who
+    // started it is not put off by a noise; the one it is happening to is.
+    if (s.directed && (!running || s.directed.bold)) {
+      const d = s.directed;
+      if (d.speed > 0) {
+        s.targetX = d.x; s.targetZ = d.z;
+        this._move(s, dt, d.speed);
+        s.yaw = Math.atan2(-(s.targetX - s.x), -(s.targetZ - s.z));
+      } else {
+        s.vx = 0; s.vz = 0;
+      }
+      if (d.face !== undefined) s.yaw = d.face;
+      s.y = w.groundHeight(s.x, s.z);
+      s.canSee = false;
+      return;
+    }
     if (running) {
       // Straight away from it, picked fresh each step so that turning a
       // corner does not send him back towards the noise.
@@ -766,22 +845,7 @@ export class Soldiers {
       }
 
       if (s.state === STATE.SLIPPED) {
-        s.slipLeft -= dt;
-        // Backwards, not forwards: the legs come up and the back goes down,
-        // all the way flat, and he turns as he slides.
-        s.lean = Math.max(-1.62, s.lean - dt * 6.5);
-        s.roll = (s.roll || 0) + (s.spin || 0) * dt * 0.35;
-        s.yaw += (s.spin || 0) * dt;
-        s.x += s.vx * dt; s.z += s.vz * dt;
-        s.vx *= 0.93; s.vz *= 0.93;
-        s.y = w.groundHeight(s.x, s.z);
-        if (s.slipLeft <= 0) {
-          s.state = STATE.ADVANCE;
-          s.stateTime = 0;
-          s.lean = 0;
-          s.roll = 0;
-          s.spin = 0;
-        }
+        this._slide(s, dt, STATE.ADVANCE);
         continue;
       }
 
