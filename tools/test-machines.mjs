@@ -641,6 +641,10 @@ async function run() {
     const modeWas = s.machines.active;
     s.machines.active = false;
     s.soldiers.reset();
+    // And whatever else the mode had about: a mech of theirs, a drone or a
+    // vehicle a few metres in front is a rocket that goes off there (in one
+    // run it went at a fifth of a second, a metre off the ground).
+    s.mechs.reset(); s.drones.reset(); s.vehicles.reset();
     const spec = s.weapons.emp;
     // Four of them in a group, out where a thrown bomb would never have
     // reached, somewhere there is room for four and a clear line to it.
@@ -666,8 +670,18 @@ async function run() {
       const ay = s.world.groundHeight(ax, az) + 0.2;
       const fx = ax - eye0.x, fy = ay - eye0.y, fz = az - eye0.z;
       const fl = Math.hypot(fx, fy, fz) || 1;
-      const block = s.world.raycast(eye0.x, eye0.y, eye0.z, fx / fl, fy / fl, fz / fl, fl);
-      if (block && block.t < fl - 1.5) continue;
+      // Down the middle and from where the barrel is rather than the eye:
+      // lower, and off to either side.
+      let blocked = false;
+      const sx = -fz / (Math.hypot(fx, fz) || 1), sz = fx / (Math.hypot(fx, fz) || 1);
+      for (const [side, up] of [[0, 0], [0.4, -0.45], [-0.4, -0.45], [0, -0.7]]) {
+        const ox = eye0.x + sx * side, oy = eye0.y + up, oz = eye0.z + sz * side;
+        const gx = ax - ox, gy = ay - oy, gz = az - oz;
+        const gl = Math.hypot(gx, gy, gz) || 1;
+        const block = s.world.raycast(ox, oy, oz, gx / gl, gy / gl, gz / gl, gl);
+        if (block && block.t < gl - 1.5) { blocked = true; break; }
+      }
+      if (blocked) continue;
       for (let i = 0; i < 4; i++) {
         const sd = s.soldiers.spawnNear(px, pz, 2, 9);
         if (sd) { s.makeMachine(sd); sd.stunLeft = 0; group.push(sd); }

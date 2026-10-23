@@ -4993,6 +4993,16 @@ So there are two cities now, and a profile picks which:
   backdoor-05-steam.png, backdoor-06-night.png and
   backdoor-07-blackout.png.
 
+## CI: the EMP check clears the street in front of the launcher
+
+- The machines suite's EMP launcher check fired at a group of four at 54 m
+  and the warhead went off a fifth of a second out, a metre off the ground:
+  something just in front of you that the world's own ray cannot see. The
+  mode keeps its own mechs, drones and vehicles about, and they are now
+  taken off the street with the soldiers before the shot; and the line is
+  tested from where the barrel is (lower, and to either side) as well as
+  from the eye.
+
 ## CI: .BACKDOOR in the live city, where an avenue has two carriageways
 
 - The first run of the .BACKDOOR suite against the live extract failed
