@@ -5,6 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -27,8 +28,24 @@ const TYPES = {
   '.osm': 'application/xml; charset=utf-8',
 };
 
+/**
+ * What a development page is: the commit checked out and when it was made.
+ * The Pages build writes a version.json of its own; this answers in its place
+ * when there is none on the disk.
+ */
+function devVersion() {
+  const git = (args) => { try { return execSync(`git ${args}`, { cwd: ROOT }).toString().trim(); } catch { return ''; } };
+  return { build: 'dev', commit: git('rev-parse --short HEAD'), time: git('log -1 --format=%cI') || null };
+}
+
 const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  if (urlPath === '/version.json' && !fs.existsSync(path.join(DIR, 'version.json'))) {
+    const body = JSON.stringify(devVersion());
+    res.writeHead(200, { 'Content-Type': TYPES['.json'], 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-cache' });
+    res.end(body);
+    return;
+  }
   if (urlPath.endsWith('/')) urlPath += 'index.html';
   const file = path.join(DIR, path.normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
   if (!file.startsWith(DIR)) { res.writeHead(403).end('forbidden'); return; }

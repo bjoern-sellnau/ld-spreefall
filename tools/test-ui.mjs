@@ -56,7 +56,73 @@ async function run() {
 
   // --- title and intro ----------------------------------------------------
   check('title screen is shown', await page.isVisible('#title'));
+  // The start: the name, what this is, one button, and which build.
+  await page.waitForFunction(() => /^build \S+/.test(document.getElementById('buildline').textContent), null, { timeout: 10000 }).catch(() => {});
+  const start = await page.evaluate(() => ({
+    main: !document.getElementById('tpmain').classList.contains('hidden'),
+    modes: !document.getElementById('tpmodes').classList.contains('hidden'),
+    button: document.getElementById('newgame').textContent,
+    build: document.getElementById('buildline').textContent,
+    word: document.querySelector('#title .wordmark').textContent,
+  }));
   await page.screenshot({ path: path.join(SHOTS, 'ui-01-title.png') });
+  check('the title opens on the name, a line on what this is, Neues Spiel and the build',
+    start.main && !start.modes && start.button === 'Neues Spiel' && start.word === 'SPREE|FALL.'
+      && /^build \S+( \| \d{2}\.\d{2}\.\d{4} um \d{2}:\d{2})?$/.test(start.build), JSON.stringify(start));
+
+  // Neues Spiel: the games, one under another, and the way back.
+  await page.click('#newgame');
+  const modes = await page.evaluate(() => ({
+    shown: !document.getElementById('tpmodes').classList.contains('hidden'),
+    main: !document.getElementById('tpmain').classList.contains('hidden'),
+    items: [...document.querySelectorAll('#tpmodes .diff.mode')].map((b) => b.textContent),
+  }));
+  await page.screenshot({ path: path.join(SHOTS, 'ui-01b-modes.png') });
+  await page.click('#tpmodes .tback');
+  const backToStart = await page.evaluate(() => !document.getElementById('tpmain').classList.contains('hidden')
+    && document.getElementById('tpmodes').classList.contains('hidden'));
+  check('Neues Spiel lists the seven games, and Zurück goes back to the start',
+    modes.shown && !modes.main && backToStart && modes.items.join('|')
+      === 'Berlin Phototour|Rise of the Machines|Just a Walk|Tactics|Slayer|The Hunt|.BACKDOOR',
+    modes.items.join(', '));
+
+  // One game: what it is, what can be set, Spielen and Zurück.
+  await page.click('#newgame');
+  await page.click('#tpmodes .diff.mode[data-mode=walk]');
+  const walkPage = await page.evaluate(() => ({
+    name: document.getElementById('modename').textContent,
+    note: document.getElementById('modenote').textContent,
+    diff: !document.getElementById('diffblock').classList.contains('hidden'),
+  }));
+  await page.click('#tpmode .tback');
+  await page.click('#tpmodes .diff.mode[data-mode=berlin]');
+  const modePage = await page.evaluate(() => ({
+    shown: !document.getElementById('tpmode').classList.contains('hidden'),
+    name: document.getElementById('modename').textContent,
+    note: document.getElementById('modenote').textContent.length,
+    time: !document.getElementById('timepick').classList.contains('hidden'),
+    diff: !document.getElementById('diffblock').classList.contains('hidden'),
+    play: document.getElementById('playbtn').textContent,
+    back: document.querySelector('#tpmode .tback').textContent,
+  }));
+  await page.screenshot({ path: path.join(SHOTS, 'ui-01c-mode.png') });
+  check('a game opens on its page: its name, what it is, its settings, Spielen and Zurück',
+    modePage.shown && modePage.name === 'Berlin Phototour' && modePage.note > 10 && modePage.time && modePage.diff
+      && modePage.play === 'Spielen' && modePage.back === 'Zurück' && walkPage.name === 'Just a Walk' && !walkPage.diff,
+    JSON.stringify({ modePage, walkPage: { name: walkPage.name, diff: walkPage.diff } }));
+  // The hour it starts at, for every game, shown on the city behind the title.
+  const startTime = await page.evaluate(() => {
+    const s = window.spreefall;
+    const slider = document.getElementById('modetime');
+    slider.value = '21.5';
+    slider.dispatchEvent(new Event('input'));
+    const out = { label: document.getElementById('modetimelabel').textContent, tod: s.renderer.timeOfDay };
+    slider.value = '17.4';
+    slider.dispatchEvent(new Event('input'));
+    return out;
+  });
+  check('and the time of day it starts at can be picked for it', startTime.label === '21:30' && startTime.tod === 21.5,
+    JSON.stringify(startTime));
 
   await page.click('#playbtn');
   await page.waitForTimeout(2500);

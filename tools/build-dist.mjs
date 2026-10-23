@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { execSync } from 'node:child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const DIST = path.join(ROOT, 'dist');
@@ -164,6 +165,17 @@ function main() {
   // underscore and can rewrite things. This turns it off.
   fs.writeFileSync(path.join(DIST, '.nojekyll'), '');
   fs.writeFileSync(path.join(DIST, 'robots.txt'), 'User-agent: *\nAllow: /\n');
+  // Which build this is, for the line under the title: the workflow's run
+  // number on the Pages build, the commit, and when it was made.
+  let commit = (process.env.GITHUB_SHA || '').slice(0, 7);
+  if (!commit) {
+    try { commit = execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim(); } catch { commit = ''; }
+  }
+  fs.writeFileSync(path.join(DIST, 'version.json'), JSON.stringify({
+    build: process.env.GITHUB_RUN_NUMBER || 'local',
+    commit,
+    time: new Date().toISOString(),
+  }));
 
   const files = walk(DIST);
   let raw = 0, gz = 0;

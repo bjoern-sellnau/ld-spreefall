@@ -69,6 +69,18 @@ the middle outward for as long as the site stays under 950 MB
 district by hand. A comparison of the same street at either tier is in
 `docs/screenshots/tier-01-standard.png` and `tier-02-full.png`.
 
+## The title
+
+The start page is the name, a line on what this is, **Neues Spiel**, and
+the build it is (`build 263 | 24.10.2026 um 01:30`, Berlin time: the run
+number and the time of the Pages build, or `dev` and the last commit on a
+local server). Neues Spiel lists the seven games (Berlin Phototour, Rise of
+the Machines, Just a Walk, Tactics, Slayer, The Hunt, .BACKDOOR); picking one
+opens its page with what it is, what can be set for it (the time of day it
+starts at for every game, the difficulty where anybody is shooting, an
+operation's settings), **Spielen** and **Zurück**. Zurück is always one page
+back. The time of day can be set in the cheat menu as well, at any time.
+
 ## Controls
 
 | | |

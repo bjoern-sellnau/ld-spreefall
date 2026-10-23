@@ -4993,6 +4993,39 @@ So there are two cities now, and a profile picks which:
   backdoor-05-steam.png, backdoor-06-night.png and
   backdoor-07-blackout.png.
 
+## 130. The title in three pages, the build under it, and the hour for every game
+
+- The title card is three pages in the one overlay. The start: the
+  Brandenburg Gate, SPREE|FALL. (the dot in the accent), the line on what
+  this is, Neues Spiel, and under it the build. Neues Spiel: the seven games
+  one under another as a menu, the last one played marked, and Zurück. A
+  game: its name, what it is, its settings, Spielen and Zurück. Zurück is one
+  page back from each. Past the start the logo and the name step back so a
+  list of seven fits a short screen. Berlin is listed as Berlin Phototour and
+  says so: twelve landmarks to find, P for the camera.
+- The build line: `build 263 | 24.10.2026 um 01:30`, on Berlin's own clock
+  whatever the visitor's is. `tools/build-dist.mjs` writes version.json next
+  to the page with the workflow's run number, the commit and the time;
+  `tools/serve.mjs` answers version.json from git when there is none on the
+  disk (build dev, the last commit's time); a page with neither says
+  `build dev`. `src/ui/version.js` formats it, with unit checks for summer
+  and winter time and for a missing or broken file.
+- The hour a game starts at can be picked on its page for every game, not
+  only Rise of the Machines, and the city behind the title shows it as the
+  slider moves; it is kept between visits, and a link's own hour wins. The
+  cheat menu has the time of day too, at any time, with the photo mode's
+  slider kept in step.
+- The difficulty is shown only where anybody is shooting at you (not Just a
+  Walk, not .BACKDOOR). The buttons say Spielen, and with an operation under
+  way Weiterspielen and Neu anfangen, the progress in the line above.
+- Every element the game and the checks already used (the mode buttons, the
+  play button, the operation's setup) is the same element in its new place.
+- Checks: unit (3 version); browser (ui suite, four more): the start page,
+  the seven games and Zurück, a game's page with its name, settings,
+  Spielen and Zurück, and the hour moving the sky; (cheats suite, one more)
+  the cheat menu's clock; the hunt suite's title check reads the new
+  buttons. Screenshots ui-01-title.png, ui-01b-modes.png, ui-01c-mode.png.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

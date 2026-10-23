@@ -49,6 +49,7 @@ import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
+import { loadBuildLine } from './ui/version.js';
 import { CockpitHud, project as projectPoint, glassClip } from './ui/cockpit.js';
 import { Visor, VISOR } from './ui/visor.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
@@ -110,6 +111,8 @@ const el = {
   crossFill: $('crossfill'), crossHint: $('crosshint'),
   crossSightLine: $('crosssightline'), crossSight: $('crosssight'),
   modeNote: $('modenote'), timePick: $('timepick'),
+  newGame: $('newgame'), buildLine: $('buildline'), modeName: $('modename'), diffBlock: $('diffblock'),
+  cheatTod: $('cheattod'), cheatTodLabel: $('cheattodlabel'),
   opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
   opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
   opsProgress: $('opsprogress'), opsWipe: $('opswipe'),
@@ -4683,6 +4686,8 @@ async function main() {
       state.lockWanted = input.pointerLocked;
       input.exitLock();
       applyCheats();
+      el.cheatTod.value = String(renderer.timeOfDay);
+      el.cheatTodLabel.textContent = timeLabel(renderer.timeOfDay);
     } else {
       relock();
     }
@@ -5931,7 +5936,7 @@ async function main() {
   /** The setup under the mode buttons on the title card. */
   function showOps() {
     el.opsSetup.classList.toggle('hidden', !campaign.active);
-    el.play.textContent = 'Press to walk';
+    el.play.textContent = 'Spielen';
     el.playNew.classList.add('hidden');
     if (!campaign.active) return;
     const set = campaign.settings;
@@ -5971,8 +5976,8 @@ async function main() {
     // it. Said so on the button, with a new one beside it, because a run
     // that opened with grounds already taken looked like a fault.
     if (sum.free > 0 || sum.score > 0) {
-      el.play.textContent = `Continue: ${sum.free} of ${sum.total} ${opsWord()}s taken`;
-      el.playNew.textContent = campaign.mode === 'hunt' ? 'New hunt' : 'New operation';
+      el.play.textContent = 'Weiterspielen';
+      el.playNew.textContent = 'Neu anfangen';
       el.playNew.classList.remove('hidden');
     }
   }
@@ -8038,6 +8043,9 @@ async function main() {
   function beginWalk() {
     el.title.classList.add('hidden');
     el.hud.classList.remove('hidden');
+    // The hour picked on the title, for every game but the end of the world,
+    // which keeps its own.
+    if (!machines.active) setDayTime(state.startTod);
     startOps();
     landmarks.reset();
     combat.reset();
@@ -8075,7 +8083,43 @@ async function main() {
   // Which game this is. Berlin is the city as it stands; Rise of the Machines
   // is the same city after it has gone, and it is picked here rather than in
   // the cheat menu because it is a mode, not a cheat: the score counts.
+  // The title in three pages: the start with the build under it, the list of
+  // games, and one game with what can be set for it.
+  const titlePages = [...document.querySelectorAll('#title .tpage')];
+  function titlePage(id) {
+    for (const pg of titlePages) pg.classList.toggle('hidden', pg.id !== id);
+    el.title.classList.toggle('sub', id !== 'tpmain');
+    state.titlePage = id;
+  }
+  el.newGame.addEventListener('click', () => titlePage('tpmodes'));
+  for (const b of document.querySelectorAll('#title .tback')) b.addEventListener('click', () => titlePage(b.dataset.to));
+  loadBuildLine().then((line) => { el.buildLine.textContent = line; });
+
+  // The hour a game starts at. Rise of the Machines keeps its own, the hour
+  // it really is unless moved; the rest start at whatever was last picked on
+  // the title, or at the golden hour the city has always started at, or at
+  // the hour a link says.
+  const TOD_KEY = 'spreefall.tod';
+  state.startTod = spawn.tod;
+  if (!deepLink) {
+    try {
+      const kept = parseFloat(localStorage.getItem(TOD_KEY));
+      if (Number.isFinite(kept)) state.startTod = kept;
+    } catch { /* private mode */ }
+  }
+  /** The time of day, everywhere it is shown and kept. */
+  function setDayTime(t) {
+    renderer.timeOfDay = t;
+    if (machines.active) machines.setTime(t);
+    el.tod.value = String(t);
+    el.todLabel.textContent = timeLabel(t);
+    el.cheatTod.value = String(t);
+    el.cheatTodLabel.textContent = timeLabel(t);
+  }
+  el.cheatTod.addEventListener('input', () => setDayTime(parseFloat(el.cheatTod.value)));
+
   const modeButtons = [...document.querySelectorAll('.diff.mode')];
+  const modeLabel = (m) => (modeButtons.find((b) => b.dataset.mode === m) || { textContent: m }).textContent;
   const modeNow = () => (campaign.active ? campaign.mode
     : state.backdoor ? 'backdoor'
     : state.peaceful ? 'walk' : (machines.active ? 'machines' : 'berlin'));
@@ -8094,9 +8138,15 @@ async function main() {
       ? 'Warheads come down every few seconds, the sky is gone, and what walks the streets is steel with one red eye. G flame, V an EMP to stop them, then anything you like.'
       : now === 'walk'
         ? 'Nothing is hunting you. The whole of Berlin to walk about in, and the cheat menu to bring anything out by hand if you change your mind.'
-        : 'A walk through the real city, with the real fight in it.';
-    el.timePick.classList.toggle('hidden', now !== 'machines');
+        : 'The real city to walk and to photograph: twelve landmarks to find, P for the camera and a link to the view, and the real fight in it.';
+    el.modeName.textContent = modeLabel(now);
+    // Nobody is shooting at you in these two, so there is nothing to set.
+    el.diffBlock.classList.toggle('hidden', now === 'walk' || now === 'backdoor');
+    // The hour it starts at, for every game; the city behind the title shows it.
+    el.timePick.classList.remove('hidden');
     applyMachineLook();
+    if (!machines.active && state.mode === 'title') renderer.timeOfDay = state.startTod;
+    showModeTime();
     showOps();
   };
   for (const b of modeButtons) {
@@ -8115,17 +8165,26 @@ async function main() {
       machines.syncClock();
       showModeTime();
       showMode();
+      titlePage('tpmode');
     });
   }
   el.modeTime.addEventListener('input', () => {
-    machines.setTime(parseFloat(el.modeTime.value));
-    el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
-    if (machines.active) renderer.timeOfDay = machines.timeOfDay;
+    const t = parseFloat(el.modeTime.value);
+    if (modeNow() === 'machines') {
+      machines.setTime(t);
+      if (machines.active) renderer.timeOfDay = machines.timeOfDay;
+    } else {
+      state.startTod = t;
+      renderer.timeOfDay = t;
+      try { localStorage.setItem(TOD_KEY, String(t)); } catch { /* private mode */ }
+    }
+    el.modeTimeLabel.textContent = timeLabel(t);
   });
   /** The slider and its label, from whatever the mode's time is now. */
   function showModeTime() {
-    el.modeTime.value = String(machines.timeOfDay.toFixed(1));
-    el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
+    const t = modeNow() === 'machines' ? machines.timeOfDay : state.startTod;
+    el.modeTime.value = String(t.toFixed(1));
+    el.modeTimeLabel.textContent = timeLabel(t);
   }
   showModeTime();
   showMode();

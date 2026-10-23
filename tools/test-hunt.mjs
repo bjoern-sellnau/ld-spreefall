@@ -816,15 +816,16 @@ async function run() {
     s.campaign.free(site, {});
     s.showOps();
     const play = document.getElementById('playbtn').textContent;
+    const progress = document.getElementById('opsprogress').textContent;
     const fresh = document.getElementById('playnew');
     const offered = !fresh.classList.contains('hidden') ? fresh.textContent : null;
     fresh.click();
-    return { play, offered, after: s.campaign.summary([]), playAfter: document.getElementById('playbtn').textContent,
+    return { play, progress, offered, after: s.campaign.summary([]), playAfter: document.getElementById('playbtn').textContent,
       held: s.campaign.allSites().every((x) => x.state !== 1) };
   });
-  check('a hunt under way is carried on from the title, or started again with New hunt',
-    /^Continue: 1 of \d+ grounds taken$/.test(title.play) && title.offered === 'New hunt'
-      && title.after.free === 0 && title.after.score === 0 && title.held && title.playAfter === 'Press to walk',
+  check('a hunt under way is carried on from the title with Weiterspielen, or started again with Neu anfangen',
+    title.play === 'Weiterspielen' && /^1 of \d+ grounds taken so far/.test(title.progress) && title.offered === 'Neu anfangen'
+      && title.after.free === 0 && title.after.score === 0 && title.held && title.playAfter === 'Spielen',
     JSON.stringify(title));
 
   await browser.close();

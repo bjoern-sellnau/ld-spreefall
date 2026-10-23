@@ -91,6 +91,26 @@ async function run() {
     !document.getElementById('cheatmark').classList.contains('hidden'));
   check('which the interface says', marked);
 
+  // The time of day, from the menu: the sky follows, and so does the photo
+  // mode's own slider.
+  const clock = await page.evaluate(() => {
+    const s = window.spreefall;
+    const was = s.renderer.timeOfDay;
+    s.cheatMenu(true);
+    const slider = document.getElementById('cheattod');
+    const opened = Math.abs(parseFloat(slider.value) - was) < 0.06;
+    slider.value = '6.5';
+    slider.dispatchEvent(new Event('input'));
+    const out = { opened, tod: s.renderer.timeOfDay, label: document.getElementById('cheattodlabel').textContent,
+      photo: document.getElementById('tod').value };
+    slider.value = String(was);
+    slider.dispatchEvent(new Event('input'));
+    s.cheatMenu(false);
+    return out;
+  });
+  check('the cheat menu sets the time of day, and the sky and the photo slider go with it',
+    clock.opened && clock.tod === 6.5 && clock.label === '06:30' && parseFloat(clock.photo) === 6.5, JSON.stringify(clock));
+
   // --- god mode ------------------------------------------------------------
   const god = await page.evaluate(() => {
     const s = window.spreefall;

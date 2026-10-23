@@ -31,62 +31,85 @@
 <div id="title" class="overlay hidden">
   <div class="titlebox">
     <svg class="logo big" viewBox="0 0 64 44" role="img" aria-label="Brandenburg Gate"><use href="#gatemark"/></svg>
-    <div class="wordmark big">SPREE<span>|</span>FALL</div>
-    <p class="blurb">Every building, street, tree and bend of the river here comes from
-    OpenStreetMap. The renderer, the physics and the sound are written from scratch
-    in WebGL2 and the Web Audio API, with no game engine and no 3D library.</p>
-    <div class="difficulty" role="radiogroup" aria-label="Mode">
-      <button class="diff mode on" data-mode="berlin">Berlin</button>
-      <button class="diff mode" data-mode="machines">Rise of the Machines</button>
-      <button class="diff mode" data-mode="walk">Just a Walk</button>
-      <button class="diff mode" data-mode="tactics">Tactics</button>
-      <button class="diff mode" data-mode="slayer">Slayer</button>
-      <button class="diff mode" data-mode="hunt">The Hunt</button>
-      <button class="diff mode" data-mode="backdoor">.BACKDOOR</button>
-    </div>
-    <p class="diffnote" id="modenote">A walk through the real city, with the real fight in it.</p>
-    <div id="opssetup" class="hidden">
-      <div class="opsrow">
-        <span>Play in</span>
-        <span class="opsseg">
-          <button class="opsbtn" data-scope="district">one district</button>
-          <button class="opsbtn" data-scope="all">all of Berlin</button>
-        </span>
+    <div class="wordmark big">SPREE<span>|</span>FALL<span class="dot">.</span></div>
+
+    <!-- The start: what this is, one button, and which build it is. -->
+    <section class="tpage" id="tpmain">
+      <p class="blurb">Every building, street, tree and bend of the river here comes from
+      OpenStreetMap. The renderer, the physics and the sound are written from scratch
+      in WebGL2 and the Web Audio API, with no game engine and no 3D library.</p>
+      <div class="playbuttons">
+        <button id="newgame" class="play">Neues Spiel</button>
       </div>
-      <div class="opsrow">
-        <span>Start in</span>
-        <select id="opsstart"></select>
+      <p class="buildline" id="buildline">build</p>
+    </section>
+
+    <!-- Which game. -->
+    <section class="tpage hidden" id="tpmodes">
+      <nav class="modelist" aria-label="Mode">
+        <button class="diff mode on" data-mode="berlin">Berlin Phototour</button>
+        <button class="diff mode" data-mode="machines">Rise of the Machines</button>
+        <button class="diff mode" data-mode="walk">Just a Walk</button>
+        <button class="diff mode" data-mode="tactics">Tactics</button>
+        <button class="diff mode" data-mode="slayer">Slayer</button>
+        <button class="diff mode" data-mode="hunt">The Hunt</button>
+        <button class="diff mode" data-mode="backdoor">.BACKDOOR</button>
+      </nav>
+      <div class="playbuttons">
+        <button class="play quiet tback" data-to="tpmain">Zurück</button>
       </div>
-      <div class="opsrow">
-        <span id="opscountlabel">Camps per district</span>
-        <span><input id="opscount" type="range" min="1" max="8" step="1"> <b id="opscountnum">4</b></span>
+    </section>
+
+    <!-- One game: what it is, what can be set, and go. -->
+    <section class="tpage hidden" id="tpmode">
+      <h2 class="modename" id="modename">Berlin Phototour</h2>
+      <p class="diffnote" id="modenote">The real city to walk and to photograph: twelve landmarks to find, P for the camera and a link to the view, and the real fight in it.</p>
+      <div id="opssetup" class="hidden">
+        <div class="opsrow">
+          <span>Play in</span>
+          <span class="opsseg">
+            <button class="opsbtn" data-scope="district">one district</button>
+            <button class="opsbtn" data-scope="all">all of Berlin</button>
+          </span>
+        </div>
+        <div class="opsrow">
+          <span>Start in</span>
+          <select id="opsstart"></select>
+        </div>
+        <div class="opsrow">
+          <span id="opscountlabel">Camps per district</span>
+          <span><input id="opscount" type="range" min="1" max="8" step="1"> <b id="opscountnum">4</b></span>
+        </div>
+        <label class="opsrow opstactics"><span>Bonus for a camp taken without an alarm</span>
+          <input id="opsquiet" type="checkbox"></label>
+        <label class="opsrow opsslayer"><span>Bosses</span>
+          <input id="opsbosses" type="checkbox"></label>
+        <p class="opsline" id="opsprogress"></p>
+        <button class="opsbtn small" id="opswipe">start this campaign again</button>
       </div>
-      <label class="opsrow opstactics"><span>Bonus for a camp taken without an alarm</span>
-        <input id="opsquiet" type="checkbox"></label>
-      <label class="opsrow opsslayer"><span>Bosses</span>
-        <input id="opsbosses" type="checkbox"></label>
-      <p class="opsline" id="opsprogress"></p>
-      <button class="opsbtn small" id="opswipe">start this campaign again</button>
-    </div>
-    <label class="timepick hidden" id="timepick">
-      <span>Time of day <b id="modetimelabel">20:12</b></span>
-      <input id="modetime" type="range" min="0" max="23.9" step="0.1" value="20.2">
-    </label>
-    <div class="difficulty" role="radiogroup" aria-label="Difficulty">
-      <button class="diff" data-diff="easy">Easy</button>
-      <button class="diff on" data-diff="normal">Normal</button>
-      <button class="diff" data-diff="hard">Hard</button>
-    </div>
-    <p class="diffnote" id="diffnote">Shields take the hit first and come back on their own. On easy they come back faster, and so does your health.</p>
-    <div class="playbuttons">
-      <button id="playbtn" class="play">Press to walk</button>
-      <button id="playnew" class="play quiet hidden">New hunt</button>
-    </div>
-    <p class="hint" id="controlhint">
-      <b>W A S D</b> to walk &nbsp; <b>Shift</b> run &nbsp; <b>Space</b> jump
-      &nbsp; <b>Mouse</b> look and fire &nbsp; <b>1 to 0</b> weapons
-      &nbsp; <b>E</b> reflexes &nbsp; <b>R</b> reload &nbsp; <b>H</b> help
-    </p>
+      <label class="timepick hidden" id="timepick">
+        <span>Time of day <b id="modetimelabel">20:12</b></span>
+        <input id="modetime" type="range" min="0" max="23.9" step="0.1" value="20.2">
+      </label>
+      <div id="diffblock">
+        <div class="difficulty" role="radiogroup" aria-label="Difficulty">
+          <button class="diff" data-diff="easy">Easy</button>
+          <button class="diff on" data-diff="normal">Normal</button>
+          <button class="diff" data-diff="hard">Hard</button>
+        </div>
+        <p class="diffnote" id="diffnote">Shields take the hit first and come back on their own. On easy they come back faster, and so does your health.</p>
+      </div>
+      <div class="playbuttons">
+        <button id="playbtn" class="play">Spielen</button>
+        <button id="playnew" class="play quiet hidden">New hunt</button>
+        <button class="play quiet tback" data-to="tpmodes">Zurück</button>
+      </div>
+      <p class="hint" id="controlhint">
+        <b>W A S D</b> to walk &nbsp; <b>Shift</b> run &nbsp; <b>Space</b> jump
+        &nbsp; <b>Mouse</b> look and fire &nbsp; <b>1 to 0</b> weapons
+        &nbsp; <b>E</b> reflexes &nbsp; <b>R</b> reload &nbsp; <b>H</b> help &nbsp; <b>Esc</b> pause
+      </p>
+    </section>
   </div>
 </div>
 
@@ -360,6 +383,11 @@
   <div class="group">
     <div class="grouplabel">numbers you can turn</div>
     <div id="cheatvalues"></div>
+  </div>
+  <div class="group">
+    <div class="grouplabel">time of day</div>
+    <label class="todrow"><input id="cheattod" type="range" min="0" max="23.9" step="0.1" value="17.4">
+      <b id="cheattodlabel">17:24</b></label>
   </div>
   <div class="group">
     <div class="grouplabel">switches</div>
