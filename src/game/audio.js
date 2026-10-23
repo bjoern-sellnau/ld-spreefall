@@ -300,6 +300,23 @@ export class Audio {
       bodyHz: 120, bodyEnd: 30, bodyGain: 0.45, bodyTail: 0.32, hp: 300,
       snap: 1.0, boom: 0.42, drive: 3.0, echo: 0.42,
       kick: 0.47, mech: 0.34 },
+    // A hand cannon: a pistol with a rifle's crack and more under it than
+    // either, and a long ring off the street.
+    magnum: { crackHz: 2100, sweepHz: 420, crackGain: 0.62, tail: 0.6,
+      bodyHz: 150, bodyEnd: 36, bodyGain: 0.42, bodyTail: 0.3, hp: 380,
+      snap: 1.0, boom: 0.36, drive: 3.0, echo: 0.48,
+      kick: 0.45, mech: 0.3 },
+    // Six barrels at twenty five rounds a second: short, hard, no tail to
+    // speak of, so they do not run into one mush.
+    minigun: { crackHz: 2300, sweepHz: 600, crackGain: 0.36, tail: 0.12,
+      bodyHz: 170, bodyEnd: 50, bodyGain: 0.24, bodyTail: 0.07, hp: 700,
+      snap: 0.8, boom: 0.12, drive: 2.4, echo: 0.14,
+      kick: 0.22, mech: 0.12, level: 0.7 },
+    // The thump of a grenade leaving a tube.
+    launcher: { crackHz: 700, sweepHz: 180, crackGain: 0.32, tail: 0.3,
+      bodyHz: 120, bodyEnd: 40, bodyGain: 0.42, bodyTail: 0.18, hp: 160,
+      snap: 0.2, boom: 0.3, drive: 1.8, echo: 0.22,
+      kick: 0.3, mech: 0.2 },
     // Forty tonnes firing. Everything here is lower and longer than the hand
     // weapons, because that is the whole difference a listener hears between
     // a rifle and a gun bolted to eight metres of armour: not loudness, which

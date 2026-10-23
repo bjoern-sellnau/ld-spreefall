@@ -314,18 +314,25 @@ async function run() {
   await page.waitForTimeout(500);
   check('2 brings up the shotgun',
     await page.evaluate(() => window.spreefall.weapon.id) === 'shotgun');
-  await page.keyboard.press('Digit6');
-  await page.waitForTimeout(500);
+  // The number row is groups since phase 121: 4 is the thrown things, and
+  // pressed again it goes on through them to the banana.
+  const went = [];
+  for (let i = 0; i < 4 && went[went.length - 1] !== 'banana'; i++) {
+    await page.keyboard.press('Digit4');
+    await page.waitForTimeout(400);
+    went.push(await page.evaluate(() => window.spreefall.weapon.id));
+  }
   const banana = await page.evaluate(() => ({
     id: window.spreefall.weapon.id,
     label: document.getElementById('weaponname').textContent,
   }));
-  check('6 is the banana, and the interface says so',
-    banana.id === 'banana' && banana.label === 'BANANA', JSON.stringify(banana));
+  check('4 again and again goes through the thrown things to the banana, and the interface says so',
+    went[0] === 'grenade' && banana.id === 'banana' && banana.label === 'BANANA',
+    `${went.join(' > ')}; ${JSON.stringify(banana)}`);
   await page.keyboard.press('KeyQ');
   await page.waitForTimeout(500);
   check('Q goes back to what you had before',
-    await page.evaluate(() => window.spreefall.weapon.id) === 'shotgun');
+    await page.evaluate(() => window.spreefall.weapon.id) === went[went.length - 2]);
 
   // The three that do not fit on the number row. Each is pressed for real,
   // because a second case for a key already used in the same switch is never

@@ -298,6 +298,8 @@ export class Campaign {
         if (!b) continue;
         const book = blankBook();
         for (const k of ['score', 'level', 'taken', 'quiet']) if (Number.isFinite(b[k])) book[k] = b[k];
+        // What the suit has made of its kills, in a hunt.
+        if (b.suit && typeof b.suit === 'object') book.suit = b.suit;
         if (b.sites && typeof b.sites === 'object') {
           for (const id of Object.keys(b.sites)) {
             if (!Array.isArray(b.sites[id])) continue;

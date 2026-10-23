@@ -20,6 +20,12 @@ export const PROJECTILE = {
     radius: 0.10, gravity: 19.6, drag: 0.12, bounce: 0.42, armTime: 0.25,
     detonateOnContact: false, trail: 'none', light: false, spin: 14,
   },
+  shell: {
+    // Out of the grenade launcher: the grenade's drop at a third of its
+    // weight, so it carries, and it goes off on the first thing it touches.
+    radius: 0.09, gravity: 7, drag: 0.02, bounce: 0, armTime: 0.06, maxAge: 9,
+    detonateOnContact: true, trail: 'smoke', light: false, spin: 18,
+  },
   incendiary: {
     // Heavier than a grenade and it does not bounce about: it lands where it
     // was thrown, which is what you want from something that sets a street on

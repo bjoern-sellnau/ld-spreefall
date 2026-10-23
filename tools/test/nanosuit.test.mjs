@@ -109,3 +109,46 @@ test('Nano Vision drains the energy while it is up, and drops with it', () => {
   assert.equal(s.nano, false);
   assert.deepEqual(dropped, ['nano vision']);
 });
+
+test('kills feed the suit: energy, then speed, then the jump, each step dearer', () => {
+  const s = new Nanosuit();
+  const U = SUIT.upgrade;
+  // Three men is the first step, and it goes to the bar, which comes full.
+  assert.deepEqual(s.feed('soldier'), []);
+  s.feed('soldier');
+  s.energy = 10;
+  assert.deepEqual(s.feed('soldier'), ['energy']);
+  assert.equal(s.maxEnergy, SUIT.energy + U.energy.capacity);
+  assert.equal(s.energy, s.maxEnergy);
+  // A mech is worth enough for the next step and change.
+  assert.deepEqual(s.feed('mech'), ['speed']);
+  assert.equal(s.catalyst, U.worth.mech - (U.first + U.more));
+  // Quicker on your feet, walking and sprinting.
+  const plain = new Nanosuit();
+  const walkK = s.update(1 / 60, { speed: 3, sprint: false });
+  assert.ok(walkK > plain.update(1 / 60, { speed: 3, sprint: false }));
+  // And the next goes to the jump.
+  const before = s.steps;
+  while (s.steps === before) s.feed('soldier');
+  assert.equal(s.level.jump, 1);
+  assert.ok(s.powerJump() > SUIT.jump.boost);
+});
+
+test('five steps of each and no more, and a hunt keeps them', () => {
+  const s = new Nanosuit();
+  for (let i = 0; i < 200; i++) s.feed('mech');
+  assert.deepEqual(s.level, { energy: 5, speed: 5, jump: 5 });
+  assert.equal(s.nextStep, Infinity);
+  const t = new Nanosuit();
+  t.restore(JSON.parse(JSON.stringify(s.upgrades)));
+  assert.deepEqual(t.level, s.level);
+  assert.equal(t.energy, SUIT.energy + 5 * SUIT.upgrade.energy.capacity);
+  // A bigger bar fills back to its own top, not the old one.
+  t.energy = 0; t.idle = 99;
+  for (let i = 0; i < 60 * 20; i++) t.update(1 / 60, { speed: 0 });
+  assert.equal(t.energy, t.maxEnergy);
+  // Out of range is held to what it can be.
+  const u = new Nanosuit();
+  u.restore({ level: { energy: 99, speed: -3, jump: 'x' } });
+  assert.deepEqual(u.level, { energy: 5, speed: 0, jump: 0 });
+});

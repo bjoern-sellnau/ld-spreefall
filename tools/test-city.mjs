@@ -746,6 +746,10 @@ async function run() {
     s.input.keys.delete('KeyW');
     const moved = Math.hypot(jeep.x - was.x, jeep.z - was.z);
     const rode = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
+    // Stopped first: out of it at speed is a bail out, and it drives on
+    // without you (phase 119, checked in the ops suite). This is the
+    // ordinary getting out.
+    jeep.speed = 0;
     s.toggleVehicle();
     const out = s.state.inVehicle === null;
     const dropped = Math.hypot(s.player.x - jeep.x, s.player.z - jeep.z);
@@ -1027,6 +1031,43 @@ async function run() {
   check('and they can be shot at like anything else',
     shot.found && shot.dead, `${shot.before} to ${shot.after}`);
 
+  // A vehicle that is done for burns for a few seconds and then goes up in a
+  // fireball much bigger than itself, with fire thrown round it and left on
+  // the street.
+  const caught = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    // Clear air for the picture: the tank before this one leaves its smoke.
+    s.effects.clear();
+    const jeep = s.vehicles.spawn('jeep', s.player.x - 16, s.player.z, 0);
+    if (!jeep) return { skip: true };
+    s.look(90, -8);
+    const was = { caught: s.state.wrecksCaught || 0, blown: s.state.wrecksBlown || 0, fire: s.burningGround.length };
+    s.vehicles.damage(jeep, 99999);
+    return { skip: false, was, caught: (s.state.wrecksCaught || 0) - was.caught, blownAtOnce: (s.state.wrecksBlown || 0) - was.blown };
+  });
+  await page.waitForTimeout(1500);
+  if (!caught.skip) await page.screenshot({ path: path.join(SHOTS, 'city-06-vehicle-burning.png') });
+  const went = await page.evaluate(() => {
+    const s = window.spreefall;
+    const early = s.state.wrecksBlown || 0;
+    return { early };
+  });
+  await page.waitForTimeout(2600);
+  if (!caught.skip) await page.screenshot({ path: path.join(SHOTS, 'city-07-vehicle-blast.png') });
+  const after = await page.evaluate(() => {
+    const s = window.spreefall;
+    // However slowly the frames come, it has gone by now.
+    for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
+    const out = { blown: s.state.wrecksBlown || 0, fire: s.burningGround.length };
+    s.vehicles.reset();
+    return out;
+  });
+  check('a vehicle that is done for burns first, then goes up with fire left burning round it',
+    !caught.skip && caught.caught === 1 && caught.blownAtOnce === 0 && went.early === caught.was.blown
+      && after.blown === caught.was.blown + 1 && after.fire > caught.was.fire,
+    JSON.stringify({ caught, went, after }));
+
   // --- and forward is forward ----------------------------------------------
   const facing = await page.evaluate(() => {
     const s = window.spreefall;
@@ -1151,8 +1192,18 @@ async function run() {
   // --- and the fighter actually flies --------------------------------------
   const takeoff = await page.evaluate(async () => {
     const s = window.spreefall;
+    // The vehicles that go up in the checks before this one can kill you,
+    // and since phase 120 dying is four seconds of slow motion with the
+    // camera going round the body: the run is stood up before it flies.
+    const down = document.getElementById('down');
+    const wasDown = !!(s.state.death || (down && !down.classList.contains('hidden')));
+    if (wasDown) document.getElementById('downbtn').click();
     s.setCheat('godmode', true);
     s.vehicles.reset();
+    // And the fire the wrecks before it left on the street (phase 118) is
+    // put out, or a fighter parked in it burns before it rolls.
+    const burning = s.burningGround.length;
+    s.burningGround.length = 0;
     // Off the ground, down a street, the way a player would have to do it.
     // Down whichever way from here is clear the furthest: the checks before
     // this one leave ruins about, and a ruin is a thing that stands now
@@ -1199,12 +1250,13 @@ async function run() {
       inIt,
       aboard,
       up: Math.round(up),
+      wasDown, burning,
     };
   });
   check('a fighter can take off from the street it is parked in',
     takeoff.climbed > 60 && takeoff.speed > 60 && takeoff.health > 0,
-    `rolled ${takeoff.rolled} s, ${takeoff.climbed} m up at ${takeoff.speed} m/s`
-      + (takeoff.aboard ? '' : ', nobody got in'));
+    `rolled ${takeoff.rolled} s, ${takeoff.climbed} m up at ${takeoff.speed} m/s, hull ${Math.round(takeoff.health)}, ${takeoff.burning} fires put out first`
+      + (takeoff.aboard ? '' : ', nobody got in') + (takeoff.wasDown ? ', stood up first' : ''));
   check('and the menu hands you one already in the air',
     takeoff.inIt && takeoff.up > 100, `${takeoff.up} m up, flying`);
 
@@ -1554,10 +1606,15 @@ async function run() {
     // Two rifle magazines into it, one round at a time, the way a player
     // would: the hit goes in through the same path a bullet takes.
     let shots = 0;
+    const blownBefore = s.state.carsBlown || 0;
     while (!car.dead && shots < 40) { s.hitCarForTest(car.x, car.z, 12); shots++; }
-    for (let i = 0; i < 60 * 2; i++) s.fixedForTest(1 / 60);
+    // It burns before it goes.
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    const atOneSecond = (s.state.carsBlown || 0) - blownBefore;
+    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
+    const atFour = (s.state.carsBlown || 0) - blownBefore;
     return {
-      skip: false, shots, dead: car.dead, before: alive, after: s.cars.alive,
+      skip: false, shots, dead: car.dead, before: alive, after: s.cars.alive, atOneSecond, atFour,
       tallBefore: Math.round(tallBefore * 100) / 100,
       tallAfter: Math.round(s.world.tallestNear(car.x, car.z, 1.2) * 100) / 100,
     };
@@ -1565,6 +1622,9 @@ async function run() {
   check('a parked car takes a magazine and then goes up',
     car.skip || (car.dead && car.after < car.before),
     car.skip ? car.why : `${car.shots} rounds, ${car.before} to ${car.after} standing`);
+  check('and it burns for a couple of seconds before it goes up',
+    car.skip || (car.atOneSecond === 0 && car.atFour >= 1),
+    car.skip ? car.why : `${car.atOneSecond} gone after a second, ${car.atFour} after four`);
   check('and what is left of it is a knee high wreck rather than a car',
     car.skip || (car.tallBefore > 1.2 && car.tallAfter > 0.2 && car.tallAfter < 1.0),
     car.skip ? car.why : `${car.tallBefore} m before, ${car.tallAfter} m after`);

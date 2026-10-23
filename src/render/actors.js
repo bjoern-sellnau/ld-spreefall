@@ -686,6 +686,77 @@ export function buildShieldSawMesh() {
   return m;
 }
 
+/** A revolver with a long barrel: a cylinder you can see, a heavy frame. */
+export function buildMagnumMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.090, -0.230, 0.036, 0.110, 0.056, 2);      // grip
+  m.box(0, 0.000, -0.300, 0.040, 0.050, 0.110, 0);       // frame
+  m.cylinder(0, 0.000, -0.270, 0.034, 0.034, -0.060, 6, 1, 'z');   // the cylinder
+  m.cylinder(0, 0.012, -0.340, 0.014, 0.014, -0.230, 10, 1, 'z');  // barrel
+  m.box(0, -0.008, -0.450, 0.020, 0.018, 0.200, 0);      // the lug under it
+  m.box(0, 0.034, -0.550, 0.006, 0.014, 0.010, 3);       // front sight
+  m.box(0, -0.040, -0.300, 0.010, 0.030, 0.030, 3);      // trigger guard
+  muzzleFlash(m, 0, 0.012, -0.572, 0.14, 0.07);
+  return m;
+}
+
+/** A shotgun with a drum under it: short, fat and boxy. */
+export function buildAutoShotgunMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.180, 0.054, 0.080, 0.160, 2);      // stock
+  m.box(0, 0.006, -0.360, 0.062, 0.084, 0.240, 0);       // receiver
+  m.cylinder(0, 0.020, -0.480, 0.020, 0.020, -0.300, 12, 1, 'z');  // barrel
+  m.cylinder(0, -0.080, -0.380, 0.080, 0.080, -0.090, 18, 2, 'z'); // the drum
+  m.box(0, -0.100, -0.250, 0.040, 0.100, 0.056, 2);      // grip
+  m.box(0, 0.056, -0.380, 0.016, 0.014, 0.200, 3);       // rail
+  muzzleFlash(m, 0, 0.020, -0.790, 0.20, 0.10);
+  return m;
+}
+
+/** Six barrels round a spindle, a motor housing and a carry handle. */
+export function buildMinigunMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.300, 0.110, 0.110, 0.220, 0);      // motor housing
+  m.box(0, 0.090, -0.300, 0.024, 0.050, 0.180, 2);       // carry handle
+  m.box(0, -0.110, -0.260, 0.040, 0.090, 0.060, 2);      // grip
+  m.box(0.080, -0.060, -0.280, 0.060, 0.090, 0.130, 2);  // the belt box
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    m.cylinder(Math.cos(a) * 0.034, Math.sin(a) * 0.034 - 0.010, -0.410, 0.011, 0.011, -0.420, 8, 1, 'z');
+  }
+  m.cylinder(0, -0.010, -0.420, 0.054, 0.054, -0.030, 14, 0, 'z');   // the clamps
+  m.cylinder(0, -0.010, -0.760, 0.054, 0.054, -0.030, 14, 0, 'z');
+  muzzleFlash(m, 0, -0.010, -0.830, 0.22, 0.12);
+  return m;
+}
+
+/** A fat tube on a stock, with a ladder sight for the long lob. */
+export function buildLauncherMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.180, 0.052, 0.080, 0.160, 2);      // stock
+  m.box(0, -0.004, -0.330, 0.070, 0.076, 0.150, 0);      // breech
+  m.cylinder(0, 0.004, -0.400, 0.040, 0.040, -0.330, 14, 1, 'z');  // tube
+  m.cylinder(0, 0.004, -0.720, 0.046, 0.046, -0.030, 14, 0, 'z');  // muzzle ring
+  m.box(0, -0.096, -0.280, 0.040, 0.100, 0.056, 2);      // grip
+  m.box(0, -0.060, -0.520, 0.034, 0.060, 0.060, 2);      // fore grip
+  m.box(0, 0.060, -0.420, 0.030, 0.050, 0.010, 3);       // ladder sight
+  muzzleFlash(m, 0, 0.004, -0.760, 0.18, 0.10);
+  return m;
+}
+
+/** Four tubes in a square box, on the shoulder like the rocket launcher. */
+export function buildSwarmMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.000, -0.560, 0.150, 0.150, 0.720, 0);       // the pod
+  for (const [x, y] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    m.cylinder(x * 0.036, y * 0.036, -0.920, 0.026, 0.026, -0.020, 10, 3, 'z');
+  }
+  m.box(0, -0.120, -0.430, 0.040, 0.110, 0.062, 2);      // grip
+  m.box(0, 0.096, -0.520, 0.028, 0.040, 0.200, 3);       // sight
+  muzzleFlash(m, 0, 0.000, -0.930, 0.240, 0.150);
+  return m;
+}
+
 /** A flail: a haft, a short chain and a spiked head. */
 export function buildFlailMesh() {
   const m = new MeshBuild();
@@ -1426,6 +1497,11 @@ export class Actors {
       shieldsaw: this._uploadMesh(buildShieldSawMesh(), 0, 0),
       flail: this._uploadMesh(buildFlailMesh(), 0, 0),
       void: this._uploadMesh(buildVoidMesh(), 0, 0),
+      magnum: this._uploadMesh(buildMagnumMesh(), 0, 0),
+      autoshotgun: this._uploadMesh(buildAutoShotgunMesh(), 0, 0),
+      minigun: this._uploadMesh(buildMinigunMesh(), 0, 0),
+      launcher: this._uploadMesh(buildLauncherMesh(), 0, 0),
+      swarm: this._uploadMesh(buildSwarmMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
 
@@ -1444,6 +1520,7 @@ export class Actors {
     this.props = {
       rocket: this._uploadMesh(buildProjectileMesh('rocket'), MAX_PROPS, 2),
       grenade: this._uploadMesh(buildProjectileMesh('grenade'), MAX_PROPS, 2),
+      shell: this._uploadMesh(buildProjectileMesh('grenade'), MAX_PROPS, 2),
       c4: this._uploadMesh(buildProjectileMesh('c4'), MAX_PROPS, 2),
       plasma: this._uploadMesh(buildProjectileMesh('plasma'), MAX_PROPS, 2),
       flak: this._uploadMesh(buildProjectileMesh('flak'), MAX_PROPS, 2),
@@ -1791,7 +1868,10 @@ export class Actors {
       // other. A train's yaw is along its track, (sin, cos), and a carriage
       // is the same either way round, so it takes pi less it.
       d[o + 3] = v.type === 'train' ? Math.PI - v.yaw : -v.yaw;
-      d[o + 4] = v.pitch; d[o + 5] = v.roll; d[o + 6] = v.hitFlash;
+      // Burning, it goes black over a couple of seconds; the flash channel
+      // carries that below nought.
+      d[o + 4] = v.pitch; d[o + 5] = v.roll;
+      d[o + 6] = v.health > 0 ? v.hitFlash : -Math.min(1, 0.25 + (v.dying || 0) / 2.5);
       // A fighter has no rotor: the channel says whether its wheels are down,
       // as two or nought, the same way an enemy jet sends its afterburner in
       // nought to one, which leaves the gear of those always up.

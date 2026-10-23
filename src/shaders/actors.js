@@ -596,7 +596,11 @@ void main() {
     colour = mix(colour, colour * vec3(0.5, 0.7, 1.4), vStun * 0.8);
   }
   // A white flash on the frame it takes a hit, so a connect is unmistakable.
-  colour = mix(colour, vec3(3.0, 2.4, 1.6), vFlash * 0.75);
+  colour = mix(colour, vec3(3.0, 2.4, 1.6), max(vFlash, 0.0) * 0.75);
+  // Below nought it is how burnt it is: a vehicle on fire goes black, and a
+  // shell is all but black, with a little of the paint's warmth left in it.
+  float burnt = max(-vFlash, 0.0);
+  colour = mix(colour, vec3(0.03, 0.026, 0.022) + colour * 0.06, burnt * 0.92);
   colour = applyFog(colour, vWorld, uCamPos.xyz, uSunDir.xyz,
                     uSkyHorizon.rgb, uSkyZenith.rgb, uFog, uSkyZenith.w);
   fragColour = vec4(colour, 1.0);

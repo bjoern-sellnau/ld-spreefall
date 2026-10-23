@@ -17,17 +17,20 @@ import { PhotoMode, dayLabel, timeLabel } from './game/photo.js';
 import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
 import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
+import { ArmsPanel, armsRows } from './ui/arms.js';
 import { ARROW_HEADS, ARROW_DRAWS } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
-import { Projectiles } from './game/projectiles.js';
+import { Projectiles, PROJECTILE } from './game/projectiles.js';
+import { throwArc, THROW as THROW_SPEC } from './game/throwarc.js';
+import { ArcView } from './ui/arcview.js';
 import { Soldiers } from './game/soldiers.js';
 import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS, BOW_HOLDS } from './game/cheats.js';
 import { CHASSIS, mechKey } from './game/chassis.js';
-import { Onslaught, ONSLAUGHT } from './game/onslaught.js';
+import { Onslaught, ONSLAUGHT, pickStrike } from './game/onslaught.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
 import { Cars } from './game/cars.js';
@@ -77,7 +80,7 @@ const el = {
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   mapUnmark: $('mapunmark'), compassBar: $('compassbar'), cockpitHud: $('cockpithud'),
   suit: $('suit'), suitBar: $('suitbar'), suitArmor: $('suitarmor'), suitCloak: $('suitcloak'), suitFx: $('suitfx'),
-  suitVisor: $('suitvisor'), suitNano: $('suitnano'), visorHud: $('visorhud'), grime: $('grime'),
+  suitVisor: $('suitvisor'), suitNano: $('suitnano'), suitUps: $('suitups'), suitCat: $('suitcat'), visorHud: $('visorhud'), grime: $('grime'), throwArc: $('throwarc'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -1263,6 +1266,8 @@ async function main() {
       grime.blood((1 - dist / 14) * (cheats.bleeding ? 1 : 0.7), sideOf(target.x, target.z));
     }
     if (target.ceph || (target.dspec && target.dspec.ceph) || target.pinger) state.cephKilled = (state.cephKilled || 0) + 1;
+    suitKill(target.ceph || (target.dspec && target.dspec.ceph) ? 'ceph'
+      : target.machine ? 'machine' : kind === true ? 'drone' : kind === 'jet' ? 'vehicle' : 'soldier');
     // A body that came apart does not also catch fire.
     if (!target.gibbed) effects.explode(target.x, target.y, target.z);
     audio.droneDown();
@@ -1825,23 +1830,45 @@ async function main() {
   // on top of that, because a car that goes up goes on burning.
   const carBlasts = [];
   cars.onDestroyed = (car) => {
-    // Not at once, and not all at the same moment: a row of cars going up one
-    // after the other is a chain, and a chain that fires inside its own blast
-    // is a thousand deep stack of them.
-    carBlasts.push({ x: car.x, z: car.z, at: state.time + 0.08 + Math.random() * 0.3 });
+    // It catches first and burns, and goes up a couple of seconds later; and
+    // not all at the same moment, so a row of cars going up one after the
+    // other is a chain, and a chain that fires inside its own blast is not a
+    // thousand deep stack of them.
+    const burn = CAR_FIRE.burn[0] + Math.random() * (CAR_FIRE.burn[1] - CAR_FIRE.burn[0]);
+    carBlasts.push({ x: car.x, z: car.z, at: state.time + burn, burn, flame: 0 });
+    const y = world.groundHeight(car.x, car.z);
+    effects.flame(car.x, y + 0.7, car.z, 1.8, 1);
+    feed('<i>car</i> on fire');
   };
 
-  function updateCarBlasts() {
+  function updateCarBlasts(dt = 1 / 60) {
     for (let i = carBlasts.length - 1; i >= 0; i--) {
-      if (carBlasts[i].at > state.time) continue;
-      const b = carBlasts.splice(i, 1)[0];
+      const b = carBlasts[i];
+      if (b.at > state.time) {
+        // Burning while it waits, the flames higher the nearer it is to going.
+        b.flame -= dt;
+        if (b.flame <= 0) {
+          b.flame = CAR_FIRE.flameEvery;
+          const y = world.groundHeight(b.x, b.z);
+          const grown = 1 + Math.min(1, 1 - (b.at - state.time) / b.burn);
+          effects.flame(b.x + (Math.random() - 0.5) * 2, y + 0.6, b.z + (Math.random() - 0.5) * 2, 1.6 * grown, 1);
+        }
+        continue;
+      }
+      carBlasts.splice(i, 1);
       const y = world.groundHeight(b.x, b.z);
       explode(b.x, y + 0.8, b.z, CAR_BLAST, { weapon: 'car' });
-      gibs.rubble(b.x, y + 1.1, b.z, 4.5, 12, 1.6);
-      fires.ignite(b.x, y, b.z, 7, 1);
-      effects.flame(b.x, y + 0.7, b.z, 4.4, 1);
-      burning.push({ x: b.x, y, z: b.z, radius: 6.0, left: 16, damagePerSecond: 26 });
-      feed('<i>car</i> burning');
+      gibs.rubble(b.x, y + 1.1, b.z, 6, 16, 2);
+      for (let k = 0; k < CAR_FIRE.fireballs; k++) {
+        const a = (k / CAR_FIRE.fireballs) * Math.PI * 2 + Math.random() * 0.6;
+        const r = 1 + Math.random() * 4;
+        effects.flame(b.x + Math.cos(a) * r, y + 0.4 + Math.random() * 1.5, b.z + Math.sin(a) * r, 3 + Math.random() * 2.5, 1);
+      }
+      effects.flame(b.x, y + 0.7, b.z, 6.5, 1);
+      fires.ignite(b.x, y, b.z, 9, 1);
+      burning.push({ x: b.x, y, z: b.z, radius: 7.5, left: 20, damagePerSecond: 28 });
+      state.carsBlown = (state.carsBlown || 0) + 1;
+      feed('<i>car</i> went up');
     }
   }
 
@@ -1850,7 +1877,10 @@ async function main() {
    * than a grenade, and it reaches far enough to take the next car along with
    * it, which is the whole pleasure of a row of them.
    */
-  const CAR_BLAST = { radius: 11, damage: 120, crater: false, punch: false };
+  const CAR_BLAST = { radius: 14, damage: 220, crater: false, punch: false };
+  // A parked car burns for two or three seconds before the tank goes, and
+  // throws fire round it when it does.
+  const CAR_FIRE = { burn: [2.0, 3.2], flameEvery: 0.13, fireballs: 7 };
 
   /**
    * A round or a blast landing on a parked car.
@@ -1871,6 +1901,9 @@ async function main() {
 
   mechs.onDestroyed = (m) => {
     if (m.demon === 'warlord') { warlordDown(m); return; }
+    if (!m.mine) suitKill('mech');
+    // Its reactor torn out from above: it falls, and that is all it does.
+    if (m.coreTaken) { m.coreTaken = false; return; }
     // The machine is dead; the reactor in it is not, yet. A small blast and
     // a shower of parts now, so a kill still reads as a kill, and the real
     // one when the containment goes.
@@ -2330,6 +2363,24 @@ async function main() {
 
   // Crazy reality: the glass you look through gets dirty.
   const grime = new Grime(el.grime);
+  const arcView = new ArcView(el.throwArc);
+  const arms = new ArmsPanel(document.getElementById('arms'));
+  /**
+   * The arc of what is in your hand, if it is thrown: shown while it is in
+   * your hand in the street, harder and warmer with the right button held.
+   */
+  function arcStep() {
+    const spec = weapon.spec;
+    const throwing = !!(spec.projectile && spec.muzzleSpeed && weapon.throwSpeed() > 0)
+      && !weapon.holstered && state.mode === 'walk' && !state.inVehicle && !state.inMech
+      && !photo.active && el.cheats.classList.contains('hidden');
+    if (!throwing) { arcView.hide(); return; }
+    const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+    const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    const from = { x: eye.x + dir.x * 0.6, y: eye.y + dir.y * 0.6 - 0.12, z: eye.z + dir.z * 0.6 };
+    const arc = throwArc(world, from, dir, weapon.throwSpeed(), PROJECTILE[spec.projectile] || PROJECTILE.grenade);
+    arcView.draw(arc, camera.viewProj, { strong: weapon.throwScale > 1, radius: spec.splash ? spec.splash.radius : 0 });
+  }
   /** Which side of the view a point is on, -1 left to 1 right. */
   function sideOf(x, z) {
     const dx = x - player.x, dz = z - player.z;
@@ -2593,22 +2644,90 @@ async function main() {
     effects.shake = Math.min(1.2, effects.shake + 0.2);
   };
 
+  // A vehicle that is done for does not go up at once: it catches, burns for
+  // a few seconds with the flames getting bigger, and then the tank goes, a
+  // fireball much bigger than the vehicle with fire thrown all round it and
+  // left burning on the street. Aircraft burn on the way down and go up
+  // where they hit.
+  const WRECK = {
+    burn: 3.2,                 // seconds on fire before it goes, on the ground
+    airLimit: 9,               // and the longest an aircraft burns falling
+    flameEvery: 0.11,
+    blast: { jeep: { radius: 20, damage: 380, force: 18 }, tank: { radius: 26, damage: 560, force: 24 },
+      heli: { radius: 22, damage: 420, force: 20 }, jet: { radius: 24, damage: 460, force: 22 } },
+    fireballs: 9,              // flames thrown out round it when it goes
+    ground: { radius: 9, seconds: 22, damagePerSecond: 30 },
+  };
+  const wrecks = [];
   vehicles.onDestroyed = (v) => {
-    explode(v.x, v.y + 1.2, v.z, { radius: 16, damage: 300 });
-    gibs.rubble(v.x, v.y + 1, v.z, 6, 12, 2);
-    // One of theirs with men still in it takes them with it.
-    const crew = convoys.find((c) => c.v === v);
-    if (crew && crew.crew) {
-      feed(`<i>${v.spec.name.toLowerCase()} destroyed</i> with ${crew.crew} aboard`);
-      state.crewLost = (state.crewLost || 0) + crew.crew;
-      crew.crew = 0;
-    } else {
-      feed(`<i>${v.spec.name.toLowerCase()} destroyed</i>`);
-    }
+    if (v.hostile) suitKill('vehicle');
+    // One of theirs with men still in it: they are in it when it goes.
     v.hostile = false;
     v.ai = null;
     if (state.inVehicle === v) leaveVehicle(true);
+    const air = v.spec.kind === 'air';
+    // The pool hands the same object out again after a reset, so the entry
+    // is for this wreck and not whatever is in the slot by the time it runs.
+    const token = {};
+    v.wreck = token;
+    wrecks.push({ v, token, left: air ? WRECK.airLimit : WRECK.burn, flame: 0, air });
+    // It catches: a burst of flame and a crack, smaller than what is coming.
+    effects.flame(v.x, v.y + 1.0, v.z, 2.4, 1);
+    effects.flash(v.x, v.y + 1.2, v.z, 3, 1.0, 0.6, 0.25, 0.25);
+    audio.explosion && audio.explosion();
+    feed(`<i>${v.spec.name.toLowerCase()}</i> on fire`);
+    state.wrecksCaught = (state.wrecksCaught || 0) + 1;
   };
+  /** The blast at the end of a burning vehicle. */
+  function blowWreck(w) {
+    const v = w.v;
+    const b = WRECK.blast[v.type] || WRECK.blast.jeep;
+    const y = v.y + 1.2;
+    explode(v.x, y, v.z, { radius: b.radius, damage: b.damage, force: b.force }, { weapon: 'vehicle' });
+    // Fire thrown out all round it, high and low.
+    for (let k = 0; k < WRECK.fireballs; k++) {
+      const a = (k / WRECK.fireballs) * Math.PI * 2 + Math.random() * 0.5;
+      const r = 1.5 + Math.random() * b.radius * 0.35;
+      effects.flame(v.x + Math.cos(a) * r, v.y + 0.5 + Math.random() * 2, v.z + Math.sin(a) * r, 3.5 + Math.random() * 3, 1);
+    }
+    effects.flame(v.x, v.y + 1, v.z, 8, 1);
+    effects.flash(v.x, y + 2, v.z, b.radius * 0.8, 1.0, 0.55, 0.2, 0.5);
+    const g = world.groundHeight(v.x, v.z);
+    fires.ignite(v.x, g, v.z, WRECK.ground.radius + 3, 1);
+    burning.push({ x: v.x, y: g, z: v.z, radius: WRECK.ground.radius, left: WRECK.ground.seconds, damagePerSecond: WRECK.ground.damagePerSecond });
+    gibs.rubble(v.x, y, v.z, 8, 20, 2.4);
+    const crew = convoys.find((c) => c.v === v);
+    if (crew && crew.crew) {
+      feed(`<i>${v.spec.name.toLowerCase()} went up</i> with ${crew.crew} aboard`);
+      state.crewLost = (state.crewLost || 0) + crew.crew;
+      crew.crew = 0;
+    } else {
+      feed(`<i>${v.spec.name.toLowerCase()} went up</i>`);
+    }
+    state.wrecksBlown = (state.wrecksBlown || 0) + 1;
+  }
+  function wreckStep(dt) {
+    for (let i = wrecks.length - 1; i >= 0; i--) {
+      const w = wrecks[i];
+      const v = w.v;
+      // Gone, or the slot is something else now.
+      if (!v.alive || v.wreck !== w.token || v.health > 0) { wrecks.splice(i, 1); continue; }
+      w.left -= dt;
+      // The fire grows the longer it has burnt.
+      w.flame -= dt;
+      if (w.flame <= 0) {
+        w.flame = WRECK.flameEvery;
+        const grown = 1 + Math.min(1, (WRECK.burn - Math.max(0, w.left)) / WRECK.burn);
+        effects.flame(v.x + (Math.random() - 0.5) * 2.4, v.y + 0.8, v.z + (Math.random() - 0.5) * 2.4, 1.8 * grown, 1);
+      }
+      // A falling aircraft goes when it hits; anything else when its time is up.
+      const down = w.air && v.vy === 0 && v.y <= world.groundHeight(v.x, v.z) + 0.05;
+      if ((w.air ? down || w.left <= 0 : w.left <= 0) || !v.alive) {
+        wrecks.splice(i, 1);
+        if (v.alive) blowWreck(w);
+      }
+    }
+  }
 
   // A vehicle driven into something hard enough goes through it: a tree goes
   // over, a parked car goes up, a wall gets a hole the size of what hit it and
@@ -3074,10 +3193,58 @@ async function main() {
     }
   }
 
+  // Out of a car at speed: you throw yourself out of the side, carrying some
+  // of its speed, and it goes on without you, foot still down, until it hits
+  // something or runs out of road. The question about a bomb is asked as it
+  // goes, and holds however far it has got by the time you answer.
+  const BAIL = {
+    from: 8,          // metres a second, faster than this is a bail out
+    keep: 14,         // seconds it keeps driving with nobody in it
+    side: 6,          // how hard you go sideways, metres a second
+    carry: 0.35,      // and how much of its speed you take with you
+    hop: 4.2,         // up, so it is a dive and not a step
+    tumble: 0.8,      // seconds the dive lasts
+  };
+  /** Which side of a vehicle has room to land on: its left, unless a wall is there. */
+  function bailSide(v) {
+    const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+    for (const sgn of [1, -1]) {
+      // Left of the nose is (fz, -fx); the right the other way.
+      const sx = fz * sgn, sz = -fx * sgn;
+      const hit = world.raycast(v.x, v.y + 1.0, v.z, sx, 0, sz, v.spec.radius + 2.6);
+      if (!hit || hit.kind === 'ground') return { sx, sz, fx, fz };
+    }
+    return { sx: fz, sz: -fx, fx, fz };
+  }
+  function bailOut(v) {
+    const { sx, sz, fx, fz } = bailSide(v);
+    const speed = v.speed;
+    vehicles.leave();
+    const x = v.x + sx * (v.spec.radius + 1.6), z = v.z + sz * (v.spec.radius + 1.6);
+    // Foot still down: it keeps going straight at the speed it had.
+    v.ai = { throttle: speed > 0 ? Math.min(1, Math.abs(speed) / v.spec.topSpeed + 0.25) : -0.6, steer: 0, brake: false };
+    v.runaway = BAIL.keep;
+    state.bail = { vx: sx * BAIL.side + fx * speed * BAIL.carry, vz: sz * BAIL.side + fz * speed * BAIL.carry, left: BAIL.tumble };
+    state.bails = (state.bails || 0) + 1;
+    return { x, z };
+  }
+  /** A vehicle running on with nobody in it stops when its time is up or it is stopped. */
+  function runawayStep(dt) {
+    for (const v of vehicles.active) {
+      if (v.runaway === undefined) continue;
+      v.runaway -= dt;
+      if (v.runaway <= 0 || v.occupied || v.health <= 0 || (v.runaway < BAIL.keep - 1 && Math.abs(v.speed) < 1)) {
+        if (!v.hostile) v.ai = null;
+        delete v.runaway;
+      }
+    }
+  }
+
   function leaveVehicle(thrown) {
     const v = state.inVehicle;
     if (!v) return;
-    const out = vehicles.leave() || { x: v.x, z: v.z, y: v.y };
+    const bailing = !thrown && v.spec.kind === 'ground' && Math.abs(v.speed) >= BAIL.from && v.health > 0;
+    const out = bailing ? bailOut(v) : (vehicles.leave() || { x: v.x, z: v.z, y: v.y });
     state.inVehicle = null;
     state.holstered = false;
     el.hud.classList.remove('driving');
@@ -3089,7 +3256,13 @@ async function main() {
       combat.hurt(22, v.x, v.z, out.x, out.z);
       toast('thrown clear');
     } else if (v.alive && v.health > 0 && state.mode === 'walk') {
-      askToRig(v);
+      if (bailing) {
+        player.vy = BAIL.hop;
+        effects.shake = Math.max(effects.shake || 0, 0.4);
+        audio.leap && audio.leap();
+        toast('bailed out: 1 time bomb, 2 remote, 3 let it go');
+      }
+      askToRig(v, bailing);
     }
   }
 
@@ -3110,8 +3283,8 @@ async function main() {
     },
   };
   let rigging = null;
-  function askToRig(v) {
-    rigging = { v, left: VBOMB.ask };
+  function askToRig(v, moving = false) {
+    rigging = { v, left: VBOMB.ask, moving };
     el.vbomb.classList.remove('hidden');
     input.exitLock();
   }
@@ -3164,7 +3337,9 @@ async function main() {
     if (rigging) {
       rigging.left -= dt;
       const v = rigging.v;
-      if (rigging.left <= 0 || !v.alive || Math.hypot(player.x - v.x, player.z - v.z) > 25) closeRig();
+      // One you have just jumped out of is driving away from you, and the
+      // question holds however far it has got.
+      if (rigging.left <= 0 || !v.alive || (!rigging.moving && Math.hypot(player.x - v.x, player.z - v.z) > 25)) closeRig();
     }
     for (const v of [...vehicles.active]) {
       const bomb = v.bomb;
@@ -5292,18 +5467,6 @@ async function main() {
     get z() { return player.z; },
     level: 0,
   };
-  /** A point this far from you in some direction the map has. */
-  function aroundYou(lo, hi) {
-    for (let k = 0; k < 24; k++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = lo + Math.random() * (hi - lo);
-      const x = player.x + Math.cos(a) * r, z = player.z + Math.sin(a) * r;
-      if (x < world.minX + 20 || x > world.maxX - 20 || z < world.minZ + 20 || z > world.maxZ - 20) continue;
-      if (combat.inField && combat.inField(x, z)) continue;
-      return { x, z, a };
-    }
-    return null;
-  }
   /** A stick of bombs across the street you are in, falling one after another. */
   function bombStick(n) {
     const B = ONSLAUGHT.bombs;
@@ -5327,26 +5490,35 @@ async function main() {
     if (dropped) audio.incoming(1.2);
     return dropped;
   }
-  /** One of the city's super weapons, near you rather than on you. */
+  /** Theirs, for a super weapon of theirs to spare: men, mechs and convoys. */
+  function theirOwn() {
+    const out = [];
+    for (const sd of soldiers.active) if (sd.alive && sd.health > 0 && !sd.civilian) out.push({ x: sd.x, z: sd.z, weight: 1 });
+    for (const m of mechs.active) if (m.alive && m.health > 0 && !m.mine) out.push({ x: m.x, z: m.z, weight: 3 });
+    for (const c of convoys) if (c.v.alive && c.v.health > 0) out.push({ x: c.v.x, z: c.v.z, weight: 3 });
+    return out;
+  }
+  /** What one of the four reaches, for the aim. */
+  function superReach(kind) {
+    if (kind === 'ion') return ionRadius();
+    if (kind === 'nuke') return nukeRadius();
+    return ONSLAUGHT.nightmare[kind].radius;
+  }
+  /** One of the city's super weapons, aimed at you and not at them. */
   function onslaughtSuper(kind) {
     const N = ONSLAUGHT.nightmare;
-    const [lo, hi] = N.away[kind];
-    // A warhead or an ion blast set bigger in the menu lands as much further off.
-    const extra = kind === 'nuke' ? Math.max(0, nukeRadius() - NUKE.radius)
-      : kind === 'ion' ? Math.max(0, ionRadius() - ION.blast) : 0;
-    for (let k = 0; k < 6; k++) {
-      const at = aroundYou(lo + extra, hi + extra);
-      if (!at) continue;
-      let ok = false;
-      if (kind === 'ion') ok = ion.fire(at.x, at.z);
-      else if (kind === 'ultra') ok = ultra.fire(at.x, at.z, { ...cheats.ultra, ...N.ultra, bearing: Math.random() * 360 });
-      else if (kind === 'storm') ok = storm.fire(at.x, at.z, { ...cheats.storm, ...N.storm, bearing: Math.random() * 360 });
-      else if (kind === 'nuke') ok = dropNuke(at.x, at.z, true, true);
-      if (ok) return { kind, x: at.x, z: at.z, away: Math.round(Math.hypot(at.x - player.x, at.z - player.z)) };
-      // Busy with the last one: nothing to be gained by trying elsewhere.
-      if ((kind === 'ion' && ion.firing) || (kind === 'ultra' && ultra.active) || (kind === 'storm' && storm.active)) break;
-    }
-    return null;
+    const reach = superReach(kind);
+    const aim = pickStrike({ x: player.x, z: player.z }, theirOwn(), reach, N.shift[kind]);
+    // Kept on the map, and off the memorial, which none of them may touch.
+    const x = Math.min(world.maxX - 20, Math.max(world.minX + 20, aim.x));
+    const z = Math.min(world.maxZ - 20, Math.max(world.minZ + 20, aim.z));
+    let ok = false;
+    if (kind === 'ion') ok = ion.fire(x, z);
+    else if (kind === 'ultra') ok = ultra.fire(x, z, { ...cheats.ultra, ...N.ultra, bearing: Math.random() * 360 });
+    else if (kind === 'storm') ok = storm.fire(x, z, { ...cheats.storm, ...N.storm, bearing: Math.random() * 360 });
+    else if (kind === 'nuke') ok = dropNuke(x, z, true, true);
+    if (!ok) return null;
+    return { kind, x, z, away: Math.round(Math.hypot(x - player.x, z - player.z)), theirs: aim.cost };
   }
   const SUPER_NAMES = { ion: 'the ion cannon', ultra: 'ultra plasma', storm: 'a void storm', nuke: 'a warhead' };
   /** Send a wave, whatever it is made of, and say what came. */
@@ -5374,8 +5546,9 @@ async function main() {
     toast(`${title} wave ${w.level}: ${bits.join(', ')}`, 3500);
     if (sent.superweapon) {
       const sw = sent.superweapon;
-      feed(`<b>${SUPER_NAMES[sw.kind]}</b> ${sw.away} m off`);
-      setTimeout(() => toast(`${SUPER_NAMES[sw.kind]} incoming, ${sw.away} m off`, 3500), 1600);
+      feed(`<b>${SUPER_NAMES[sw.kind]}</b> on you${sw.away > 2 ? `, ${sw.away} m off` : ''}`);
+      toast(`${SUPER_NAMES[sw.kind].toUpperCase()} AIMED AT YOU: RUN`, 4000);
+      audio.incoming && audio.incoming(2);
     }
     state.onslaughtLast = sent;
     return sent;
@@ -5573,7 +5746,28 @@ async function main() {
     combat._dmgTimer = setTimeout(() => el.damage.classList.remove('on'), 140);
   };
 
+  // Dying is not a cut to a card. You come apart the way they do, the world
+  // drops to a crawl, and the camera goes round what is left for a few
+  // seconds before the card comes up over it.
+  const DEATH = { slow: 0.2, seconds: 4.2, turn: 0.55, radius: [4.5, 9], height: [2.2, 4.8] };
   combat.onDown = () => {
+    const x = player.x, y = player.y, z = player.z;
+    state.death = { t: 0, x, y: y + 1.0, z, yaw: camera.yaw, carded: false };
+    // In pieces, whatever the gore switches say: this is the one death that
+    // is always shown.
+    const k = Math.max(2, cheats.goreScale || 1);
+    gibs.burst(x, y, z, { x: 0, y: 1, z: 0 }, k, 1);
+    for (const up of [0.4, 1.0, 1.5]) {
+      effects.blood(x, y + up, z, (Math.random() - 0.5) * 1.4, 1.2, (Math.random() - 0.5) * 1.4, k * 1.6);
+    }
+    effects.stain(x, y, z, 1.6);
+    effects.blast(x, y + 1, z, 3.5);
+    audio.explosion && audio.explosion();
+    state.flash = Math.max(state.flash, 0.5);
+    state.deaths = (state.deaths || 0) + 1;
+  };
+  /** The card, once the camera has been round. */
+  function showDown() {
     input.exitLock();
     el.downText.textContent =
       (cheats.used ? 'With cheats on, so this one does not count for much. ' : '')
@@ -5581,7 +5775,29 @@ async function main() {
       + `took down ${combat.kills} drone${combat.kills === 1 ? '' : 's'} `
       + `and scored ${combat.score.toLocaleString()}. Nothing here is permanent.`;
     el.down.classList.remove('hidden');
-  };
+  }
+  /** The camera going round where you were, a little wider and higher each second. */
+  function deathCam(elapsed) {
+    const d = state.death;
+    d.t += elapsed;
+    if (!d.carded && d.t >= DEATH.seconds) { d.carded = true; showDown(); }
+    const k = Math.min(1, d.t / DEATH.seconds);
+    const a = d.yaw + d.t * DEATH.turn;
+    const r = DEATH.radius[0] + (DEATH.radius[1] - DEATH.radius[0]) * k;
+    const h = DEATH.height[0] + (DEATH.height[1] - DEATH.height[0]) * k;
+    // Behind (sin a, cos a) of the middle, which is where a camera looking
+    // along (-sin a, -cos a) stands; pulled in along the same line when a
+    // wall is in the way.
+    const dx = Math.sin(a), dz = Math.cos(a);
+    const len = Math.hypot(r, h);
+    const blocked = world.raycast(d.x, d.y, d.z, dx * r / len, h / len, dz * r / len, len);
+    const pull = blocked ? Math.max(0.25, (blocked.t - 0.5) / len) : 1;
+    camera.position[0] = d.x + dx * r * pull;
+    camera.position[1] = d.y + h * pull;
+    camera.position[2] = d.z + dz * r * pull;
+    camera.yaw = a;
+    camera.pitch = -Math.atan2(h, r);
+  }
 
   combat.onTier = (tier) => {
     drones.setTier(tier);
@@ -5608,8 +5824,14 @@ async function main() {
 
   el.downBtn.addEventListener('click', () => {
     el.down.classList.add('hidden');
+    state.death = null;
+    state.slam = null;
     combat.revive();
     weapon.reset();
+    // The reset puts the rifle back in your hands without a swap, so the
+    // name under the ammunition has to be told.
+    el.weaponname.textContent = weaponLabel(weapon.spec);
+    el.combat.classList.toggle('explosive', weapon.spec.kind !== 'hitscan');
     drones.reset();
     // The camps and nests stand down before the street is cleared, so they
     // are manned again when you come back rather than counted as taken
@@ -5866,7 +6088,8 @@ async function main() {
     if (!suited() || photo.active) return false;
     const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
     const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
-    const g = weapon.quickGrenade(eye, dir);
+    // With the right button held it goes harder, as from the hand.
+    const g = weapon.quickGrenade(eye, dir, input.secondary);
     if (!g) {
       if (weapon.grenadesLeft <= 0) { toast('no grenades left'); audio.dryFire(); }
       return true;
@@ -6027,6 +6250,25 @@ async function main() {
     }
   }
 
+  // Nano catalyst: what a kill in a hunt leaves for the suit. The steps it
+  // pays for are announced, kept with the hunt, and flash on the suit's bar.
+  const UP_NAMES = { energy: 'ENERGY', speed: 'SPEED', jump: 'JUMP' };
+  const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+  function suitKill(kind) {
+    if (!campaign.active || campaign.mode !== 'hunt') return;
+    const got = suit.feed(kind);
+    if (campaign.book) { campaign.book.suit = suit.upgrades; campaign.save(); }
+    for (const what of got) {
+      const lv = suit.level[what];
+      toast(`SUIT UPGRADE: ${UP_NAMES[what]} ${ROMAN[lv]}`, 2600);
+      feed(`<b>suit upgrade</b> ${what} ${ROMAN[lv]}`);
+      audio.ultraCharge && audio.ultraCharge(0.25);
+      const sp = el.suitUps.querySelector(`[data-up="${what}"]`);
+      if (sp) { sp.classList.remove('up'); void sp.offsetWidth; sp.classList.add('up'); }
+    }
+    if (got.length) state.suitUps = (state.suitUps || 0) + got.length;
+  }
+
   /** The bar, the two modes, and the edge of the screen while they are on. */
   function suitHud() {
     const on = suited();
@@ -6034,7 +6276,11 @@ async function main() {
     el.suitFx.classList.toggle('cloak', on && suit.cloak);
     el.suitFx.classList.toggle('armor', on && suit.armor && !suit.cloak);
     if (!on) return;
-    el.suitBar.style.width = `${Math.round(suit.energy / SUIT.energy * 100)}%`;
+    el.suitBar.style.width = `${Math.round(suit.energy / suit.maxEnergy * 100)}%`;
+    for (const sp of el.suitUps.querySelectorAll('span')) {
+      sp.querySelector('i').style.setProperty('--lv', `${suit.level[sp.dataset.up] / SUIT.upgrade.most * 100}%`);
+    }
+    el.suitCat.style.width = `${Number.isFinite(suit.nextStep) ? Math.round(suit.catalyst / suit.nextStep * 100) : 100}%`;
     el.suit.classList.toggle('low', suit.energy < 25);
     el.suit.classList.toggle('sprint', suit.sprinting);
     el.suitArmor.classList.toggle('on', suit.armor);
@@ -6046,6 +6292,8 @@ async function main() {
   /** A run starting: the start district, if one is set, is flown to once the intro is over. */
   function startOps() {
     suit.reset();
+    // A hunt carried on is carried on in the suit it had got to.
+    if (campaign.active && campaign.mode === 'hunt' && campaign.book && campaign.book.suit) suit.restore(campaign.book.suit);
     grab.reset();
     visor.reset();
     tactics.clear();
@@ -6239,6 +6487,140 @@ async function main() {
       best = s; bestD = d;
     }
     return best;
+  }
+
+  // Death from above. In the air, F takes whoever is under you: a man,
+  // whatever he was doing, or one of their mechs if you have come down on
+  // its back, which is a jump only the suit or the reflex gets you, or a
+  // roof. You go to them in a quarter of a second, a man is dead under you
+  // and the ones round him are knocked flat, and a mech has its reactor torn
+  // out of it, so it falls with no fusion blast, and you are thrown clear.
+  const SLAM = {
+    reach: 3.5, perMetre: 0.35, drop: [0.6, 14],     // a man: how far out, more the higher you are, and how far below
+    mechReach: 3.5, mechDrop: [-2.5, 12],            // a mech: out past its radius, and about its top
+    time: 0.26, mechTime: 0.34,
+    shock: { radius: 3.2, damage: 140 },             // round the man you land on
+    mechCost: 35,                                    // suit energy, in a hunt
+    leap: 1.9, push: 9,                              // off the wreck: up, as a jump's multiple, and away
+  };
+  function airTakedownTarget() {
+    if (state.mode !== 'walk' || state.inVehicle || state.inMech || player.onGround || state.slam) return null;
+    const fx = -Math.sin(camera.yaw), fz = -Math.cos(camera.yaw);
+    let best = null, bestD = Infinity;
+    for (const m of mechs.active) {
+      if (!m.alive || m.mine || m.health <= 0 || m.dying) continue;
+      const top = m.y + m.spec.height;
+      const dy = player.y - top;
+      if (dy < SLAM.mechDrop[0] || dy > SLAM.mechDrop[1]) continue;
+      const d = Math.hypot(m.x - player.x, m.z - player.z);
+      if (d > m.spec.radius + SLAM.mechReach) continue;
+      const dd = Math.hypot(d, dy);
+      if (dd < bestD) { bestD = dd; best = { kind: 'mech', t: m }; }
+    }
+    if (best) return best;
+    for (const sd of soldiers.active) {
+      if (!sd.alive || sd.civilian || sd.health <= 0 || sd.held || sd.rise > 0 || sd.state === 5) continue;
+      const dy = player.y - sd.y;
+      if (dy < SLAM.drop[0] || dy > SLAM.drop[1]) continue;
+      const dx = sd.x - player.x, dz = sd.z - player.z;
+      const d = Math.hypot(dx, dz);
+      if (d > SLAM.reach + dy * SLAM.perMetre) continue;
+      // Ahead of you, or near enough straight under you.
+      if (d > 1.5 && (dx * fx + dz * fz) / d < 0.2) continue;
+      const dd = Math.hypot(d, dy);
+      if (dd < bestD) { bestD = dd; best = { kind: 'soldier', t: sd }; }
+    }
+    return best;
+  }
+
+  /** @returns {boolean} whether there was one to start */
+  function airTakedown() {
+    const tg = airTakedownTarget();
+    if (!tg) return false;
+    if (tg.kind === 'mech' && suited() && !suit.strength(SLAM.mechCost)) {
+      toast('not enough suit energy to take the mech');
+      return false;
+    }
+    state.slam = { t: 0, time: tg.kind === 'mech' ? SLAM.mechTime : SLAM.time,
+      from: { x: player.x, y: player.y, z: player.z }, kind: tg.kind, target: tg.t };
+    audio.leap && audio.leap();
+    return true;
+  }
+
+  /** A step of a slam under way. @returns {boolean} whether one is, so the body is not also stepped */
+  function slamStep(dt) {
+    const sl = state.slam;
+    if (!sl) return false;
+    const t = sl.target;
+    sl.t += dt;
+    const k = Math.min(1, sl.t / sl.time);
+    const to = sl.kind === 'mech'
+      ? { x: t.x, y: t.y + t.spec.height, z: t.z }
+      : { x: t.x, y: t.y, z: t.z };
+    const e = k * k;   // gathering speed on the way down
+    player.x = sl.from.x + (to.x - sl.from.x) * e;
+    player.y = sl.from.y + (to.y - sl.from.y) * e;
+    player.z = sl.from.z + (to.z - sl.from.z) * e;
+    player.vy = 0;
+    if (k < 1) return true;
+    state.slam = null;
+    if (sl.kind === 'mech') slamMech(t);
+    else slamSoldier(t);
+    return true;
+  }
+
+  function slamSoldier(sd) {
+    const down = { x: 0, y: -1, z: 0 };
+    const killed = sd.alive && sd.health > 0 && soldiers.damage(sd, 9999, down);
+    for (let i = 0; i < 2; i++) effects.blood(sd.x, sd.y + 0.6, sd.z, (Math.random() - 0.5) * 2, 0.8, (Math.random() - 0.5) * 2, cheats.goreScale * 1.4);
+    if (cheats.bleeding) effects.stain(sd.x, world.groundHeight(sd.x, sd.z), sd.z, 0.9, 40);
+    // The ones round him go flat with him.
+    for (const o of soldiers.active) {
+      if (o === sd || !o.alive || o.civilian || o.health <= 0) continue;
+      const d = Math.hypot(o.x - sd.x, o.z - sd.z);
+      if (d > SLAM.shock.radius) continue;
+      const l = d || 1;
+      if (soldiers.damage(o, SLAM.shock.damage * (1 - d / SLAM.shock.radius * 0.5), { x: (o.x - sd.x) / l, y: 0.5, z: (o.z - sd.z) / l })) {
+        creditTarget(o, false, 'soldier');
+      }
+    }
+    effects.blast(sd.x, world.groundHeight(sd.x, sd.z) + 0.2, sd.z, 2.2);
+    effects.shake = Math.min(1.2, effects.shake + 0.5);
+    audio.land && audio.land(player.surface);
+    audio.hitMarker(true);
+    feed('<b>takedown</b> from above');
+    if (killed) creditTarget(sd, true, 'soldier');
+    player.onGround = true;
+    state.airTakedowns = (state.airTakedowns || 0) + 1;
+  }
+
+  function slamMech(m) {
+    if (m.alive && m.health > 0) {
+      // Torn out, not shot: no shield stops a hand, and the reactor comes out
+      // with it, so there is nothing left to go critical.
+      m.shield = 0;
+      m.coreTaken = true;
+      mechs.damage(m, 1e9, true);
+      combat.creditKill(true, 0);
+    }
+    const top = m.y + m.spec.height;
+    effects.blast(m.x, top, m.z, 4);
+    for (let i = 0; i < 3; i++) effects.explode(m.x + (Math.random() - 0.5) * 2, top - 1 - i, m.z + (Math.random() - 0.5) * 2);
+    gibs.rubble(m.x, top - 1, m.z, 4, 10, 1.6);
+    effects.shake = Math.min(1.4, effects.shake + 0.9);
+    state.flash = Math.max(state.flash, 0.35);
+    audio.explosion && audio.explosion();
+    audio.hitMarker(true);
+    showHitmarker('kill');
+    feed(`<b>${m.spec.name.toLowerCase()} taken</b>, reactor torn out`);
+    toast('MECH TAKEDOWN');
+    // Thrown clear, back the way you came and up.
+    const bx = -Math.sin(camera.yaw), bz = -Math.cos(camera.yaw);
+    player.vy = PLAYER.jumpSpeed * SLAM.leap;
+    player.onGround = false;
+    state.bail = { vx: -bx * SLAM.push, vz: -bz * SLAM.push, left: BAIL.tumble };
+    state.killSlow = Math.max(state.killSlow || 0, 1.0);
+    state.mechTakedowns = (state.mechTakedowns || 0) + 1;
   }
 
   /** The takedown itself. @returns {boolean} whether there was one to do */
@@ -7239,7 +7621,7 @@ async function main() {
         state.holstered = !state.holstered;
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
-      case 'KeyF': if (!takedown() && !suitGrab() && !suitPunch()) toggleVehicle(); break;
+      case 'KeyF': if (!airTakedown() && !takedown() && !suitGrab() && !suitPunch()) toggleVehicle(); break;
       case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(true); else openTravel(); break;
@@ -7261,6 +7643,7 @@ async function main() {
       case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5':
       case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9': case 'Digit0':
         weapon.selectSlot(Number(code.slice(5)));
+        arms.poke(Number(code.slice(5)));
         break;
       // The number row carries the weapons now, so the quality tiers moved to
       // the function keys.
@@ -7332,6 +7715,8 @@ async function main() {
       state.goreStop = Math.max(0, state.goreStop - dt);
       scale = Math.min(scale, 0.1);
     }
+    // Dying, for as long as the camera is going round.
+    if (state.death && !state.death.carded) scale = Math.min(scale, DEATH.slow);
     // A Stinger in the air. Shallower than a blast, because you are still
     // flying the machine while you watch it.
     if (state.airSlow > 0) {
@@ -7408,10 +7793,12 @@ async function main() {
       memorialStep();
       refineStep();
       bombStep(worldDt);
+      runawayStep(worldDt);
       convoyStep(worldDt);
+      wreckStep(worldDt);
       onslaughtStep(worldDt);
       pingStep(worldDt);
-      updateCarBlasts();
+      updateCarBlasts(worldDt);
       trains.update(worldDt, player);
       ion.update(worldDt);
       ultra.update(worldDt, ultraLive());
@@ -7522,6 +7909,14 @@ async function main() {
       wishX = (basis[0] * input.moveZ + basis[2] * input.moveX) * speed;
       wishZ = (basis[1] * input.moveZ + basis[3] * input.moveX) * speed;
     }
+    // A dive out of a moving car: the push dies away over the dive.
+    if (state.bail) {
+      const k = Math.max(0, state.bail.left / BAIL.tumble);
+      wishX += state.bail.vx * k;
+      wishZ += state.bail.vz * k;
+      state.bail.left -= selfDt;
+      if (state.bail.left <= 0) state.bail = null;
+    }
     const wasGround = player.onGround;
     // Jumping while the reflex is running spends a slice of the meter and
     // throws you most of a storey into the air.
@@ -7531,7 +7926,7 @@ async function main() {
       boost = reflex.leap();
       if (boost > 1) audio.leap();
     }
-    player.step(selfDt, wishX, wishZ, jumped, boost);
+    if (!slamStep(selfDt)) player.step(selfDt, wishX, wishZ, jumped, boost);
     // Held, the suit puts its strength into the jump: a moment after leaving
     // the ground, still rising, it goes most of the way up again.
     if (jumped && boost === 1) state.suitJump = { t: 0, done: false };
@@ -7646,10 +8041,12 @@ async function main() {
     memorialStep();
     refineStep();
     bombStep(worldDt);
+    runawayStep(worldDt);
     convoyStep(worldDt);
+    wreckStep(worldDt);
     onslaughtStep(worldDt);
     pingStep(worldDt);
-    updateCarBlasts();
+    updateCarBlasts(worldDt);
     trains.update(worldDt, player);
     ion.update(worldDt);
     ultra.update(worldDt, ultraLive());
@@ -7782,6 +8179,8 @@ async function main() {
       camera.position[2] = p.z;
       camera.yaw = p.yaw;
       camera.pitch = p.pitch;
+    } else if (state.death) {
+      deathCam(elapsed);
     } else if (state.inMech && state.cockpit && state.inMech.spec.cockpit
       && !mechEyeBoxedIn(state.inMech)) {
       state.canopy = true;
@@ -7942,7 +8341,7 @@ async function main() {
     camera.update(w / Math.max(1, h));
 
     // --- the weapon in your hands ---
-    if (state.mode === 'walk' && !photo.active && !state.inVehicle && !state.inMech) {
+    if (state.mode === 'walk' && !photo.active && !state.inVehicle && !state.inMech && !state.death) {
       const speed = Math.hypot(player.vx || 0, player.vz || 0);
       state.bob += elapsed * (speed > 4 ? 11.5 : 7.4) * Math.min(1, speed / 2.6);
       // Sway lags the look, which is what makes a viewmodel feel like a weight.
@@ -8062,6 +8461,10 @@ async function main() {
       photo.capture(`${timeLabel(renderer.timeOfDay)}, ${dayLabel(renderer.dayOfYear)}`);
     }
 
+    // The weapons down the side, on foot only: a mech has its own rows and
+    // a vehicle its own guns.
+    arms.update(elapsed, weapon, state.mode === 'walk' && !photo.active && !state.inMech
+      && !state.inVehicle && !state.death);
     if (state.mode === 'walk' && !photo.active) {
       // Combat interface.
       const hp = Math.round(combat.health);
@@ -8117,14 +8520,16 @@ async function main() {
       const near = (state.inVehicle || state.inMech) ? null
         : (mechs.nearest(player.x, player.z, 9) || vehicles.nearest(player.x, player.z, 7));
       // A man who has not seen you, within arm's reach, comes before any car.
-      const quietKill = (state.inVehicle || state.inMech) ? null : takedownTarget();
+      const fromAbove = airTakedownTarget();
+      const quietKill = (state.inVehicle || state.inMech) ? null : (fromAbove ? fromAbove.t : takedownTarget());
       // And in the suit, a man in reach to take by the throat, or the one
       // already in your hand to let go of.
       const grabbable = suited() && !quietKill
         ? (grab.held || grab.pick({ x: player.x, z: player.z }, { x: -Math.sin(camera.yaw), z: -Math.cos(camera.yaw) }, soldiers.active))
         : null;
       el.rideHint.classList.toggle('hidden', !near && !quietKill && !grabbable);
-      if (quietKill) el.rideHintName.textContent = quietKill.demon ? 'Finish' : 'Takedown';
+      if (fromAbove) el.rideHintName.textContent = fromAbove.kind === 'mech' ? 'Mech takedown' : 'Takedown';
+      else if (quietKill) el.rideHintName.textContent = quietKill.demon ? 'Finish' : 'Takedown';
       else if (grabbable) el.rideHintName.textContent = grab.held ? 'Let go' : 'Grab';
       else if (near) el.rideHintName.textContent = near.spec.name;
       // The scope: a picture of one, and no rifle in the way of it.
@@ -8135,9 +8540,11 @@ async function main() {
       cockpitStep();
       suitHud();
       visorStep();
+      arcStep();
       grimeStep();
     } else {
       cockpitHud.hide();
+      arcView.hide();
       grime.draw(0, false);
     }
 
@@ -8220,6 +8627,7 @@ async function main() {
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
     storm, stormSpec: VOID_STORM,
     takedown: () => takedown(), takedownTarget: () => takedownTarget(),
+    airTakedown: () => airTakedown(), airTakedownTarget: () => airTakedownTarget(), slamSpec: SLAM, suitKill: (k) => suitKill(k),
     demonSpec: DEMON, gazerSpec: GAZER,
     spawnDemon(kind, dx, dz, level = 0) {
       // Put down exactly where it was asked for, for a test that needs it there.
@@ -8242,6 +8650,7 @@ async function main() {
     showOps: () => showOps(),
     startOps: () => startOps(),
     reactors, fusionSpec: FUSION,
+    arcView, arms, armsRows, throwSpec: THROW_SPEC, bailSpec: BAIL,
     onslaught, onslaughtSpec: ONSLAUGHT, launchOnslaught: (w) => launchOnslaught(w), foeChassis,
     compassBar, cockpitHud, suit, suitSpec: SUIT, visor, visorSpec: VISOR, makeDemon: (t, k, l) => makeDemon(t, k, l), suited: () => suited(), suitPunch: () => suitPunch(), grime, grimeSpec: GRIME, grab, grabSpec: GRAB, suitGrab: () => suitGrab(), quickGrenade: () => quickGrenade(),
     setMark: (at) => setMark(at),

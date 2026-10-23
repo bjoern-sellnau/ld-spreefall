@@ -56,6 +56,19 @@ export const SUIT = {
   },
   // How long it waits before trying again after being emptied.
   stall: 1.2,
+  // Nano catalyst, the second game's currency: what a kill leaves for the
+  // suit to take up. Enough of it and the suit gets better at one of three
+  // things, in turn: a bigger and quicker filling bar, quicker feet, and a
+  // higher jump. Five steps of each, each step dearer than the last.
+  upgrade: {
+    worth: { soldier: 1, machine: 2, drone: 1, ceph: 3, vehicle: 3, mech: 8 },
+    first: 3, more: 2,           // catalyst to the first step, and that much more each step after
+    order: ['energy', 'speed', 'jump'],
+    most: 5,
+    energy: { capacity: 20, regen: 0.15 },   // a step: points on the bar, and a share on the refill
+    speed: { walk: 0.06, sprint: 0.12 },     // a step: a share on your feet, and on the sprint on top
+    jump: { boost: 0.3 },                    // a step: on the held jump's multiplier
+  },
 };
 
 export class Nanosuit {
@@ -66,6 +79,9 @@ export class Nanosuit {
   }
 
   reset() {
+    this.level = { energy: 0, speed: 0, jump: 0 };
+    this.catalyst = 0;
+    this.steps = 0;
     this.energy = SUIT.energy;
     this.armor = false;
     this.cloak = false;
@@ -74,6 +90,61 @@ export class Nanosuit {
     this.sprinting = false;
     this.idle = SUIT.regenDelay;
     this.stalled = 0;
+  }
+
+  /** The bar, with what the energy steps have added. */
+  get maxEnergy() { return SUIT.energy + this.level.energy * SUIT.upgrade.energy.capacity; }
+
+  /** Catalyst to the next step, or Infinity with every step taken. */
+  get nextStep() {
+    const U = SUIT.upgrade;
+    if (this.steps >= U.order.length * U.most) return Infinity;
+    return U.first + U.more * this.steps;
+  }
+
+  /**
+   * A kill's catalyst. Every step it pays for goes to the next of the three
+   * in turn, skipping one that is full.
+   * @param {string} kind a key of SUIT.upgrade.worth
+   * @returns {string[]} the steps it paid for, by name
+   */
+  feed(kind) {
+    const U = SUIT.upgrade;
+    this.catalyst += U.worth[kind] || 1;
+    const got = [];
+    while (this.catalyst >= this.nextStep) {
+      this.catalyst -= this.nextStep;
+      let what = null;
+      for (let i = 0; i < U.order.length && !what; i++) {
+        const o = U.order[(this.steps + i) % U.order.length];
+        if (this.level[o] < U.most) what = o;
+      }
+      if (!what) break;
+      this.level[what]++;
+      this.steps++;
+      got.push(what);
+      // A bigger bar comes full: the step is felt at once.
+      if (what === 'energy') this.energy = this.maxEnergy;
+    }
+    return got;
+  }
+
+  /** What the steps come to, to keep with the hunt. */
+  get upgrades() { return { level: { ...this.level }, catalyst: this.catalyst, steps: this.steps }; }
+
+  /** The steps a hunt had, back on the suit, each held to what it can be. */
+  restore(u) {
+    if (!u || !u.level) return;
+    const U = SUIT.upgrade;
+    let steps = 0;
+    for (const o of U.order) {
+      const n = Math.max(0, Math.min(U.most, Math.round(Number(u.level[o]) || 0)));
+      this.level[o] = n;
+      steps += n;
+    }
+    this.steps = steps;
+    this.catalyst = Math.max(0, Number(u.catalyst) || 0);
+    this.energy = this.maxEnergy;
   }
 
   /** Fully up: the cloak has finished coming on. */
@@ -146,11 +217,15 @@ export class Nanosuit {
     if (drain > 0) this._spend(drain * dt);
     else {
       this.idle += dt;
-      if (this.idle >= SUIT.regenDelay) this.energy = Math.min(SUIT.energy, this.energy + SUIT.regen * dt);
+      if (this.idle >= SUIT.regenDelay) {
+        const regen = SUIT.regen * (1 + this.level.energy * SUIT.upgrade.energy.regen);
+        this.energy = Math.min(this.maxEnergy, this.energy + regen * dt);
+      }
     }
     if (this.energy <= 0) this.sprinting = false;
-    let k = 1;
-    if (this.sprinting) k *= SUIT.sprint.speed;
+    const U = SUIT.upgrade.speed;
+    let k = 1 + this.level.speed * U.walk;
+    if (this.sprinting) k *= SUIT.sprint.speed + this.level.speed * U.sprint;
     if (this.armor) k *= SUIT.armor.speed;
     return k;
   }
@@ -191,7 +266,7 @@ export class Nanosuit {
   powerJump() {
     if (this.energy < SUIT.jump.cost || this.stalled > 0) return 1;
     this._spend(SUIT.jump.cost);
-    return SUIT.jump.boost;
+    return SUIT.jump.boost + this.level.jump * SUIT.upgrade.jump.boost;
   }
 
   /** Anything else the suit's strength does: true if there was energy for it. */

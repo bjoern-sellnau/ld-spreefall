@@ -8,6 +8,8 @@ export const COMBAT = {
   regenDelay: 5.0,
   regenRate: 11,
   tierKills: [0, 6, 14, 26, 42, 62, 88],
+  // What everything you carry does, over what its own numbers say.
+  playerPower: 1.5,
 };
 
 /**
@@ -278,7 +280,7 @@ export class Combat {
     return fresh;
   }
 
-  get damageScale() { return this.powers.quad > 0 ? 4 : 1; }
+  get damageScale() { return (this.powers.quad > 0 ? 4 : 1) * COMBAT.playerPower; }
   get rateScale() { return this.powers.overload > 0 ? 0.55 : 1; }
   get reloadScale() { return this.powers.overload > 0 ? 0.4 : 1; }
   get hasPower() { return this.powers.quad > 0 || this.powers.ultra > 0 || this.powers.overload > 0; }

@@ -12,11 +12,12 @@
 // gets it back as it decays, minus the small share each weapon is allowed to
 // keep. That share is what makes a burst walk, rather than a stuck aim.
 
-import { WEAPONS, LOADOUT, KIND, KITS, ARROW_DRAWS, weaponBySlot } from './arsenal.js';
+import { WEAPONS, LOADOUT, KIND, KITS, ARROW_DRAWS, BUCKETS, BUCKET_KEYS, weaponBySlot } from './arsenal.js';
+import { THROW } from './throwarc.js';
 
 const STATE = { READY: 0, FIRING: 1, RELOADING: 2, HOLSTERED: 3 };
 export const WEAPON_STATE = STATE;
-export { WEAPONS, LOADOUT, KIND, KITS, weaponBySlot };
+export { WEAPONS, LOADOUT, KIND, KITS, BUCKETS, BUCKET_KEYS, weaponBySlot };
 
 // Kept so older callers and tests that import SPEC still read the rifle.
 export const SPEC = WEAPONS.m16;
@@ -44,6 +45,11 @@ export class Weapon {
     this.id = 'm16';
     // A mode's own kit, or null for the ordinary number row.
     this.kit = null;
+    // The weapon last picked out of each group of the number row.
+    this.lastInBucket = {};
+    this.onBucket = null;        // fn(key, id) when a number key picks
+    // How far a rotary cannon has spun up, 0 to 1.
+    this.spin = 0;
     // The cheat that lets the wheel reach every weapon whatever the mode.
     this.everyWeapon = false;
 
@@ -185,13 +191,31 @@ export class Weapon {
     // A charge belongs to the gun it was built up in.
     this.blastHeld = 0;
     this.blastReady = false;
+    this.spin = 0;
     if (this.onSwap) this.onSwap(id, this.spec);
     return true;
   }
 
+  /**
+   * A number key. In a mode with a kit it is one weapon a key. Otherwise the
+   * key is a group: from outside it you get the one of the group you last
+   * held (the first, the first time), and from inside it the next one.
+   */
   selectSlot(slot) {
-    const id = this.kit ? this.kit[(slot + 9) % 10] : weaponBySlot(slot);
-    return id ? this.select(id) : false;
+    if (this.kit) {
+      const id = this.kit[(slot + 9) % 10];
+      return id ? this.select(id) : false;
+    }
+    const bucket = BUCKETS[slot];
+    if (!bucket) return false;
+    const ids = bucket.ids;
+    const at = ids.indexOf(this.id);
+    let id;
+    if (at >= 0) id = ids[(at + 1) % ids.length];
+    else id = this.lastInBucket[slot] && ids.includes(this.lastInBucket[slot]) ? this.lastInBucket[slot] : ids[0];
+    this.lastInBucket[slot] = id;
+    if (this.onBucket) this.onBucket(slot, id);
+    return this.select(id);
   }
 
   /** Give the number row a mode's kit, or null for the ordinary one. */
@@ -318,7 +342,13 @@ export class Weapon {
 
     // A semi automatic needs the trigger released between shots. Holding it
     // down on a shotgun should not empty the tube.
-    const pulled = spec.auto ? trigger : (trigger && !this.triggerWasDown);
+    let pulled = spec.auto ? trigger : (trigger && !this.triggerWasDown);
+    // Six barrels have to come up to speed before the first round, and wind
+    // down at half the rate when you let go.
+    if (spec.spinUp) {
+      this.spin = Math.max(0, Math.min(1, (this.spin || 0) + (trigger ? dt : -dt * 0.5) / spec.spinUp));
+      if (this.spin < 1) pulled = false;
+    }
     if (pulled && this.cooldown <= 0) {
       if (this.ammo > 0) this.fire(eye, dir);
       else if (this.reserve > 0) {
@@ -690,8 +720,11 @@ export class Weapon {
 
   _fireProjectile(eye, dir, spec) {
     if (!this.projectiles) return;
-    // Flak throws a handful at once, each on its own line.
+    // Flak throws a handful at once, each on its own line. A swarm's rockets
+    // all go after what the sight is on.
     const count = spec.shards || 1;
+    const swarm = spec.homing && count > 1
+      ? { homing: spec.homing, target: this._aimedTarget(eye, dir, 0.22, spec.homing.range) } : null;
     for (let i = 1; i < count; i++) {
       const sd = this._spray(dir, this.spread * 1.35);
       this.projectiles.launch(spec.projectile, {
@@ -700,6 +733,7 @@ export class Weapon {
         vy: sd.y * spec.muzzleSpeed * (0.8 + Math.random() * 0.4) + 1.2,
         vz: sd.z * spec.muzzleSpeed * (0.8 + Math.random() * 0.4),
         fuse: spec.fuse, splash: this._scaledSplash(spec.splash), weapon: this.id,
+        homing: swarm ? swarm.homing : null, target: swarm ? swarm.target : null,
       });
     }
     const d = this._spray(dir, this.spread);
@@ -721,7 +755,8 @@ export class Weapon {
       this.blastHeld = 0;
     }
     const drawn = this.draw ? ARROW_DRAWS[this.draw] : null;
-    const speed = (blast ? blast.speed : spec.muzzleSpeed) * (drawn ? drawn.speed : 1);
+    const speed = (blast ? blast.speed : spec.muzzleSpeed) * (drawn ? drawn.speed : 1)
+      * (spec.kind === KIND.THROW ? this.throwScale : 1);
     const splash = blast ? {
       ...spec.splash,
       radius: spec.splash.radius * blast.radius,
@@ -776,7 +811,15 @@ export class Weapon {
    *
    * @returns {object|null} the grenade in the air, or null with none left
    */
-  quickGrenade(eye, dir) {
+  /** How hard a throw goes: harder with the right button held. */
+  get throwScale() { return this.aiming && !this.holstered ? THROW.far : 1; }
+
+  /** How fast what is in your hands leaves them, if it is thrown. */
+  throwSpeed() {
+    return this.spec.kind === KIND.THROW ? this.spec.muzzleSpeed * this.throwScale : 0;
+  }
+
+  quickGrenade(eye, dir, far = false) {
     if (!this.projectiles || this.quickCooldown > 0) return null;
     const slot = this.carried.grenade;
     if (!slot) return null;
@@ -787,11 +830,12 @@ export class Weapon {
     }
     const spec = WEAPONS.grenade;
     this.quickCooldown = 0.7;
+    const speed = spec.muzzleSpeed * (far ? THROW.far : 1);
     return this.projectiles.launch(spec.projectile, {
       x: eye.x + dir.x * 0.6, y: eye.y + dir.y * 0.6 - 0.12, z: eye.z + dir.z * 0.6,
-      vx: dir.x * spec.muzzleSpeed,
-      vy: dir.y * spec.muzzleSpeed + 3.4,
-      vz: dir.z * spec.muzzleSpeed,
+      vx: dir.x * speed,
+      vy: dir.y * speed + THROW.lift,
+      vz: dir.z * speed,
       fuse: spec.fuse,
       splash: this._scaledSplash(spec.splash),
       weapon: 'grenade',

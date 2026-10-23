@@ -389,6 +389,16 @@ async function run() {
       // what is behind you is kept until it is properly behind you.
       const dropped = await page.evaluate(async () => {
         const s = window.spreefall;
+        // The city streams round the camera, and since phase 120 a run that
+        // has been killed has its camera going round the body where it fell,
+        // holding that district however far the player is moved: it is stood
+        // up first.
+        const down = document.getElementById('down');
+        const wasDown = !!(s.state.death || (down && !down.classList.contains('hidden')));
+        if (wasDown) {
+          document.getElementById('downbtn').click();
+          await new Promise((r) => requestAnimationFrame(r));
+        }
         const home = s.world.entryFor(s.world.home);
         const hx = (home.bounds.minX + home.bounds.maxX) / 2;
         const hz = (home.bounds.minZ + home.bounds.maxZ) / 2;
@@ -432,11 +442,12 @@ async function run() {
           standing: Math.round(s.player.y * 100) / 100,
           ground: Math.round(s.world.groundHeight(s.player.x, s.player.z) * 100) / 100,
           here: s.world.nameAt(s.player.x, s.player.z),
+          wasDown,
         };
       });
       check('a district you are a long way from is let go',
         !dropped.after.includes('core') && dropped.before.loaded.includes('core'),
-        `${dropped.before.loaded.join(', ')} became ${dropped.after.join(', ')} from ${dropped.before.away} m away, ${dropped.bytes} MB held`);
+        `${dropped.before.loaded.join(', ')} became ${dropped.after.join(', ')} from ${dropped.before.away} m away, ${dropped.bytes} MB held${dropped.wasDown ? ', stood up first' : ''}`);
       check('and not one of its tiles is left on the card',
         dropped.homeTilesOnCard === 0,
         `${dropped.homeTilesOnCard} of the dropped district's tiles still resident`);

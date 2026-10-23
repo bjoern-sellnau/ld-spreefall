@@ -300,6 +300,7 @@ function buildDistrict(district, overflight = false) {
   let roads = [];
   let areas = [];           // pedestrian areas
   let waterPolys = [];
+  const waterLines = [];    // river and canal centrelines
   let greens = [];
   let rails = [];
   let trees = [];
@@ -314,16 +315,21 @@ function buildDistrict(district, overflight = false) {
     for (const m of rel.members) if (m.type === 'way') usedInRelation.add(m.ref);
   }
 
+  // A multipolygon's member ways are pieces of its rings, not rings: a long
+  // canal or river is cut into segments that only close when they are put
+  // end to end. Taken one by one, as they were, every open piece became a
+  // sliver of a polygon and the Teltowkanal had no water in it.
   const relRings = (rel) => {
-    const outers = [], inners = [];
+    const outerWays = [], innerWays = [];
     for (const m of rel.members) {
       if (m.type !== 'way') continue;
       const w = osm.ways.get(m.ref);
-      if (!w) continue;
-      const ring = wayRing(w);
-      if (ring.length < 3) continue;
-      (m.role === 'inner' ? inners : outers).push(ring);
+      if (!w || w.refs.length < 2) continue;
+      (m.role === 'inner' ? innerWays : outerWays).push(w.refs);
     }
+    const toRing = (refs) => wayRing({ refs });
+    const outers = joinRings(outerWays).map(toRing).filter((r) => r.length >= 3);
+    const inners = joinRings(innerWays).map(toRing).filter((r) => r.length >= 3);
     return { outers, inners };
   };
 
@@ -370,7 +376,14 @@ function buildDistrict(district, overflight = false) {
       if (closed) waterPolys.push({ ring: ring.slice(0, -1), holes: [], tags: t });
       continue;
     }
-    if (t.waterway) continue;   // the centreline, we use the polygon
+    // The centreline: the polygon is what is drawn, but a river or a canal
+    // that has only its line in the data gets water along it (below).
+    if (t.waterway) {
+      if ((t.waterway === 'river' || t.waterway === 'canal') && t.tunnel !== 'yes' && t.tunnel !== 'culvert') {
+        waterLines.push({ line: ring, tags: t });
+      }
+      continue;
+    }
     if (t.leisure === 'park' || t.leisure === 'garden' || t.landuse === 'grass'
         || t.landuse === 'forest' || t.landuse === 'meadow' || t.landuse === 'village_green') {
       if (closed) greens.push({ ring: ring.slice(0, -1), holes: [], tags: t });
@@ -406,6 +419,12 @@ function buildDistrict(district, overflight = false) {
       places.push({ p, tags: t, rank: PLACE_RANK[t.place] });
     }
   }
+
+  // Water along a centreline where no polygon has any: what of a river or a
+  // canal is not already covered by a water area gets a ribbon its width.
+  const ribbons = centrelineWater(waterLines, waterPolys);
+  for (const r of ribbons) waterPolys.push(r);
+  if (ribbons.length) console.log(`water from centrelines: ${ribbons.length} stretches`);
 
   console.log(`features: buildings ${buildings.length}  roads ${roads.length}  areas ${areas.length}  water ${waterPolys.length}  green ${greens.length}  rails ${rails.length}  trees ${trees.length}`);
 
@@ -2188,6 +2207,76 @@ export function joinLines(list, tol = 1.5) {
       }
     }
     out.push({ kind: start.kind, up: start.up, line });
+  }
+  return out;
+}
+
+/**
+ * The closed rings of a multipolygon from its member ways, given as lists of
+ * node ids in any order and either direction. A closed way is a ring as it
+ * is; open ones are joined end to end where they share a node until they
+ * close. A chain that never closes (a piece missing from the data) is left
+ * out rather than closed with a straight line across whatever is between.
+ *
+ * @param {number[][]} ways
+ * @returns {number[][]} rings of node ids, without the last repeating the first
+ */
+export function joinRings(ways) {
+  const rings = [];
+  const open = [];
+  for (const w of ways) {
+    if (w.length < 2) continue;
+    if (w.length >= 4 && w[0] === w[w.length - 1]) rings.push(w.slice(0, -1));
+    else open.push(w.slice());
+  }
+  while (open.length) {
+    let chain = open.pop();
+    for (;;) {
+      if (chain.length >= 4 && chain[0] === chain[chain.length - 1]) break;
+      const end = chain[chain.length - 1];
+      const i = open.findIndex((w) => w[0] === end || w[w.length - 1] === end);
+      if (i < 0) break;
+      const w = open.splice(i, 1)[0];
+      chain = w[0] === end ? chain.concat(w.slice(1)) : chain.concat(w.slice(0, -1).reverse());
+    }
+    if (chain.length >= 4 && chain[0] === chain[chain.length - 1]) rings.push(chain.slice(0, -1));
+  }
+  return rings;
+}
+
+/** How wide a river or canal is drawn when the data has only its line. */
+export const CENTRELINE_WIDTH = { river: 30, canal: 20 };
+
+/**
+ * Ribbons of water along the stretches of river and canal centrelines that
+ * no water polygon covers: OpenStreetMap asks for the area and the line
+ * both, and where somebody drew only the line there would otherwise be no
+ * water at all. The width is the line's own width tag if it has one.
+ *
+ * @param {{line:number[][], tags:object}[]} lines
+ * @param {{ring:number[][]}[]} polys
+ * @returns {{ring:number[][], holes:[], tags:object}[]}
+ */
+export function centrelineWater(lines, polys) {
+  const out = [];
+  const wet = (x, z) => polys.some((w) => pointInRing(x, z, w.ring));
+  for (const { line, tags } of lines) {
+    if (line.length < 2) continue;
+    const given = parseFloat(tags.width);
+    const width = Number.isFinite(given) && given > 2 ? Math.min(given, 120) : CENTRELINE_WIDTH[tags.waterway] || 20;
+    // Runs of segments whose middle is dry.
+    let run = null;
+    const flush = () => {
+      if (run && run.length >= 2) out.push({ ring: ringOf(run, width / 2), holes: [], tags: { natural: 'water', water: tags.waterway, centreline: 'yes' } });
+      run = null;
+    };
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1], b = line[i];
+      if (wet((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)) { flush(); continue; }
+      if (!run) run = [a];
+      run.push(b);
+    }
+    flush();
   }
   return out;
 }

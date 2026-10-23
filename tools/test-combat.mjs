@@ -288,6 +288,9 @@ async function run() {
     s.soldiers.enabled = false;
     s.teleport(81, 0);
     window.T.bar = window.T.park(-30, 5, 0);
+    // A tougher one: since phase 117 a round to the middle of an ordinary
+    // drone takes all of it, and this is about what is left after a hit.
+    window.T.bar.maxHealth = window.T.bar.health = 300;
     // And one behind you, which is not on the screen and gets no bar.
     window.T.park(30, 5, 0);
     window.T.aimAt(window.T.bar);
@@ -313,7 +316,7 @@ async function run() {
   const hit = await readBars();
   await page.evaluate(() => {
     const s = window.spreefall;
-    for (let i = 0; i < 6 && window.T.bar.health > 0; i++) {
+    for (let i = 0; i < 12 && window.T.bar.health > 0; i++) {
       window.T.aimAt(window.T.bar); s.weapon.spread = 0; s.weapon.cooldown = 0; s.shoot();
     }
   });
@@ -388,6 +391,57 @@ async function run() {
   });
   await page.waitForTimeout(260);
   await page.screenshot({ path: path.join(SHOTS, 'combat-03-down.png') });
+
+  // --- dying: in pieces, in slow motion, the camera going round ------------
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.effects.clear && s.effects.clear();
+    s.teleport(81, 0); s.look(90, 0); s.setTime(15.4);
+    s.combat.godmode = false;
+    s.combat.shield = 0;
+    s.combat.health = 1;
+    window.GIBS0 = s.gibs.active.length;
+    s.combat.hurt(500, s.player.x + 10, s.player.z, s.player.x, s.player.z);
+  });
+  // Sampled by how far round the camera has got, not by the clock: a CI
+  // runner draws a frame or two a second, and a sample taken before the
+  // first frame of the orbit sees the camera still in your head.
+  const dying = [];
+  for (const at of [0.1, 0.6, 1.6]) {
+    await page.waitForFunction((t) => {
+      const d = window.spreefall.state.death;
+      return !d || d.t >= t || d.carded;
+    }, at, { timeout: 60000 }).catch(() => {});
+    dying.push(await page.evaluate(() => {
+      const s = window.spreefall;
+      const d = s.state.death;
+      return {
+        on: !!d, t: d ? d.t : 0, carded: d ? d.carded : null,
+        card: !document.getElementById('down').classList.contains('hidden'),
+        yaw: +s.camera.yaw.toFixed(3),
+        dist: d ? Math.hypot(s.camera.position[0] - d.x, s.camera.position[2] - d.z) : 0,
+        gibs: s.gibs.active.length - window.GIBS0,
+        scale: s.state.timeScale,
+      };
+    }));
+    if (dying.length === 2) await page.screenshot({ path: path.join(SHOTS, 'combat-04-death-cam.png') });
+  }
+  check('dying blows you apart, with the card held back while the camera goes round',
+    dying[0].on && dying[0].gibs > 10 && !dying[0].card && !dying[1].card,
+    JSON.stringify(dying[0]));
+  check('and the camera goes round from outside you, in slow motion',
+    dying[0].dist > 3 && dying[2].dist > 3 && Math.abs(dying[2].yaw - dying[0].yaw) > 0.3
+      && dying.every((d) => d.carded || d.scale <= 0.25),
+    JSON.stringify(dying.map((d) => [d.t.toFixed(2), d.yaw, d.dist.toFixed(1), d.scale])));
+  const carded = await page.waitForFunction(
+    () => !document.getElementById('down').classList.contains('hidden'), null, { timeout: 30000 })
+    .then(() => true, () => false);
+  check('then the card comes up over it, and the button brings you back',
+    carded && await page.evaluate(() => {
+      document.getElementById('downbtn').click();
+      const s = window.spreefall;
+      return !s.state.death && s.combat.health > 0;
+    }));
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

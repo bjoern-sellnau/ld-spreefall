@@ -595,6 +595,72 @@ html, body {
   100% { opacity: 0.35; }
 }
 
+/* The weapons down the left side: a key in a box and what it gives you, the
+   row you are on lit, a bar of ammunition under each name, and the group a
+   key or the wheel just picked from opened out for a moment. Glass rather
+   than slab, so the street shows through it. */
+#arms {
+  position: absolute;
+  left: 18px; top: 50%;
+  transform: translateY(-58%);
+  display: flex; flex-direction: column;
+  gap: 3px;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+#arms.hidden { display: none; }
+#arms.idle { opacity: 0.55; }
+#arms .row {
+  display: flex; align-items: flex-start;
+  gap: 5px;
+}
+#arms .row > b {
+  flex: none;
+  width: 17px; height: 17px;
+  font: 700 10px/17px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 2px;
+  background: rgba(10, 12, 16, 0.35);
+}
+#arms .row.cur > b {
+  color: #0d0d0d;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+#arms .list { display: flex; flex-direction: column; gap: 2px; }
+#arms .it {
+  display: none;
+  min-width: 86px;
+  padding: 3px 7px 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(14, 16, 20, 0.55), rgba(14, 16, 20, 0.12));
+  backdrop-filter: blur(3px);
+}
+#arms .it.pick, #arms .row.open .it { display: block; }
+#arms .it span {
+  display: block;
+  font: 600 9.5px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.62);
+}
+#arms .it i {
+  display: block;
+  height: 2px; margin-top: 3px;
+  background: rgba(255, 255, 255, 0.12);
+}
+#arms .it u { display: block; height: 100%; background: rgba(255, 255, 255, 0.5); }
+#arms .it.on {
+  background: linear-gradient(90deg, rgba(226, 201, 141, 0.32), rgba(226, 201, 141, 0.06));
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+#arms .it.on span { color: #fff; }
+#arms .it.on u { background: var(--accent); }
+#arms .it.dry span { color: rgba(226, 112, 90, 0.75); }
+#arms .row:not(.cur):not(.open) .it { min-width: 0; background: none; backdrop-filter: none; padding: 3px 4px; }
+#arms .row:not(.cur):not(.open) .it i { display: none; }
+
 #killfeed {
   position: absolute;
   right: 18px; top: 240px;
@@ -1405,6 +1471,7 @@ html, body {
   #combat { left: 12px; bottom: 74px; gap: 14px; }
   #vehicle { left: 142px; bottom: 74px; }
   #powers { left: 12px; bottom: 132px; gap: 6px; }
+  #arms { left: 8px; transform: translateY(-62%) scale(0.85); transform-origin: left center; }
   #combat .vitals { width: 118px; }
   #combat .ammo { font-size: 21px; }
   #threat { right: 12px; bottom: 74px; font-size: 9.5px; letter-spacing: 0.08em; }
@@ -1741,6 +1808,18 @@ html, body {
 #suit .modes b { margin-right: 4px; color: var(--ink); }
 #suit .modes span.on { opacity: 1; color: #7fe0ff; }
 #suit #suitarmor.on { color: #ffc46a; }
+/* What the suit has made of its kills: five pips for each of the three, and
+   a thin line for the catalyst towards the next step. */
+#suit .ups { display: flex; gap: 10px; margin-top: 7px; align-items: center; }
+#suit .ups span { display: flex; flex-direction: column; gap: 3px; font-size: 8.5px; }
+#suit .ups span i { display: block; width: 40px; height: 3px;
+  background: linear-gradient(90deg, #7fe0ff var(--lv, 0%), rgba(255, 255, 255, 0.12) var(--lv, 0%));
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 8.25px);
+  mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 8.25px); }
+#suit .ups em { flex: 1; height: 2px; align-self: flex-end; margin-bottom: 1px; background: rgba(255, 255, 255, 0.1); }
+#suit .ups em u { display: block; height: 100%; width: 0; background: #b8f0ff; }
+#suit .ups span.up { color: #fff; animation: suitup 0.5s ease 3; }
+@keyframes suitup { 50% { color: #7fe0ff; text-shadow: 0 0 8px #7fe0ff; } }
 #suitfx {
   position: absolute; inset: 0;
   pointer-events: none;
@@ -1781,6 +1860,12 @@ html, body {
   pointer-events: none; z-index: 38;
 }
 #grime.hidden { display: none; }
+/* The line a grenade will fly, under the dirt on the glass. */
+#throwarc {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 37;
+}
+#throwarc.hidden { display: none; }
 canvas.nano { filter: grayscale(1) brightness(0.62) contrast(1.4) sepia(1) hue-rotate(175deg) saturate(2.4); }
 #suit .modes { flex-wrap: wrap; gap: 6px 10px; }
 #suit #suitvisor.on { color: #9ee8ff; }

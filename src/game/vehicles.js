@@ -167,6 +167,13 @@ export class Vehicles {
     v.occupied = false;
     v.dying = 0;
     v.grounded = spec.kind === KIND.GROUND || height <= 0;
+    // A slot from the pool carries what the last thing in it had: a driver
+    // with no hands, a bomb, a fire. A new one has none of them.
+    v.ai = null;
+    v.bomb = null;
+    v.hostile = false;
+    v.wreck = null;
+    delete v.runaway;
     this.active.push(v);
     return v;
   }

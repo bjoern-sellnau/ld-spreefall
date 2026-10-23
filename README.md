@@ -83,16 +83,17 @@ district by hand. A comparison of the same street at either tier is in
 | M | enlarge the map, on the streets around you; click it to set a mark the compass points to, click the mark again (or right click) to take it off |
 | N | sound on and off |
 | H | help |
-| 1 to 6, or the mouse wheel | M16, shotgun, rocket launcher, grenade, C4, banana |
+| 1 to 0, again for the next, or the mouse wheel | a group of weapons a key, in the manner of Half-Life: 1 rifles, 2 shotguns, 3 launchers, 4 thrown, 5 pistols, 6 close, 7 fire, 8 energy, 9 anti armour, 0 void |
 | 7 8 9 0 | railgun, plasma rifle, flak cannon, splinter gun |
 | Z | flamethrower, right mouse throws a wall of fire that runs across the ground |
 | B | incendiary bomb |
+| (anything thrown) | while it is in your hand a dotted arc shows where it will fly and a ring the size of its blast where it first comes down; warmer and brighter for the harder throw |
 | X | EMP, which stops the machines where they stand |
 | E, or right Shift | reflexes: the city slows and you do not; in The Hunt, E is the suit's cloak |
 | Space while reflexes run | a leap, paid for out of the same meter |
 | F5 F6 F7 | difficulty: easy, normal, hard |
 | C | the cheat menu |
-| F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels. Getting out asks whether to rig the vehicle as a bomb: 1 a time bomb of ten seconds, 2 a remote one for T, 3 no |
+| F | get into the nearest vehicle, or out of the one you are in; a silent takedown on a guard who has not seen you; a finisher on a demon that reels. Getting out asks whether to rig the vehicle as a bomb: 1 a time bomb of ten seconds, 2 a remote one for T, 3 no. Out of a car or a tank at more than 8 m/s you dive clear out of the side (the side with room) and it drives on without you, foot still down, for up to fourteen seconds or until something stops it, and the question waits however far it has gone |
 | R | reload; with the bow in hand, the head on the next arrow: plain, fire, poison or explosive |
 | J | in Tactics and Slayer, the journal: every district, and the camps or nests given back, or given back harder |
 | driving | W forward, S back, A D steer, Shift brake, left mouse fires; drive into a wall fast enough and you go through it |
@@ -102,7 +103,7 @@ district by hand. A comparison of the same street at either tier is in
 | Q | back to the weapon you had before; in The Hunt, the suit's armour |
 | T | blow the C4 you have put down, and every vehicle rigged with a remote bomb |
 | Left mouse, or RT on a pad | fire |
-| Right mouse, or LT on a pad | aim down the sight |
+| Right mouse, or LT on a pad | aim down the sight; with a grenade, a banana or an incendiary in hand, the harder throw, 1.6 times as fast, nearly twice as far |
 | G | holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt |
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
@@ -121,6 +122,11 @@ its own after a few seconds out of the fire, and breaks with a sound you will
 learn to dread. The shot that empties it spends only what the shield had left,
 so the break is a warning rather than a wound, and you get the moment after it
 to find a wall.
+
+**Going down is not a cut to a card.** You come apart the way they do, the
+world drops to a fifth of its speed, and the camera goes round what is left of
+you for four seconds, wider and higher as it goes, before the card comes up
+over it.
 
 **Three difficulties, chosen on the title screen or with F5, F6 and F7.** They
 change the size of the shield, how long the quiet has to be before it comes
@@ -192,6 +198,24 @@ What is under the hood:
   the names and the numbers are ours. Each one is a row in
   `src/game/arsenal.js`, because every difference between a rifle and a shotgun
   that the game cares about is a number.
+- The number row is groups, the way Half-Life has it: every key holds a few
+  weapons of a kind and pressing it again goes to the next, and coming back to
+  a key gives you the one you last had there. The first on each key is what
+  that key always was. 1 is the M16, the marksman rifle, a rotary cannon (six
+  barrels, spins up for 0.4 s and then puts out twenty five rounds a second)
+  and the bow; 2 the pump, the double barrel, a drum shotgun that fires as
+  fast as you can hold it, and the flak cannon; 3 the rocket launcher, a swarm
+  launcher (four rockets a shot, each after what the sight is on) and a
+  grenade launcher (lobbed a long way, goes off on what it meets); 4 the
+  grenade, the incendiary, the banana and C4; 5 the suppressed pistol and a
+  hand cannon whose round goes through one man into the next; 6 the chainsaw,
+  the flail and the shield saw; 7 the flamethrower; 8 plasma, the railgun and
+  the splinter gun; 9 the mech killer and the EMP; 0 the void cannon.
+- Down the left side of the screen is what you carry: a row a key with the key
+  in a box and the weapon it would give you, the row you are on lit, a bar of
+  ammunition under each name, and the group you just picked from opened out
+  for a couple of seconds before the panel folds back and dims. In a mode with
+  a kit of its own it is the kit, a weapon a key.
 - And on the wheel, past those, a void cannon: a slow green ball that reaches
   out to everybody within sixteen metres of where it is going, sends a tendril
   to everybody within forty eight of where it lands, and cuts a hole eighteen
@@ -299,7 +323,7 @@ visits.
 | Extreme enemies | a camp or hunting ground that calls for help gets wave after wave of it, as many as the waves setting says (a slider and a box to type the number in, 1 to 50, 6 to start with), 20 s apart instead of 38 and two more men in each; a Slayer nest holds that many waves of demons, each past the third a little bigger |
 | Crazy reality | the screen gets filthy: dust off every blast near you, dozens of specks at once, from the side it went off and settling low, blood when you are hit (from that side, and it runs in up to three drips) or a kill is close, soot from fire at your feet or the flamethrower, and a brown or red film in from the edges as it builds up; in a mech only the canopy gets it, not its frame or the dashboard; it clears by itself in half a minute or so |
 | One Man Army | wave after wave, the first twelve seconds after it is switched on and then every forty, coming closer together: a squad on foot, then bigger squads and jeeps, a tank from the third, a mech out of the sky from the fourth (the light ones first, the walking fortresses and the eleven metre one by the twelfth), steel among the men, a stick of bombs across your street from the fifth, jets from the sixth, and bigger armies every wave |
-| Nightmare | One Man Army, and from the third wave the city's super weapons on their side, in turn: the ion cannon, ultra plasma, a void storm and a warhead, every other wave and from the eighth every wave; each comes down far enough off that it reaches your street without starting in it |
+| Nightmare | One Man Army, and from the third wave the city's super weapons on their side, in turn: the ion cannon, ultra plasma, a void storm and a warhead, every other wave and from the eighth every wave; each is aimed at you, moved off you only as far as it takes to leave out their own men, mechs and convoys, and only kills its own when there is no point near you that spares them. A warning and the time it takes to charge or fall are all you get |
 
 A run with any of them moved off what the game ships with is marked `cheated`
 on the interface, and the end screen says so. Switching them back does not
@@ -569,6 +593,21 @@ and you in a suit with one bar of energy that everything it does runs on.
 - The energy comes back by itself 1.4 s after the last thing that drew on it.
   Run it out and whatever was on goes off, and it will not come back on for
   a moment.
+- **Kills feed the suit.** Every kill of theirs in a hunt leaves nano
+  catalyst (a man 1, a machine 2, one of their aliens 3, a jeep, tank or jet
+  3, a mech 8), and enough of it buys a step: the first at 3, each after it
+  2 more. The steps go round energy (20 more on the bar, which comes full,
+  and 15 percent faster back), speed (6 percent on your feet and more on the
+  sprint) and jump (0.3 more on the held jump's multiple), five of each. The
+  suit's panel shows five pips for each and a line towards the next step,
+  and the hunt keeps them when you come back to it.
+- **Death from above.** In the air with one of theirs under you, **F**
+  takes him: you are on him in a quarter of a second, he is dead and
+  whoever is within three metres of him is knocked down and hurt. Come down
+  on the back of one of their mechs (the suit's jump, the reflex leap or a
+  roof gets you up there) and F tears its reactor out for 35 energy: it
+  falls with no fusion blast, and you are thrown clear. It works on foot in
+  any mode; the suit is what gets you high enough.
 - You start with the bow in your hands. The number row is bow, rifle,
   suppressed pistol, marksman rifle, shotgun, grenade, C4, rocket launcher,
   railgun, banana. A ground cleared without anybody raising the alarm pays
@@ -720,6 +759,14 @@ saw was a tank reversing.
 | Tank | 12 m/s, two and a half thousand health, one shell every two and a half seconds |
 | Helicopter | hovers; space climbs, right mouse holds the rockets |
 | Fighter | 180 m/s, and it stops flying below 38 |
+
+Destroyed, none of them goes up at once. It catches, burns for three
+seconds with the fire climbing higher, and then the tank goes: a fireball
+20 to 26 metres across (the tank the biggest), fire thrown out all round it
+and left burning on the street for twenty seconds. An aircraft shot down
+burns on the way down and goes up where it hits. A parked car does the same
+on a smaller scale: two to three seconds alight, then 14 metres of blast
+and its own fire on the road.
 
 Both aircraft fly where you look. The mouse, or A and D, turn the view, and
 the aircraft turns its nose onto it as fast as it can, banking into the turn
@@ -1181,6 +1228,10 @@ downloaded textures and no downloaded models anywhere in this project:
 - Roads draw their own lane markings, kerbs and cobblestones; water animates two
   wave trains and reflects the sky; trees are instanced billboards with a real
   trunk.
+- Water comes from the water areas in the data, a long canal or river put
+  together from the pieces it is mapped in, and where a river or canal has
+  only its centreline, a band of water its width (the `width` tag, or 30 m
+  for a river and 20 m for a canal) along it.
 - Where the map gives a `building:colour`, that colour is used. Where it does
   not, a colour is picked from a Berlin palette of ochre, cream, grey, sandstone
   and red brick.

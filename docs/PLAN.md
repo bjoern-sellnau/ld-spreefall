@@ -4536,6 +4536,285 @@ So there are two cities now, and a profile picks which:
   and a warhead falling 230 m off or more later. Screenshots
   cheat-11-one-man-army and cheat-12-nightmare.
 
+## 116. The Teltowkanal had no water in it
+
+- The report: a link to 52.4306 N, 13.3108 E (x -4532, z 9477), Lichterfelde
+  West, looking down at the Teltowkanal: where is the water?
+- The cause: the OSM wiki says a long canal's water area is cut into
+  segments that are joined into one multipolygon (Tag:water=canal), and the
+  build took every member way of a multipolygon as a ring of its own. A
+  closed one is; an open piece of a canal's bank is not, and triangulated on
+  its own it was a sliver or nothing. Everything mapped that way was broken
+  the same way: canals and rivers in pieces, and buildings and parks drawn
+  as multipolygons with split outlines.
+- `joinRings` puts the member ways end to end where they share a node, in
+  either direction, until each ring closes, outers and inners apart; a chain
+  that never closes is left out rather than closed with a straight line.
+- And `centrelineWater`: where a river or a canal has only its line (the
+  wiki asks for the area and the line both, and not every stretch has the
+  area), a band of water along the stretches no water area covers, the
+  line's own `width` or 30 m for a river and 20 m for a canal. Not for
+  tunnels and culverts, and not for streams and ditches.
+- Neither OSM nor the live page can be reached from the sandbox, so the
+  canal itself is checked by the deploy, which builds from the live
+  extract; here the synthetic city builds unchanged (its water is closed
+  ways), and the unit checks (3) cover a canal in three pieces with one
+  reversed and an island, a chain that does not close, and the band with
+  and without a width tag, stopping where an area already is.
+
+## 117. Stronger weapons and grenades, and the arc of a throw
+
+- The ask: stronger weapons and grenades, a path showing where a grenade
+  will land, and a harder throw on the right mouse button.
+- Everything you carry hits half as hard again: `COMBAT.playerPower` 1.5,
+  through the same `damageScale` the quad damage pickup uses, so rounds,
+  pellets, splash and the melee all get it (quad is now 4 times that). The
+  grenade itself goes from a radius of 8 m and 135 to 11 m and 260 (390
+  with the scale), and a little more force.
+- The arc: `src/game/throwarc.js` flies the throw ahead of time with the
+  projectile's own gravity and drag, the same lift and the same world
+  raycast the thrown one meets, and stops at the first thing it hits;
+  `src/ui/arcview.js` draws dots along it and a ring the size of the blast
+  where it comes down, on a canvas under the dirt on the glass. Shown while
+  a grenade, a banana or an incendiary is in your hand in the street.
+- The harder throw: with the right button held a throw leaves the hand 1.6
+  times as fast (the arc turns orange). Counter-Strike has its full throw on
+  the left and a lob on the right (csdb.gg, metabot.gg guides); here the
+  left is the ordinary throw and the right the one you line up, since the
+  right button is aiming everywhere else in the game. In The Hunt, G with
+  the right button held throws the hard one too.
+- Checks (arsenal, 51): the arc shows with its ring, 19.8 m out from the
+  hip and 36.8 m with the button held, and the grenade thrown with it first
+  comes down 0.13 m from the mark; the power and the grenade's numbers. The
+  charged plasma check now expects ten times the bolt and the half again.
+  Screenshot combat-07-grenade-arc.
+
+## 118. Vehicles burn, and then they go up
+
+- The ask: a destroyed vehicle should burn first and then explode, big,
+  with plenty of flames.
+- Before: a vehicle at no health went up the same frame (16 m, 300), and a
+  parked car a tenth to four tenths of a second later.
+- Now `vehicles.onDestroyed` sets it alight instead: a burst of flame and a
+  crack, its gun and its driver gone, and a wreck in a list that burns for
+  3.2 s, flames every 0.11 s growing to twice the height as the time runs
+  out. Then `blowWreck`: a blast of 20 m and 380 for a jeep, 26 and 560 for
+  a tank (22 and 24 for the helicopter and the fighter), nine flames thrown
+  out round it up to a third of the radius, a tall one in the middle, the
+  trees caught 12 m round and 9 m of burning ground for 22 s, more rubble.
+  An aircraft burns on the way down and goes up where it lands, or after 9
+  s at most. A convoy's men still aboard die in the blast, not the catch.
+- A parked car: alight for 2 to 3.2 s (a random share, so a row of them
+  still goes as a chain), then 14 m and 220 where it was 11 and 120, seven
+  flames thrown round it and 7.5 m of burning road for 20 s.
+- A vehicle rigged as a bomb still goes at once, and then burns and goes up
+  again as its tank does.
+- And it looks burnt: the hit flash channel of the vehicle instances carries
+  below nought how burnt it is (a quarter at once, all of it over two and a
+  half seconds), and the shader takes the paint to all but black by that
+  much. Before, a destroyed jeep stood in its own fireball as green as it
+  was parked.
+- Found by the city check on the way: `vehicles.reset()` puts the objects
+  back in a pool, and the burning list kept the object, so the tank shot down
+  in the check before set fire to the jeep spawned into the same slot. The
+  entry now carries a token the wreck holds, and a vehicle from the pool
+  starts with no driver, bomb, fire or runaway left over.
+- Checks (city): a jeep at no health is alight and not blown at once, not
+  blown 1.5 s later, blown by 4 s with more burning ground than before;
+  a parked car is not gone after a second and is by four. Screenshots
+  city-06-vehicle-burning and city-07-vehicle-blast.
+
+## 119. Out of a car at speed, and it drives on
+
+- The ask: jump out of a fast car to the side, pick a remote bomb, a time
+  bomb or nothing, and the car just keeps going.
+- Before: getting out set the handbrake (phase 98 had it on purpose, since a
+  jeep left at full throttle rolled on with a rigged bomb), you were put down
+  beside it, and the question went away once the car was 25 m off.
+- Now, out of a ground vehicle at more than 8 m/s is a bail out. You go out
+  of whichever side has room (the left, unless a raycast finds a wall within
+  the vehicle's radius and 2.6 m), with a push of 6 m/s sideways and a third
+  of the car's speed along it, 4.2 m/s up, dying away over 0.8 s. The car
+  gets a driver with no hands: the throttle where it was (its speed over
+  its top speed and a quarter), no steering, for up to 14 s, or until it is
+  stopped, hits something hard enough to stop it, or somebody gets in. The
+  bomb question is asked as before and holds however far the car has got;
+  T still blows a remote one wherever it is.
+- Getting out slower than that is what it was: the handbrake, beside it.
+- Checks (ops): a jeep at 22 m/s, out of it: you are out and asked, it has
+  a driver, after a second and a half it has run 43 m and is 40 m from you,
+  you are 4 m from where you got out, the question is still there, 2 rigs it
+  remote and T blows it.
+
+## 120a. Nightmare aims at you, not at its own
+
+- The ask: in Nightmare the enemy should try to kill you, not itself, unless
+  it has to. As built in 115 the super weapons came down 150 to 320 m off
+  you, in whichever direction, so what they mostly killed was the army sent
+  after you.
+- `pickStrike` in `onslaught.js`: you, and 36 points round you in three
+  rings out to a shift of 90 m for the ion cannon, 70 for a warhead and 30
+  for the two rains (each a share of what it reaches, so you are inside it
+  wherever the aim goes), each costed by the men of theirs inside its reach
+  and three for a mech or a vehicle; the cheapest wins, the nearest to you
+  of any that tie. With nobody of theirs about it is straight on you; with a
+  squad to one side it goes to the other; with them all round you and a
+  reach that takes them anyway, it is on you at the cost it cannot avoid.
+- The warning is a toast in capitals, the incoming sound and the feed line;
+  after that it is the ion cannon's eight second charge, the rains coming
+  down, or a warhead's four second fall. The cinematic camera still does
+  not take a warhead aimed at you.
+- Checks: unit (5, one new) on straight on, sparing a squad, and the cost
+  that cannot be helped; cheats: the ion cannon and a warhead land within
+  their shift of you, and ultra plasma with four of theirs 60 m east lands
+  west of you with none of them in it.
+
+## 120. Dying in slow motion, the camera going round
+
+- The ask: when you die you come apart like the enemies do, in slow
+  motion, and the camera goes round you.
+- Before: the health bar ran out and the card came up at once over a frozen
+  first person view.
+- Now the card waits 4.2 s. The moment you go down you burst into pieces
+  (the same gibs a soldier makes, at twice the scale whatever the gore
+  switches say, since this is the one death always shown), with three jets
+  of blood, a stain, a blast and a flash. The world runs at a fifth of its
+  speed for as long as the camera goes round: from where you were looking,
+  0.55 rad a real second, out from 4.5 to 9 m and up from 2.2 to 4.8 m,
+  looking down at the spot, and pulled in along its own line when a wall is
+  in the way. The weapon in your hands is gone. Then the card, and the
+  button clears it all.
+- Checks (combat): health to nothing with godmode off: the burst is out (32
+  pieces), the card held back after half a second and after a second, the
+  camera 5 to 7 m off the spot with the yaw turning by a radian between the
+  first look and the third, the death clock under 3.5 s after more than two
+  real seconds (the slow motion), the card after it, and the button brings
+  you back with no death left over. Screenshot combat-04-death-cam.png.
+- And the Nightmare check from 120a, which was red here: its ultra plasma
+  was aimed while the jeeps and men of the earlier One Man Army waves were
+  still about, so six of theirs were inside wherever it went. It now clears
+  those first and sends the ultra plasma alone, so the squad is the only
+  thing it has to miss.
+
+## 121. More weapons, several to a key
+
+- The ask: more and stronger weapons, which can share keys.
+- The number row is now groups (`BUCKETS` in `arsenal.js`): a key held a
+  single weapon before, and 7 had two (the flamer and the railgun, so the
+  railgun was never reached from it). A key from outside its group gives the
+  one last held there, the first the first time; pressed again it goes to
+  the next in the group and round. The first of each group is what the key
+  always gave, so 1 is still the rifle and 4 the grenade. `LOADOUT` is the
+  groups in order, which is the order of the wheel. Kits (Tactics, Slayer,
+  The Hunt) are still a weapon a key.
+- Five new, each the heavy one of its group: a hand cannon (125 a round,
+  2.6 on the core, through two), a drum shotgun (ten pellets, automatic, a
+  twenty round drum), a rotary cannon (30 a round at 25 a second after a
+  0.4 s spin up that winds down at half the rate), a grenade launcher (a new
+  `shell` projectile, a third of a grenade's drop, goes off on contact, 9 m
+  and 210) and a swarm launcher (four rockets a shot, every one of them
+  homing on what the sight was on). Each has its own viewmodel and pose, and
+  the hand cannon, the rotary and the launcher their own report.
+- Checks (arsenal): the groups go round and remember, every one of the 27
+  fires, the hand cannon hurts two in a line, the rotary fires nothing in
+  its spin up and sixteen in the second after, four rockets out of the
+  swarm, and the shell goes off 60 m out in a second and a half.
+
+## 122. The weapons down the side
+
+- The ask: a modern HUD with the weapons at the side, like Half-Life's but
+  down the side.
+- `src/ui/arms.js`: a row a number key down the left edge, the key in a box
+  and the weapon it would give you under it with a bar of what is left of
+  its magazine and reserve together. The row you are on has its key lit in
+  the accent and the weapon in your hands a lit bar; a dry one is red. A pick
+  by a key, the wheel or anything else opens that key's group, every weapon
+  in it listed, for 2.4 s, and then the panel folds to one name a row and
+  dims to 55 %. A kit is shown a weapon a key. Hidden in a vehicle, a mech
+  (which has its own rows), in photo mode and while you are dying. Smaller
+  at phone width.
+- Checks (arsenal): ten rows 1 to 0 at the left edge, the right one lit and
+  open with its four, the marksman rifle lit; folded and dimmed three
+  seconds later; the Tactics kit is a weapon a key. Screenshots
+  arsenal-01-side-panel.png and arsenal-02-rotary.png.
+
+## 123. Kills make the suit better
+
+- The ask: upgrades for killing them: more energy for the suit, more speed,
+  a higher jump.
+- In the manner of the second game's nano catalyst. `Nanosuit.feed(kind)`:
+  a man is worth 1, a machine 2, an alien 3, a jeep, tank or jet 3, a mech
+  8; the first step costs 3 and each after it 2 more; the steps go round
+  energy, speed and jump, skipping one that is full, five of each. Energy
+  is 20 on the bar a step (which comes full when the step is taken) and 15
+  percent on the refill; speed is 6 percent on your feet and 0.12 on the
+  sprint multiple; jump is 0.3 on the held jump's multiple, so five steps
+  take it from 1.75 to 3.25. A kill in a hunt feeds it from `creditTarget`,
+  a mech from its destruction and a vehicle of theirs from its; each step
+  is a toast, a feed line, the charge chord and a flash on its pips. The
+  suit's panel has five pips a track and a line to the next step. The steps
+  are kept in the hunt's book and put back when the hunt carries on; a new
+  hunt starts from none.
+- Checks: unit (two new) on the order, the cost, the bigger bar coming full
+  and refilling to its own top, quicker feet, a higher jump, the ceiling,
+  and keeping them; hunt: three men and the bar is bigger and full, a mech
+  and you are quicker, the book has it and the pips read 20 percent.
+  Screenshot hunt-08-suit-upgrade.png.
+
+## 124. Death from above, mechs included
+
+- The ask: a takedown out of the jump, and onto their mechs: jump on one
+  and take it out.
+- In the air, F looks first for one of their mechs whose top you are within
+  2.5 m below and 12 m above and within its radius and 3.5 m of, and then
+  for a man 0.6 to 14 m below you, within 3.5 m and a third of a metre more
+  for every metre of drop, ahead of you or under you. You go to him on a
+  curve that gathers speed, a quarter of a second (a third for a mech), and
+  the body is not stepped meanwhile.
+- A man: dead, blood and a stain, a small blast of dust, and anybody within
+  3.2 m knocked down and hurt by up to 140. A mech: no shield stops a hand,
+  the reactor comes out with it, so it falls with none of the fusion blast
+  a kill otherwise sets off (the one way out of a mech's 46 m blast from
+  arm's length); 35 suit energy in a hunt, a second of slow motion, and you
+  are thrown up at 1.9 times a jump and back the way you came. On foot in
+  any mode; reaching a mech's back takes the suit's jump, the reflex leap or
+  a roof. The hint over the crosshair says Takedown or Mech takedown while
+  there is one.
+- Checks (hunt): six metres over a man, F takes him (and nothing from the
+  ground), you end on him, the man beside him is hurt, the kill feeds the
+  suit; three metres over a Lynx, F kills it with no reactor left running,
+  takes 35 energy, and you go up. Screenshot hunt-09-mech-takedown.png.
+
+## CI: the machines suite stands the run up before it aims
+
+- Since phase 120 dying is four seconds of a camera going round the body,
+  and the machines suite gets killed by its own machines before the EMP
+  launcher and the bite out of the city. Both aim or look along the camera,
+  so the EMP warhead went into the street at the player's feet in a tenth
+  of a second and the bite was measured from the orbit. A `standUp()` in
+  the page presses the button first. Stood up and in the open, the bite's
+  heap comes out 94 to 100 per cent darker from run to run where it was
+  measured from the floor before; the bar is nine in ten now, which a hole
+  showing sky (thousands of brighter pixels) still fails. The respawn also
+  had a bug of its own: the rifle came back in your hands under the name
+  of whatever you had held, now told to the HUD (checked in the hunt suite).
+- The same in the other suites that can get you killed: the city's fighter
+  is stood up and the wreck fires put out before it rolls, the ops suite's
+  `fresh()` and the shield saw stand the run up (killed, its stepping loops
+  ran at a fifth of the speed, so ninety seconds of convoy was eighteen),
+  and the convoy is measured in god mode. The interface check that 6 is the
+  banana now presses 4 through the thrown things to it, since 6 is the
+  close group from phase 121.
+- And the death camera's own check sampled by the clock, so on a CI runner
+  that draws a frame or two a second its first look came before the first
+  frame of the orbit, with the camera still in your head. It now waits for
+  the orbit to get 0.1, 0.6 and 1.6 s round, and reads the slow motion from
+  the time scale (a fifth) rather than from the death clock.
+- And the district suite's drop check: the city streams round the camera,
+  so a run killed before it held the district where its body lies while
+  the player was teleported 27 km off. It stands the run up first and says
+  so when it had to.
+
 ## CI: the combat checks find their lines instead of assuming them
 
 - The browser checks in CI have been red since phase 92 on two combat
