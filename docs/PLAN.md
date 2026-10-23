@@ -4810,6 +4810,10 @@ So there are two cities now, and a profile picks which:
   frame of the orbit, with the camera still in your head. It now waits for
   the orbit to get 0.1, 0.6 and 1.6 s round, and reads the slow motion from
   the time scale (a fifth) rather than from the death clock.
+- And the district suite's drop check: the city streams round the camera,
+  so a run killed before it held the district where its body lies while
+  the player was teleported 27 km off. It stands the run up first and says
+  so when it had to.
 
 ## CI: the combat checks find their lines instead of assuming them
 
