@@ -4785,6 +4785,43 @@ So there are two cities now, and a profile picks which:
   suit; three metres over a Lynx, F kills it with no reactor left running,
   takes 35 energy, and you go up. Screenshot hunt-09-mech-takedown.png.
 
+## 125. .BACKDOOR: the profiler and the phone
+
+- The ask: a new mode, .BACKDOOR, where you hack your way into the city
+  the way the Watch Dogs games do it: passers by, cars, buses, crimes like
+  theft and brawls, and a great many things to hack. Built in four phases:
+  this one is the mode and the phone, then traffic, then crime, then the
+  city's own systems.
+- What the games do, checked against the coverage of the first one (the
+  PlayStation blog, the Watch Dogs wiki and reviews, found through a web
+  search): a phone that profiles every citizen in the street, an app that
+  finds crimes about to happen, and hacks on traffic lights, steam pipes,
+  blockers, bridges, phones and cars, and a blackout of everything electric
+  nearby for a short while. The names, facts and numbers here are ours.
+- `src/game/backdoor.js`: `profileFor(seed)` is who somebody is (a name out
+  of Berlin's mix, an age, a job and what it pays, one fact they would rather
+  you did not know, and a record for about one in nine), the same person for
+  the same seed every time. `pickTarget` is what the phone is pointed at:
+  the nearest to the crosshair within 48 m and a cone that narrows a little
+  with distance. `Phone` is the battery (100, back at 10 a second after
+  0.8 s of rest), and a hack under way that wants the phone kept on its
+  target until it is done and is lost, battery spent, if it is not.
+- The mode: a button on the title card, the peaceful city with 18 people
+  about where Just a Walk has 10, and the phone in the corner (battery in
+  three cells, what you have taken, how many hacks). Pointed at somebody:
+  a bracket round them, red for a record, and a card beside it with who
+  they are and the two hacks, Q and E in place of the last weapon and the
+  reflex. Q rings their phone (12 battery): they stop where they are and
+  look at it for six seconds. E empties their account into yours (25
+  battery, 1.4 s with the phone on them). The money is kept between visits.
+- Checks: unit (4) on the same person for the same seed, the share with a
+  record, the aim, and the battery and the lost hack; browser
+  (tools/test-backdoor.mjs, 11, in CI as its own step): the button and its
+  note, the street and the phone, the card and its hacks, nothing when
+  pointed at nobody, Q stops a man on his way somewhere, E empties his
+  account once and the money is kept, looking away loses it, a flat battery
+  says so and fills again. Screenshot backdoor-01-profiler.png.
+
 ## CI: the machines suite stands the run up before it aims
 
 - Since phase 120 dying is four seconds of a camera going round the body,

@@ -661,6 +661,74 @@ html, body {
 #arms .row:not(.cur):not(.open) .it { min-width: 0; background: none; backdrop-filter: none; padding: 3px 4px; }
 #arms .row:not(.cur):not(.open) .it i { display: none; }
 
+/* .BACKDOOR: the phone's view of the street. A bracket round whatever it is
+   pointed at, a card beside it with who they are, and the battery and what
+   you have taken in the corner, in the plain white and teal of a city
+   operating system rather than the game's warm gold. */
+#hackmark {
+  position: absolute;
+  left: 0; top: 0;
+  width: 40px; height: 56px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+#hackmark.hidden, #hackcard.hidden, #phone.hidden { display: none; }
+#hackmark i {
+  position: absolute;
+  width: 9px; height: 9px;
+  border: 0 solid #e8fbff;
+  box-shadow: 0 0 6px rgba(120, 230, 255, 0.6);
+}
+#hackmark i:nth-child(1) { left: 0; top: 0; border-left-width: 2px; border-top-width: 2px; }
+#hackmark i:nth-child(2) { right: 0; top: 0; border-right-width: 2px; border-top-width: 2px; }
+#hackmark i:nth-child(3) { left: 0; bottom: 0; border-left-width: 2px; border-bottom-width: 2px; }
+#hackmark i:nth-child(4) { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
+#hackmark.criminal i { border-color: #ff5a4a; box-shadow: 0 0 6px rgba(255, 80, 60, 0.7); }
+#hackcard {
+  position: absolute;
+  left: 0; top: 0;
+  width: 250px;
+  padding: 8px 10px 8px;
+  background: linear-gradient(90deg, rgba(6, 14, 18, 0.82), rgba(6, 14, 18, 0.55));
+  border-left: 2px solid #7fe8ff;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: rgba(225, 245, 250, 0.82);
+  pointer-events: none;
+}
+#hackcard.criminal { border-left-color: #ff5a4a; }
+#hackcard .hc-name { font-weight: 700; font-size: 12.5px; letter-spacing: 0.06em; color: #fff; text-transform: uppercase; }
+#hackcard .hc-fact { color: rgba(170, 235, 250, 0.9); }
+#hackcard .hc-rec { color: #ff7a6a; font-weight: 700; }
+#hackcard .hc-rec:empty { display: none; }
+#hackcard .hc-acts { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+#hackcard .hc-acts span b {
+  display: inline-block; min-width: 14px; margin-right: 4px; padding: 0 3px;
+  background: #e8fbff; color: #061016; text-align: center; border-radius: 2px;
+}
+#hackcard .hc-acts span.off { opacity: 0.4; }
+#hackcard .hc-bar { height: 2px; margin-top: 6px; background: rgba(255, 255, 255, 0.1); }
+#hackcard .hc-bar i { display: block; height: 100%; width: 0; background: #7fe8ff; }
+#phone {
+  position: absolute;
+  right: 22px; bottom: 64px;
+  width: 168px;
+  font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: rgba(225, 245, 250, 0.8);
+  letter-spacing: 0.14em;
+}
+#phone .ph-label { text-transform: uppercase; margin-bottom: 5px; color: #7fe8ff; }
+#phone .ph-bat { position: relative; height: 5px; background: rgba(255, 255, 255, 0.1); }
+#phone .ph-bat i { display: block; height: 100%; width: 100%; background: #7fe8ff; box-shadow: 0 0 6px rgba(127, 232, 255, 0.5); }
+/* Three cells, the way the battery reads in the games it comes from. */
+#phone .ph-bat::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 33%, #061016 33%, #061016 34%, transparent 34%,
+    transparent 66.5%, #061016 66.5%, #061016 67.5%, transparent 67.5%);
+}
+#phone.low .ph-bat i { background: #ff6a4a; box-shadow: 0 0 6px rgba(255, 106, 74, 0.5); }
+#phone .ph-money { margin-top: 6px; display: flex; justify-content: space-between; font-size: 13px; color: #fff; letter-spacing: 0.04em; }
+#phone .ph-money em { font-style: normal; font-size: 9.5px; color: rgba(225, 245, 250, 0.6); align-self: flex-end; letter-spacing: 0.12em; }
+
 #killfeed {
   position: absolute;
   right: 18px; top: 240px;

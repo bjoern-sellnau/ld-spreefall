@@ -871,6 +871,49 @@ export class Audio {
     o.stop(t + 0.1);
   }
 
+  /**
+   * The phone getting into something: two quick data chirps, the second
+   * higher, and a lower one when it is a hack that failed or was lost.
+   */
+  hackChirp(ok = true) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const notes = ok ? [1480, 2220] : [620, 410];
+    notes.forEach((hz, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(hz, t + i * 0.07);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + i * 0.07);
+      g.gain.exponentialRampToValueAtTime(0.05, t + i * 0.07 + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.07 + 0.06);
+      o.connect(g).connect(this.master);
+      o.start(t + i * 0.07);
+      o.stop(t + i * 0.07 + 0.07);
+    });
+  }
+
+  /** Somebody's phone ringing in the street, quieter the further off. */
+  ringtone(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = 0.05 * Math.max(0.1, 1 - distance / 60);
+    for (let k = 0; k < 6; k++) {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(k % 2 ? 1320 : 1760, t + k * 0.11);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + k * 0.11);
+      g.gain.exponentialRampToValueAtTime(level, t + k * 0.11 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.11 + 0.1);
+      o.connect(g).connect(this.master);
+      o.start(t + k * 0.11);
+      o.stop(t + k * 0.11 + 0.11);
+    }
+  }
+
   spotted() {
     const ctx = this.ctx;
     if (!ctx || !this.enabled) return;

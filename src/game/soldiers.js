@@ -394,8 +394,12 @@ export class Soldiers {
     s.health = CIVIL.health;
     s.maxHealth = CIVIL.health;
     s.panicLeft = 0;
-    // Which coat he has on, which the shader reads out of the fraction.
+    // Which coat he has on, which the shader reads out of the fraction, and
+    // who he is to a phone that profiles him (.BACKDOOR): the slot is reused,
+    // so whatever was known about the last one in it goes.
     s.who = Math.random();
+    s.profile = null;
+    s.phoneLeft = 0;
     this._errand(s);
     return s;
   }
@@ -443,6 +447,15 @@ export class Soldiers {
     }
     s.panicLeft = Math.max(0, (s.panicLeft || 0) - dt);
     const running = s.panicLeft > 0;
+    // A phone that rang: he stops where he is and looks at it, unless
+    // something has frightened him, which beats any message.
+    if (!running && s.phoneLeft > 0) {
+      s.phoneLeft = Math.max(0, s.phoneLeft - dt);
+      s.vx = 0; s.vz = 0;
+      s.y = w.groundHeight(s.x, s.z);
+      s.canSee = false;
+      return;
+    }
     if (running) {
       // Straight away from it, picked fresh each step so that turning a
       // corner does not send him back towards the noise.

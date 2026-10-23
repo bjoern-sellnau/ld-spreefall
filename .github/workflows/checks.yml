@@ -105,6 +105,8 @@ jobs:
         run: node tools/test-ops.mjs
       - name: Play The Hunt, in the suit
         run: node tools/test-hunt.mjs
+      - name: Get into the city in .BACKDOOR
+        run: node tools/test-backdoor.mjs
       - name: Keep the screenshots
         if: always()
         uses: actions/upload-artifact@v4

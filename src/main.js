@@ -57,6 +57,7 @@ import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convo
 import { Grab, GRAB } from './game/grab.js';
 import { Grime, GRIME } from './ui/grime.js';
 import { Nanosuit, SUIT } from './game/nanosuit.js';
+import { BACKDOOR, Phone, profileFor, pickTarget } from './game/backdoor.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
 import { Slayer, SLAYER } from './game/slayer.js';
@@ -80,7 +81,10 @@ const el = {
   mapFit: $('mapfit'), mapHere: $('maphere'), mapZoom: $('mapzoom'),
   mapUnmark: $('mapunmark'), compassBar: $('compassbar'), cockpitHud: $('cockpithud'),
   suit: $('suit'), suitBar: $('suitbar'), suitArmor: $('suitarmor'), suitCloak: $('suitcloak'), suitFx: $('suitfx'),
-  suitVisor: $('suitvisor'), suitNano: $('suitnano'), suitUps: $('suitups'), suitCat: $('suitcat'), visorHud: $('visorhud'), grime: $('grime'), throwArc: $('throwarc'),
+  suitVisor: $('suitvisor'), suitNano: $('suitnano'), suitUps: $('suitups'), suitCat: $('suitcat'),
+  hackMark: $('hackmark'), hackCard: $('hackcard'), hcName: $('hcname'), hcJob: $('hcjob'), hcFact: $('hcfact'),
+  hcRec: $('hcrec'), hcActs: $('hcacts'), hcProg: $('hcprog'),
+  phone: $('phone'), phoneBat: $('phbat'), phoneMoney: $('phmoney'), phoneHacks: $('phhacks'), visorHud: $('visorhud'), grime: $('grime'), throwArc: $('throwarc'),
   btnTravel: $('btntravel'),
   crosshair: $('crosshair'), gunmark: $('gunmark'), blastCharge: $('blastcharge'), hitmarker: $('hitmarker'), damage: $('damage'),
   streetName: $('streetname'),
@@ -516,6 +520,10 @@ async function main() {
     // about what you came for rather than a setting.
     peaceful: (() => {
       try { return localStorage.getItem('spreefall.walk') === '1'; } catch { return false; }
+    })(),
+    // .BACKDOOR: the peaceful city with a phone that gets into it.
+    backdoor: (() => {
+      try { return localStorage.getItem('spreefall.backdoor') === '1'; } catch { return false; }
     })(),
     blastSlow: 0,
     // While a Stinger is running down what it locked onto.
@@ -5977,6 +5985,150 @@ async function main() {
     showOps();
   });
 
+  // --- .BACKDOOR ---------------------------------------------------------------
+  //
+  // A phone that profiles whoever it is pointed at and gets into what they
+  // carry. What it can be pointed at is a list the later phases add to;
+  // what each hack does to the street is here.
+  const phone = new Phone();
+  state.hackTarget = null;
+  state.hacksDone = 0;
+  const MONEY_KEY = 'spreefall.backdoor.money';
+  function savedMoney() {
+    try { return Math.max(0, parseInt(localStorage.getItem(MONEY_KEY) || '0', 10) || 0); } catch { return 0; }
+  }
+  function saveMoney() {
+    try { localStorage.setItem(MONEY_KEY, String(Math.round(phone.money))); } catch { /* private mode */ }
+  }
+  const euro = (n) => `€${Math.round(n).toLocaleString('en-GB')}`;
+  function backdoorOn() {
+    return state.backdoor && state.mode === 'walk' && !photo.active && !state.inMech && !state.death;
+  }
+  /** Who somebody is, worked out the first time the phone looks at them. */
+  function profileOf(sd) {
+    if (!sd.profile) sd.profile = profileFor(sd.who || 0.5);
+    return sd.profile;
+  }
+  /** Everything the phone could be pointed at, where it would point. */
+  function hackables() {
+    const out = [];
+    for (const sd of soldiers.active) {
+      if (!sd.alive || !sd.civilian || sd.health <= 0 || sd.state === 5) continue;
+      out.push({ kind: 'person', ref: sd, x: sd.x, y: sd.y + 1.55, z: sd.z });
+    }
+    return out;
+  }
+  /** The two hacks a target offers, on Q and on E. */
+  function hacksFor(t) {
+    if (t.kind === 'person') {
+      const p = profileOf(t.ref);
+      return [
+        { kind: 'distract', label: 'Distract' },
+        p.bank > 0
+          ? { kind: 'bank', label: `Empty account ${euro(p.bank)}` }
+          : { kind: 'bank', label: 'Account empty', off: true },
+      ];
+    }
+    return [];
+  }
+  function hackKey(slot) {
+    const t = state.hackTarget;
+    if (!t) { toast('nothing in reach to get into'); audio.hackChirp(false); return false; }
+    const h = hacksFor(t)[slot];
+    if (!h || h.off) { audio.hackChirp(false); return false; }
+    const why = phone.start(h.kind, t);
+    if (why === 'battery') { toast('battery too low'); audio.hackChirp(false); return false; }
+    if (why) return false;
+    audio.hackChirp(true);
+    return true;
+  }
+  /** What a hack that has gone through does. */
+  function applyHack(job) {
+    const t = job.target;
+    const away = Math.hypot(t.ref.x - player.x, t.ref.z - player.z);
+    if (job.kind === 'distract') {
+      t.ref.phoneLeft = BACKDOOR.hacks.distract.effect;
+      audio.ringtone(away);
+      feed(`<b>distracted</b> ${profileOf(t.ref).name}`);
+    } else if (job.kind === 'bank') {
+      const p = profileOf(t.ref);
+      const got = p.bank;
+      p.bank = 0;
+      phone.money += got;
+      saveMoney();
+      toast(`+${euro(got)} from ${p.name}`);
+      feed(`<b>account emptied</b> ${p.name}, ${euro(got)}`);
+    }
+    state.hacksDone++;
+  }
+  /** The phone, every frame: what it is pointed at, the hack under way, and the HUD. */
+  function backdoorStep(dt) {
+    const shown = backdoorOn();
+    el.phone.classList.toggle('hidden', !shown);
+    if (!shown) {
+      state.hackTarget = null;
+      el.hackMark.classList.add('hidden');
+      el.hackCard.classList.add('hidden');
+      phone.update(dt, () => false);
+      return;
+    }
+    // What it is pointed at: the nearest to the crosshair that it can see.
+    const eye = { x: camera.position[0], y: camera.position[1], z: camera.position[2] };
+    const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+    let cands = hackables();
+    let found = null;
+    for (let k = 0; k < 3 && cands.length; k++) {
+      const p = pickTarget(eye, dir, cands);
+      if (!p) break;
+      if (world.lineOfSight(eye.x, eye.y, eye.z, p.thing.x, p.thing.y, p.thing.z)) { found = p.thing; break; }
+      cands = cands.filter((c) => c !== p.thing);
+    }
+    state.hackTarget = found;
+    const res = phone.update(dt, (target) => !!found && found.ref === target.ref
+      && target.ref.alive && target.ref.health > 0);
+    if (res && res.done) { audio.hackChirp(true); applyHack(res.done); }
+    if (res && res.lost) { audio.hackChirp(false); toast('lost the connection'); }
+
+    el.phoneBat.style.width = `${Math.round(phone.battery / BACKDOOR.battery.most * 100)}%`;
+    el.phone.classList.toggle('low', phone.battery < 25);
+    el.phoneMoney.textContent = euro(phone.money);
+    el.phoneHacks.textContent = `${state.hacksDone} hack${state.hacksDone === 1 ? '' : 's'}`;
+
+    const at = found && projectPoint(camera.viewProj, found.x, found.y, found.z, window.innerWidth, window.innerHeight);
+    if (!at) {
+      el.hackMark.classList.add('hidden');
+      el.hackCard.classList.add('hidden');
+      return;
+    }
+    const p = found.kind === 'person' ? profileOf(found.ref) : null;
+    const bad = !!(p && p.criminal);
+    const dist = Math.hypot(found.x - eye.x, found.y - eye.y, found.z - eye.z);
+    const size = Math.max(18, Math.min(70, 900 / Math.max(1, dist)));
+    el.hackMark.classList.remove('hidden');
+    el.hackMark.classList.toggle('criminal', bad);
+    el.hackMark.style.left = `${at.x}px`;
+    el.hackMark.style.top = `${at.y + size * 0.35}px`;
+    el.hackMark.style.width = `${size * 0.7}px`;
+    el.hackMark.style.height = `${size * 1.1}px`;
+    el.hackCard.classList.remove('hidden');
+    el.hackCard.classList.toggle('criminal', bad);
+    el.hackCard.style.left = `${Math.min(window.innerWidth - 270, at.x + size * 0.5 + 12)}px`;
+    el.hackCard.style.top = `${Math.max(8, Math.min(window.innerHeight - 170, at.y - 20))}px`;
+    if (p) {
+      el.hcName.textContent = p.name;
+      el.hcJob.textContent = `${p.age} · ${p.job} · ${euro(p.income)} a year`;
+      el.hcFact.textContent = p.fact;
+      el.hcRec.textContent = p.record ? `RECORD: ${p.record}` : '';
+    }
+    const acts = hacksFor(found);
+    el.hcActs.innerHTML = acts.map((h, i) => {
+      const cost = BACKDOOR.hacks[h.kind] ? BACKDOOR.hacks[h.kind].cost : 0;
+      const off = h.off || phone.battery < cost;
+      return `<span class="${off ? 'off' : ''}"><b>${i ? 'E' : 'Q'}</b>${h.label}</span>`;
+    }).join('');
+    el.hcProg.style.width = `${Math.round(phone.progress * 100)}%`;
+  }
+
   // --- the suit, in The Hunt -------------------------------------------------------
   const suit = new Nanosuit();
   /** Wearing it: The Hunt, on foot, in the street. */
@@ -7224,6 +7376,8 @@ async function main() {
     weapon.setKit(campaign.active ? campaign.mode : null);
     // In the suit you start with the bow in your hands: it is what the cloak is for.
     if (campaign.mode === 'hunt') weapon.select('bow');
+    phone.reset();
+    phone.money = savedMoney();
     pickups.reset();
     gibs.clear();
     demolition.reset();
@@ -7252,11 +7406,14 @@ async function main() {
   // the cheat menu because it is a mode, not a cheat: the score counts.
   const modeButtons = [...document.querySelectorAll('.diff.mode')];
   const modeNow = () => (campaign.active ? campaign.mode
+    : state.backdoor ? 'backdoor'
     : state.peaceful ? 'walk' : (machines.active ? 'machines' : 'berlin'));
   const showMode = () => {
     const now = modeNow();
     for (const b of modeButtons) b.classList.toggle('on', b.dataset.mode === now);
-    el.modeNote.textContent = now === 'hunt'
+    el.modeNote.textContent = now === 'backdoor'
+      ? 'The city runs on one network and your phone has a way in. Point it at anybody to see who they are; Q and E get into what they carry. Nobody is hunting you, and nothing you take is ever given back.'
+      : now === 'hunt'
       ? 'Hunting grounds held by squads in black, and you in the suit: Q armour, E cloak, Shift a sprint and Space held a jump that both run on its energy, F a punch. The bow fires from the cloak; a gun drops it.'
       : now === 'tactics'
       ? 'Armed camps across the city, to be taken one at a time. Take one without anybody raising the alarm for the bonus; break the radio and nobody comes to help them.'
@@ -7273,9 +7430,13 @@ async function main() {
   };
   for (const b of modeButtons) {
     b.addEventListener('click', () => {
-      state.peaceful = b.dataset.mode === 'walk';
+      state.backdoor = b.dataset.mode === 'backdoor';
+      state.peaceful = b.dataset.mode === 'walk' || state.backdoor;
       campaign.setMode(b.dataset.mode);
-      try { localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0'); } catch { /* private mode */ }
+      try {
+        localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0');
+        localStorage.setItem('spreefall.backdoor', state.backdoor ? '1' : '0');
+      } catch { /* private mode */ }
       machines.set(b.dataset.mode === 'machines');
       // Picking the mode puts the clock back on the hour it actually is,
       // unless the slider has been moved: a tab left open since the morning
@@ -7581,6 +7742,12 @@ async function main() {
         return;
       }
     }
+    // .BACKDOOR: Q and E are the phone's two hacks on whatever it is
+    // pointed at, rather than the last weapon and the reflex.
+    if (backdoorOn() && (code === 'KeyQ' || code === 'KeyE')) {
+      hackKey(code === 'KeyQ' ? 0 : 1);
+      return;
+    }
     // In the suit, Q and E are its two modes, the way the later games had
     // them, rather than the last weapon and the reflex.
     if (suited() && !photo.active && (code === 'KeyQ' || code === 'KeyE')) {
@@ -7765,7 +7932,7 @@ async function main() {
     // And who is about. A city with nobody hunting you is still a city with
     // people in it; one that is being shelled is not, and the ones who were
     // there have already gone.
-    soldiers.civilianBudget = state.peaceful ? CIVILIANS : 0;
+    soldiers.civilianBudget = state.peaceful ? (state.backdoor ? BACKDOOR.civilians : CIVILIANS) : 0;
 
     if (state.mode === 'intro' || state.mode === 'landing') return;
 
@@ -8465,6 +8632,7 @@ async function main() {
     // a vehicle its own guns.
     arms.update(elapsed, weapon, state.mode === 'walk' && !photo.active && !state.inMech
       && !state.inVehicle && !state.death);
+    backdoorStep(elapsed);
     if (state.mode === 'walk' && !photo.active) {
       // Combat interface.
       const hp = Math.round(combat.health);
@@ -8628,6 +8796,8 @@ async function main() {
     storm, stormSpec: VOID_STORM,
     takedown: () => takedown(), takedownTarget: () => takedownTarget(),
     airTakedown: () => airTakedown(), airTakedownTarget: () => airTakedownTarget(), slamSpec: SLAM, suitKill: (k) => suitKill(k),
+    phone, backdoorSpec: BACKDOOR, hackKey: (slot) => hackKey(slot), hackables: () => hackables(),
+    get hackTarget() { return state.hackTarget; }, profileOf: (sd) => profileOf(sd),
     demonSpec: DEMON, gazerSpec: GAZER,
     spawnDemon(kind, dx, dz, level = 0) {
       // Put down exactly where it was asked for, for a test that needs it there.

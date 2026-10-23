@@ -687,6 +687,32 @@ nothing is copied from them.
 ![The tech bow in The Hunt](docs/screenshots/hunt-07-tech-bow.png)
 ![The tactic bow, chosen in the cheat menu](docs/screenshots/hunt-08-tactic-bow.png)
 
+## .BACKDOOR
+
+The city runs on one network, and your phone has a way into it. Nobody is
+hunting you here: it is the peaceful city, with nearly twice as many people
+in the streets as Just a Walk, and a phone in the corner with a battery in
+three cells and what you have taken so far.
+
+- **Point it at somebody** and it profiles them: a bracket round them, red if
+  they have a record, and a card with their name, age, job and what it pays,
+  and one thing about them they would rather you did not know. The same
+  person is the same person every time you look.
+- **Q** rings their phone: they stop where they stand and look at it for a
+  few seconds. **E** empties their bank account into yours, which takes a
+  moment and wants the phone kept on them; look away and it is lost, and the
+  battery with it. What you take is kept between visits.
+- The battery pays for every hack and fills again by itself once you leave
+  it alone.
+- Coming next: traffic and buses you can get into, crimes in the street to
+  stop, and the city's own systems (traffic lights, steam pipes, a
+  blackout).
+
+Where the ideas come from: the Watch Dogs games, whose phone profiles every
+citizen in the street and hacks the city's traffic lights, steam pipes,
+phones and cars, and can black out everything electric nearby for a short
+while. The people, names, facts and numbers here are ours.
+
 ## The end of an operation
 
 When every camp or nest in the operation has been taken, a card says what it
