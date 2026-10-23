@@ -361,6 +361,12 @@ async function run() {
   // A fresh camp at level one, nobody alerted, and you a long way off.
   const fresh = () => page.evaluate(() => {
     const s = window.spreefall;
+    // Killed in the check before, the run would be four seconds of slow
+    // motion with the camera going round the body (phase 120), and the
+    // simulation steps here never let those four seconds pass: it is stood
+    // up first.
+    const down = document.getElementById('down');
+    if (s.state.death || (down && !down.classList.contains('hidden'))) document.getElementById('downbtn').click();
     s.tactics.clear();
     s.campaign.reset({});
     s.soldiers.reset();
@@ -641,6 +647,9 @@ async function run() {
   await fresh();
   const convoy = await page.evaluate(() => {
     const s = window.spreefall;
+    // The men out of the jeeps shoot, and this measures them arriving rather
+    // than how long you last against them.
+    s.setCheat('godmode', true);
     const site = s.campaign.allSites()[1] || s.campaign.allSites()[0];
     const run = s.tactics.live.get(site.id);
     s.vehicles.reset();
@@ -1399,6 +1408,8 @@ async function run() {
 
   const shield = await page.evaluate(async () => {
     const s = window.spreefall;
+    const down = document.getElementById('down');
+    if (s.state.death || (down && !down.classList.contains('hidden'))) document.getElementById('downbtn').click();
     const put = (kind, dx, dz) => {
       const d = s.spawnDemon(kind, dx, dz);
       d.rise = 0; d.y = s.world.groundHeight(d.x, d.z);

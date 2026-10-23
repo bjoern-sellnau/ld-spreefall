@@ -4798,6 +4798,13 @@ So there are two cities now, and a profile picks which:
   showing sky (thousands of brighter pixels) still fails. The respawn also
   had a bug of its own: the rifle came back in your hands under the name
   of whatever you had held, now told to the HUD (checked in the hunt suite).
+- The same in the other suites that can get you killed: the city's fighter
+  is stood up and the wreck fires put out before it rolls, the ops suite's
+  `fresh()` and the shield saw stand the run up (killed, its stepping loops
+  ran at a fifth of the speed, so ninety seconds of convoy was eighteen),
+  and the convoy is measured in god mode. The interface check that 6 is the
+  banana now presses 4 through the thrown things to it, since 6 is the
+  close group from phase 121.
 
 ## CI: the combat checks find their lines instead of assuming them
 
