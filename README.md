@@ -718,15 +718,21 @@ three cells and what you have taken so far.
   catch, or shoot him, for less. Stopping one pays and raises your good
   name; one that gets away, a victim on the ground, or an innocent shot
   lowers it.
+- **Traffic lights** at the junctions of the bigger roads, in the German
+  order (red, red and amber, green, amber), and the traffic stops for them.
+  Pointed at a mast, the phone shows the junction and what each way shows:
+  **Q** turns it red both ways and the traffic piles up, **E** turns it
+  green both ways and nobody gives way to anybody.
 - The battery pays for every hack and fills again by itself once you leave
   it alone.
-- Coming next: the city's own systems (traffic lights, steam pipes, a
-  blackout).
+- Coming next: steam pipes under the street, and a blackout.
 
 Where the ideas come from: the Watch Dogs games, whose phone profiles every
 citizen in the street and hacks the city's traffic lights, steam pipes,
 phones and cars, and can black out everything electric nearby for a short
-while. The people, names, facts and numbers here are ours.
+while. The people, names, facts and numbers here are ours. The lights keep
+German time: three seconds of amber where the limit is 50 km/h, and one
+second of red and amber before green, as the RiLSA 2015 sets it.
 
 ## The end of an operation
 

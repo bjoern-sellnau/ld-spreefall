@@ -4902,6 +4902,51 @@ So there are two cities now, and a profile picks which:
   gets away, and an innocent shot costs your name. Screenshot
   backdoor-03-crime.png.
 
+## 128. .BACKDOOR: traffic lights, and the phone in them
+
+- Lights where a bigger road (primary, secondary, tertiary, trunk) meets
+  another, crossing it or ending on it, with at least three ways out in two
+  directions. The map fetch keeps the roads and not the signal nodes, so
+  `junctionsOf` in `src/game/traffic.js` works them out from where the
+  centrelines meet: two segments that cross, or the end of one within 6 m
+  of another, merged within 15 m, and the ways out read off the lines that
+  pass (both ways) or end there (one way). The axis is the widest road's;
+  whatever crosses it is the other direction. On the offline Mitte that is
+  39 junctions, among them Unter den Linden at Wilhelmstrasse, Glinkastrasse
+  and Friedrichstrasse; two quiet streets crossing get none.
+- The German order, checked against sources: green for ten seconds, amber
+  for three (the time for 50 km/h), red, and red and amber together for the
+  last second before green, which the RiLSA 2015 sets at one second; two
+  seconds of red both ways between the two directions. Each junction is
+  offset from the next so a street does not change all at once.
+- A driver watches for the light ahead (18 m plus his speed): at red, or at
+  red and amber, he stops 2 m short of the junction; at amber he stops if
+  he still can at 5 m/s2 and goes on if he cannot; over the line he goes on
+  whatever it shows. A dark junction is crawled through at 5 m/s.
+- A mast for every way in, on the right of whoever is coming, facing them:
+  a thin pole, a near black housing with a board behind it and three lamps
+  under visors, lit by the shader from what the instance says it shows.
+  Up to 96 drawn, the nearest first.
+- The phone: pointed at a mast it shows the junction by its streets and
+  what each direction shows. Q turns it red both ways for ten seconds (15
+  battery) and the traffic piles up at it; E turns it green both ways for
+  eight (30 battery), and a driver who has green both ways pays no
+  attention to anybody crossing, which is how the crash happens.
+- Fixed on the way: a passer by appeared through the sphere of light that
+  machines and soldiers arrive in, and everybody within 35 m of it ran,
+  which in .BACKDOOR (eighteen people, topped up all the time) meant
+  somebody was always running. `spawnNear` now takes whether it arrives,
+  and `spawnCivilianNear` says no, as its comment always said it did. It
+  showed up as a crime victim who walked off mid crime.
+- Checks: unit (5 signals, 1 civilians) on where the lights are and are
+  not, the order and the amber time, never green both ways, a car that
+  waits at red and goes on green, two that meet on green both ways, held
+  on red both ways, a crawl through a dark junction, and a passer by who
+  frightens nobody; browser (backdoor suite, six more): the masts are
+  there and drawn, the German order off the game clock, the card, Q holds
+  a car short of the junction, E lets it through, and two cars from two
+  ways crash on green both ways. Screenshot backdoor-04-lights.png.
+
 ## CI: the machines suite stands the run up before it aims
 
 - Since phase 120 dying is four seconds of a camera going round the body,

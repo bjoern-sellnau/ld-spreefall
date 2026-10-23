@@ -343,8 +343,13 @@ export class Soldiers {
     return null;
   }
 
-  /** Puts one on the ground out of sight, between minR and maxR of the player. */
-  spawnNear(px, pz, minR, maxR) {
+  /**
+   * Puts one on the ground out of sight, between minR and maxR of the
+   * player. One that arrives comes through a sphere of light, which the
+   * street runs from; one that does not (somebody who lives here) just walks
+   * in.
+   */
+  spawnNear(px, pz, minR, maxR, arrive = true) {
     const s = this.free();
     if (!s) return null;
     const w = this.world;
@@ -367,7 +372,7 @@ export class Soldiers {
       if (boxed) continue;
       s.spawn(x, g, z, this.tier);
       this.active.push(s);
-      if (this.onArrive) this.onArrive(s);
+      if (arrive && this.onArrive) this.onArrive(s);
       return s;
     }
     return null;
@@ -386,7 +391,7 @@ export class Soldiers {
    * street like anybody else.
    */
   spawnCivilianNear(px, pz, minR, maxR) {
-    const s = this.spawnNear(px, pz, minR, maxR);
+    const s = this.spawnNear(px, pz, minR, maxR, false);
     if (!s) return null;
     s.civilian = true;
     s.rise = 0;

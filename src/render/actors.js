@@ -20,6 +20,7 @@ const MAX_JETS = 6;
 const MAX_VEHICLES = 8;
 // Camps near enough to draw at once.
 const MAX_CAMPS = 12;
+const MAX_SIGNALS = 96;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 256;
@@ -1142,6 +1143,24 @@ export function buildBusMesh() {
   return m;
 }
 
+/**
+ * A traffic light on its mast, Berlin style: a dark housing on a thin pole
+ * with red, amber and green (parts 101 to 103) facing whoever is coming,
+ * each under a visor. Which are lit the instance says, in the rotor
+ * channel: 0 red, 1 red and amber, 2 green, 3 amber, 4 dark.
+ */
+export function buildSignalMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, 0, 0.075, 0.06, 3.5, 8, 100);                // the mast
+  m.box(0, 2.9, 0, 0.34, 1.02, 0.26, 100);                      // the housing
+  m.box(0, 2.9, 0.15, 0.52, 1.2, 0.03, 100);                    // the board behind it
+  for (const [y, part] of [[3.22, 101], [2.9, 102], [2.58, 103]]) {
+    m.icosphere(0, y, -0.12, 0.1, 10, 6, part);                 // the lamp
+    m.box(0, y + 0.13, -0.2, 0.26, 0.025, 0.14, 100);           // its visor
+  }
+  return m;
+}
+
 export function buildJeepMesh() {
   const m = new MeshBuild();
   const P = 31;
@@ -1519,6 +1538,8 @@ export class Actors {
     this.camp = this._uploadMesh(buildCampMesh(), MAX_CAMPS, 2);
     // Slayer's nests, through the same shader.
     this.nest = this._uploadMesh(buildNestMesh(), MAX_CAMPS, 2);
+    // The traffic lights round you in .BACKDOOR, through the same shader.
+    this.signal = this._uploadMesh(buildSignalMesh(), MAX_SIGNALS, 2);
     this.vehicles = {
       car: this._uploadMesh(buildCarMesh(), 24, 2),
       bus: this._uploadMesh(buildBusMesh(), 6, 2),
@@ -2075,10 +2096,32 @@ export class Actors {
     }
   }
 
+  /** @param {{x:number,y:number,z:number,yaw:number,light:number}[]} list traffic lights to draw */
+  updateSignals(list) {
+    const gl = this.gl;
+    const mesh = this.signal;
+    const d = mesh.instData;
+    let n = 0;
+    for (const c of list) {
+      if (n >= MAX_SIGNALS) break;
+      const o = n * 8;
+      d[o] = c.x; d[o + 1] = c.y; d[o + 2] = c.z; d[o + 3] = -c.yaw;
+      d[o + 4] = 0; d[o + 5] = 0; d[o + 6] = 0;
+      d[o + 7] = c.light;
+      n++;
+    }
+    mesh.instanceCount = n;
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 8);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
   drawCamps() {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest]) {
+    for (const mesh of [this.camp, this.nest, this.signal]) {
       if (!mesh.instanceCount) continue;
       this.progDrone.use();
       gl.bindVertexArray(mesh.vao);
@@ -2092,7 +2135,7 @@ export class Actors {
   drawCampShadows(lightViewProj) {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest]) {
+    for (const mesh of [this.camp, this.nest, this.signal]) {
       if (!mesh.instanceCount) continue;
       this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
       gl.bindVertexArray(mesh.vao);

@@ -58,7 +58,10 @@ import { Grab, GRAB } from './game/grab.js';
 import { Grime, GRIME } from './ui/grime.js';
 import { Nanosuit, SUIT } from './game/nanosuit.js';
 import { BACKDOOR, Phone, profileFor, pickTarget } from './game/backdoor.js';
-import { TRAFFIC, roadIndex, pickSpawn, nearestLane, straightNear, drive as trafficDrive } from './game/traffic.js';
+import {
+  TRAFFIC, SIGNALS, roadIndex, pickSpawn, nearestLane, straightNear, drive as trafficDrive,
+  junctionsOf, mastsOf, lightAt,
+} from './game/traffic.js';
 import { CRIME, newCrime, crimeStep, crimeRecord, repFor, stopped as crimeStopped } from './game/crime.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -6036,6 +6039,7 @@ async function main() {
       if (!v.alive || !v.traffic || v.health <= 0 || v === state.inVehicle) continue;
       out.push({ kind: v.type, ref: v, x: v.x, y: v.y + (v.type === 'bus' ? 2.4 : 1.2), z: v.z });
     }
+    for (const m of signalMasts(BACKDOOR.reach + 10)) out.push({ kind: 'signal', ref: m.j, x: m.x, y: m.y + 2.9, z: m.z });
     return out;
   }
   /** A number plate, from the car's own seed: B for Berlin, letters and digits. */
@@ -6046,6 +6050,9 @@ async function main() {
   }
   /** The two hacks a target offers, on Q and on E. */
   function hacksFor(t) {
+    if (t.kind === 'signal') {
+      return [{ kind: 'allRed', label: 'All red' }, { kind: 'allGreen', label: 'All green' }];
+    }
     if (t.kind === 'car') {
       return [{ kind: 'stall', label: 'Stall engine' }, { kind: 'ram', label: 'Ram' }];
     }
@@ -6105,6 +6112,10 @@ async function main() {
       if (v.traffic) { v.traffic.opened = true; v.traffic.stalled = Math.max(v.traffic.stalled || 0, 6); }
       const out = openDoors(v);
       feed(`<b>doors opened</b> ${out} off the bus`);
+    } else if (job.kind === 'allRed' || job.kind === 'allGreen') {
+      const green = job.kind === 'allGreen';
+      t.ref.hack = { kind: green ? 'green' : 'red', left: BACKDOOR.hacks[job.kind].effect };
+      feed(`<b>${green ? 'all green' : 'all red'}</b> ${junctionName(t.ref)}`);
     } else if (job.kind === 'bank') {
       const p = profileOf(t.ref);
       const got = p.bank;
@@ -6140,7 +6151,7 @@ async function main() {
     }
     state.hackTarget = found;
     const res = phone.update(dt, (target) => !!found && found.ref === target.ref
-      && target.ref.alive && target.ref.health > 0);
+      && target.ref.alive !== false && !(target.ref.health <= 0));
     if (res && res.done) { audio.hackChirp(true); applyHack(res.done); }
     if (res && res.lost) { audio.hackChirp(false); toast('lost the connection'); }
 
@@ -6183,6 +6194,14 @@ async function main() {
       el.hcJob.textContent = `Registered to ${owner.name}, ${owner.job.toLowerCase()}`;
       el.hcFact.textContent = `${Math.round(Math.abs(v.speed) * 3.6)} km/h${v.traffic && v.traffic.stalled > 0 ? ', engine dead' : ''}`;
       el.hcRec.textContent = '';
+    } else if (found.kind === 'signal') {
+      const j = found.ref;
+      el.hcName.textContent = 'Traffic lights';
+      el.hcJob.textContent = junctionName(j);
+      el.hcFact.textContent = j.hack
+        ? `${j.hack.kind === 'green' ? 'ALL GREEN' : 'ALL RED'} for ${Math.ceil(j.hack.left)} s`
+        : [0, 1].map((ph) => `${legName(j, ph)} ${LIGHT_WORD[lightAt(j, ph, state.signalClock)]}`).join(' · ');
+      el.hcRec.textContent = '';
     } else if (found.kind === 'bus') {
       const v = found.ref;
       el.hcName.textContent = `BVG ${v.line || 'M41'}`;
@@ -6215,6 +6234,47 @@ async function main() {
       trafficLen = lines.length;
     }
     return trafficIdx;
+  }
+  // The lights: where they are is worked out once from the same lines,
+  // what they show from a clock that runs with the traffic.
+  let junctionList = [], junctionIdx = null;
+  state.signalClock = 0;
+  function trafficJunctions() {
+    const idx = trafficRoads();
+    if (junctionIdx !== idx) {
+      junctionList = junctionsOf(idx);
+      for (const j of junctionList) j.masts = mastsOf(j);
+      junctionIdx = idx;
+    }
+    return junctionList;
+  }
+  function junctionsNear(x, z, r = SIGNALS.near) {
+    return trafficJunctions().filter((j) => Math.abs(j.x - x) < r && Math.abs(j.z - z) < r);
+  }
+  const LIGHT_CODE = { red: 0, redAmber: 1, green: 2, amber: 3, off: 4 };
+  const LIGHT_WORD = { red: 'red', redAmber: 'red and amber', green: 'green', amber: 'amber', off: 'dark' };
+  const junctionName = (j) => j.names.slice(0, 2).join(' / ') || 'Junction';
+  /** What a direction at a junction is called: the widest road in it. */
+  function legName(j, phase) {
+    let best = null;
+    for (const l of j.legs) if (l.phase === phase && l.name && (!best || l.w > best.w)) best = l;
+    return best ? best.name : (phase ? 'across' : 'along');
+  }
+  /** The masts round you, nearest first, standing on the ground, with what each shows. */
+  function signalMasts(r = SIGNALS.near) {
+    if (!state.backdoor || state.mode !== 'walk') return [];
+    const out = [];
+    for (const j of junctionsNear(player.x, player.z, r)) {
+      for (const m of j.masts) {
+        const d = Math.hypot(m.x - player.x, m.z - player.z);
+        if (d > r) continue;
+        if (world.isLoaded && !world.isLoaded(m.x, m.z)) continue;
+        out.push({ x: m.x, y: world.groundHeight(m.x, m.z), z: m.z, yaw: m.yaw, j, d,
+          light: LIGHT_CODE[lightAt(j, m.phase, state.signalClock)] });
+      }
+    }
+    out.sort((a, b) => a.d - b.d);
+    return out;
   }
   const BUS_LINES = ['M41', '100', '200', 'M29', 'M85', '248', '142', 'N8', 'M19', 'TXL'];
   function spawnTraffic(type, near = null) {
@@ -6375,6 +6435,11 @@ async function main() {
       if (!v.traffic || v === state.inVehicle) continue;
       if (Math.hypot(v.x - player.x, v.z - player.z) > TRAFFIC.far + 40) vehicles.remove(v);
     }
+    state.signalClock += dt;
+    for (const j of trafficJunctions()) {
+      if (j.hack && (j.hack.left -= dt) <= 0) j.hack = null;
+    }
+    const signals = { junctions: junctionsNear(player.x, player.z, TRAFFIC.far + 60), time: state.signalClock };
     state.trafficTimer -= dt;
     if (state.trafficTimer <= 0 && idx.roads.length) {
       state.trafficTimer = 0.4;
@@ -6402,7 +6467,7 @@ async function main() {
         if (t.wild <= 0) t.crashed = true;
         continue;
       }
-      v.ai = trafficDrive(v, idx, others, dt);
+      v.ai = trafficDrive(v, idx, others, dt, Math.random, signals);
     }
     vehicleCrashes();
     vehicleStrikes(dt);
@@ -9023,6 +9088,7 @@ async function main() {
       renderer.actors.updateMechs(mechs.active);
       renderer.actors.updateCamps(tactics.enabled ? tactics.drawList(player.x, player.z) : []);
       renderer.actors.updateNests(slayer.enabled ? slayer.drawList(player.x, player.z) : []);
+      renderer.actors.updateSignals(signalMasts());
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -9047,6 +9113,7 @@ async function main() {
         ? tactics.drawList(camera.position[0], camera.position[2], 1600) : []);
       renderer.actors.updateNests(live && slayer.enabled
         ? slayer.drawList(camera.position[0], camera.position[2], 1600) : []);
+      renderer.actors.updateSignals(live ? signalMasts() : []);
       renderer.drawActors = live;
     }
 
@@ -9248,6 +9315,8 @@ async function main() {
     phone, backdoorSpec: BACKDOOR, hackKey: (slot) => hackKey(slot), hackables: () => hackables(),
     trafficSpec: TRAFFIC, spawnTraffic: (type, near) => spawnTraffic(type, near), trafficRoads: () => trafficRoads(),
     get crashes() { return state.crashes; },
+    signalSpec: SIGNALS, junctions: () => trafficJunctions(), signalMasts: (r) => signalMasts(r),
+    lightAt: (j, phase) => lightAt(j, phase, state.signalClock), get signalClock() { return state.signalClock; },
     crimes, crimeSpec: CRIME, crimeBegin: (kind) => crimeBegin(kind), subdue: (sd) => subdue(sd),
     straightNear: (x, z, minLen) => straightNear(trafficRoads(), x, z, minLen),
     get hackTarget() { return state.hackTarget; }, profileOf: (sd) => profileOf(sd),

@@ -66,6 +66,15 @@ void main() {
   // A city car's paint, one of six by the rotor channel, which a car has no
   // other use for.
   if (part > 89.5 && part < 90.5) part = 90.0 + clamp(floor(iState.w + 0.5), 0.0, 5.0);
+  // A traffic light's three lamps, parts 101 to 103, lit by what the
+  // instance says it shows: 0 red, 1 red and amber, 2 green, 3 amber, 4 dark.
+  if (part > 100.5 && part < 103.5) {
+    int st = int(iState.w + 0.5);
+    bool lit = (part < 101.5 && (st == 0 || st == 1))
+      || (part > 101.5 && part < 102.5 && (st == 1 || st == 3))
+      || (part > 102.5 && st == 2);
+    if (lit) part += 3.0;
+  }
   // A camp's three switches, in the rotor channel: taken, radio down, alarm.
   if (part > 63.5 && part < 72.5) {
     int st = int(iState.w + 0.5);
@@ -429,6 +438,19 @@ void main() {
     else if (k == 96) { albedo = vec3(0.86, 0.66, 0.05); rough = 0.4; metal = 0.25; }
     else if (k == 97) { albedo = vec3(0.04, 0.04, 0.045); rough = 0.7; metal = 0.2; }
     else if (k == 98) { albedo = vec3(0.1); emissive = vec3(1.6, 0.9, 0.1); rough = 0.3; }
+  } else if (vPart > 99.5 && vPart < 106.5) {
+    // A traffic light: the mast and the housing near black, three lamps
+    // dark, and lit. The tonemapper keeps a colour only if the other
+    // channels stay low, so each lit one is carried by its ratio.
+    int k = int(vPart + 0.5);
+    rough = 0.55; metal = 0.3;
+    albedo = vec3(0.045, 0.048, 0.05);
+    if (k == 101) { albedo = vec3(0.1, 0.02, 0.02); rough = 0.2; }
+    else if (k == 102) { albedo = vec3(0.1, 0.07, 0.02); rough = 0.2; }
+    else if (k == 103) { albedo = vec3(0.02, 0.08, 0.05); rough = 0.2; }
+    else if (k == 104) { albedo = vec3(0.3, 0.02, 0.01); emissive = vec3(4.2, 0.1, 0.03); rough = 0.2; }
+    else if (k == 105) { albedo = vec3(0.3, 0.16, 0.01); emissive = vec3(3.8, 1.25, 0.03); rough = 0.2; }
+    else if (k == 106) { albedo = vec3(0.02, 0.3, 0.14); emissive = vec3(0.08, 3.4, 1.1); rough = 0.2; }
   } else if (vPart > 84.5 && vPart < 87.5) {
     // A camp's alarm box: yellow and black, a red lamp, the lamp lit and
     // flashing while the alarm sounds.

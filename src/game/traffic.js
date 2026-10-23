@@ -49,7 +49,7 @@ export function roadIndex(lines) {
     for (let i = 2; i < r.pts.length; i += 2) len += Math.hypot(r.pts[i] - r.pts[i - 2], r.pts[i + 1] - r.pts[i - 1]);
     if (len < 12) continue;
     const li = roads.length;
-    roads.push({ cls: r.cls, w: r.w || 7, pts: r.pts, len, n: r.pts.length / 2 });
+    roads.push({ cls: r.cls, w: r.w || 7, pts: r.pts, len, n: r.pts.length / 2, name: r.n || '' });
     for (const end of [0, 1]) {
       const x = end ? r.pts[r.pts.length - 2] : r.pts[0];
       const z = end ? r.pts[r.pts.length - 1] : r.pts[1];
@@ -214,7 +214,7 @@ export function nearestLane(index, x, z, yaw = 0) {
  * @param {number} dt
  * @returns {{throttle:number, steer:number, brake:boolean}}
  */
-export function drive(v, index, others, dt, rand = Math.random) {
+export function drive(v, index, others, dt, rand = Math.random, signals = null) {
   const t = v.traffic;
   const kind = v.type === 'bus' ? 'bus' : 'car';
   // Stalled by a hack, or crashed: the handbrake and nothing else.
@@ -240,6 +240,10 @@ export function drive(v, index, others, dt, rand = Math.random) {
   const bend = Math.min(1, Math.abs(err) / 1.1);
   let want = TRAFFIC.cruise[kind] + (TRAFFIC.corner - TRAFFIC.cruise[kind]) * bend;
 
+  // The lights ahead, if any.
+  const lights = signals ? lightsAhead(v, signals.junctions, signals.time) : { want: Infinity, reckless: false };
+  want = Math.min(want, lights.want);
+
   // Whatever is in the lane ahead: the vehicle's own frame, forward along
   // its heading and right across it.
   const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
@@ -255,6 +259,8 @@ export function drive(v, index, others, dt, rand = Math.random) {
     if (side > 1.4 + (o.r || 0.4)) continue;
     // One coming the other way in its own lane is passed, not waited for.
     if (o.yaw !== undefined && Math.cos(o.yaw - v.yaw) < -0.5 && ahead > 6) continue;
+    // Green both ways, he has right of way, and anybody crossing is not his problem.
+    if (lights.reckless && o.yaw !== undefined && Math.cos(o.yaw - v.yaw) < 0.7) continue;
     blocked = Math.min(blocked, ahead);
   }
   if (blocked < Infinity) want = Math.min(want, Math.max(0, (blocked - TRAFFIC.gap * 0.6) * 0.8));
@@ -274,4 +280,214 @@ export function drive(v, index, others, dt, rand = Math.random) {
     steer,
     brake: v.speed > want + 1.5 || (want < 0.5 && v.speed > 0.2),
   };
+}
+
+// --- the lights ---------------------------------------------------------------
+//
+// A junction where a bigger road meets another gets lights, the way it does
+// in Berlin: two directions, each its turn, with the German order of things
+// (red, red and amber together for a second, green, three seconds of amber
+// at 50 km/h, red), and two seconds of red both ways between them. The map
+// fetch keeps roads and not the signal nodes, so where the lights are is
+// worked out from where the lines meet.
+
+export const SIGNALS = {
+  green: 10, amber: 3, allRed: 2, redAmber: 1,
+  meet: 6,                      // how close two lines come to meet
+  merge: 15,                    // and two meetings this close are one junction
+  stop: 2,                      // where a car waits, short of the junction
+  look: 18,                     // how far ahead a driver watches for a light
+  near: 260,                    // junctions run and drawn round you
+  classes: new Set(['primary', 'secondary', 'tertiary', 'trunk']),
+};
+
+/** The direction a heading belongs to at a junction: 0 along its axis, 1 across. */
+export const phaseOf = (j, yaw) => (Math.abs(Math.cos(yaw - j.axis)) >= Math.SQRT1_2 ? 0 : 1);
+
+/**
+ * What a direction's light shows: 'green', 'amber', 'red', 'redAmber', or
+ * 'off' when the junction is dark. A hacked junction shows whatever it was
+ * told to, both ways.
+ */
+export function lightAt(j, phase, time) {
+  if (j.dark) return 'off';
+  if (j.hack) return j.hack.kind;
+  const S = SIGNALS;
+  const half = S.green + S.amber + S.allRed;
+  const m = (((time + j.offset - phase * half) % (half * 2)) + half * 2) % (half * 2);
+  if (m < S.green) return 'green';
+  if (m < S.green + S.amber) return 'amber';
+  if (m >= half * 2 - S.redAmber) return 'redAmber';
+  return 'red';
+}
+
+/**
+ * Every junction with lights: where two lines meet, one of them a bigger
+ * road, with at least three ways out of it in two directions.
+ * @returns {{x:number, z:number, r:number, axis:number, offset:number,
+ *   legs:{yaw:number, dx:number, dz:number, w:number, phase:number, name:string}[], names:string[]}[]}
+ */
+export function junctionsOf(index) {
+  const S = SIGNALS;
+  const segs = [];
+  index.roads.forEach((road, li) => {
+    for (let i = 1; i < road.n; i++) {
+      const a = pt(road, i - 1), b = pt(road, i);
+      segs.push({ li, i, ax: a.x, az: a.z, bx: b.x, bz: b.z });
+    }
+  });
+  // Segments by the cells along them.
+  const G = 40;
+  const grid = new Map();
+  segs.forEach((s, k) => {
+    const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
+    const steps = Math.max(1, Math.ceil(len / (G / 2)));
+    const cells = new Set();
+    for (let t = 0; t <= steps; t++) {
+      const x = s.ax + ((s.bx - s.ax) * t) / steps, z = s.az + ((s.bz - s.az) * t) / steps;
+      cells.add(`${Math.floor(x / G)},${Math.floor(z / G)}`);
+    }
+    for (const c of cells) {
+      let list = grid.get(c);
+      if (!list) { list = []; grid.set(c, list); }
+      list.push(k);
+    }
+  });
+  // Where any two lines meet: they cross, or one ends on the other.
+  const meets = [];
+  const near = (px, pz, s) => {
+    const dx = s.bx - s.ax, dz = s.bz - s.az;
+    const l2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((px - s.ax) * dx + (pz - s.az) * dz) / l2));
+    const x = s.ax + dx * t, z = s.az + dz * t;
+    return { d: Math.hypot(px - x, pz - z), x, z };
+  };
+  const tried = new Set();
+  for (const list of grid.values()) {
+    for (let p = 0; p < list.length; p++) {
+      for (let q = p + 1; q < list.length; q++) {
+        const A = segs[list[p]], B = segs[list[q]];
+        if (A.li === B.li) continue;
+        const pair = list[p] < list[q] ? `${list[p]}:${list[q]}` : `${list[q]}:${list[p]}`;
+        if (tried.has(pair)) continue;
+        tried.add(pair);
+        const rx = A.bx - A.ax, rz = A.bz - A.az, sx = B.bx - B.ax, sz = B.bz - B.az;
+        const den = rx * sz - rz * sx;
+        if (Math.abs(den) > 1e-6) {
+          const t = ((B.ax - A.ax) * sz - (B.az - A.az) * sx) / den;
+          const u = ((B.ax - A.ax) * rz - (B.az - A.az) * rx) / den;
+          if (t >= 0 && t <= 1 && u >= 0 && u <= 1) { meets.push({ x: A.ax + rx * t, z: A.az + rz * t }); continue; }
+        }
+        for (const [S1, S2] of [[A, B], [B, A]]) {
+          for (const [px, pz] of [[S1.ax, S1.az], [S1.bx, S1.bz]]) {
+            const n = near(px, pz, S2);
+            if (n.d <= S.meet) meets.push({ x: (px + n.x) / 2, z: (pz + n.z) / 2 });
+          }
+        }
+      }
+    }
+  }
+  // One junction for meetings close together.
+  const groups = [];
+  const byCell = new Map();
+  for (const m of meets) {
+    const cx = Math.floor(m.x / S.merge), cz = Math.floor(m.z / S.merge);
+    let g = null;
+    for (let a = -1; a <= 1 && !g; a++) {
+      for (let b = -1; b <= 1 && !g; b++) {
+        g = (byCell.get(`${cx + a},${cz + b}`) || []).find((o) => Math.hypot(o.x - m.x, o.z - m.z) < S.merge) || null;
+      }
+    }
+    if (g) { g.sx += m.x; g.sz += m.z; g.n++; g.x = g.sx / g.n; g.z = g.sz / g.n; continue; }
+    g = { x: m.x, z: m.z, sx: m.x, sz: m.z, n: 1 };
+    groups.push(g);
+    const k = `${cx},${cz}`;
+    if (!byCell.has(k)) byCell.set(k, []);
+    byCell.get(k).push(g);
+  }
+  const out = [];
+  const reach = S.meet + 4;
+  for (const g of groups) {
+    // The ways out: along every line that passes, both ways along it unless
+    // it ends here.
+    const best = new Map();
+    const cx = Math.floor(g.x / G), cz = Math.floor(g.z / G);
+    for (let a = -1; a <= 1; a++) {
+      for (let b = -1; b <= 1; b++) {
+        for (const k of grid.get(`${cx + a},${cz + b}`) || []) {
+          const s = segs[k];
+          const n = near(g.x, g.z, s);
+          const was = best.get(s.li);
+          if (n.d <= reach && (!was || n.d < was.d)) best.set(s.li, { d: n.d, s, x: n.x, z: n.z });
+        }
+      }
+    }
+    const legs = [];
+    for (const [li, b] of best) {
+      const road = index.roads[li];
+      let dx = b.s.bx - b.s.ax, dz = b.s.bz - b.s.az;
+      const l = Math.hypot(dx, dz) || 1;
+      dx /= l; dz /= l;
+      const start = pt(road, 0), end = pt(road, road.n - 1);
+      const atStart = Math.hypot(start.x - b.x, start.z - b.z) < reach;
+      const atEnd = Math.hypot(end.x - b.x, end.z - b.z) < reach;
+      if (!atEnd) legs.push({ dx, dz, w: road.w, cls: road.cls, name: road.name });
+      if (!atStart) legs.push({ dx: -dx, dz: -dz, w: road.w, cls: road.cls, name: road.name });
+    }
+    if (legs.length < 3 || !legs.some((l) => S.classes.has(l.cls))) continue;
+    // The axis is the widest road's; the other direction is whatever crosses it.
+    const widest = legs.reduce((a, b) => (b.w > a.w ? b : a));
+    const axis = headingTo(widest.dx, widest.dz);
+    for (const l of legs) {
+      l.yaw = headingTo(l.dx, l.dz);
+      l.phase = Math.abs(Math.cos(l.yaw - axis)) >= Math.SQRT1_2 ? 0 : 1;
+    }
+    if (!legs.some((l) => l.phase === 1) || !legs.some((l) => l.phase === 0)) continue;
+    const r = Math.max(...legs.map((l) => l.w)) / 2 + 1.5;
+    const names = [...new Set(legs.map((l) => l.name).filter(Boolean))];
+    const seed = Math.abs(Math.sin(g.x * 12.9898 + g.z * 78.233) * 43758.5453) % 1;
+    out.push({ x: g.x, z: g.z, r, axis, legs, names, offset: seed * 2 * (S.green + S.amber + S.allRed), hack: null, dark: false });
+  }
+  return out;
+}
+
+/**
+ * Where the masts stand: one for each way in, on the right of whoever is
+ * coming, facing them.
+ */
+export function mastsOf(j) {
+  return j.legs.map((l) => {
+    const out = j.r + 1.5, side = l.w / 2 + 0.8;
+    // Coming in along -leg, the right hand side is (leg.z, -leg.x).
+    return { x: j.x + l.dx * out + l.dz * side, z: j.z + l.dz * out - l.dx * side, yaw: l.yaw, phase: l.phase, j };
+  });
+}
+
+/**
+ * How fast a driver may go for the lights ahead of him, if they say
+ * anything: Infinity when they do not. A light that has been told to show
+ * green both ways also tells him to pay no attention to anybody crossing.
+ */
+export function lightsAhead(v, junctions, time) {
+  const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+  const rx = -fz, rz = fx;
+  const speed = Math.max(0, v.speed || 0);
+  let want = Infinity, reckless = false;
+  for (const j of junctions || []) {
+    const dx = j.x - v.x, dz = j.z - v.z;
+    const ahead = dx * fx + dz * fz;
+    if (ahead < -j.r || ahead > j.r + SIGNALS.look + speed * 1.5) continue;
+    if (Math.abs(dx * rx + dz * rz) > j.r + 4) continue;
+    const light = lightAt(j, phaseOf(j, v.yaw), time);
+    if (j.hack && j.hack.kind === 'green') reckless = true;
+    // Nobody's turn: up to it and through it at a crawl, looking both ways.
+    if (light === 'off') { want = Math.min(want, TRAFFIC.corner); continue; }
+    const toLine = ahead - j.r - SIGNALS.stop;
+    if (toLine < -0.5) continue;                 // over the line: on through
+    if (light === 'red' || light === 'redAmber'
+      || (light === 'amber' && toLine > (speed * speed) / (2 * 5) + 1)) {
+      want = Math.min(want, Math.max(0, toLine * 0.7));
+    }
+  }
+  return { want, reckless };
 }

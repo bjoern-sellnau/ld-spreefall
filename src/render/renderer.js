@@ -740,7 +740,8 @@ export class Renderer {
       draws += this.actors.drawVehicles();
       draws += this.actors.drawCamps();
       tris += this.actors.camp.instanceCount * (this.actors.camp.count / 3)
-        + this.actors.nest.instanceCount * (this.actors.nest.count / 3);
+        + this.actors.nest.instanceCount * (this.actors.nest.count / 3)
+        + this.actors.signal.instanceCount * (this.actors.signal.count / 3);
       for (const type in this.actors.vehicles) {
         const mesh = this.actors.vehicles[type];
         tris += mesh.instanceCount * (mesh.count / 3);

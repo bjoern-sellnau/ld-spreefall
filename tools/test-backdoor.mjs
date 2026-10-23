@@ -411,7 +411,7 @@ async function run() {
   const theft = await crime('theft', [-10, 2], [-18, -3]);
   check('a crime starts near you and the phone says so: what, how far, which way',
     theft && /CRIME DETECTED: bag theft, \d+ m [NESW]+/.test(theft.toast), theft && theft.toast);
-  const snatched = await steps(60 * 6);
+  const snatched = await steps(60 * 7);
   check('the thief walks up, takes the bag and runs', snatched.phase === 'flee' && snatched.apart > 5 && !snatched.over,
     JSON.stringify(snatched));
   const offenderCard = await page.evaluate(async () => {
@@ -514,6 +514,128 @@ async function run() {
   });
   check('and somebody who was only walking down the street costs it too, shot',
     innocent.dead && innocent.rep < 0, JSON.stringify(innocent));
+
+  // --- the lights --------------------------------------------------------------
+  // The nearest junction with lights to the square, with the street to
+  // itself, and you on the pavement a few metres off one of its masts.
+  const junction = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.vehicles.reset(); s.soldiers.reset();
+    s.crimes.live = null; s.crimes.next = 1e9;
+    s.teleport(81, 0);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    const js = s.junctions().filter((j) => j.legs.length >= 4)
+      .sort((a, b) => Math.hypot(a.x - 81, a.z) - Math.hypot(b.x - 81, b.z));
+    const j = js[0];
+    if (!j) return null;
+    window.junction = j;
+    // Stand back from the mast on the widest road's leg, on its own side.
+    const m = j.masts.find((k) => k.phase === 0) || j.masts[0];
+    const l = j.legs[j.masts.indexOf(m)];
+    const px = m.x + l.dx * 9 + l.dz * 1.2, pz = m.z + l.dz * 9 - l.dx * 1.2;
+    s.teleport(px, pz);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    window.mast = m;
+    // Its order over a cycle and a bit, both ways, off the clock the traffic runs.
+    const seq = [], both = [];
+    for (let i = 0; i < 60 * 34; i++) {
+      s.fixedForTest(1 / 60);
+      const a = s.lightAt(j, 0), b = s.lightAt(j, 1);
+      if (seq[seq.length - 1] !== a) seq.push(a);
+      if (a === 'green' && b === 'green') both.push(i);
+    }
+    window.keepClear([]);
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    const masts = s.signalMasts(80).filter((k) => k.j === j);
+    return { names: j.names, legs: j.legs.length, r: +j.r.toFixed(1), masts: masts.length,
+      drawn: s.renderer.actors.signal.instanceCount, seq: seq.join('>'), both: both.length,
+      lit: masts.map((k) => k.light) };
+  });
+  check('junctions where a bigger road meets another have lights, a mast for every way in, drawn',
+    !!junction && junction.legs >= 4 && junction.masts === junction.legs && junction.drawn >= junction.masts,
+    JSON.stringify(junction && { names: junction.names, legs: junction.legs, masts: junction.masts, drawn: junction.drawn }));
+  check('and they change the German way: green, amber, red, red and amber, never green both ways',
+    !!junction && /green>amber>red>redAmber>green/.test(junction.seq) && junction.both === 0,
+    junction && junction.seq);
+
+  const aimMast = () => page.evaluate(async () => {
+    const s = window.spreefall;
+    const m = window.mast;
+    const y = s.world.groundHeight(m.x, m.z) + 2.9;
+    const dx = m.x - s.player.x, dz = m.z - s.player.z, dy = y - (s.player.y + 1.7);
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    const t = s.hackTarget;
+    return { on: !!t && t.kind === 'signal' && t.ref === window.junction, card: document.getElementById('hcname').textContent,
+      job: document.getElementById('hcjob').textContent, fact: document.getElementById('hcfact').textContent,
+      acts: document.getElementById('hcacts').textContent };
+  });
+  const lights = await aimMast();
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-04-lights.png') });
+  check('pointed at a mast, the phone shows the junction, what each way shows, and Q and E',
+    lights.on && lights.card === 'Traffic lights' && junction.names.every((n) => lights.job.includes(n))
+      && /(green|amber|red)/.test(lights.fact) && /Q\s*All red/.test(lights.acts) && /E\s*All green/.test(lights.acts),
+    `${lights.job}; ${lights.fact}; ${lights.acts}`);
+
+  // Q: red both ways, and a car coming up to it waits short of it.
+  const red = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const j = window.junction;
+    s.phone.battery = s.backdoorSpec.battery.most;
+    const ok = s.hackKey(0);
+    const both = [s.lightAt(j, 0), s.lightAt(j, 1)];
+    // A car on the widest road, 60 m out, driving in.
+    const l = j.legs.find((k) => k.phase === 0);
+    const v = s.spawnTraffic('car', { x: j.x + l.dx * 60, z: j.z + l.dz * 60, yaw: Math.atan2(l.dx, l.dz) });
+    v.speed = 10;
+    for (let i = 0; i < 60 * 7; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
+    const short = Math.hypot(v.x - j.x, v.z - j.z);
+    const held = { speed: +v.speed.toFixed(2), short: +short.toFixed(1) };
+    // E: green both ways, and it goes.
+    s.phone.battery = s.backdoorSpec.battery.most;
+    const ok2 = s.hackKey(1);
+    const green = [s.lightAt(j, 0), s.lightAt(j, 1)];
+    for (let i = 0; i < 60 * 5; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
+    const past = (v.x - j.x) * l.dx + (v.z - j.z) * l.dz;
+    j.hack = null;
+    return { ok, both, held, r: j.r, ok2, green, past: +past.toFixed(1) };
+  });
+  check('Q turns it red both ways, and a car coming up to it waits short of it',
+    red.ok && red.both.every((b) => b === 'red') && red.held.speed < 0.5 && red.held.short > red.r && red.held.short < red.r + 12,
+    JSON.stringify(red));
+  check('E turns it green both ways, and the car goes on through', red.ok2 && red.green.every((b) => b === 'green') && red.past < -red.r,
+    JSON.stringify({ green: red.green, past: red.past }));
+
+  // Green both ways with somebody coming each way: nobody gives way.
+  const pile = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const j = window.junction;
+    s.vehicles.reset();
+    const a = j.legs.find((k) => k.phase === 0), b = j.legs.find((k) => k.phase === 1);
+    const A = s.spawnTraffic('car', { x: j.x + a.dx * 30, z: j.z + a.dz * 30, yaw: Math.atan2(a.dx, a.dz) });
+    const B = s.spawnTraffic('car', { x: j.x + b.dx * 30, z: j.z + b.dz * 30, yaw: Math.atan2(b.dx, b.dz) });
+    // Each the same way short of where their lanes cross, so they get there together.
+    const fa = [-Math.sin(A.yaw), -Math.cos(A.yaw)], fb = [-Math.sin(B.yaw), -Math.cos(B.yaw)];
+    const den = fa[0] * fb[1] - fa[1] * fb[0];
+    const t = ((B.x - A.x) * fb[1] - (B.z - A.z) * fb[0]) / den;
+    const P = { x: A.x + fa[0] * t, z: A.z + fa[1] * t };
+    A.x = P.x - fa[0] * 32; A.z = P.z - fa[1] * 32;
+    B.x = P.x - fb[0] * 32; B.z = P.z - fb[1] * 32;
+    A.speed = B.speed = 9;
+    j.hack = { kind: 'green', left: 8 };
+    const crashes = s.crashes;
+    let closest = Infinity;
+    for (let i = 0; i < 60 * 6 && s.crashes === crashes; i++) {
+      s.fixedForTest(1 / 60);
+      window.keepClear([A, B]);
+      closest = Math.min(closest, Math.hypot(A.x - B.x, A.z - B.z));
+    }
+    j.hack = null;
+    return { crashed: s.crashes - crashes, a: !!A.traffic.crashed, b: !!B.traffic.crashed,
+      hurt: A.health < A.spec.health && B.health < B.spec.health, closest: +closest.toFixed(1) };
+  });
+  check('green both ways with a car coming each way: nobody gives way, and they crash',
+    pile.crashed > 0 && pile.a && pile.b && pile.hurt, JSON.stringify(pile));
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

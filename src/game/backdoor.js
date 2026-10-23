@@ -26,6 +26,9 @@ export const BACKDOOR = {
     stall: { name: 'Stall engine', cost: 20, seconds: 0, effect: 9 },
     ram: { name: 'Ram', cost: 30, seconds: 0, effect: 3.5 },
     doors: { name: 'Open the doors', cost: 15, seconds: 0 },
+    // The lights at a junction.
+    allRed: { name: 'All red', cost: 15, seconds: 0, effect: 10 },
+    allGreen: { name: 'All green', cost: 30, seconds: 0, effect: 8 },
   },
 };
 
