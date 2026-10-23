@@ -6636,7 +6636,8 @@ async function main() {
     rep: (() => { try { return parseInt(localStorage.getItem(REP_KEY) || '0', 10) || 0; } catch { return 0; } })(),
   };
   const CRIME_NAMES = { theft: 'bag theft', brawl: 'assault' };
-  const bearing = (dx, dz) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][
+  // Which way, in eight points, for the crime line (not the compass's own bearing in degrees).
+  const pointOf = (dx, dz) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][
     ((Math.round(Math.atan2(dx, -dz) / (Math.PI / 4)) % 8) + 8) % 8];
   function saveRep() {
     try { localStorage.setItem(REP_KEY, String(crimes.rep)); } catch { /* private mode */ }
@@ -6665,7 +6666,7 @@ async function main() {
     o.crime = live; v.crime = live;
     crimes.live = live;
     const dx = o.x - player.x, dz = o.z - player.z;
-    toast(`CRIME DETECTED: ${CRIME_NAMES[kind]}, ${Math.round(Math.hypot(dx, dz))} m ${bearing(dx, dz)}`, 3800);
+    toast(`CRIME DETECTED: ${CRIME_NAMES[kind]}, ${Math.round(Math.hypot(dx, dz))} m ${pointOf(dx, dz)}`, 3800);
     feed(`<b>crime detected</b> ${CRIME_NAMES[kind]}`);
     audio.spotted();
     return live;
@@ -6772,7 +6773,7 @@ async function main() {
     const dx = o.x - player.x, dz = o.z - player.z;
     const d = Math.round(Math.hypot(dx, dz));
     const what = live.c.phase === 'flee' ? 'thief running' : live.c.phase === 'fight' ? 'fight on' : CRIME_NAMES[live.kind];
-    el.phoneCrime.textContent = `CRIME: ${what} · ${d} m ${bearing(dx, dz)}`;
+    el.phoneCrime.textContent = `CRIME: ${what} · ${d} m ${pointOf(dx, dz)}`;
     const at = projectPoint(camera.viewProj, o.x, o.y + 2.25, o.z, window.innerWidth, window.innerHeight);
     if (!at || at.x < 0 || at.y < 0 || at.x > window.innerWidth || at.y > window.innerHeight) {
       el.crimeMark.classList.add('hidden');

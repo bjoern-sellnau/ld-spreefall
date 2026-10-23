@@ -716,7 +716,12 @@ async function run() {
     for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
     return out;
   });
-  await page.waitForTimeout(400);
+  // The pips are drawn with the frame, and a frame on a slow runner can take
+  // longer than any fixed wait: wait for one that has them, for a while.
+  await page.waitForFunction(() => {
+    const sp = document.querySelector('#suitups [data-up=energy] i');
+    return !!sp && sp.style.getPropertyValue('--lv') !== '' && sp.style.getPropertyValue('--lv') !== '0%';
+  }, null, { timeout: 8000 }).catch(() => {});
   const pips = await page.evaluate(() => {
     const sp = document.querySelector('#suitups [data-up=energy] i');
     return { lv: sp ? sp.style.getPropertyValue('--lv') : null,

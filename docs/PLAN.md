@@ -4993,6 +4993,22 @@ So there are two cities now, and a profile picks which:
   backdoor-05-steam.png, backdoor-06-night.png and
   backdoor-07-blackout.png.
 
+## CI: the compass lost its bearing to the crime line
+
+- The ops suite went red on the compass: facing the nearest camp, the bar
+  put it behind you, and facing your own mark, off to one side. Phase 127
+  gave the crime line a little helper for the eight points of the compass
+  (how a toast says "92 m SW") and called it `bearing`, inside the same
+  function as everything else in `main.js`, where it hid the compass's own
+  `bearing` in degrees, imported from `ui/compassbar.js`. The compass was
+  handed "SW" for an angle. The helper is `pointOf` now; every other name
+  the .BACKDOOR phases added was checked for the same thing and none
+  clashes.
+- The suit pips check in The Hunt read the HUD after a fixed 400 ms, and on
+  a slow runner the frame that draws them had not come yet (master's run
+  after the merge of #22 read 0 percent). It waits for that frame now, up
+  to eight seconds.
+
 ## CI: the machines suite stands the run up before it aims
 
 - Since phase 120 dying is four seconds of a camera going round the body,
