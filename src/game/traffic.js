@@ -97,9 +97,11 @@ export function aimPoint(road, run, at, look = TRAFFIC.look) {
 /**
  * The line to take at the end of this one: another that begins or ends
  * within the join distance, not the one it is on, picked at random; or this
- * one back the other way if there is none.
+ * one back the other way if there is none. Given the way the car is facing,
+ * the one that carries on most nearly straight instead of a random one.
+ * @param {{x:number, z:number}|null} ahead
  */
-export function nextLeg(index, li, dir, rand = Math.random) {
+export function nextLeg(index, li, dir, rand = Math.random, ahead = null) {
   const road = index.roads[li];
   const endPt = dir > 0 ? pt(road, road.n - 1) : pt(road, 0);
   const found = [];
@@ -116,7 +118,18 @@ export function nextLeg(index, li, dir, rand = Math.random) {
   if (!found.length) {
     return { li, dir: -dir, i: dir > 0 ? road.n - 2 : 1 };
   }
-  const e = found[Math.floor(rand() * found.length)];
+  let e = found[Math.floor(rand() * found.length)];
+  if (ahead) {
+    // Which way each one leaves the junction, and the straightest of them.
+    let best = -Infinity;
+    for (const f of found) {
+      const r = index.roads[f.li];
+      const a = f.end === 0 ? pt(r, 0) : pt(r, r.n - 1), b = f.end === 0 ? pt(r, 1) : pt(r, r.n - 2);
+      const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+      const dot = ((b.x - a.x) * ahead.x + (b.z - a.z) * ahead.z) / l;
+      if (dot > best) { best = dot; e = f; }
+    }
+  }
   const next = index.roads[e.li];
   // Joined at its start it is driven forwards from there, at its end backwards.
   return e.end === 0 ? { li: e.li, dir: 1, i: 1 } : { li: e.li, dir: -1, i: next.n - 2 };
@@ -231,7 +244,10 @@ export function drive(v, index, others, dt, rand = Math.random, signals = null) 
   if (!road) return { throttle: 0, steer: 0, brake: true };
   let aim = aimPoint(road, t, v);
   if (aim.end) {
-    const n = nextLeg(index, t.li, t.dir, rand);
+    // A driver who knows where he is going (the checks' cars) keeps straight
+    // on; anybody else takes one of the ways on at random.
+    const ahead = t.through ? { x: -Math.sin(v.yaw), z: -Math.cos(v.yaw) } : null;
+    const n = nextLeg(index, t.li, t.dir, rand, ahead);
     t.li = n.li; t.dir = n.dir; t.i = n.i;
     road = index.roads[t.li];
     aim = aimPoint(road, t, v);

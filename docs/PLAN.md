@@ -5608,6 +5608,21 @@ So there are two cities now, and a profile picks which:
   for 45 and 30). Shown here with one round's 15: 15 in the middle of a
   cell, 30 on a line, 60 on a corner, and 15 in the cell it hit each time.
   The check now reads the cell it hit, and the other checks keep the sum.
+- The run on that got to .BACKDOOR again, the green light check passing
+  (50.5 m on, 1.7 m from the middle), and failed two others. The two cars
+  sent at each other on green both ways missed by 8.4 m: one of them took
+  another way where its stretch of road ended. And the car at the steam
+  waited 12.9 m short and then did not move at all: a car stops 0.6 of its
+  8 m gap short of whatever is in its lane, people and you included, you
+  stood 8 m short of the pipe to get into it, and 8 and 4.8 is 12.8, so
+  where the lane ran near the kerb it was you it was waiting for, and still
+  was after the steam. A driver can now be told to keep straight on where a
+  stretch ends (`through`: the way on that leaves most nearly the way it is
+  facing, with a unit check of its own); the three checks' cars are, and
+  everybody else still takes a way at random. And you step off the road
+  once the steam is going, and back to blow the pipe. Here the cars crash
+  (4.4 m), the car waits 5.6 m short and goes 55.8 m after, and the suite
+  passes 48 of 48.
 
 ## CI: the EMP check clears the street in front of the launcher
 

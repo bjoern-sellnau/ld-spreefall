@@ -627,6 +627,8 @@ async function run() {
     const l = j.legs.find((k) => k.phase === 0);
     const v = s.spawnTraffic('car', { x: j.x + l.dx * 60, z: j.z + l.dz * 60, yaw: Math.atan2(l.dx, l.dz) });
     v.speed = 10;
+    // Straight on where its stretch of road ends, not a turning at random.
+    v.traffic.through = true;
     for (let i = 0; i < 60 * 7; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
     const short = Math.hypot(v.x - j.x, v.z - j.z);
     const held = { speed: +v.speed.toFixed(2), short: +short.toFixed(1) };
@@ -673,6 +675,9 @@ async function run() {
     A.x = P.x - fa[0] * 32; A.z = P.z - fa[1] * 32;
     B.x = P.x - fb[0] * 32; B.z = P.z - fb[1] * 32;
     A.speed = B.speed = 9;
+    // Both straight on: in the live city the map's ways end at the junction,
+    // and a driver turning off at random missed the other one by 8 m.
+    A.traffic.through = B.traffic.through = true;
     for (const k of j.group || [j]) k.hack = { kind: 'green', left: 8 };
     const crashes = s.crashes;
     let closest = Infinity;
@@ -744,8 +749,14 @@ async function run() {
     s.phone.battery = s.backdoorSpec.battery.most;
     const ok = s.hackKey(0);
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
+    // Off the road once it is going: you stood eight metres short of the
+    // pipe to get into it, and where the lane runs near the kerb a car
+    // stopped for you there, 13 m short, and stayed stopped after.
+    const stood = { x: s.player.x, z: s.player.z };
+    s.teleport(p.x + fz * 40, p.z - fx * 40);
     const v = s.spawnTraffic('car', { x: p.x - fx * 45, z: p.z - fz * 45, yaw: p.yaw });
     v.speed = 10;
+    v.traffic.through = true;
     let steam = 0;
     for (let i = 0; i < 60 * 5; i++) {
       s.fixedForTest(1 / 60);
@@ -768,6 +779,12 @@ async function run() {
     out.past = +(((v.x - p.x) * fx + (v.z - p.z) * fz)).toFixed(1);
     s.vehicles.remove(v);
     for (const j of held) j.hack = null;
+    // And back where you stood, looking at the cover, for blowing it.
+    s.teleport(stood.x, stood.z);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    const dx = p.x - s.player.x, dz = p.z - s.player.z, dy = s.world.groundHeight(p.x, p.z) + 0.1 - (s.player.y + 1.7);
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
     return out;
   });
   check('Q vents steam across the road, and a car stops short of it until it stops',
