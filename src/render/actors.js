@@ -2082,7 +2082,11 @@ export class Actors {
   updateVehicles(list) {
     const gl = this.gl;
     const counts = { car: 0, bus: 0, jeep: 0, tank: 0, heli: 0, jet: 0, train: 0 };
-    for (const v of list) {
+    // The live ones first and the burnt out shells after, so a street full of
+    // wrecks never leaves a car that is still driving without a body.
+    const ordered = list.some((v) => v.health <= 0)
+      ? [...list.filter((v) => !(v.health <= 0)), ...list.filter((v) => v.health <= 0)] : list;
+    for (const v of ordered) {
       const mesh = this.vehicles[v.type];
       if (!v.alive || !mesh || counts[v.type] >= mesh.maxInstances) continue;
       const o = counts[v.type] * 8;

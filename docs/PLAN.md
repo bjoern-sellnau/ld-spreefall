@@ -5229,6 +5229,26 @@ So there are two cities now, and a profile picks which:
   hammer 530, flamethrower 35, bow 25, ripper 45, volt 9, EMP 69. One rail
   shot is many times one rifle round.
 
+## 136. A vehicle that goes up stays there, burnt out
+
+- The ask: vehicles should explode, not simply disappear. They did explode:
+  since phase 118 one that is done for catches, burns for a few seconds and
+  goes up in a fireball with fire left round it. But fourteen seconds after
+  it died the vehicle layer took it out of the street, so a wreck went up and
+  then, a few seconds later, was not there any more. Parked cars were never
+  like that (they stay as burnt out shells); the jeeps, tanks, helicopters,
+  fighters, and .BACKDOOR's cars and buses were.
+- Now the shell stays where it went up, drawn burnt black, for good. Only
+  past a dozen of them does the oldest go, and when every one of the forty
+  slots is taken a new vehicle takes the place of the oldest wreck rather
+  than not appearing at all. The renderer draws the live ones before the
+  wrecks, so a street full of shells never leaves a car that is still
+  driving without a body, and a burnt out car does not count towards the
+  traffic, so the road keeps its cars.
+- Checks (city suite, one more): twenty seconds after a jeep goes up its
+  shell is still in the street; with sixty jeeps spawned and destroyed in
+  forty slots, a fresh one still comes out, in the oldest wreck's place.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

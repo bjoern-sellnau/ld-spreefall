@@ -1060,6 +1060,22 @@ async function run() {
     // However slowly the frames come, it has gone by now.
     for (let i = 0; i < 60 * 4; i++) s.fixedForTest(1 / 60);
     const out = { blown: s.state.wrecksBlown || 0, fire: s.burningGround.length };
+    // And twenty seconds on the burnt out shell is still standing where it
+    // went up, rather than taken away.
+    const jeep = s.vehicles.active.find((v) => v.type === 'jeep' && v.health <= 0);
+    for (let i = 0; i < 60 * 20; i++) s.fixedForTest(1 / 60);
+    out.shell = !!jeep && jeep.alive && s.vehicles.active.includes(jeep);
+    // With every slot taken by wrecks, a new one takes the oldest one's place.
+    s.vehicles.reset();
+    let made = 0;
+    for (let i = 0; i < 60; i++) {
+      const v = s.vehicles.spawn('jeep', s.player.x + 400 + i * 9, s.player.z + 300, 0);
+      if (!v) break;
+      made++;
+      s.vehicles.damage(v, 99999);
+    }
+    const fresh = s.vehicles.spawn('jeep', s.player.x + 400, s.player.z + 340, 0);
+    out.pool = { made, wrecks: s.vehicles.wrecks, fresh: !!fresh && fresh.health > 0 };
     s.vehicles.reset();
     return out;
   });
@@ -1067,6 +1083,8 @@ async function run() {
     !caught.skip && caught.caught === 1 && caught.blownAtOnce === 0 && went.early === caught.was.blown
       && after.blown === caught.was.blown + 1 && after.fire > caught.was.fire,
     JSON.stringify({ caught, went, after }));
+  check('and leaves a burnt out shell that stays, until the slots run out and the oldest makes way',
+    !caught.skip && after.shell && after.pool.made >= 30 && after.pool.fresh, JSON.stringify(after));
 
   // --- and forward is forward ----------------------------------------------
   const facing = await page.evaluate(() => {

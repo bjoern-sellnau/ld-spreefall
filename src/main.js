@@ -6852,7 +6852,9 @@ async function main() {
     if (state.trafficTimer <= 0 && idx.roads.length) {
       state.trafficTimer = 0.4;
       let cars = 0, buses = 0;
-      for (const v of vehicles.active) if (v.traffic) { if (v.type === 'bus') buses++; else cars++; }
+      // A burnt out shell is not traffic any more, so it does not keep a new
+      // car off the road.
+      for (const v of vehicles.active) if (v.traffic && v.health > 0) { if (v.type === 'bus') buses++; else cars++; }
       if (buses < TRAFFIC.buses) spawnTraffic('bus');
       else if (cars < TRAFFIC.cars) spawnTraffic('car');
     }
