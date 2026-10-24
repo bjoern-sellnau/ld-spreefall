@@ -943,6 +943,37 @@ height field under the wheels and the collision segments in front of the
 bumper, from the same raycast the bullets use. They can be shot at, they
 catch fire and they go up.
 
+### What they show of it
+
+Everything with wheels or tracks keeps a damage model, and shows it.
+
+- A round stops in the box the vehicle stands in, so a car is cover and a
+  shot over its roof misses. It leaves a hole with a ring of bare metal
+  round it in the side it went into, up to fifteen a side, and pushes the
+  panel in only a little. Above the waistline it takes the glass with it.
+- The windscreen is laminated, two sheets on a plastic film: hit, it
+  crazes white and stays in its frame. The side and rear windows are
+  toughened and go all at once into small pieces, leaving the frame empty.
+- A blast pushes in every side facing it and blows their glass in. A crash
+  pushes in the end that hit, 4.5 % of it for every metre a second, and
+  cracks the windscreen from eight metres a second up. A nose pushed in
+  past 30 % loses its headlights and past 60 % its bumper, which falls into
+  the road, and the same for the tail.
+- Under 55 % of its hull the engine smokes grey, under 30 % black, and
+  under 15 % it is on fire and burns down by itself until it goes up.
+- It takes most of a magazine from the rifle to set a car or a jeep
+  alight, about three for a bus, and a tank does not notice.
+- A parked car is part of the street, so it shows a hit as glass coming off
+  and smoke as it runs down, and goes up as it always has.
+
+In .BACKDOOR the road blockers take part: a car driven into them is stopped
+dead and its nose pushed in, and blockers coming up under a car standing
+over them go into its floor and throw it, nose up, back off the row. The
+posts stand no more than 1.2 m apart, so there is always one under a car.
+
+![A car shot through the side](docs/screenshots/backdoor-09-shot-car.png)
+![Thrown by the blockers](docs/screenshots/backdoor-11-thrown-car.png)
+
 ## Free travel
 
 Press **V**, or the travel button. The same map comes up, you pick a place,

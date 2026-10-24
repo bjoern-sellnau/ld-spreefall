@@ -34,7 +34,7 @@ import { CHASSIS, mechKey } from './game/chassis.js';
 import { Onslaught, ONSLAUGHT, pickStrike } from './game/onslaught.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
-import { Cars } from './game/cars.js';
+import { Cars, CAR_HEALTH } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
 import { bakeCrush } from './game/bake.js';
 import { fineGround, fineWalls, fineWallsByTile, holeInWall } from './game/remesh.js';
@@ -46,6 +46,7 @@ import { FireWalls } from './game/firewall.js';
 import { Machines, MACHINES, makeMachine, empBurst } from './game/machines.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
+import { BROKE, DENTS, engineState } from './game/dents.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
@@ -66,7 +67,7 @@ import {
   junctionsOf, mastsOf, lightAt,
 } from './game/traffic.js';
 import { CITY, pipesOf, pipeStep, pipeState, pipeReady, blastOn, Blackout, furnitureOf, boxState, boxReady,
-  boxStep, zapOn, atmCash, atmState, atmReady, atmStep, bollardsOf, postsOf, bollardStep, intoBollards } from './game/city.js';
+  boxStep, zapOn, atmCash, atmState, atmReady, atmStep, bollardsOf, postsOf, bollardStep, intoBollards, postsUnder } from './game/city.js';
 import { CRIME, newCrime, crimeStep, crimeRecord, repFor, stopped as crimeStopped } from './game/crime.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -398,6 +399,7 @@ async function main() {
   const vehicles = new Vehicles(world);
   const mechs = new Mechs(world);
   weapon.mechs = mechs;
+  weapon.vehicles = vehicles;
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
@@ -734,7 +736,8 @@ async function main() {
     if (shot.target) {
       audio.hitMarker(shot.core);
       showHitmarker(shot.killed ? 'kill' : (shot.core ? 'core' : ''));
-      if (shot.killed) creditTarget(shot.target, shot.core, shot.surface);
+      // A vehicle that goes up says so itself, through its own explosion.
+      if (shot.killed && shot.surface !== 'vehicle') creditTarget(shot.target, shot.core, shot.surface);
       if (spec.arc && (shot.surface === 'soldier' || shot.surface === 'drone')) voltArc(shot.target, shot.surface, spec);
       // The particle rifle burns the flesh off what it kills and leaves it
       // standing, black, the way F.E.A.R.'s Type-7 does.
@@ -1165,7 +1168,7 @@ async function main() {
       const r = Math.hypot(v.x - x, v.y + 1.0 - by, v.z - z);
       if (r > splash.radius) continue;
       if (!reach(v.x, v.y + 1.0, v.z)) continue;
-      vehicles.damage(v, splash.damage * (1 - r / splash.radius));
+      vehicles.blast(v, splash.damage * (1 - r / splash.radius), x, z);
     }
     // A charge that landed looking for a car. It takes the nearest one within
     // reach and that car is the bomb: the shaped charge is small, what goes
@@ -1976,7 +1979,7 @@ async function main() {
     }
     for (const v of [...vehicles.active]) {
       const away = Math.hypot(v.x - m.x, v.z - m.z);
-      if (away < stomp.radius) vehicles.damage(v, stomp.damage * (1 - away / stomp.radius));
+      if (away < stomp.radius) vehicles.blast(v, stomp.damage * (1 - away / stomp.radius), m.x, m.z);
     }
     for (const other of [...mechs.active]) {
       if (other === m) continue;
@@ -2101,11 +2104,23 @@ async function main() {
    *
    * @returns {boolean} whether that was the one that set it off
    */
+  // The parked cars that have been hit and are still standing, for their
+  // smoke. A parked car is part of the street it is baked into, so what
+  // shows of a hit on it is the glass that comes off and the smoke after.
+  const hurtCars = new Set();
   function hitCar(x, y, z, damage) {
     const car = cars.at(x, z, 2.4);
     if (!car) return false;
-    if (y > world.groundHeight(x, z) + 2.2) return false;
-    return cars.hurt(car, damage);
+    const g = world.groundHeight(x, z);
+    if (y > g + 2.2) return false;
+    if (y > g + 0.9 && !car.dead) {
+      for (let k = 0; k < 8; k++) {
+        effects.spark(x + (Math.random() - 0.5) * 0.5, y + (Math.random() - 0.5) * 0.3, z + (Math.random() - 0.5) * 0.5, 0.75, 0.85, 0.95);
+      }
+    }
+    const gone = cars.hurt(car, damage);
+    if (!car.dead) hurtCars.add(car);
+    return gone;
   }
 
   mechs.onEject = () => { if (state.inMech) leaveMech(false); };
@@ -2969,6 +2984,89 @@ async function main() {
       feed(`<i>${v.spec.name.toLowerCase()} went up</i>`);
     }
     state.wrecksBlown = (state.wrecksBlown || 0) + 1;
+  }
+  // What breaks off a vehicle, as it breaks: the windscreen crazes with a
+  // crack and a glitter, a side or rear window goes into the road in small
+  // pieces, a light goes out with a pop, and a bumper falls off.
+  vehicles.onBreak = (v, broke) => {
+    const H = vehicles.hull(v);
+    if (!H) return;
+    const c = Math.cos(v.yaw), sn = Math.sin(v.yaw);
+    const at = (lx, ly, lz) => ({ x: v.x + c * lx + sn * lz, y: v.y + ly, z: v.z - sn * lx + c * lz });
+    const out = (lx, lz) => ({ x: c * lx + sn * lz, z: -sn * lx + c * lz });
+    const glassY = (H.glass + H.H) / 2;
+    const panes = [[BROKE.screen, 0, -H.L * 0.2], [BROKE.rearScreen, 0, H.L * 0.36],
+      [BROKE.left, -H.W / 2, 0], [BROKE.right, H.W / 2, 0]];
+    for (const [bit, lx, lz] of panes) {
+      if (!(broke & bit)) continue;
+      const p = at(lx, glassY, lz);
+      const n = out(Math.sign(lx), lz === 0 ? 0 : Math.sign(lz));
+      // Laminated, the windscreen holds together and only glints; toughened
+      // glass goes into a shower of little cubes.
+      const shards = bit === BROKE.screen ? 6 : 22;
+      for (let k = 0; k < shards; k++) {
+        effects.spark(p.x + (Math.random() - 0.5) * 0.9 + n.x * 0.2, p.y + (Math.random() - 0.5) * 0.4,
+          p.z + (Math.random() - 0.5) * 0.9 + n.z * 0.2, 0.75, 0.85, 0.95);
+      }
+      state.panesBroken = (state.panesBroken || 0) + 1;
+    }
+    for (const [bit, lz] of [[BROKE.headlights, -H.L / 2], [BROKE.taillights, H.L / 2]]) {
+      if (!(broke & bit)) continue;
+      for (const side of [-1, 1]) {
+        const p = at(side * H.W * 0.33, 0.68, lz);
+        effects.flash(p.x, p.y, p.z, 0.25, 1.0, 0.9, 0.7, 0.06);
+      }
+    }
+    for (const [bit, lz] of [[BROKE.frontBumper, -H.L / 2], [BROKE.rearBumper, H.L / 2]]) {
+      if (!(broke & bit)) continue;
+      const p = at(0, 0.45, lz);
+      const n = out(0, Math.sign(lz));
+      gibs.spall(p.x, p.y, p.z, n.x, 0.2, n.z, 3, 0.5, 2, 1.8);
+      for (let k = 0; k < 10; k++) effects.spark(p.x + (Math.random() - 0.5) * 1.6, p.y, p.z + (Math.random() - 0.5) * 1.6, 1.0, 0.8, 0.45);
+      state.bumpersLost = (state.bumpersLost || 0) + 1;
+    }
+  };
+  /**
+   * A vehicle that has taken enough smokes from under its bonnet, grey and
+   * then black, and below that it is on fire and burning down to the point
+   * where it goes up. Only the ones near enough to see.
+   */
+  function damageStep(dt) {
+    for (const car of hurtCars) {
+      if (car.dead) { hurtCars.delete(car); continue; }
+      const share = car.health / CAR_HEALTH;
+      if (share >= DENTS.smoke) continue;
+      if (Math.abs(car.x - player.x) > 260 || Math.abs(car.z - player.z) > 260) continue;
+      car.smokeAt = (car.smokeAt || 0) - dt;
+      if (car.smokeAt > 0) continue;
+      const y = world.groundHeight(car.x, car.z) + 1.1;
+      effects.smoke(car.x, y, car.z, share < DENTS.black ? 0.9 : 0.1, 1);
+      car.smokeAt = share < DENTS.black ? 0.08 : 0.14;
+    }
+    for (const v of vehicles.active) {
+      const stage = engineState(v);
+      if (!stage) continue;
+      if (Math.abs(v.x - player.x) > 260 || Math.abs(v.z - player.z) > 260) continue;
+      const H = vehicles.hull(v);
+      const e = H ? H.engine : [0, 1, 0];
+      const c = Math.cos(v.yaw), sn = Math.sin(v.yaw);
+      const x = v.x + c * e[0] + sn * e[2], y = v.y + (H ? Math.min(H.H, e[1] + 0.4) : e[1]), z = v.z - sn * e[0] + c * e[2];
+      v.smokeAt = (v.smokeAt || 0) - dt;
+      if (v.smokeAt > 0) continue;
+      const big = v.spec.mass > 2 ? 1.8 : 1;
+      if (stage === 'smoke') {
+        effects.smoke(x, y, z, 0.1, big);
+        v.smokeAt = 0.14;
+      } else {
+        effects.smoke(x, y, z, 0.9, big * 1.2);
+        v.smokeAt = 0.08;
+        if (stage === 'fire') {
+          effects.flame(x, y - 0.2, z, 1.1 * big, 0.6);
+          // And the fire eats into what is left, so it goes up in the end.
+          vehicles.damage(v, v.maxHealth * DENTS.burn * 0.08, false);
+        }
+      }
+    }
   }
   function wreckStep(dt) {
     for (let i = wrecks.length - 1; i >= 0; i--) {
@@ -7023,7 +7121,7 @@ async function main() {
       const b = blastOn(p, v.x, v.z);
       if (!b) continue;
       vehicles.launch(v, b.up * (v.type === 'bus' ? 0.45 : 1), (Math.random() - 0.5) * 2.4 * b.share);
-      vehicles.damage(v, v.spec.health * CITY.blast.hull * b.share);
+      vehicles.blast(v, v.spec.health * CITY.blast.hull * b.share, p.x, p.z);
       if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
       thrown++;
     }
@@ -7173,15 +7271,52 @@ async function main() {
       lured.splice(i, 1);
     }
     for (const row of cityBollards()) {
+      const was = row.up;
       if (row.left > 0 || row.up > 0) bollardStep(row, dt);
+      // Coming up under a car: the posts go into its floor and throw it,
+      // nose or tail first by which end they came up under, off the row the
+      // way it was nearer to going.
+      if (row.up > was && was < 0.9) {
+        for (const v of vehicles.active) {
+          if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground' || v.airborne) continue;
+          if (Math.abs(v.x - row.x) > 12 || Math.abs(v.z - row.z) > 12) continue;
+          const H = vehicles.hull(v);
+          if (!H) continue;
+          const under = postsUnder(row, v, H);
+          if (!under.length) continue;
+          const B = CITY.bollards;
+          const heavy = v.spec.mass > 2 ? 0.35 : 1;
+          const at = under.reduce((a, p) => a + p.z, 0) / under.length;
+          // Up under the nose turns the nose up, a rising pitch the way the
+          // body is drawn; under the tail, the other way, and either way it
+          // is pushed back off the row.
+          vehicles.launch(v, B.lift * heavy, (at < 0 ? 1 : -1) * B.tumble * heavy);
+          v.speed = (at < 0 ? -1 : 1) * B.shove * heavy;
+          const lx = under.reduce((a, p) => a + p.x, 0) / under.length;
+          // The floor takes it, and the end it came up under with it.
+          const c = Math.cos(v.yaw), sn = Math.sin(v.yaw);
+          vehicles.hit(v, v.spec.health * B.hull * heavy, v.x + c * lx + sn * at, v.y + 0.3, v.z - sn * lx + c * at);
+          if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
+          const g = world.groundHeight(v.x, v.z);
+          for (let k = 0; k < 18; k++) {
+            effects.spark(v.x + (Math.random() - 0.5) * 2, g + 0.3 + Math.random() * 0.6, v.z + (Math.random() - 0.5) * 2, 1.0, 0.75, 0.4);
+          }
+          audio.collapse && audio.collapse(Math.hypot(v.x - player.x, v.z - player.z) + 20, 2);
+          state.bollardLifts = (state.bollardLifts || 0) + 1;
+          feed(`<b>thrown by the blockers</b> ${v.spec.name.toLowerCase()}`);
+        }
+      }
       if (row.up < 0.6) continue;
       for (const v of vehicles.active) {
-        if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground') continue;
+        if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground' || v.airborne) continue;
         if (Math.abs(v.x - row.x) > 12 || Math.abs(v.z - row.z) > 12) continue;
         if (!intoBollards(row, v)) continue;
         const hit = Math.abs(v.speed);
+        const nose = v.speed >= 0;
         v.speed = -Math.sign(v.speed) * Math.min(1, hit * 0.1);
         if (hit < 2) continue;
+        // The end that met them goes in, and a fast one cracks the screen.
+        vehicles.crash(v, hit, nose);
         vehicles.damage(v, hit * 22 * (v.spec.mass > 2 ? 0.5 : 1));
         if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
         const g = world.groundHeight(v.x, v.z);
@@ -7318,6 +7453,10 @@ async function main() {
         A.speed *= 0.15; B.speed *= 0.15;
         for (const V of [A, B]) {
           if (V.traffic) { V.traffic.crashed = true; V.traffic.wild = 0; }
+          // The end of each that met the other: its nose if the other was
+          // ahead of it, its tail if it was run into from behind.
+          const ox = (V === A ? dx : -dx), oz = (V === A ? dz : -dz);
+          vehicles.crash(V, closing, -Math.sin(V.yaw) * ox - Math.cos(V.yaw) * oz > 0);
           vehicles.damage(V, closing * 14 * (V.spec.mass > 2 ? 0.5 : 1));
         }
         const mx = (A.x + B.x) / 2, mz = (A.z + B.z) / 2;
@@ -8043,7 +8182,7 @@ async function main() {
     } else if (kind === 'drone') killed = drones.damage(t, dmg);
     else if (kind === 'jet') killed = jets.damage(t, dmg);
     else if (kind === 'mech') killed = mechs.damage(t, dmg * 0.25, core);
-    else if (kind === 'vehicle') { vehicles.damage(t, dmg * 0.25); kind = null; }
+    else if (kind === 'vehicle') { vehicles.hit(t, dmg * 0.25, hit.x, hit.y, hit.z, true); kind = null; }
     if (!kind) return;
     audio.hitMarker(core);
     showHitmarker(killed ? 'kill' : (core ? 'core' : ''));
@@ -8734,7 +8873,7 @@ async function main() {
       if (d > spec.reach + 1.5 || (dx * fx + dz * fz) / (fl * d) < spec.arc) continue;
       const k = 1 - Math.min(1, d / (spec.reach + 1.5)) * (1 - Q.edge);
       vehicles.launch(v, Q.up * k * (v.type === 'bus' ? 0.45 : 1), (Math.random() - 0.5) * 2 * k);
-      vehicles.damage(v, v.spec.health * Q.hull * k);
+      vehicles.blast(v, v.spec.health * Q.hull * k, player.x, player.z);
       if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
       thrown++;
     }
@@ -9561,6 +9700,7 @@ async function main() {
     demolition.reset();
     fires.reset();
     cars.reset();
+    hurtCars.clear();
     renderer.clearCollapses();
     renderer.clearFires();
     effects.clear();
@@ -10212,6 +10352,7 @@ async function main() {
       runawayStep(worldDt);
       convoyStep(worldDt);
       wreckStep(worldDt);
+      damageStep(worldDt);
       onslaughtStep(worldDt);
       pingStep(worldDt);
       updateCarBlasts(worldDt);
@@ -10472,6 +10613,7 @@ async function main() {
     runawayStep(worldDt);
     convoyStep(worldDt);
     wreckStep(worldDt);
+    damageStep(worldDt);
     onslaughtStep(worldDt);
     pingStep(worldDt);
     updateCarBlasts(worldDt);

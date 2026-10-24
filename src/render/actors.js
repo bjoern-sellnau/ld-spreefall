@@ -5,9 +5,10 @@
 import { createProgram } from '../engine/gl.js';
 import { CHASSIS, WARLORD } from '../game/chassis.js';
 import { MECH_BUILDERS } from './mechmeshes.js';
+import { HULLS, packHoles } from '../game/dents.js';
 import { mat4 } from '../engine/math.js';
 import {
-  DRONE_VS, DRONE_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
+  DRONE_VS, DRONE_FS, BODY_FS, DRONE_SHADOW_VS, DRONE_SHADOW_FS,
   SPARK_VS, SPARK_FS, VIEWMODEL_VS, VIEWMODEL_FS, SOLDIER_VS, SOLDIER_FS, SOLDIER_SHADOW_VS,
   PICKUP_VS, GIB_VS, MECH_VS,
 } from '../shaders/actors.js';
@@ -24,7 +25,7 @@ const MAX_SIGNALS = 96;
 const MAX_COVERS = 64;
 const MAX_BOXES = 48;
 const MAX_ATMS = 24;
-const MAX_POSTS = 160;
+const MAX_POSTS = 320;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 1536;
@@ -1447,8 +1448,10 @@ export function buildCarMesh() {
   const m = new MeshBuild();
   const P = 90;
   m.box(0, 0.62, 0, 1.76, 0.5, 4.4, P);                     // the body
-  m.box(0, 0.42, -2.18, 1.7, 0.22, 0.12, 2);                // bumpers
-  m.box(0, 0.42, 2.18, 1.7, 0.22, 0.12, 2);
+  // Bumpers, front and back, in parts of their own (drawn as dark metal) so
+  // each can come off.
+  m.box(0, 0.42, -2.18, 1.7, 0.22, 0.12, 122);
+  m.box(0, 0.42, 2.18, 1.7, 0.22, 0.12, 123);
   // The cabin, narrower than the body, with a raked screen front and back.
   m.box(0, 1.15, 0.25, 1.56, 0.52, 2.1, P);
   m.plate([[-0.76, 0.9, -0.8], [0.76, 0.9, -0.8], [0.72, 1.38, -0.55], [-0.72, 1.38, -0.55]], 0.04, 24);
@@ -1583,7 +1586,7 @@ export function buildJeepMesh() {
   m.plate([[-0.95, 1.36, -0.75], [0.95, 1.36, -0.75], [0.95, 1.24, -2.12], [-0.95, 1.24, -2.12]], 0.1, P);
   m.box(0, 0.98, -2.12, 1.5, 0.5, 0.08, 2);               // grille
   for (const side of [-1, 1]) m.box(side * 0.6, 1.08, -2.17, 0.22, 0.16, 0.04, 34);
-  m.box(0, 0.6, -2.22, 1.98, 0.2, 0.22, 2);               // bumper
+  m.box(0, 0.6, -2.22, 1.98, 0.2, 0.22, 122);             // bumper, which can come off
   // Windscreen, raked back, in a frame.
   m.plate([[-0.86, 1.4, -0.66], [0.86, 1.4, -0.66], [0.86, 1.98, -0.46], [-0.86, 1.98, -0.46]], 0.05, 24);
   for (const side of [-1, 1]) m.box(side * 0.9, 1.7, -0.56, 0.07, 0.62, 0.07, 2);
@@ -1913,11 +1916,11 @@ export class Actors {
     this.progSoldierShadow = createProgram(gl, SOLDIER_SHADOW_VS, DRONE_SHADOW_FS, 'soldierShadow');
     this.progSoldier.use().int('uShadow0', 4).int('uShadow1', 5);
     // A mech rides the shared body shader with a transform of its own.
-    this.progMech = createProgram(gl, MECH_VS, DRONE_FS, 'mech');
+    this.progMech = createProgram(gl, MECH_VS, BODY_FS, 'mech');
     this.progMech.use().int('uShadow0', 4).int('uShadow1', 5);
-    this.progPickup = createProgram(gl, PICKUP_VS, DRONE_FS, 'pickup');
+    this.progPickup = createProgram(gl, PICKUP_VS, BODY_FS, 'pickup');
     this.progPickup.use().int('uShadow0', 4).int('uShadow1', 5);
-    this.progGib = createProgram(gl, GIB_VS, DRONE_FS, 'gib');
+    this.progGib = createProgram(gl, GIB_VS, BODY_FS, 'gib');
     this.progGib.use().int('uShadow0', 4).int('uShadow1', 5);
 
     this.drone = this._uploadMesh(buildDroneMesh(), MAX_DRONES, 2);
@@ -1945,17 +1948,23 @@ export class Actors {
     this.powerBox = this._uploadMesh(buildPowerBoxMesh(), MAX_BOXES, 2);
     this.atm = this._uploadMesh(buildAtmMesh(), MAX_ATMS, 2);
     this.bollard = this._uploadMesh(buildBollardMesh(), MAX_POSTS, 2);
+    // Four vec4s each: the two everything drawn this way has, and the two
+    // that carry a vehicle's damage.
     this.vehicles = {
-      car: this._uploadMesh(buildCarMesh(), 24, 2),
-      bus: this._uploadMesh(buildBusMesh(), 6, 2),
-      jeep: this._uploadMesh(buildJeepMesh(), MAX_VEHICLES, 2),
-      tank: this._uploadMesh(buildTankMesh(), MAX_VEHICLES, 2),
-      heli: this._uploadMesh(buildHeliMesh(), MAX_VEHICLES, 2),
-      jet: this._uploadMesh(buildJetMesh(), MAX_VEHICLES, 2),
+      car: this._uploadMesh(buildCarMesh(), 24, 4),
+      bus: this._uploadMesh(buildBusMesh(), 6, 4),
+      jeep: this._uploadMesh(buildJeepMesh(), MAX_VEHICLES, 4),
+      tank: this._uploadMesh(buildTankMesh(), MAX_VEHICLES, 4),
+      heli: this._uploadMesh(buildHeliMesh(), MAX_VEHICLES, 4),
+      jet: this._uploadMesh(buildJetMesh(), MAX_VEHICLES, 4),
       // Six carriages is two trains on the same stretch of viaduct, which is
       // more than Berlin manages at rush hour.
-      train: this._uploadMesh(buildTrainMesh(), 6, 2),
+      train: this._uploadMesh(buildTrainMesh(), 6, 4),
     };
+    // What the two damage vec4s read as for everything else drawn with the
+    // same shader, which does not send them: nothing.
+    gl.vertexAttrib4f(7, 0, 0, 0, 0);
+    gl.vertexAttrib4f(8, 0, 0, 0, 0);
     // Every viewmodel is uploaded once. They are a few hundred triangles each,
     // so carrying all six costs less than switching would.
     this.weapons = {
@@ -2383,7 +2392,7 @@ export class Actors {
     for (const v of ordered) {
       const mesh = this.vehicles[v.type];
       if (!v.alive || !mesh || counts[v.type] >= mesh.maxInstances) continue;
-      const o = counts[v.type] * 8;
+      const o = counts[v.type] * 16;
       const d = mesh.instData;
       d[o] = v.x; d[o + 1] = v.y; d[o + 2] = v.z;
       // A vehicle goes along (-sin yaw, -cos yaw), the same as the camera and
@@ -2407,6 +2416,13 @@ export class Actors {
       // A car has neither, and sends which of the six paints it wears.
       d[o + 7] = v.type === 'jet' ? (v.gearDown === false ? 0 : 2)
         : (v.type === 'tank' ? (v.turret || 0) : (v.type === 'car' ? (v.paint || 0) : v.rotor));
+      // Its damage, for the ones on the ground that keep any.
+      const H = v.dent && HULLS[v.type];
+      d[o + 8] = H ? v.dent[0] : 0; d[o + 9] = H ? v.dent[1] : 0;
+      d[o + 10] = H ? v.dent[2] : 0; d[o + 11] = H ? v.dent[3] : 0;
+      d[o + 12] = H ? v.broke || 0 : 0;
+      d[o + 13] = H ? H.L / 2 : 0; d[o + 14] = H ? H.W / 2 : 0;
+      d[o + 15] = H ? packHoles(v) : 0;
       counts[v.type]++;
     }
     for (const type in this.vehicles) {
@@ -2414,7 +2430,7 @@ export class Actors {
       mesh.instanceCount = counts[type];
       if (counts[type] > 0) {
         gl.bindBuffer(gl.ARRAY_BUFFER, mesh.instVbo);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.instData, 0, counts[type] * 8);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.instData, 0, counts[type] * 16);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
       }
     }

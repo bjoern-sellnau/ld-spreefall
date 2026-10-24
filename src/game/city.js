@@ -51,7 +51,13 @@ export const CITY = {
   atm: { cash: [80, 420], empty: 120, spray: 8, lure: 25, run: 3.4 },
   // A road blocker: how far before the junction, how long it takes to come
   // up or go down, and how long it stays up.
-  bollards: { set: 7, rise: 0.5, up: 12, spacing: 1.6 },
+  // A row is posts a quarter of a metre thick with no more than 1.2 m of
+  // air between them, the most British guidance on stopping a vehicle
+  // allows, so nothing as wide as a car gets through or sits between two.
+  bollards: { set: 7, rise: 0.5, up: 12, spacing: 1.44,
+    // Coming up under a car: how fast it throws it, how much it turns it
+    // over, how far off the row it goes, and how much of the hull it costs.
+    lift: 5.5, tumble: 1.6, shove: 3.5, hull: 0.22 },
 };
 
 /** A number from a position that is the same every time, 0 to 1. */
@@ -336,7 +342,7 @@ export function bollardsOf(junctions = []) {
 
 /** The posts of a row, where each one stands. */
 export function postsOf(row) {
-  const n = Math.max(3, Math.round(row.w / CITY.bollards.spacing));
+  const n = Math.max(3, Math.ceil((row.w - 0.6) / CITY.bollards.spacing) + 1);
   const out = [];
   for (let i = 0; i < n; i++) {
     const t = (i / (n - 1) - 0.5) * (row.w - 0.6);
@@ -352,6 +358,24 @@ export function bollardStep(row, dt) {
   const want = row.left > 0 ? 1 : 0;
   const step = dt / B.rise;
   row.up = want > row.up ? Math.min(want, row.up + step) : Math.max(want, row.up - step);
+}
+
+/**
+ * The posts of a row that are under a vehicle's body, each as where it is in
+ * the vehicle's own frame (x to its right, z back from its middle). Posts
+ * coming up there come up into the floor of it.
+ * @param {{x:number, z:number, yaw:number}} v
+ * @param {{L:number, W:number}} hull the box it stands in
+ */
+export function postsUnder(row, v, hull) {
+  const c = Math.cos(v.yaw), s = Math.sin(v.yaw);
+  const out = [];
+  for (const p of postsOf(row)) {
+    const dx = p.x - v.x, dz = p.z - v.z;
+    const lx = c * dx - s * dz, lz = s * dx + c * dz;
+    if (Math.abs(lx) < hull.W / 2 - 0.1 && Math.abs(lz) < hull.L / 2 - 0.15) out.push({ x: lx, z: lz });
+  }
+  return out;
 }
 
 /**

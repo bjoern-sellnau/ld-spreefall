@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 
 import { roadIndex, junctionsOf } from '../../src/game/traffic.js';
 import { CITY, furnitureOf, boxStep, boxState, boxReady, zapOn, atmCash, atmState, atmStep,
-  bollardsOf, postsOf, bollardStep, intoBollards } from '../../src/game/city.js';
+  bollardsOf, postsOf, bollardStep, intoBollards, postsUnder } from '../../src/game/city.js';
+import { HULLS } from '../../src/game/dents.js';
 
 const LINES = [
   { cls: 'secondary', w: 12, pts: [-400, 0, 400, 0] },
@@ -91,4 +92,28 @@ test('blockers across every road into a junction, up and down over half a second
   for (let i = 0; i < 40; i++) bollardStep(row, 1 / 60);
   assert.equal(row.up, 0);
   assert.equal(intoBollards(row, car), false);
+});
+
+test('the posts stand no more than 1.2 m apart, so a car over the row always has one under it', () => {
+  const idx = roadIndex(LINES);
+  const rows = bollardsOf(junctionsOf(idx));
+  for (const row of rows.slice(0, 12)) {
+    const posts = postsOf(row);
+    for (let i = 1; i < posts.length; i++) {
+      const gap = Math.hypot(posts[i].x - posts[i - 1].x, posts[i].z - posts[i - 1].z) - 0.24;
+      assert.ok(gap <= 1.2 + 1e-9, `${gap.toFixed(2)} m of air`);
+    }
+    // A car standing across the row anywhere in its width, nose over it.
+    const yaw = Math.atan2(row.nx, row.nz);
+    for (let t = -0.4; t <= 0.4; t += 0.1) {
+      const across = t * (row.w - 2);
+      const car = { x: row.x + row.nx * 1.2 + row.ax * across, z: row.z + row.nz * 1.2 + row.az * across, yaw };
+      const under = postsUnder(row, car, HULLS.car);
+      assert.ok(under.length >= 1, `none under a car ${across.toFixed(2)} m across`);
+      // And they are under its front half.
+      assert.ok(under.every((p) => p.z < 0 && Math.abs(p.z + 1.2) < 1e-6), JSON.stringify(under));
+    }
+    // A car well back from the row has none under it.
+    assert.equal(postsUnder(row, { x: row.x + row.nx * 6, z: row.z + row.nz * 6, yaw }, HULLS.car).length, 0);
+  }
 });

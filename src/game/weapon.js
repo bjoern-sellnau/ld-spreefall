@@ -492,6 +492,12 @@ export class Weapon {
       const h = this.mechs.raycast(ox, oy, oz, dx, dy, dz, maxT);
       take(h, 'mech', h && h.mech);
     }
+    // A car, a bus, a jeep or a tank: the round stops in it and dents the
+    // side it went into, so it is cover for whoever is behind it.
+    if (this.vehicles) {
+      const h = this.vehicles.raycast(ox, oy, oz, dx, dy, dz, maxT);
+      if (h && (!best || h.t < best.t)) best = { t: h.t, core: false, kind: 'vehicle', target: h.target, x: h.x, y: h.y, z: h.z };
+    }
     return best;
   }
 
@@ -500,6 +506,11 @@ export class Weapon {
     if (hit.kind === 'soldier') return this.soldiers.damage(hit.target, amount, dir);
     if (hit.kind === 'jet') return this.jets.damage(hit.target, amount);
     if (hit.kind === 'mech') return this.mechs.damage(hit.target, amount, hit.core);
+    if (hit.kind === 'vehicle') {
+      // Where it went in: a traced shot carries it as its end.
+      const p = hit.end || hit;
+      return this.vehicles.hit(hit.target, amount, p.x, p.y, p.z, true);
+    }
     return this.drones.damage(hit.target, amount);
   }
 

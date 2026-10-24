@@ -1179,7 +1179,8 @@ async function run() {
       for (let i = 0; i < 30; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
       const nose = (v.x - row.x) * row.nx + (v.z - row.z) * row.nz - (v.spec.length || 4) / 2;
       const out = { ok, card, acts, up: +live.up.toFixed(2), crashed: !!(v.traffic && v.traffic.crashed), hurt: v.health < hull,
-        speed: +Math.abs(v.speed).toFixed(2), nose: +nose.toFixed(2), crashes: s.state.bollardCrashes || 0 };
+        speed: +Math.abs(v.speed).toFixed(2), nose: +nose.toFixed(2), crashes: s.state.bollardCrashes || 0,
+        dent: v.dent.map((d) => +d.toFixed(2)), broke: v.broke };
       for (const j of s.junctions()) j.hack = null;
       live.left = 0;
       s.vehicles.remove(v);
@@ -1190,6 +1191,165 @@ async function run() {
   check('road blockers come up out of the road at a junction, and a car driving into them is stopped dead and damaged',
     blockers.ok && blockers.card === 'Road blockers' && blockers.up === 1 && blockers.crashed && blockers.hurt
       && blockers.speed < 1.5 && blockers.nose > -1.5, JSON.stringify(blockers));
+  // Eleven metres a second into them: 0.045 of its nose a metre a second,
+  // the headlights out past 0.3, and the windscreen cracked from eight.
+  check('and its nose shows it: pushed in, the headlights out and the windscreen crazed, the tail untouched',
+    blockers.dent && blockers.dent[0] > 0.3 && blockers.dent[1] === 0 && (blockers.broke & 16) && (blockers.broke & 1)
+      && !(blockers.broke & 2), JSON.stringify({ dent: blockers.dent, broke: blockers.broke }));
+
+  // --- what a vehicle shows of what has been done to it ----------------------
+  // A car parked in the middle of the street, side on to you on the kerb,
+  // and the rifle into its side: low first, then through the windows.
+  await byRoad();
+  const shotCar = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const r = window.road;
+    s.effects.clear();
+    const v = s.vehicles.spawn('car', r.mx, r.mz, r.yaw);
+    v.paint = 2;
+    window.lastCar = v;
+    window.keepClear([v]);
+    s.weapon.giveAll(); s.weapon.select('m16');
+    const fire = async (h, n) => {
+      for (let k = 0; k < n && v.health > 0; k++) {
+        const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+        const dx = v.x - ex, dy = v.y + h - ey, dz = v.z - ez;
+        const l = Math.hypot(dx, dy, dz);
+        s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.asin(dy / l) * 180 / Math.PI);
+        s.camera.update(16 / 9);
+        s.weapon.cooldown = 0; s.weapon.spread = 0; s.weapon.ammo = 30;
+        s.shoot();
+      }
+    };
+    // Which side of it faces you.
+    const lx = Math.cos(v.yaw) * (s.player.x - v.x) - Math.sin(v.yaw) * (s.player.z - v.z);
+    const side = lx < 0 ? 2 : 3, pane = lx < 0 ? 4 : 8;
+    await fire(0.55, 4);
+    const low = { holes: v.holes[side], broke: v.broke, share: v.health / v.maxHealth };
+    await fire(1.15, 4);
+    const high = { holes: v.holes[side], broke: v.broke, dent: +v.dent[side].toFixed(2), share: +(v.health / v.maxHealth).toFixed(2),
+      panes: s.state.panesBroken || 0 };
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 3; i++) await new Promise((res) => requestAnimationFrame(res));
+    return { low, high, side, pane, smoke: s.effects.list.filter((p) => p.alive && p.kind === 6).length };
+  });
+  check('rounds into a car make holes in the side they went into, and only above the waistline take the glass with them',
+    shotCar.low.holes === 4 && !(shotCar.low.broke & shotCar.pane) && shotCar.high.holes === 8 && (shotCar.high.broke & shotCar.pane)
+      && shotCar.high.panes >= 1, JSON.stringify(shotCar));
+  check('a round makes a hole and not much of a dent, and eight of them leave a car still running',
+    shotCar.high.dent < 0.3 && shotCar.high.share > 0.55 && shotCar.smoke === 0, JSON.stringify(shotCar.high));
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-09-shot-car.png') });
+
+  const burning = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const v = window.lastCar;
+    const stages = [];
+    const smokeOf = () => s.effects.list.filter((p) => p.alive && p.kind === 6);
+    let shots = 8;
+    s.weapon.select('m16');
+    while (v.health > 0 && shots < 60) {
+      const ex = s.player.x, ey = s.player.y + 1.7, ez = s.player.z;
+      const dx = v.x - ex, dy = v.y + 0.6 - ey, dz = v.z - ez;
+      const l = Math.hypot(dx, dy, dz);
+      s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.asin(dy / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+      s.weapon.cooldown = 0; s.weapon.spread = 0; s.weapon.ammo = 30;
+      s.shoot();
+      shots++;
+      for (let i = 0; i < 6; i++) s.fixedForTest(1 / 60);
+      const share = v.health / v.maxHealth;
+      const st = share < 0.15 ? 'fire' : share < 0.3 ? 'black' : share < 0.55 ? 'smoke' : null;
+      if (st && !stages.some((x) => x.st === st)) {
+        // A fifth of a second at it first, so the first puff of the new
+        // colour is out: the last of the old one was let go up to 0.14 s ago.
+        for (let i = 0; i < 12; i++) s.fixedForTest(1 / 60);
+        const puffs = smokeOf().filter((p) => p.life > p.maxLife - 0.2);
+        stages.push({ st, shots, puffs: puffs.length, dark: puffs.length ? +Math.min(...puffs.map((p) => p.r)).toFixed(2) : null });
+      }
+      if (share < 0.15) break;
+    }
+    // A second of it on fire, for the picture.
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 3; i++) await new Promise((res) => requestAnimationFrame(res));
+    return { stages, shots, lit: +v.health.toFixed(1) };
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-10-burning-car.png') });
+  const burnt = await page.evaluate(() => {
+    const s = window.spreefall;
+    const v = window.lastCar;
+    // On fire it burns down by itself, and goes up.
+    let t = 0;
+    for (; t < 15 && v.health > 0; t += 1 / 60) s.fixedForTest(1 / 60);
+    return { burnt: +t.toFixed(1), dead: v.health <= 0 };
+  });
+  const stage = (st) => burning.stages.find((x) => x.st === st);
+  check('shot on, the engine smokes grey, then black, and then it is on fire',
+    stage('smoke') && stage('black') && stage('fire') && stage('smoke').puffs > 0 && stage('black').dark < stage('smoke').dark
+      && burning.shots <= 30, JSON.stringify(burning.stages));
+  check('and once it is burning it burns down by itself and goes up, the way any vehicle does',
+    burnt.dead && burnt.burnt > 2 && burnt.burnt < 12, JSON.stringify({ lit: burning.lit, ...burnt }));
+
+  // Blockers coming up under a car standing over them: they come up into its
+  // floor under the nose and throw it, nose up, back off the row.
+  const thrown = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.vehicles.reset();
+    s.effects.clear();
+    const rows = s.bollardRows().filter((r) => Math.hypot(r.x - 81, r.z) < 400 && r.up === 0 && !(r.left > 0))
+      .sort((a, b) => Math.hypot(a.x - 81, a.z) - Math.hypot(b.x - 81, b.z));
+    for (const row of rows) {
+      // Coming into the junction, its nose a metre past the row.
+      const yaw = Math.atan2(row.nx, row.nz);
+      const v = s.vehicles.spawn('car', row.x + row.nx * 1.2, row.z + row.nz * 1.2, yaw);
+      v.paint = 4;
+      const on = await window.onTo(row, row.x, s.world.groundHeight(row.x, row.z) + 0.4, row.z);
+      if (!on || s.hackTarget.ref !== row) { s.vehicles.remove(v); continue; }
+      window.keepClear([v]);
+      const g0 = v.y, lifts = s.state.bollardLifts || 0;
+      s.phone.battery = s.backdoorSpec.battery.most;
+      const ok = s.hackKey(0);
+      let top = 0, pitch = 0, flew = false, apex = null;
+      for (let t = 0; t < 3; t += 1 / 60) {
+        s.fixedForTest(1 / 60);
+        window.keepClear([v]);
+        if (v.airborne) flew = true;
+        if (v.y - g0 > top) top = v.y - g0;
+        pitch = Math.max(pitch, v.pitch);
+        if (flew && !apex && v.lift < 0.6) apex = { x: v.x, y: v.y, z: v.z };
+        if (flew && !v.airborne) break;
+      }
+      const away = (v.x - row.x) * row.nx + (v.z - row.z) * row.nz;
+      return { ok, flew, top: +top.toFixed(2), pitch: +pitch.toFixed(2), away: +away.toFixed(2),
+        lifts: (s.state.bollardLifts || 0) - lifts, hurt: v.health < v.maxHealth, dent: v.dent.map((d) => +d.toFixed(2)),
+        row: { x: row.x, z: row.z, nx: row.nx, nz: row.nz }, apex };
+    }
+    return { found: false };
+  });
+  check('blockers coming up under a car throw it into the air, nose up, and back off the row',
+    thrown.ok && thrown.flew && thrown.lifts === 1 && thrown.top > 0.6 && thrown.pitch > 0.3 && thrown.away > 1.2 && thrown.hurt
+      && thrown.dent[0] > 0, JSON.stringify(thrown));
+  // The picture: the same again, held at the top of the throw.
+  if (thrown.row) {
+    await page.evaluate(async (row0) => {
+      const s = window.spreefall;
+      const row = s.bollardRows().find((r) => r.x === row0.x && r.z === row0.z);
+      row.left = 0; row.up = 0;
+      s.vehicles.reset(); s.effects.clear();
+      const v = s.vehicles.spawn('car', row.x + row.nx * 1.2, row.z + row.nz * 1.2, Math.atan2(row.nx, row.nz));
+      v.paint = 4;
+      // From the kerb, side on, a little back.
+      const px = row.x + row.ax * 9 + row.nx * 2, pz = row.z + row.az * 9 + row.nz * 2;
+      s.teleport(px, pz);
+      const dx = v.x - px, dz = v.z - pz;
+      s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, 4);
+      row.left = 12;
+      for (let t = 0; t < 2 && !(v.airborne && v.lift < 1.5); t += 1 / 60) s.fixedForTest(1 / 60);
+      s.state.paused = true;
+      for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+    }, thrown.row);
+    await page.screenshot({ path: path.join(SHOTS, 'backdoor-11-thrown-car.png') });
+    await page.evaluate(() => { window.spreefall.state.paused = false; });
+  }
 
   // The picture: a power box going up on the pavement, held at the moment it
   // goes (the world stopped, the frame still drawn).

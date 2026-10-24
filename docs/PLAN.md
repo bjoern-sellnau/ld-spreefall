@@ -5747,6 +5747,106 @@ So there are two cities now, and a profile picks which:
   cheat menu 137 of 137. The seven chips sit centred in one row under the
   time of day.
 
+## 142. Vehicles that show what was done to them, and the blockers that throw them
+
+- The ask: vehicles should break when you shoot at them, a damage model,
+  and in .BACKDOOR they should react to the blockers you raise too.
+- What was there: a rifle round went straight through every vehicle. The
+  weapon's own trace asked the drones, the soldiers, the jets and the mechs
+  what was in the way and never the vehicles, so only a blast hurt one,
+  and nothing on it showed what it had been through until it caught fire.
+- Rounds now stop in the box a vehicle stands in (car 4.5 by 1.8 by 1.42,
+  jeep, bus 11.7 long, tank), turned with it, so a car is cover and a shot
+  over its roof misses. The rockets ask the same box; the bus used to be a
+  sphere 1.6 m round its middle with ten metres of it that could not be
+  hit.
+- The damage model (game/dents.js, arithmetic only): each side of the box,
+  nose, tail, left and right, keeps how far it is pushed in. A blow pushes
+  its side in by 2.2 times its share of the hull, a blast every side
+  facing it by how squarely, and a crash the end that hit by 0.045 a metre
+  a second. A round makes a hole and a quarter of that dent, and the holes
+  are counted to fifteen a side.
+- Glass above the waistline goes with what hits it, the way car glass
+  does: the windscreen is laminated, two sheets on a film, and crazes white
+  where it is hit and stays in its frame; the side and rear windows are
+  toughened, and go all at once into small pieces, leaving the frame empty.
+  A crash from 8 m/s up cracks the windscreen; a blast blows in the glass
+  on the sides facing it.
+- A nose pushed in past 0.3 loses its headlights and past 0.6 its bumper,
+  which falls into the road; a tail its lights and its bumper. Bullets on
+  their own do not take a bumper off.
+- The engine smokes grey below 55 % of the hull, black below 30 %, and
+  burns below 15 %, at 2 % of the hull a second, until it goes up the way
+  every vehicle already did. Smoke is a new kind in the effects pool, drawn
+  over what is behind it and not added to it, since smoke is darker than
+  the sky it goes up against. It came out as a puddle on the road first:
+  the shader read anything above three as a pool on the pavement.
+- How much a round does depends on what it goes into: a car or a jeep
+  takes most of a magazine from the rifle to set alight (18 rounds for a
+  car, 23 for a jeep), a bus three magazines, and a tank does not notice.
+  At the old one for one a car went up after seven.
+- Drawing it: vehicles carry two more vec4s each, the four dents, then what
+  has broken as bits, half the length and width, and the holes four bits a
+  side. The vertex shader pushes each side in, most at its edge, with a
+  wobble from the corner's own position and the nose and tail sagging; it
+  takes a pane by the way it faces, hides what is gone under the road, and
+  turns lights that are out dark. The fragment shader scrapes the paint to
+  bare metal in the folds and puts holes with a ring of bright metal where
+  the rounds went in. The car's and the jeep's bumpers are parts of their
+  own now so they can come off.
+- In .BACKDOOR: a car into raised blockers is stopped dead as before, and
+  now its nose shows it. Blockers coming up under a car standing over them
+  go into its floor: it is thrown up at 5.5 m/s, nose up if they came up
+  under the nose, pushed back off the row at 3.5 m/s, and a fifth of its
+  hull goes with it (a bus a third of all of that). A car in the air no
+  longer has the handbrake on. For there always to be a post under a car,
+  the posts stand 1.44 m apart centre to centre, a quarter of a metre
+  thick: 1.2 m of air, the most the UK guidance on stopping vehicles with
+  bollards allows. They were 2.13 m apart, and a car could stand between
+  two.
+- The parked cars are part of the street they are baked into and have no
+  body of their own to dent, so what shows of a round into one is glass
+  coming off above the waistline, and smoke, grey and then black, once it
+  is down past the same shares of what it can take.
+- One found on the way: the first browser run had low rounds breaking the
+  glass. A traced shot carries where it went in as its end, not as x, y
+  and z, so the damage model was handed nothing and read the middle of
+  nowhere as above the waistline. It is handed the end now, and a hit
+  with no point lands on the middle of the doors.
+- Sources:
+  [Science ABC on laminated and tempered car glass](https://www.scienceabc.com/eyeopeners/tempered-laminated-car-windshield-glass-why-break-such-small-pieces)
+  (laminated holds to its film, tempered goes into small blunt pieces),
+  [NBC DFW on laminated side windows](https://www.nbcdfw.com/news/local/type-of-glass-in-your-cars-windows-could-change-escape-plan-2/1944508/)
+  (side windows are increasingly laminated too; here they are the older,
+  commoner toughened kind), and the
+  [DfT's Traffic Advisory Leaflet 2/13](https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/650617/tal-2-13-bollards-pedestrian-movement.pdf)
+  (bollards against vehicles at most 1,200 mm of air apart). Checked through
+  search excerpts; this session cannot open the pages themselves.
+- Checks: nine unit checks of the damage model (the nose is minus z
+  whichever way it faces, the turned box and a shot over its roof, the
+  nose that loses its lights and then its bumper, glass above the
+  waistline on its own side only, a blast, a crash and its windscreen, the
+  engine's stages, the rounds it takes, holes and their packing) and one of
+  the posts (never more than 1.2 m of air, one under a car anywhere across
+  the row, none under one six metres back). In .BACKDOOR: the car into the
+  blockers has its nose in (0.56), its headlights out and its windscreen
+  crazed and the tail untouched; four low rounds make four holes and break
+  nothing, four through the windows take the glass on that side; eight
+  leave it at 62 % with a 0.21 dent and no smoke; shot on, it smokes grey
+  after 10, black after 15 and burns after 18, and burns down and goes up
+  7 s later; blockers under a parked car throw it 0.9 m up, nose up 1.09
+  rad, 3.3 m back off the row. Screenshots: `backdoor-09-shot-car.png`,
+  `backdoor-10-burning-car.png`, `backdoor-11-thrown-car.png`.
+- Two more found on the way. A burning car went white: the fire takes its
+  share of the hull through the same damage a round does, and every hit
+  flashed it; the fire no longer does. And the smoke check read the colour
+  in the step the stage changed, before the first puff of the new colour
+  was out, and passed or failed on the timing; it waits a fifth of a
+  second now and reads only the new puffs.
+- With it in: the unit checks 190 of 190, .BACKDOOR 54 of 54, combat 18 of
+  18, the arsenal 92 of 92, the machines 68 of 68 and the city 93 of 93.
+  Rounds stopping in vehicles changed none of the others.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

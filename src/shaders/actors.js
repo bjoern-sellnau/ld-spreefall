@@ -11,12 +11,19 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aInfo;     // x part id, y rotor phase weight
 layout(location = 5) in vec4 iPosYaw;   // xyz world position, w yaw
 layout(location = 6) in vec4 iState;    // x tilt, y roll, z hit flash, w rotor angle
+// A vehicle's damage, which only vehicles send: how far each side is pushed
+// in (nose, tail, left, right), then what has broken as bits, half its
+// length and width, and how many rounds have gone into each side, four bits
+// a side. Anything else reads nought from both.
+layout(location = 7) in vec4 iDent;
+layout(location = 8) in vec4 iWreck;
 
 out vec3 vWorld;
 out vec3 vNormal;
 flat out float vPart;
 flat out float vFlash;
 out float vViewDist;
+out vec2 vScuff;
 
 mat3 rotY(float a) {
   float c = cos(a), s = sin(a);
@@ -123,6 +130,49 @@ void main() {
   }
   // A road blocker sinks into the road by as much as it is not up.
   if (part > 118.5 && part < 120.5) p.y -= (1.0 - clamp(iState.w, 0.0, 1.0)) * 0.96;
+  // A vehicle's damage. Each side goes in by as much as it has taken, most
+  // at its edge and nothing past a third of the way across, with a wobble
+  // from the corner's own position so a dented panel is not a flat panel
+  // moved; the nose and the tail sag as they go. The glass, the lights and
+  // the bumpers go by what has broken.
+  vScuff = vec2(0.0);
+  if (iWreck.y > 0.5) {
+    float hl = iWreck.y, hw = iWreck.z;
+    int bits = int(iWreck.x + 0.5);
+    // Which pane, by the way it faces and which half it is in, before
+    // anything moves: the windscreen is laminated and crazes in its frame,
+    // the rest are toughened and go.
+    if (part > 23.5 && part < 24.5) {
+      int pane = abs(aNormal.z) > abs(aNormal.x) ? (aPos.z < 0.0 ? 1 : 2) : (aPos.x < 0.0 ? 4 : 8);
+      if ((bits & pane) != 0) {
+        if (pane == 1) part = 124.0;
+        else part = -1.0;
+      }
+    }
+    if (part > 33.5 && part < 34.5 && (bits & 16) != 0) part = 2.0;
+    if (part > 98.5 && part < 99.5 && (bits & 32) != 0) part = 2.0;
+    if (part > 121.5 && part < 122.5) part = (bits & 64) != 0 ? -1.0 : 2.0;
+    if (part > 122.5 && part < 123.5) part = (bits & 128) != 0 ? -1.0 : 2.0;
+    float fz = clamp(-aPos.z / hl, -1.0, 1.0), fx = clamp(aPos.x / hw, -1.0, 1.0);
+    float wF = smoothstep(0.3, 1.0, fz), wB = smoothstep(0.3, 1.0, -fz);
+    float wL = smoothstep(0.35, 1.0, -fx), wR = smoothstep(0.35, 1.0, fx);
+    float seed = fract(iPosYaw.x * 0.37 + iPosYaw.z * 0.11) * 7.0;
+    float wob = 0.6 + 0.8 * fract(sin(dot(floor(aPos * 2.7) + seed, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    vec3 push = vec3(0.0, -(iDent.x * wF + iDent.y * wB) * 0.25,
+      (iDent.x * wF - iDent.y * wB) * hl * 0.26);
+    push.x = (iDent.z * wL - iDent.w * wR) * hw * 0.42;
+    p += push * wob;
+    float here = iDent.x * wF + iDent.y * wB + iDent.z * wL + iDent.w * wR;
+    // The rounds in each side, four bits a side, as a share of fifteen.
+    float packed = iWreck.w;
+    float hF = mod(packed, 16.0), hB = mod(floor(packed / 16.0), 16.0);
+    float hLft = mod(floor(packed / 256.0), 16.0), hRt = floor(packed / 4096.0);
+    float holes = (hF * wF + hB * wB + hLft * wL + hRt * wR) / 15.0;
+    vScuff = vec2(clamp(here, 0.0, 1.0), clamp(holes * 1.6, 0.0, 1.0));
+    nrm = normalize(nrm + (vec3(wob, 1.7 - wob, wob * 0.7) - 0.85) * here * 0.9);
+    // Gone: folded away under the road where nobody sees it.
+    if (part < 0.0) { p = vec3(0.0, -50.0, 0.0); part = 2.0; }
+  }
   mat3 body = rotY(-iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
@@ -492,6 +542,16 @@ void main() {
     else if (k == 118) { albedo = vec3(0.01); rough = 0.3; metal = 0.0; }
     else if (k == 119) albedo = vec3(0.18, 0.18, 0.19);
     else { albedo = vec3(0.5, 0.04, 0.03); emissive = vec3(0.6, 0.03, 0.02); rough = 0.3; metal = 0.1; }
+  } else if (vPart > 123.5 && vPart < 124.5) {
+    // A windscreen that has been hit: laminated, so it stays in its frame,
+    // crazed white round where it was struck and in long cracks out from
+    // there, with the film between the sheets holding it together.
+    vec2 q = vWorld.xz * 3.1 + vWorld.y * 2.3;
+    vec3 c = cells(q);
+    float crack = 1.0 - smoothstep(0.0, 0.06, c.y);
+    albedo = mix(vec3(0.05, 0.06, 0.07), vec3(0.62, 0.66, 0.7), crack * 0.9 + 0.12);
+    rough = mix(0.08, 0.6, crack);
+    metal = 0.3;
   } else if (vPart > 120.5 && vPart < 121.5) {
     // The combo rifle's ball: violet, and never still.
     albedo = vec3(0.02);
@@ -665,6 +725,26 @@ void main() {
     emissive = vec3(0.0);
   }
 
+  // A dented panel: the paint scraped to the metal along the creases and
+  // darker in the folds, the further in the more. And a panel that has been
+  // shot: holes where the rounds went in, each with a ring of bright metal
+  // where the paint came off round it, more of them the more rounds.
+  if (vScuff.x > 0.02) {
+    float scrape = vnoise(vWorld.xz * 7.0 + vWorld.y * 5.0);
+    albedo = mix(albedo, vec3(0.33, 0.33, 0.34), smoothstep(0.55, 0.85, scrape) * vScuff.x * 0.85);
+    rough = mix(rough, 0.75, vScuff.x * 0.5);
+    albedo *= 1.0 - vScuff.x * 0.25;
+  }
+  if (vScuff.y > 0.02) {
+    vec3 hc = cells(vWorld.xz * 5.0 + vec2(vWorld.y * 5.0, -vWorld.y * 3.0));
+    float pick = step(1.0 - vScuff.y * 0.8, hc.z);
+    float hole = step(hc.x, 0.075) * pick;
+    float ring = step(hc.x, 0.13) * pick * (1.0 - hole);
+    albedo = mix(albedo, vec3(0.42, 0.42, 0.44), ring * 0.8);
+    albedo = mix(albedo, vec3(0.008), hole);
+    emissive *= 1.0 - hole;
+  }
+
   vec3 L = uSunDir.xyz;
   float ndl = max(dot(n, L), 0.0);
   float shadow = shadowFactor(vWorld, ndl, vViewDist);
@@ -811,9 +891,13 @@ void main() {
 // so their build of the shader has the term compiled out rather than reading
 // a varying nothing writes.
 export const DRONE_FS = bodyFS(
-  '#define vCharred 0.0\n#define vMachine 0.0\n#define vStun 0.0\n#define vCivil 0.0');
+  '#define vCharred 0.0\n#define vMachine 0.0\n#define vStun 0.0\n#define vCivil 0.0\nin vec2 vScuff;');
+// The same for everything drawn with it that is never a vehicle: the mechs,
+// the pickups and the pieces.
+export const BODY_FS = bodyFS(
+  '#define vCharred 0.0\n#define vMachine 0.0\n#define vStun 0.0\n#define vCivil 0.0\n#define vScuff vec2(0.0)');
 export const SOLDIER_FS = bodyFS(
-  'flat in float vCharred;\nflat in float vMachine;\nflat in float vStun;\nflat in float vCivil;');
+  'flat in float vCharred;\nflat in float vMachine;\nflat in float vStun;\nflat in float vCivil;\n#define vScuff vec2(0.0)');
 
 // Soldiers share the drone's fragment shader and its instance layout, and
 // differ only in what the vertex stage does with the transform: a walk cycle
@@ -1110,9 +1194,9 @@ layout(location = 5) in vec4 iA;    // xyz start, w kind
 layout(location = 6) in vec4 iB;    // xyz end or spread, w life 0..1
 layout(location = 7) in vec4 iC;    // rgb colour, w width
 // Kinds: 0 tracer, 1 spark, 2 muzzle or blast flash, 3 blood, 4 a pool of it
-// on the ground, 5 a column of light standing on the street. Three and four
-// are drawn in a second pass with an ordinary alpha blend; the rest are
-// additive.
+// on the ground, 5 a column of light standing on the street, 6 smoke. Three,
+// four and six are drawn in a second pass with an ordinary alpha blend; the
+// rest are additive.
 
 out vec2 vUv;
 flat out float vKind;
@@ -1139,7 +1223,7 @@ void main() {
     vec3 toEye = normalize(uCamPos.xyz - mid);
     vec3 side = normalize(cross(normalize(axis), toEye)) * iC.w;
     pos = a + axis * c.x + side * (c.y - 0.5) * 2.0;
-  } else if (iA.w > 4.5) {
+  } else if (iA.w > 4.5 && iA.w < 5.5) {
     // A column standing on the ground, turned to face the eye. iB.x is how
     // tall it is and iC.w how wide.
     vec3 base = iA.xyz;
@@ -1149,7 +1233,7 @@ void main() {
     vec3 fwd = l > 0.001 ? toEye / l : vec3(0.0, 0.0, 1.0);
     vec3 right = normalize(vec3(fwd.z, 0.0, -fwd.x));
     pos = base + right * (c.x - 0.5) * 2.0 * iC.w + vec3(0.0, c.y * iB.x, 0.0);
-  } else if (iA.w > 3.5) {
+  } else if (iA.w > 3.5 && iA.w < 4.5) {
     // A pool on the pavement: flat, not turned to face anybody, growing to its
     // full size over the first second.
     vec3 centre = iA.xyz;
@@ -1172,6 +1256,8 @@ void main() {
     vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
     vec3 up = cross(fwd, right);
     float s = iC.w;
+    // Smoke spreads as it rises: three times the size by the time it goes.
+    if (iA.w > 5.5) s *= mix(3.0, 1.0, iB.w);
     pos = centre + right * (c.x - 0.5) * 2.0 * s + up * (c.y - 0.5) * 2.0 * s;
   }
   gl_Position = uViewProj * vec4(pos, 1.0);
@@ -1190,6 +1276,17 @@ layout(location = 0) out vec4 fragColour;
 
 void main() {
   float a;
+  if (vKind > 5.5) {
+    // Smoke: a soft round puff, coming in quickly and thinning out slowly,
+    // with a little grain so a column of them is not a stack of discs.
+    vec2 d = vUv - 0.5;
+    float r = length(d) * 2.0;
+    float grain = 0.8 + 0.2 * sin(vSeed * 37.0 + d.x * 9.0) * sin(d.y * 11.0 - vSeed * 13.0);
+    a = pow(max(0.0, 1.0 - r), 1.6) * grain * smoothstep(1.0, 0.85, vLife) * vLife * 0.75;
+    if (a < 0.01) discard;
+    fragColour = vec4(vColour, a);
+    return;
+  }
   if (vKind < 0.5) {
     // Tracer: bright core with a soft edge, fading towards the tail.
     float across = 1.0 - abs(vUv.y - 0.5) * 2.0;
