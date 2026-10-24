@@ -5598,6 +5598,16 @@ So there are two cities now, and a profile picks which:
   than its approach and the radius together in five seconds, which a car
   stopped in the junction is not) and away from the steam. Here 55.6 m and
   2.4 m from the middle, and 55.8 m; the suite passes 48 of 48.
+- The run on that failed early, in the arsenal: one rifle round is a dent
+  read 31 against a ceiling of 30. A hit gives the cell of the damage grid
+  it lands in all of it and the cells within a metre and a half across a
+  line a share, so the sum over the grid for one round is anything up to
+  four times it, by where it lands; since the wall check goes at the one
+  nearest frontage, which in the live city stands on a line of the 22 m
+  grid, the kick and the butt read exactly twice what they did (90 and 60
+  for 45 and 30). Shown here with one round's 15: 15 in the middle of a
+  cell, 30 on a line, 60 on a corner, and 15 in the cell it hit each time.
+  The check now reads the cell it hit, and the other checks keep the sum.
 
 ## CI: the EMP check clears the street in front of the launcher
 

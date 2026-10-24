@@ -1040,7 +1040,11 @@ async function run() {
     };
     if (!findWall()) return { skip: true };
     const total = () => { let n = 0; for (const v of s.demolition.damage.values()) n += v; return n; };
-    const out = {};
+    // And the cell that took the most: a hit within a metre and a half of
+    // the grid's lines is shared with the cells across them, so the total
+    // for one round is anything up to four times it, by where it landed.
+    const peak = () => { let n = 0; for (const v of s.demolition.damage.values()) n = Math.max(n, v); return n; };
+    const out = {}, peaks = {};
     // Six metres from a rocket going off is close enough to kill you, and a
     // frontage that has taken a few of them is not there for a rifle after.
     // So nobody dies here, and the ones that go off come last.
@@ -1094,6 +1098,7 @@ async function run() {
       if (spec.ring) for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
       if (id === 'c4' || id === 'duck') s.projectiles.detonateAll(id);
       out[id] = Math.round(total());
+      peaks[id] = Math.round(peak());
     }
     s.projectiles.clear();
     // The city back as it was: every weapon has now gone at the same
@@ -1102,11 +1107,12 @@ async function run() {
     s.demolition.reset(); s.renderer.clearCollapses();
     s.setCheat('godmode', false);
     s.teleport(start.x, start.z);
-    return { out, moves };
+    return { out, moves, peaks };
   });
   const moves = walls.moves || {};
+  const peaks = walls.peaks || {};
   if (!walls.skip) Object.assign(walls, walls.out);
-  delete walls.out; delete walls.moves;
+  delete walls.out; delete walls.moves; delete walls.peaks;
   const none = walls.skip ? ['no wall found'] : Object.keys(walls).filter((id) => !(walls[id] > 0) && !['banana', 'emp', 'translocator', 'wire'].includes(id));
   check('every weapon in the loadout wears a frontage down, rounds, swings, flame, arrows and saws as well as blasts',
     !walls.skip && none.length === 0,
@@ -1114,8 +1120,9 @@ async function run() {
   check('and a kick and the butt of a rifle wear it down as well',
     !walls.skip && moves.kick > 0 && moves.bash > 0, walls.skip ? '' : `kick ${moves.kick}, bash ${moves.bash}`);
   check('and one rifle round is a dent in it, where one rail shot is many times that',
-    !walls.skip && walls.m16 > 5 && walls.m16 < 30 && walls.railgun > walls.m16 * 5,
-    walls.skip ? '' : `m16 ${walls.m16}, railgun ${walls.railgun}, minigun ${walls.minigun}`);
+    !walls.skip && peaks.m16 > 5 && peaks.m16 < 30 && peaks.railgun > peaks.m16 * 5,
+    walls.skip ? '' : `in the cell it hit: m16 ${peaks.m16}, railgun ${peaks.railgun}, minigun ${peaks.minigun}`
+      + `; over every cell: m16 ${walls.m16}, railgun ${walls.railgun}`);
 
   // --- the eight out of the other shooters ---------------------------------
   // Each checked for the thing it is for: Hailstorm pours, the volt caster's
