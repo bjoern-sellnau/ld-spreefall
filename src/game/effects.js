@@ -87,7 +87,7 @@ export class Effects {
    * A stroke of lightning, or one leg of it: a ribbon as wide as it has to be
    * to be seen kilometres off, there for a moment.
    */
-  bolt(ax, ay, az, bx, by, bz, width, life = 0.12) {
+  bolt(ax, ay, az, bx, by, bz, width, life = 0.12, r = 6.0, g = 6.4, b = 8.0) {
     const s = this._get();
     s.alive = true;
     s.kind = 0;
@@ -95,7 +95,7 @@ export class Effects {
     s.bx = bx; s.by = by; s.bz = bz;
     s.maxLife = life;
     s.life = life;
-    s.r = 6.0; s.g = 6.4; s.b = 8.0;
+    s.r = r; s.g = g; s.b = b;
     s.size = width;
     s.vx = 0; s.vy = 0; s.vz = 0;
     s.gravity = 0;
@@ -708,6 +708,7 @@ export class Effects {
     s.size = (0.35 + Math.random() * 0.3) * strength;
     // Its grain, so no two puffs look alike.
     s.bx = 0; s.by = 0; s.bz = Math.random() * 10;
+    return s;
   }
 
   /**

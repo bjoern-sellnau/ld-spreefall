@@ -78,6 +78,8 @@ precision highp float;
 ${CAMERA_BLOCK}
 uniform float uSnow;
 uniform float uAlpha;
+uniform vec4 uTint;      // rgb what the rain has in it, a how much
+uniform float uEmber;    // 1: embers, glowing on their own
 in vec2 vUv;
 in float vFade;
 layout(location = 0) out vec4 fragColour;
@@ -92,6 +94,8 @@ void main() {
   float lum = dot(sky, vec3(0.2126, 0.7152, 0.0722));
   vec3 col = vec3(0.7, 0.74, 0.8) * (0.25 + lum * 2.2) + vec3(1.0) * uWeather.z * 1.5;
   if (uSnow > 0.5) col = vec3(0.92, 0.94, 0.98) * (0.35 + lum * 2.4) + vec3(1.0) * uWeather.z;
+  col = mix(col, uTint.rgb * (0.4 + lum * 2.0), uTint.a);
+  if (uEmber > 0.5) col = vec3(3.2, 1.2, 0.25) * (0.6 + 0.4 * fract(vUv.x * 7.0 + vFade * 13.0));
   fragColour = vec4(col, a * vFade * uAlpha);
 }
 `;
@@ -124,19 +128,24 @@ export class Precip {
   draw(weather, windYaw = 0) {
     this.drawn = 0;
     if (!weather) return 0;
-    const snow = weather.snow > weather.rain;
-    const amount = Math.min(1.5, snow ? weather.snow : weather.rain);
+    // Embers out of a firestorm fall like snow and glow like nothing else.
+    const embers = (weather.embers || 0) > Math.max(weather.rain, weather.snow);
+    const snow = embers || weather.snow > weather.rain;
+    const amount = Math.min(1.5, embers ? weather.embers : (snow ? weather.snow : weather.rain));
     if (amount < 0.02) return 0;
     const gl = this.gl;
     const n = Math.min(PRECIP.count, Math.round(PRECIP.count * amount / 1.5));
     const wind = (snow ? 2.5 : 4) * weather.wind;
+    const tint = weather.precipTint || [0, 0, 0, 0];
     this.prog.use()
       .vec3('uBox', PRECIP.box[0], PRECIP.box[1], PRECIP.box[2])
       .vec2('uSpeed', ...(snow ? PRECIP.snowSpeed : PRECIP.rainSpeed))
       .vec3('uWind', Math.sin(windYaw) * wind, 0, Math.cos(windYaw) * wind)
       .float('uSnow', snow ? 1 : 0)
       .float('uSmear', PRECIP.smear)
-      .float('uAlpha', snow ? 0.85 : 0.42);
+      .float('uAlpha', snow ? 0.85 : 0.42)
+      .vec4('uTint', tint[0], tint[1], tint[2], tint[3])
+      .float('uEmber', embers ? 1 : 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);

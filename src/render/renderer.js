@@ -476,10 +476,18 @@ export class Renderer {
       for (let i = 0; i < 3; i++) {
         zen[i] = (zen[i] * (1 - grey * 0.9) + (lz * 1.6 + lh * 0.4) * 0.5 * tint[i] * grey * 0.9) * dim;
         hor[i] = (hor[i] * (1 - grey * 0.85) + lh * 0.9 * tint[i] * grey * 0.85) * dim;
+        // An extreme weather's colour over the whole sky: green yellow under
+        // acid, violet in an ion storm, orange over a firestorm.
+        if (W.tint && W.tint[3] > 0) {
+          const lum = (lz + lh) * 0.5 + 0.02;
+          zen[i] += (W.tint[i] * lum * 1.6 - zen[i]) * W.tint[3];
+          hor[i] += (W.tint[i] * lum * 2.0 - hor[i]) * W.tint[3];
+        }
         // Lit, not washed out: the channel itself has to stay the brightest
         // thing in the sky.
-        zen[i] += W.flash * [0.22, 0.24, 0.32][i];
-        hor[i] += W.flash * [0.28, 0.3, 0.36][i];
+        const fc = W.flashTint || [0.22, 0.24, 0.32];
+        zen[i] += W.flash * fc[i];
+        hor[i] += W.flash * fc[i] * 1.2;
         this.sunCol[i] *= 1 - grey * 0.78;
       }
       shadowShare = 1 - grey * 0.85;

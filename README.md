@@ -1023,6 +1023,42 @@ cheat.
 ![Rain at the Brandenburg Gate](docs/screenshots/weather-01-rain.png)
 ![A storm, and the bolt standing behind the Gate](docs/screenshots/weather-04-storm.png)
 
+### Extreme weather
+
+Under the weather on each game's page, and in the cheat menu's **extreme
+weather** group, four kinds of weather past anything real can be switched
+on, each on its own or **All**. Then they come at random, on average every
+five minutes (one to twenty in the cheat menu), more than one at once if the
+dice say so, and the cheat menu can bring each one now. Each is announced
+twenty seconds ahead with a red band and the siren, rising and falling the
+way the warning sirens in Germany do: "Achtung: Säureregen wird erwartet in
+20 Sekunden. Suchen Sie sich Schutz!", counted down, and given the all clear
+with a steady tone when it is over. It covers a stretch some hundreds of
+metres across round where it was announced.
+
+- **Säureregen**, acid rain: green rain under a green sky; whoever is out in
+  it is eaten down to the bones in a green pool, trees melt, cars corrode.
+- **Ionensturm**, an ion storm: bolts every second or so, on people, cars,
+  shelters, the walls round you; whoever is within a few metres is burnt to a
+  black skeleton where they stood, and what it lands on is wrecked, the
+  building included.
+- **Wirbelsturm**, a tornado: a funnel that comes from a quarter of a
+  kilometre off and passes close; whoever it takes is thrown into the air
+  and bursts on landing, trees are whirled apart, cars thrown, and near it
+  you lose health.
+- **Feuersturm**, a firestorm: an orange sky raining embers; whoever is out
+  in it catches and burns, trees catch, cars burn.
+
+Shelter is a roof: a bus shelter (glass, a bench and the stop's green H on
+yellow) or a kiosk's awning, one every hundred and thirty metres or so of
+street, or the inside of a vehicle or a mech. Under it you are out of all
+four, except the very core of a tornado. The people who live here run for
+the nearest shelter when the warning comes. A bolt, a tornado or a blast
+brings a shelter down, and then it shelters nobody.
+
+![Acid rain at a bus shelter](docs/screenshots/extreme-01-acid.png)
+![A tornado coming down the street](docs/screenshots/extreme-03-tornado.png)
+
 ## Destruction
 
 Buildings come down, and the ground craters. This section used to say the

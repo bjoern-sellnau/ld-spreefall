@@ -130,6 +130,14 @@ void main() {
   }
   // A road blocker sinks into the road by as much as it is not up.
   if (part > 118.5 && part < 120.5) p.y -= (1.0 - clamp(iState.w, 0.0, 1.0)) * 0.96;
+  // A shelter brought down: the glass gone, the roof and the awning tipped
+  // down onto one end, the frame leaning, and the lit poster dark.
+  if (part > 124.5 && part < 133.5 && iState.w > 0.5) {
+    if (part > 126.5 && part < 127.5) p = vec3(0.0, -50.0, 0.0);
+    else if ((part > 125.5 && part < 126.5) || part > 132.5) p.y = 0.35 + (p.x + 2.4) * 0.32 + (p.y - 2.4) * 0.3;
+    else if (part > 124.5 && part < 125.5 && p.y > 0.6) p.x += (p.y - 0.6) * 0.35;
+    if (part > 129.5 && part < 130.5) part = 126.0;
+  }
   // A vehicle's damage. Each side goes in by as much as it has taken, most
   // at its edge and nothing past a third of the way across, with a wobble
   // from the corner's own position so a dented panel is not a flat panel
@@ -542,6 +550,24 @@ void main() {
     else if (k == 118) { albedo = vec3(0.01); rough = 0.3; metal = 0.0; }
     else if (k == 119) albedo = vec3(0.18, 0.18, 0.19);
     else { albedo = vec3(0.5, 0.04, 0.03); emissive = vec3(0.6, 0.03, 0.02); rough = 0.3; metal = 0.1; }
+  } else if (vPart > 124.5 && vPart < 133.5) {
+    // A shelter: the steel frame and bench, the roof, the glass, the stop's
+    // yellow disc and green H, the poster lit from inside (more at night),
+    // a kiosk's green paint and its red and white awning.
+    int k = int(vPart + 0.5);
+    rough = 0.5; metal = 0.3;
+    if (k == 125) { albedo = vec3(0.19, 0.2, 0.21); metal = 0.75; rough = 0.35; }
+    else if (k == 126) { albedo = vec3(0.1, 0.105, 0.11); rough = 0.6; }
+    else if (k == 127) { albedo = vec3(0.04, 0.055, 0.065); rough = 0.04; metal = 0.9; }
+    else if (k == 128) { albedo = vec3(0.86, 0.68, 0.04); emissive = vec3(0.12, 0.09, 0.0); rough = 0.4; metal = 0.1; }
+    else if (k == 129) { albedo = vec3(0.02, 0.32, 0.12); rough = 0.4; metal = 0.1; }
+    else if (k == 130) { albedo = vec3(0.55, 0.55, 0.5); emissive = vec3(1.1, 1.05, 0.9) * (0.25 + uMisc.y * 1.3); rough = 0.2; metal = 0.0; }
+    else if (k == 131) { albedo = vec3(0.16, 0.34, 0.22); rough = 0.55; metal = 0.1; }
+    else {
+      float stripe = step(0.5, fract((vWorld.x + vWorld.z) * 1.6));
+      albedo = mix(vec3(0.62, 0.05, 0.04), vec3(0.85, 0.84, 0.8), stripe);
+      rough = 0.8; metal = 0.0;
+    }
   } else if (vPart > 123.5 && vPart < 124.5) {
     // A windscreen that has been hit: laminated, so it stays in its frame,
     // crazed white round where it was struck and in long cracks out from

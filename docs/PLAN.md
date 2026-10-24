@@ -5893,6 +5893,127 @@ So there are two cities now, and a profile picks which:
   3.5 km, where it only rolls, for 11.5 s, starting ten seconds after the
   flash. The suite passes 17 of 17.
 
+## 144. Extreme weather, announced, and shelters to get under
+
+- The ask: four kinds of weather past anything real, coming at random and
+  announced first ("Achtung Säureregen wird erwartet in 20 sekunden, suchen
+  sie sich schutz"): acid rain that melts the people and trees it lands on;
+  an ion storm whose bolts burn people up on the spot and can destroy
+  buildings, trees, shelters and vehicles; a tornado that throws people into
+  the air to burst when they come down, whirls the trees about and hurts
+  you; and a firestorm that burns whoever it reaches. Each can be switched
+  on in the options, all of them too, and more than one can come at once.
+  And small bus shelters and other places to get under, to be safe from
+  them. The message ended at "diese können", taken as: and these can be
+  destroyed, which they can.
+- Where they are switched on: on each game's page, under the weather, a row
+  Säureregen, Ionensturm, Wirbelsturm, Feuersturm, All; and the same
+  switches in the cheat menu's extreme weather group, with how often (on
+  average every 1 to 20 minutes, 5 to start with, between half and one and
+  a half times that each time) and a button for each to bring it now. One
+  set of switches, kept between visits; none of it counts as a cheat.
+- The warning (game/extreme.js, arithmetic only): twenty seconds ahead, a
+  red band across the top, word for word "Achtung: Säureregen wird
+  erwartet in 20 Sekunden. Suchen Sie sich Schutz!", counted down every
+  five seconds and each of the last three, then "Säureregen! Suchen Sie
+  sofort Schutz." when it comes and "Entwarnung: Säureregen ist vorüber."
+  when it is over. With it the siren the way the warning sirens in Germany
+  sound: a howl rising and falling for the warning, a steady tone for the
+  all clear, cut from the real minute to a few seconds. Each comes on and
+  goes over six seconds and covers a stretch round where it was announced,
+  a few hundred metres across, which you can get out of.
+- The shelters (game/shelters.js): a bus shelter, a glass back and ends
+  under a flat roof, a bench, and the stop's sign, the green H on a yellow
+  disc of the road traffic regulations (Zeichen 224); and a kiosk with its
+  awning out over the pavement. One every 130 m of the real streets, on
+  alternate sides, 2.6 m past the kerb, facing the road, none within 16 m
+  of a junction or 60 m of another, and only where the pavement is clear:
+  387 in the test city, 11 within 400 m of the square. Under the roof you
+  are out of all four, except the core of a tornado; so you are in a
+  vehicle or a mech. A bolt, the core of a tornado or a blast brings a
+  shelter down: the glass goes into the road, it is drawn broken, and it
+  shelters nobody after; whoever was under it when the bolt landed lives,
+  that once. The people who live here run for the nearest shelter within
+  90 m when the warning comes, three to a shelter, and go back to what they
+  were doing at the all clear.
+- Acid rain: green rain and a green cast; whoever is out in it is eaten
+  away (an eighth of what they can take a second) and goes down to the
+  bones in a green pool, smoking; trees melt; parked cars corrode; you lose
+  six a second in the open.
+- The ion storm: a white glare and a hum, and a bolt every 0.7 s or so on
+  somebody, a car, a shelter, a frontage near you or the ground. Within
+  4.5 m of where it lands everybody is burnt to a black skeleton where they
+  stood; within 7 m cars are wrecked, the building takes a blast, trees are
+  flattened and set alight; you lose 70 if it lands on you in the open.
+- The tornado: a funnel of dark cloud narrow at the street and wide in the
+  sky, turning, with dust at its foot. It comes from a quarter of a
+  kilometre off on a line that passes within 30 m of where you were, at
+  9 m/s (20 mph, the top of what the National Severe Storms Laboratory is
+  quoted as calling typical). In its core, 14 m across the middle, it picks people up,
+  shelter or not, and throws them up at 13 to 23 m/s and round with the
+  wind, and they burst when they come down; it whirls trees apart, throws
+  cars and brings shelters down. Out to 38 m it still costs you, up to ten
+  a second, and shakes the view. How hard the wind is, is not modelled as a
+  speed: on the Enhanced Fujita scale (65 to over 200 mph in gusts) a
+  tornado is rated by what it destroys, and this one does what an EF3 or
+  stronger does to trees and cars, and more to people than any real one.
+- The firestorm: an orange sky, embers falling like snow and glowing, fires
+  starting on the street; whoever is out in it catches and burns to a black
+  body (a sixth of what they can take a second), trees catch, cars burn; you
+  lose nine a second in the open. The Hamburg police president's report on
+  the firestorm of July 1943 is the picture: the wind it made itself was
+  such that going out into it was mostly impossible, and it swept over the
+  water with embers and sparks.
+- Acid rain that melts and an ion storm are invented; so are the numbers
+  of the tornado and how big each stretch is, set for the game.
+- Found on the way: the strength each event works with was measured at the
+  point where it was announced, which a tornado moves away from, so its
+  funnel and what it did faded out once it was 38 m past that point. Now
+  each uses its own strength, and the trees, the embers and the bolts near
+  you happen only while you are inside its stretch. The funnel was drawn
+  from puffs that rose for two to four seconds while it moved on at 9 m/s,
+  a smear; now each lives under a second, goes with the funnel and round
+  it, and is as big as the funnel is wide there. The warning siren never
+  sounded: audio.js had two methods named siren, the camp's further down,
+  and the second of a name in a class is the only one there is; it is
+  warnSiren now. And an event brought with no warning said "in 0
+  Sekunden"; it says it is here.
+- Sources: the
+  [warning signals, Hamburg's interior authority](https://www.hamburg.de/politik-und-verwaltung/behoerden/behoerde-fuer-inneres-und-sport/themen/katastrophenschutz/warnung-der-bevoelkerung/faq-sirenen-94190)
+  (a minute's rising and falling howl for a warning, a minute's steady
+  tone for the all clear), the road traffic regulations'
+  [Anlage 2](https://www.gesetze-im-internet.de/stvo_2013/anlage_2.html)
+  (Zeichen 224, the stop of a scheduled or school bus), the
+  [AMS Glossary on the Enhanced Fujita scale](https://glossary.ametsoc.org/wiki/Enhanced_Fujita_Scale)
+  (3 s gusts by category, rated from damage indicators, trees among them),
+  [a news article on how fast tornadoes move](https://www.yahoo.com/news/fast-tornadoes-move-depends-highway-163000083.html)
+  (quoting NSSL, typically 10 to 20 mph, and a weather service guide, an
+  average near 30; secondhand, not found on NSSL's own pages), and the
+  [Hamburg police president's report, 1943](https://germanhistorydocs.org/de/deutschland-nationalsozialismus-1933-1945/bericht-des-hamburger-polizeipraesidenten-ueber-den-hamburger-feuersturm-im-juli-august-1943)
+  (German History in Documents and Images). Checked through search
+  excerpts; this session cannot open the pages themselves.
+- Checks: six unit checks (the warning word for word and its count, the
+  event coming and going with the all clear, more than one at once and the
+  dice only for what is switched on, a tornado that passes close and
+  moves, shelters along the street facing it, and who is under a roof and
+  who is not, before and after it comes down); and the weather suite stages
+  each kind at a bus shelter near the square with somebody under it and
+  somebody in the street: the warning, its count and the siren; two of
+  three people in the street get under a roof before it comes; acid melts
+  the one outside and two trees or more and spares the one under the roof,
+  and you, under it, lose nothing; a bolt burns the one outside to a
+  skeleton, brings the shelter down with the one under it alive, and wrecks
+  a car; the tornado lifts the one outside 7 m and more, he bursts, trees
+  go, the shelter comes down and you are hurt 17 m from its line; the
+  firestorm burns the one outside, lights trees and rains embers; two at
+  once; the switches on the game's page and in the cheat menu, and one
+  coming by itself, none of it a cheat. The suite passes 32 of 32, and the
+  unit checks 200 of 200. Pictures:
+  [acid rain](screenshots/extreme-01-acid.png),
+  [ion storm](screenshots/extreme-02-ion.png),
+  [tornado](screenshots/extreme-03-tornado.png),
+  [firestorm](screenshots/extreme-04-fire.png).
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

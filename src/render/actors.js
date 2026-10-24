@@ -25,6 +25,7 @@ const MAX_SIGNALS = 96;
 const MAX_COVERS = 64;
 const MAX_BOXES = 48;
 const MAX_ATMS = 24;
+const MAX_SHELTERS = 40;
 const MAX_POSTS = 320;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
@@ -1554,6 +1555,53 @@ export function buildAtmMesh() {
 }
 
 /**
+ * A bus shelter, Berlin's kind: a steel frame (125) under a flat roof (126),
+ * a glass back and glass ends (127), a bench, a lit poster in one end (130),
+ * and the stop's sign on its pole at the other, a green H (129) on a yellow
+ * disc (128). Its open side faces the road, which is its own minus z. Brought
+ * down, the glass is gone, the roof lies tipped on the bench and the frame
+ * leans; the shader does that from the instance.
+ */
+export function buildShelterStopMesh() {
+  const m = new MeshBuild();
+  for (const x of [-2.0, 2.0]) {
+    for (const z of [-0.7, 0.7]) m.box(x, 1.25, z, 0.08, 2.5, 0.08, 125);
+  }
+  m.box(0, 2.53, -0.15, 4.4, 0.1, 1.9, 126);                    // the roof, over the kerb side
+  m.box(0, 1.27, 0.7, 3.92, 2.1, 0.03, 127);                    // the glass back
+  for (const x of [-2.0, 2.0]) m.box(x, 1.27, 0.15, 0.03, 2.1, 1.1, 127);
+  m.box(1.98, 1.25, 0.15, 0.06, 1.7, 1.0, 130);                 // the poster, lit
+  m.box(0, 0.46, 0.42, 2.4, 0.06, 0.42, 125);                   // the bench
+  for (const x of [-1.1, 1.1]) m.box(x, 0.23, 0.42, 0.06, 0.46, 0.36, 125);
+  // The stop's sign on its pole, facing up and down the street.
+  m.box(-2.55, 1.35, -0.85, 0.07, 2.7, 0.07, 125);
+  m.cylinder(-2.6, 2.5, -0.85, 0.26, 0.26, 0.1, 16, 128, 'x');
+  for (const x of [-2.62, -2.48]) {
+    m.box(x, 2.5, -0.93, 0.02, 0.26, 0.05, 129);                // the H: two uprights
+    m.box(x, 2.5, -0.77, 0.02, 0.26, 0.05, 129);
+    m.box(x, 2.5, -0.85, 0.02, 0.05, 0.16, 129);                // and the bar
+  }
+  return m;
+}
+
+/**
+ * A kiosk: a booth painted green (131) with its window to the street, a
+ * counter, a flat roof (126), a lit sign (130), and an awning (133) out over
+ * the pavement on two posts, which is where you stand to be out of it.
+ */
+export function buildShelterKioskMesh() {
+  const m = new MeshBuild();
+  m.box(0, 1.3, 0.4, 2.6, 2.6, 1.8, 131);
+  m.box(0, 1.5, -0.51, 1.8, 0.9, 0.02, 127);                     // the window
+  m.box(0, 1.0, -0.66, 2.0, 0.06, 0.32, 125);                    // the counter
+  m.box(0, 2.66, 0.4, 2.8, 0.1, 2.0, 126);
+  m.box(0, 2.95, -0.1, 1.7, 0.42, 0.06, 130);                    // the sign
+  m.plate([[-1.6, 2.62, -0.5], [1.6, 2.62, -0.5], [1.6, 2.32, -2.6], [-1.6, 2.32, -2.6]], 0.05, 133);
+  for (const x of [-1.52, 1.52]) m.box(x, 1.16, -2.52, 0.06, 2.32, 0.06, 125);
+  return m;
+}
+
+/**
  * One road blocker: a steel post (119) with a red reflective band (120). The
  * whole post sinks into the road by as much as the instance says it is not up.
  */
@@ -1947,6 +1995,8 @@ export class Actors {
     this.cover = this._uploadMesh(buildCoverMesh(), MAX_COVERS, 2);
     this.powerBox = this._uploadMesh(buildPowerBoxMesh(), MAX_BOXES, 2);
     this.atm = this._uploadMesh(buildAtmMesh(), MAX_ATMS, 2);
+    this.shelterStop = this._uploadMesh(buildShelterStopMesh(), MAX_SHELTERS, 2);
+    this.shelterKiosk = this._uploadMesh(buildShelterKioskMesh(), MAX_SHELTERS, 2);
     this.bollard = this._uploadMesh(buildBollardMesh(), MAX_POSTS, 2);
     // Four vec4s each: the two everything drawn this way has, and the two
     // that carry a vehicle's damage.
@@ -2571,6 +2621,11 @@ export class Actors {
   /** Power boxes, ATMs and blocker posts, each with its state in the light channel. */
   updateBoxes(list) { this._fillStreet(this.powerBox, MAX_BOXES, list); }
   updateAtms(list) { this._fillStreet(this.atm, MAX_ATMS, list); }
+  /** The shelters near you, each kind its own mesh; the light channel says whether it is down. */
+  updateShelters(list) {
+    this._fillStreet(this.shelterStop, MAX_SHELTERS, list.filter((c) => c.kind === 'stop'));
+    this._fillStreet(this.shelterKiosk, MAX_SHELTERS, list.filter((c) => c.kind === 'kiosk'));
+  }
   updateBollards(list) { this._fillStreet(this.bollard, MAX_POSTS, list); }
 
   _fillStreet(mesh, most, list) {
@@ -2596,7 +2651,8 @@ export class Actors {
   drawCamps() {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest, this.signal, this.cover, this.powerBox, this.atm, this.bollard]) {
+    for (const mesh of [this.camp, this.nest, this.signal, this.cover, this.powerBox, this.atm, this.bollard,
+      this.shelterStop, this.shelterKiosk]) {
       if (!mesh.instanceCount) continue;
       this.progDrone.use();
       gl.bindVertexArray(mesh.vao);
@@ -2610,7 +2666,8 @@ export class Actors {
   drawCampShadows(lightViewProj) {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest, this.signal, this.cover, this.powerBox, this.atm, this.bollard]) {
+    for (const mesh of [this.camp, this.nest, this.signal, this.cover, this.powerBox, this.atm, this.bollard,
+      this.shelterStop, this.shelterKiosk]) {
       if (!mesh.instanceCount) continue;
       this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
       gl.bindVertexArray(mesh.vao);

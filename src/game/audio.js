@@ -171,6 +171,116 @@ export class Audio {
   }
 
   /**
+   * The siren for the extreme weather, the way the warning sirens in
+   * Germany do it: a howl rising and falling for a warning, a steady tone
+   * for the all clear, and between, short beeps as the count runs down.
+   * Shortened from the real minute, since a game has to get on. Not
+   * `siren`: that is the camp's, further down, and a second method of the
+   * same name would put this one out of reach.
+   */
+  warnSiren(what) {
+    this.lastWarn = what;
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1800;
+    const g = ctx.createGain();
+    if (what === 'count') {
+      o.type = 'square';
+      o.frequency.setValueAtTime(880, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.connect(lp).connect(g).connect(this.master);
+      o.start(t); o.stop(t + 0.2);
+      return;
+    }
+    const len = what === 'clear' ? 3.5 : 4.5;
+    if (what === 'clear') {
+      o.frequency.setValueAtTime(420, t);
+    } else {
+      // Up and down, twice over the length of it.
+      o.frequency.setValueAtTime(300, t);
+      for (let k = 0; k < 4; k++) {
+        o.frequency.linearRampToValueAtTime(k % 2 ? 300 : 520, t + (k + 1) * len / 4);
+      }
+    }
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.5);
+    g.gain.setValueAtTime(0.16, t + len - 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(lp).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + len + 0.05);
+  }
+
+  /**
+   * The beds under the extreme weather, each nought to one at where you
+   * are: acid hissing on everything, a firestorm's roar, a tornado's, louder
+   * the nearer the funnel, and the hum of an ion storm.
+   */
+  setExtreme(acid = 0, fire = 0, tornado = 0, ion = 0) {
+    if (!this.ctx || !this.enabled) return;
+    const want = acid + fire + tornado + ion > 0.001;
+    if (!want && !this.beds.acid) return;
+    if (!this.beds.acid) {
+      this.beds.acid = { parts: [this._bedSource('highpass', 4200, 0.8, 0.22), this._bedSource('bandpass', 2200, 2.5, 0.1)], level: 0 };
+      this.beds.firestorm = { parts: [this._bedSource('lowpass', 520, 0.7, 0.5), this._bedSource('bandpass', 1400, 1.2, 0.12)], level: 0 };
+      const roar = this._bedSource('bandpass', 140, 0.8, 0.9);
+      const whistle = this._bedSource('bandpass', 760, 6, 0.08);
+      const lfo = this.ctx.createOscillator();
+      lfo.frequency.value = 0.31;
+      const lg = this.ctx.createGain();
+      lg.gain.value = 60;
+      lfo.connect(lg).connect(roar.filter.frequency);
+      lfo.start();
+      this.beds.tornado = { parts: [roar, whistle], level: 0 };
+      this.beds.ion = { parts: [this._bedSource('bandpass', 100, 8, 0.25), this._bedSource('highpass', 6000, 0.7, 0.05)], level: 0 };
+    }
+    this._setBed(this.beds.acid, Math.min(1, acid));
+    this._setBed(this.beds.firestorm, Math.min(1, fire));
+    this._setBed(this.beds.tornado, Math.min(1.3, tornado));
+    this._setBed(this.beds.ion, Math.min(1, ion));
+  }
+
+  /** An ion bolt landing this far off: a hard electric crack and a buzz. */
+  ionZap(distance = 50) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + distance / 343;
+    const near = Math.max(0.05, Math.min(1, 60 / Math.max(10, distance)));
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(5200, t);
+    bp.frequency.exponentialRampToValueAtTime(600, t + 0.5);
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.7 * near, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3);
+    src.stop(t + 0.65);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.4);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.25 * near, t + 0.01);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    o.connect(og).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.5);
+  }
+
+  /**
    * Thunder from a strike this far off, as long after the flash as sound
    * takes to cover the distance, about three seconds a kilometre. Close to,
    * a sharp crack and a tearing over the first third of a second, and a
