@@ -5550,6 +5550,14 @@ So there are two cities now, and a profile picks which:
   distance and was reached late or never. It now keeps a copy of each hit,
   and the storm beam copies its own before it asks the bodies in the way.
   Three runs of the wall check in a row: the ring at 276 each time.
+- The next live run had the ring at 502 and the grenade launcher at 0, and
+  that was the same mistake in the check itself: its search for the nearest
+  wall kept the world's answer object too, so it walked up to the last ray's
+  point along the first ray's line, and which frontage that was depended on
+  what the weapons before had opened up. The ripper's wall search did the
+  same. Both keep a copy now. Here every weapon wears the frontage down
+  (the launcher 388) and the suite passes 92 of 92; the live city cannot be
+  fetched from this session, so the CI run is the check there.
 
 ## CI: the EMP check clears the street in front of the launcher
 

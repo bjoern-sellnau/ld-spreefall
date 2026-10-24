@@ -1031,7 +1031,10 @@ async function run() {
       for (let k = 0; k < 32; k++) {
         const ang = (k / 32) * Math.PI * 2;
         const h = s.world.raycast(s.player.x, s.player.y + 1.4, s.player.z, Math.cos(ang), 0, Math.sin(ang), 80);
-        if (h && h.kind === 'wall' && h.t > 7 && (!best || h.t < best.h.t)) best = { h, ang };
+        // A copy: the world answers every ray in the same object, so keeping
+        // it kept the last ray's point with the first one's direction, and
+        // which frontage that was changed with what had been opened up.
+        if (h && h.kind === 'wall' && h.t > 7 && (!best || h.t < best.h.t)) best = { h: { ...h }, ang };
       }
       return best;
     };
@@ -1211,7 +1214,7 @@ async function run() {
       const ang = (k / 32) * Math.PI * 2;
       const e = eye();
       const h = s.world.raycast(e.x, e.y - 0.3, e.z, Math.cos(ang), 0, Math.sin(ang), 60);
-      if (h && h.kind === 'wall' && h.t > 5 && (!wall || h.t < wall.t)) wall = h;
+      if (h && h.kind === 'wall' && h.t > 5 && (!wall || h.t < wall.t)) wall = { ...h };
     }
     out.ripper.wall = !!wall;
     if (wall) {
