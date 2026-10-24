@@ -112,6 +112,7 @@ const el = {
   crossSightLine: $('crosssightline'), crossSight: $('crosssight'),
   modeNote: $('modenote'), timePick: $('timepick'),
   newGame: $('newgame'), buildLine: $('buildline'), modeName: $('modename'), diffBlock: $('diffblock'),
+  pause: $('pause'), pauseResume: $('pauseresume'), pauseMenu: $('pausemenu'),
   cheatTod: $('cheattod'), cheatTodLabel: $('cheattodlabel'),
   opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
   opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
@@ -5926,7 +5927,11 @@ async function main() {
 
   input.onLockChange = (locked) => {
     el.canvas.classList.toggle('locked', locked);
-    if (!locked && state.mode === 'walk' && !photo.active) toast('click to look around again');
+    // Esc lets the mouse go before the page hears the key, so the pause opens
+    // on the mouse coming free, unless a panel of ours took it.
+    if (!locked && state.mode === 'walk' && !photo.active && !openPause()) {
+      if (!panelUp()) toast('click to look around again');
+    }
   };
 
   // --- operations: Tactics and Slayer ---------------------------------------
@@ -8040,7 +8045,61 @@ async function main() {
   el.opsReset.addEventListener('click', () => giveBack(false));
   el.opsHarder.addEventListener('click', () => giveBack(true));
 
-  function beginWalk() {
+  // --- the pause, on Esc -----------------------------------------------------------
+  //
+  // The world stops and a menu runs down the left edge: carry on, another
+  // game straight away from where you stand, or the title.
+  const pauseItems = [...document.querySelectorAll('#pausemodes .pitem')];
+  /** Another panel of ours has the screen, and the mouse with it. */
+  function panelUp() {
+    return !el.cheats.classList.contains('hidden') || !el.opsPanel.classList.contains('hidden')
+      || !el.opsEnd.classList.contains('hidden') || !el.down.classList.contains('hidden')
+      || !el.crossing.classList.contains('hidden') || !el.completion.classList.contains('hidden')
+      || minimap.big || !!state.targeting || photo.active || !!rigging || !!state.death;
+  }
+  function openPause() {
+    if (state.mode !== 'walk' || state.paused || panelUp()) return false;
+    state.paused = true;
+    const now = modeNow();
+    for (const b of pauseItems) b.classList.toggle('on', b.dataset.mode === now);
+    el.pause.classList.remove('hidden');
+    input.fire = false;
+    if (input.keys) input.keys.clear();
+    if (input.pointerLocked) input.exitLock();
+    return true;
+  }
+  function closePause(lock = true) {
+    if (!state.paused) return;
+    state.paused = false;
+    el.pause.classList.add('hidden');
+    if (lock && !isTouch) input.requestLock();
+  }
+  /** Another game, straight away and from where you stand: no title, no flight in. */
+  function switchGame(mode) {
+    if (state.inMech) leaveMech(false);
+    if (state.inVehicle) leaveVehicle(true);
+    if (rigging) choose(null);
+    soldiers.reset();
+    mechs.reset();
+    vehicles.reset();
+    jets.reset();
+    projectiles.clear();
+    if (crimes.live) { for (const sd of [crimes.live.o, crimes.live.v]) if (sd) { sd.directed = null; sd.crime = null; } crimes.live = null; }
+    blackout.left = 0;
+    for (const j of trafficJunctions()) j.hack = null;
+    pickMode(mode);
+    state.paused = false;
+    el.pause.classList.add('hidden');
+    beginWalk(true);
+    toast(modeLabel(mode));
+  }
+  el.pauseResume.addEventListener('click', () => closePause(true));
+  el.pauseMenu.addEventListener('click', () => { location.reload(); });
+  for (const b of pauseItems) b.addEventListener('click', () => switchGame(b.dataset.mode));
+  // A click beside the menu is a click back into the game.
+  el.pause.addEventListener('click', (ev) => { if (ev.target === el.pause) closePause(true); });
+
+  function beginWalk(direct = false) {
     el.title.classList.add('hidden');
     el.hud.classList.remove('hidden');
     // The hour picked on the title, for every game but the end of the world,
@@ -8067,7 +8126,7 @@ async function main() {
     effects.clear();
     audio.start();
     el.btnSound.textContent = 'sound on';
-    if (deepLink) {
+    if (deepLink || direct) {
       state.mode = 'walk';
       state.walking = true;
     } else {
@@ -8077,7 +8136,7 @@ async function main() {
     }
     if (!isTouch) input.requestLock();
   }
-  el.play.addEventListener('click', beginWalk);
+  el.play.addEventListener('click', () => beginWalk());
 
   // The difficulty buttons on the title screen.
   // Which game this is. Berlin is the city as it stands; Rise of the Machines
@@ -8149,22 +8208,26 @@ async function main() {
     showModeTime();
     showOps();
   };
+  /** Which game, from the title or from the pause, kept for the next visit. */
+  function pickMode(mode) {
+    state.backdoor = mode === 'backdoor';
+    state.peaceful = mode === 'walk' || state.backdoor;
+    campaign.setMode(mode);
+    try {
+      localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0');
+      localStorage.setItem('spreefall.backdoor', state.backdoor ? '1' : '0');
+    } catch { /* private mode */ }
+    machines.set(mode === 'machines');
+    // Picking the mode puts the clock back on the hour it actually is,
+    // unless the slider has been moved: a tab left open since the morning
+    // should still start the end of the world at this afternoon.
+    machines.syncClock();
+    showModeTime();
+    showMode();
+  }
   for (const b of modeButtons) {
     b.addEventListener('click', () => {
-      state.backdoor = b.dataset.mode === 'backdoor';
-      state.peaceful = b.dataset.mode === 'walk' || state.backdoor;
-      campaign.setMode(b.dataset.mode);
-      try {
-        localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0');
-        localStorage.setItem('spreefall.backdoor', state.backdoor ? '1' : '0');
-      } catch { /* private mode */ }
-      machines.set(b.dataset.mode === 'machines');
-      // Picking the mode puts the clock back on the hour it actually is,
-      // unless the slider has been moved: a tab left open since the morning
-      // should still start the end of the world at this afternoon.
-      machines.syncClock();
-      showModeTime();
-      showMode();
+      pickMode(b.dataset.mode);
       titlePage('tpmode');
     });
   }
@@ -8414,6 +8477,9 @@ async function main() {
       if (code === 'Digit3' || code === 'Escape') { choose(null); return; }
     }
     if (code === 'Escape') {
+      // The pause: Esc again carries on, and Esc with nothing else up opens it.
+      if (state.paused) { closePause(false); return; }
+      if (state.mode === 'walk' && !panelUp() && el.help.classList.contains('hidden') && openPause()) return;
       el.help.classList.add('hidden');
       // One step back rather than straight out: if a target is armed, Escape
       // disarms it and leaves the map up.
@@ -9513,7 +9579,8 @@ async function main() {
     }
   }
 
-  const loop = new Loop({ hz: 60, onFixed: fixed, onRender: render });
+  // Paused, the world does not move; a check's own steps still do.
+  const loop = new Loop({ hz: 60, onFixed: (dt) => { if (!state.paused) fixed(dt); }, onRender: render });
 
   el.loading.classList.add('hidden');
   el.title.classList.remove('hidden');
@@ -9543,6 +9610,7 @@ async function main() {
     trafficSpec: TRAFFIC, spawnTraffic: (type, near) => spawnTraffic(type, near), trafficRoads: () => trafficRoads(),
     get crashes() { return state.crashes; },
     signalSpec: SIGNALS, junctions: () => trafficJunctions(), signalMasts: (r) => signalMasts(r),
+    openPause: () => openPause(), closePause: (lock) => closePause(lock), switchGame: (mode) => switchGame(mode),
     citySpec: CITY, pipes: () => cityPipes(), coversNear: (r) => coversNear(r), blackout, blackoutKey: () => blackoutKey(),
     lightAt: (j, phase) => lightAt(j, phase, state.signalClock), get signalClock() { return state.signalClock; },
     crimes, crimeSpec: CRIME, crimeBegin: (kind) => crimeBegin(kind), subdue: (sd) => subdue(sd),

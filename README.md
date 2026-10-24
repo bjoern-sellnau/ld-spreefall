@@ -81,6 +81,10 @@ starts at for every game, the difficulty where anybody is shooting, an
 operation's settings), **Spielen** and **Zurück**. Zurück is always one page
 back. The time of day can be set in the cheat menu as well, at any time.
 
+**Esc** in the street pauses: the world stops and a bar runs down the left
+edge with **Weiter**, all seven games (one click starts it where you stand,
+with no title and no flight in) and **Hauptmenü**. Esc again carries on.
+
 ## Controls
 
 | | |
@@ -95,6 +99,7 @@ back. The time of day can be set in the cheat menu as well, at any time.
 | M | enlarge the map, on the streets around you; click it to set a mark the compass points to, click the mark again (or right click) to take it off |
 | N | sound on and off |
 | H | help |
+| Esc | pause, with every game a click away; Esc again carries on |
 | 1 to 0, again for the next, or the mouse wheel | a group of weapons a key, in the manner of Half-Life: 1 rifles, 2 shotguns, 3 launchers, 4 thrown, 5 pistols, 6 close, 7 fire, 8 energy, 9 anti armour, 0 void |
 | 7 8 9 0 | railgun, plasma rifle, flak cannon, splinter gun |
 | Z | flamethrower, right mouse throws a wall of fire that runs across the ground |

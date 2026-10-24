@@ -113,6 +113,28 @@
   </div>
 </div>
 
+<!-- Esc in a game: the world stops, and the way out runs down the left
+     side, the way out of most shooters does, with every game a click away. -->
+<div id="pause" class="hidden">
+  <div class="pausebar">
+    <div class="wordmark">SPREE<span>|</span>FALL<span class="dot">.</span></div>
+    <div class="pausekicker">Pause</div>
+    <button class="pitem resume" id="pauseresume">Weiter</button>
+    <div class="pausehead">Spiel wechseln</div>
+    <nav id="pausemodes" aria-label="Spiel wechseln">
+      <button class="pitem" data-mode="berlin">Berlin Phototour</button>
+      <button class="pitem" data-mode="machines">Rise of the Machines</button>
+      <button class="pitem" data-mode="walk">Just a Walk</button>
+      <button class="pitem" data-mode="tactics">Tactics</button>
+      <button class="pitem" data-mode="slayer">Slayer</button>
+      <button class="pitem" data-mode="hunt">The Hunt</button>
+      <button class="pitem" data-mode="backdoor">.BACKDOOR</button>
+    </nav>
+    <button class="pitem quiet" id="pausemenu">Hauptmenü</button>
+    <p class="hint"><b>Esc</b> weiter</p>
+  </div>
+</div>
+
 <!-- Changing district. One district is in memory at a time, so crossing a
      boundary is a short wait, and a wait should say where you are going. -->
 <div id="opspanel" class="overlay hidden">

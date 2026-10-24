@@ -5026,6 +5026,39 @@ So there are two cities now, and a profile picks which:
   the cheat menu's clock; the hunt suite's title check reads the new
   buttons. Screenshots ui-01-title.png, ui-01b-modes.png, ui-01c-mode.png.
 
+## 131. Esc: the pause down the left side, with every game a click away
+
+- Esc in the street stops the world and puts a bar down the left edge: the
+  name, Pause, Weiter, the seven games under Spiel wechseln with the one
+  being played marked, and Hauptmenü at the foot. The city stays in view to
+  the right of it, dimmed. Esc again, Weiter, or a click beside the bar
+  carries on; Weiter and the click take the mouse back, Esc cannot (the
+  browser does not count Esc as a gesture), so the next click does.
+- The browser lets the mouse go before the page hears Esc, so the pause
+  opens on the mouse coming free in the street as well, which also covers
+  a switch to another window. Where one of our own panels took the mouse
+  (the cheat menu, the operation panel, the big map, the target map, the
+  bomb question, the crossing card, the completion card, the death card)
+  it does not, and photo mode keeps its free mouse.
+- Only the game's own step stops: the loop's fixed step is skipped while
+  paused, so nothing moves, burns down or counts down, and the frame is
+  still drawn.
+- A game picked from the bar starts at once where you stand: no title and
+  no flight in. Whatever the last game had out is cleared first (you are
+  taken out of a mech or a vehicle, a bomb question is answered no, the
+  soldiers, mechs, vehicles, jets, shots, a crime under way, a blackout and
+  hacked lights all go), then the game is set up as Spielen would set it
+  up, with its own weapons and the hour picked on the title. Hauptmenü
+  reloads the page onto the start.
+- Checks: browser (ui suite, six more): Esc opens the bar at the left edge
+  and at most 400 px wide, a second and a half of the real loop moves the
+  clock not at all, the seven games are listed with the one being played
+  marked, Esc and Weiter each carry on, a game picked there starts at once
+  within five metres of where you stood with the phone up for .BACKDOOR,
+  and the bar then marks .BACKDOOR and goes back to Berlin the same way.
+  The URL check now closes the pause it opens by letting the mouse go.
+  Screenshot ui-09-pause.png.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

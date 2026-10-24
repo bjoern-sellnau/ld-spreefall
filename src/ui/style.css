@@ -177,6 +177,53 @@ html, body {
 }
 #tpmode .timepick { margin: 14px auto 4px; }
 #tpmode .playbuttons .play { min-width: 150px; }
+/* The pause: the world stopped and dimmed, darkest on the left where the
+   menu runs down the edge of the screen. */
+#pause {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: linear-gradient(90deg, rgba(6, 7, 9, 0.9) 0, rgba(6, 7, 9, 0.55) 360px, rgba(6, 7, 9, 0.2) 100%);
+}
+#pause .pausebar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: min(320px, 86vw);
+  padding: 34px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  background: rgba(10, 12, 15, 0.86);
+  border-right: 1px solid var(--edge);
+  animation: pausein 0.16s ease-out;
+}
+@keyframes pausein { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+#pause .wordmark { font-size: 26px; letter-spacing: 0.14em; margin-bottom: 4px; }
+#pause .pausekicker { color: var(--dim); font: 600 11px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 16px; }
+#pause .pausehead { color: var(--dim); font: 600 10px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.24em; text-transform: uppercase; margin: 18px 0 4px; }
+#pause nav { display: flex; flex-direction: column; gap: 5px; }
+#pause .pitem {
+  font: 600 13px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid transparent;
+  border-radius: 2px;
+  padding: 11px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, padding 0.15s ease;
+}
+#pause .pitem:hover { background: rgba(226, 201, 141, 0.1); border-left-color: var(--accent); padding-left: 18px; }
+#pause .pitem.on { color: var(--accent); border-left-color: var(--accent); }
+#pause .pitem.resume { background: var(--accent); color: var(--ground); border-color: var(--accent); }
+#pause .pitem.resume:hover { background: #f0dba8; }
+#pause .pitem.quiet { margin-top: auto; background: transparent; }
+#pause .hint { margin-top: 10px; }
+
 /* The time of day in the cheat menu: a slider and the hour it says. */
 #cheats .todrow { display: flex; align-items: center; gap: 12px; }
 #cheats .todrow input { flex: 1; }

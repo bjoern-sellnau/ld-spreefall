@@ -281,8 +281,11 @@ async function run() {
   // page, which the game reads as an enormous look. That is right for a game
   // and wrong for a test, so the lock goes before anything is clicked and the
   // view is set after.
+  // Letting the mouse go opens the pause, as Esc would, so it is closed again
+  // without asking for the mouse back.
   await page.evaluate(() => { window.spreefall.input.exitLock(); });
   await page.waitForTimeout(300);
+  await page.evaluate(() => window.spreefall.closePause(false));
   await page.evaluate(async () => {
     const s = window.spreefall;
     // Every synthetic click so far moved the mouse across the page, and while
@@ -459,6 +462,73 @@ async function run() {
   check('and it settles back to the faint version rather than staying bright',
     !street.skip && street.settled.up && !street.settled.fresh,
     street.skip ? '' : `${street.settled.up ? 'still up' : 'gone'}, ${street.settled.fresh ? 'bright' : 'faint'}`);
+
+  // --- the pause, on Esc ---------------------------------------------------
+  // Esc stops the world and puts a menu down the left edge: carry on, any of
+  // the seven games straight away from where you stand, or the title.
+  await page.evaluate(() => window.spreefall.teleport(319, -22));
+  await simulate(page, 0.2);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const paused = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const from = s.state.time;
+    // The real loop, not the test's own steps: a second and a half of it.
+    await new Promise((r) => setTimeout(r, 1500));
+    const bar = document.querySelector('#pause .pausebar').getBoundingClientRect();
+    return {
+      shown: !document.getElementById('pause').classList.contains('hidden'),
+      paused: s.state.paused, moved: s.state.time - from,
+      left: Math.round(bar.left), width: Math.round(bar.width),
+      games: [...document.querySelectorAll('#pausemodes .pitem')].map((b) => b.dataset.mode),
+      on: (document.querySelector('#pausemodes .pitem.on') || {}).dataset?.mode,
+    };
+  });
+  check('Esc in the street opens the pause down the left edge',
+    paused.shown && paused.paused && paused.left === 0 && paused.width > 200 && paused.width < 400,
+    `shown ${paused.shown}, bar at ${paused.left} px, ${paused.width} px wide`);
+  check('and the world stands still behind it', paused.moved === 0, `${paused.moved.toFixed(3)} s went by`);
+  check('with all seven games in it, the one being played marked',
+    paused.games.join(',') === 'berlin,machines,walk,tactics,slayer,hunt,backdoor' && paused.on === 'berlin',
+    `${paused.games.join(',')}; on ${paused.on}`);
+  await page.screenshot({ path: path.join(SHOTS, 'ui-09-pause.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const resumed = await page.evaluate(() => ({ shown: !document.getElementById('pause').classList.contains('hidden'),
+    paused: window.spreefall.state.paused }));
+  await simulate(page, 0.1);
+  check('Esc again carries on', !resumed.shown && !resumed.paused, JSON.stringify(resumed));
+  await page.evaluate(() => window.spreefall.openPause());
+  await page.click('#pauseresume');
+  await page.waitForTimeout(300);
+  check('and so does Weiter', await page.evaluate(() => !window.spreefall.state.paused
+    && document.getElementById('pause').classList.contains('hidden')));
+
+  // Another game from the pause starts where you stand, with no title and no
+  // flight in.
+  const before = await page.evaluate(() => ({ x: window.spreefall.player.x, z: window.spreefall.player.z }));
+  await page.evaluate(() => window.spreefall.openPause());
+  await page.click('#pausemodes .pitem[data-mode="backdoor"]');
+  await simulate(page, 0.2);
+  const switched = await page.evaluate((b) => {
+    const s = window.spreefall;
+    return { mode: s.state.mode, backdoor: !!s.state.backdoor, paused: s.state.paused,
+      title: !document.getElementById('title').classList.contains('hidden'),
+      phone: !document.getElementById('phone').classList.contains('hidden'),
+      moved: Math.hypot(s.player.x - b.x, s.player.z - b.z) };
+  }, before);
+  check('a game picked there starts at once, where you stand',
+    switched.mode === 'walk' && switched.backdoor && !switched.paused && !switched.title && switched.phone && switched.moved < 5,
+    JSON.stringify(switched));
+  await page.evaluate(() => window.spreefall.openPause());
+  const marked = await page.evaluate(() => (document.querySelector('#pausemodes .pitem.on') || {}).dataset?.mode);
+  await page.click('#pausemodes .pitem[data-mode="berlin"]');
+  await simulate(page, 0.2);
+  const home = await page.evaluate(() => ({ backdoor: !!window.spreefall.state.backdoor,
+    phone: !document.getElementById('phone').classList.contains('hidden'), mode: window.spreefall.state.mode }));
+  check('and the pause knows which one it is, and goes back the same way',
+    marked === 'backdoor' && !home.backdoor && !home.phone && home.mode === 'walk',
+    `marked ${marked}; ${JSON.stringify(home)}`);
 
   await browser.close();
 
