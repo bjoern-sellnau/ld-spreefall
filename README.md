@@ -69,6 +69,22 @@ the middle outward for as long as the site stays under 950 MB
 district by hand. A comparison of the same street at either tier is in
 `docs/screenshots/tier-01-standard.png` and `tier-02-full.png`.
 
+## The title
+
+The start page is the name, a line on what this is, **Neues Spiel**, and
+the build it is (`build 263 | 24.10.2026 um 01:30`, Berlin time: the run
+number and the time of the Pages build, or `dev` and the last commit on a
+local server). Neues Spiel lists the seven games (Berlin Phototour, Rise of
+the Machines, Just a Walk, Tactics, Slayer, The Hunt, .BACKDOOR); picking one
+opens its page with what it is, what can be set for it (the time of day it
+starts at for every game, the difficulty where anybody is shooting, an
+operation's settings), **Spielen** and **Zurück**. Zurück is always one page
+back. The time of day can be set in the cheat menu as well, at any time.
+
+**Esc** in the street pauses: the world stops and a bar runs down the left
+edge with **Weiter**, all seven games (one click starts it where you stand,
+with no title and no flight in) and **Hauptmenü**. Esc again carries on.
+
 ## Controls
 
 | | |
@@ -83,6 +99,7 @@ district by hand. A comparison of the same street at either tier is in
 | M | enlarge the map, on the streets around you; click it to set a mark the compass points to, click the mark again (or right click) to take it off |
 | N | sound on and off |
 | H | help |
+| Esc | pause, with every game a click away; Esc again carries on |
 | 1 to 0, again for the next, or the mouse wheel | a group of weapons a key, in the manner of Half-Life: 1 rifles, 2 shotguns, 3 launchers, 4 thrown, 5 pistols, 6 close, 7 fire, 8 energy, 9 anti armour, 0 void |
 | 7 8 9 0 | railgun, plasma rifle, flak cannon, splinter gun |
 | Z | flamethrower, right mouse throws a wall of fire that runs across the ground |
@@ -202,15 +219,29 @@ What is under the hood:
   weapons of a kind and pressing it again goes to the next, and coming back to
   a key gives you the one you last had there. The first on each key is what
   that key always was. 1 is the M16, the marksman rifle, a rotary cannon (six
-  barrels, spins up for 0.4 s and then puts out twenty five rounds a second)
-  and the bow; 2 the pump, the double barrel, a drum shotgun that fires as
-  fast as you can hold it, and the flak cannon; 3 the rocket launcher, a swarm
-  launcher (four rockets a shot, each after what the sight is on) and a
-  grenade launcher (lobbed a long way, goes off on what it meets); 4 the
-  grenade, the incendiary, the banana and C4; 5 the suppressed pistol and a
-  hand cannon whose round goes through one man into the next; 6 the chainsaw,
-  the flail and the shield saw; 7 the flamethrower; 8 plasma, the railgun and
-  the splinter gun; 9 the mech killer and the EMP; 0 the void cannon.
+  barrels, spins up for 0.4 s and then puts out twenty five rounds a second),
+  the bow and Hailstorm; 2 the pump, the double barrel, a drum shotgun that
+  fires as fast as you can hold it, and the flak cannon; 3 the rocket
+  launcher, a swarm launcher (four rockets a shot, each after what the sight
+  is on), a grenade launcher (lobbed a long way, goes off on what it meets),
+  the arbalest and the disc ripper; 4 the grenade, the incendiary, the
+  banana, C4 and the cling charge; 5 the suppressed pistol and a hand cannon
+  whose round goes through one man into the next; 6 the chainsaw, the flail,
+  the shield saw, the lunge blade and the quake hammer; 7 the flamethrower
+  and the flare pistol; 8 plasma, the railgun, the splinter gun and the volt
+  caster; 9 the mech killer and the EMP; 0 the void cannon.
+- Eight of those come out of Crysis, DOOM, Far Cry and Halo, each the idea of
+  one weapon there under a name and numbers of our own. Hailstorm (Crysis 3's
+  Typhoon): eight stacked barrels, three rounds a pull thirty times a second.
+  The volt caster (the Crysis K-Volt): whoever it hits holds still, and the
+  charge jumps on to the next two within seven metres. The arbalest (DOOM
+  Eternal's Ballista): the bolt goes into a wall or a man and goes off a
+  moment later. The disc ripper (Far Cry New Dawn's saw launcher): a saw
+  blade through everybody in the line and off the walls, four times. The
+  flare pistol (Far Cry): alight where it lands. And from Halo: the cling
+  charge sticks to what it hits and rides on him; the lunge blade takes you
+  nine metres onto a man and cuts him down; the quake hammer floors
+  everybody in the half circle in front of you and throws the cars.
 - Down the left side of the screen is what you carry: a row a key with the key
   in a box and the weapon it would give you, the row you are on lit, a bar of
   ammunition under each name, and the group you just picked from opened out
@@ -318,6 +349,10 @@ visits.
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
 | Overkill | every kill an execution: the skeleton out of the body, pieces raining down, a fountain, a word across the screen |
 | Comic carnage | overkill drawn as a comic book: bright red blood by the bucket from every hit, heads that pop, blood rain, splashes on the screen, the word in yellow |
+| Ultra comical gore | comic carnage past all sense: far more blood, a body in half as many pieces again, every piece landing with a splat and staying where it falls, and a squelch at every step through a pool |
+| Red footprints | walk through blood and you leave red footprints for fourteen steps, fading, and so does anybody else |
+| Pieces stay for good | on as it ships: with ultra comical gore the pieces lie there for good; off, they go after the time on the slider (5 to 600 s, 90 to start with) |
+| Performance limit | while the frame rate is under the limit on its slider (10 to 60, 30 to start with), half of the pieces, pools and footprints lying about are cleared every second, oldest first |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 | Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
 | Extreme enemies | a camp or hunting ground that calls for help gets wave after wave of it, as many as the waves setting says (a slider and a box to type the number in, 1 to 50, 6 to start with), 20 s apart instead of 38 and two more men in each; a Slayer nest holds that many waves of demons, each past the third a little bigger |
@@ -381,6 +416,15 @@ What the seven gore switches actually are:
   street round it and a taller, longer fountain, the word is yellow with a
   red outline, a kill close to you throws splashes on the screen, and the
   walls round a kill are left with the blood running down them.
+- **Ultra comical gore** is the one past that, on purpose absurd: two more
+  bursts a kill, one up and one out, a second fountain twice as tall, a red
+  rain twelve metres wide for four and a half seconds, two dozen pools round
+  it and the walls out to fourteen metres. Every hit gushes for twice as
+  long. Every piece splats when it lands, and you hear it; they stay where
+  they fall (or go after the time you set), and walking through it
+  squelches.
+- **Red footprints**: a step in a pool puts it on your boots, and on anybody
+  else's, for fourteen steps, left and right, fainter each time.
 
 And the last kill:
 

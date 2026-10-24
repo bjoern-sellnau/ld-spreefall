@@ -117,6 +117,29 @@ export const PROJECTILE = {
     radius: 0.6, gravity: 19.6, drag: 0, bounce: 0, armTime: 0.1, maxAge: 20,
     detonateOnContact: true, trail: 'smoke', light: true, spin: 2,
   },
+  bolt: {
+    // The arbalest's: flat and very fast, into the first thing it meets, a
+    // wall or a man, and off cling seconds after it went in.
+    radius: 0.04, gravity: 0.6, drag: 0, bounce: 0, armTime: 0.0, maxAge: 5,
+    detonateOnContact: false, cling: 0.45, trail: 'none', light: true, spin: 0,
+  },
+  cling: {
+    // Thrown like a grenade, but it does not bounce: it holds on to what it
+    // touches and goes off a second later.
+    radius: 0.09, gravity: 14, drag: 0.1, bounce: 0, armTime: 0.05,
+    detonateOnContact: false, cling: 1.1, trail: 'none', light: true, spin: 12,
+  },
+  disc: {
+    // A saw blade: through bodies, off walls at the speed it arrived, and
+    // into the ground, where it lies until its time is up.
+    radius: 0.2, gravity: 0, drag: 0, bounce: 1, armTime: 0.0, maxAge: 3.5,
+    detonateOnContact: false, bounces: 4, blade: true, trail: 'spark', light: true, spin: 40,
+  },
+  flare: {
+    // A flare: a slow arc, a bright light, and alight wherever it lands.
+    radius: 0.06, gravity: 9, drag: 0.02, bounce: 0, armTime: 0.02, maxAge: 6,
+    detonateOnContact: true, trail: 'glow', light: true, spin: 6,
+  },
   banana: {
     radius: 0.12, gravity: 19.6, drag: 0.2, bounce: 0.25, armTime: 0.2,
     detonateOnContact: false, sticks: true, trail: 'none', light: false, spin: 10,
@@ -148,6 +171,7 @@ export class Projectiles {
     this.onHostile = null;   // fn(body, x, y, z, direct) when it goes off
     this.onSaw = null;       // fn(body, hit) the shield saw goes through somebody
     this.onSawBack = null;   // fn(body) and comes back to the hand
+    this.onCling = null;     // fn(body, hit) a bolt or a cling charge takes hold
     // Set by the game layer: the same raycast the bullets use against drones
     // and soldiers. Without it a rocket flies through the man it was aimed at
     // and goes off on the wall behind him, which is exactly what the first
@@ -217,6 +241,9 @@ export class Projectiles {
     b.fx = undefined;
     b.returning = false;
     b.hitSet = null;
+    // Whoever a bolt or a cling charge is holding on to, and where on him.
+    b.host = null;
+    b.hx = 0; b.hy = 0; b.hz = 0;
     b.seed = Math.random();
     this.active.push(b);
     return b;
@@ -281,6 +308,8 @@ export class Projectiles {
         // A stuck charge still ages out, so a forgotten banana does not live
         // forever in a city you have walked away from.
         if (b.age > (b.spec.arrow ? 25 : 240)) this._remove(b);
+        // One that took hold of somebody goes where he goes.
+        else if (b.host) { b.x = b.host.x + b.hx; b.y = b.host.y + b.hy; b.z = b.host.z + b.hz; }
         continue;
       }
 
@@ -443,6 +472,54 @@ export class Projectiles {
           b.x += dx * 0.22; b.y += dy * 0.22; b.z += dz * 0.22;
           remaining = 0;
           break;
+        }
+
+        // A bolt or a cling charge takes hold of what it touched, and if
+        // that was somebody it rides on him, and the fuse is short now.
+        if (b.spec.cling) {
+          b.stuck = true;
+          b.fx = b.vx; b.fy = b.vy; b.fz = b.vz;
+          b.vx = b.vy = b.vz = 0;
+          if (hit.kind === 'actor' && hit.target) {
+            b.host = hit.target;
+            b.hx = b.x - hit.target.x; b.hy = b.y - hit.target.y; b.hz = b.z - hit.target.z;
+          } else {
+            b.x += hit.nx * 0.02; b.y += hit.ny * 0.02; b.z += hit.nz * 0.02;
+          }
+          b.fuse = Math.min(b.fuse, b.spec.cling);
+          if (this.onCling) this.onCling(b, hit);
+          remaining = 0;
+          break;
+        }
+
+        // A saw blade goes through a body and on, off a wall at full speed,
+        // and into the ground for good.
+        if (b.spec.blade) {
+          if (hit.kind === 'actor') {
+            if (!(b.hitSet && b.hitSet.has(hit.target))) {
+              (b.hitSet || (b.hitSet = new Set())).add(hit.target);
+              if (this.onSaw) this.onSaw(b, hit);
+            }
+            const on = Math.min(remaining * speed, 1.2);
+            b.x += dx * on; b.y += dy * on; b.z += dz * on;
+            remaining = 0;
+            break;
+          }
+          if (hit.ny > 0.6 || b.bouncesLeft <= 0) {
+            b.stuck = true;
+            b.vx = b.vy = b.vz = 0;
+            b.x += dx * 0.08; b.y += dy * 0.08; b.z += dz * 0.08;
+            if (this.onBounce) this.onBounce(b, hit);
+            remaining = 0;
+            break;
+          }
+          b.bouncesLeft--;
+          const dot = b.vx * hit.nx + b.vy * hit.ny + b.vz * hit.nz;
+          b.vx -= 2 * dot * hit.nx; b.vy -= 2 * dot * hit.ny; b.vz -= 2 * dot * hit.nz;
+          b.x += hit.nx * 0.03; b.y += hit.ny * 0.03; b.z += hit.nz * 0.03;
+          b.ricochets = (b.ricochets || 0) + 1;
+          if (this.onBounce) this.onBounce(b, hit);
+          continue;
         }
 
         // A bolt with bounces left rebounds; one without goes off.

@@ -15,8 +15,13 @@
 // the air for one kill. Two hundred and fifty six chunks is one instanced
 // draw and a few kilobytes, and the walls are only asked about while a chunk
 // is moving fast, which it is for a fraction of its life.
-const MAX = 256;
+// Ultra comical gore throws half a pool's worth of the old size at a kill
+// and asks for the pieces to stay where they land, so the pool is six times
+// what it was: a street can hold three of those kills and their leftovers.
+const MAX = 1536;
 // The highest gore multiplier anything here listens to: the overkill setting.
+// Ultra comical gore goes higher, but in blood: a burst past this many
+// pieces is a burst nobody can count, and a pool emptied by one kill.
 const TOP = 12;
 
 /** How much of each kind a body is made of, by the part id the shader reads. */
@@ -40,11 +45,30 @@ export class Gibs {
     this.pool = [];
     for (let i = 0; i < MAX; i++) this.pool.push(new Gib());
     this.active = [];
+    this._born = 0;
     // Set by the game layer when blood is switched on: fn(x, y, z) for a drop
     // coming off something in flight, and fn(x, y, z, size) for what is left
     // where one of them stops.
     this.onDrip = null;
     this.onPool = null;
+    // A piece of somebody hitting the street for the first time: fn(piece,
+    // speed), for the splat.
+    this.onLand = null;
+    // How long a piece of somebody lies there once it has stopped, in
+    // seconds; nought is as long as it always has.
+    this.keep = 0;
+  }
+
+  /**
+   * Take some of what is lying still off the street, the oldest first: a
+   * share of the pieces of people, for a machine that is struggling.
+   * @returns {number} how many went
+   */
+  trim(share = 0.5) {
+    const lying = this.active.filter((g) => g.resting && g.body).sort((a, b) => a.born - b.born);
+    const n = Math.ceil(lying.length * share);
+    for (let i = 0; i < n; i++) this._remove(lying[i]);
+    return n;
   }
 
   clear() {
@@ -136,6 +160,7 @@ export class Gibs {
       g.maxLife = 9 + Math.random() * 8;
       g.life = g.maxLife;
       g.resting = false;
+      g.body = false;
       g.dripAt = 0;
       g.wet = false;
       g.mass = 1.4 + g.scale;
@@ -185,6 +210,7 @@ export class Gibs {
       g.maxLife = 26 + Math.random() * 20;
       g.life = g.maxLife;
       g.resting = false;
+      g.body = false;
       g.dripAt = 0;
       g.wet = false;
       // Heavier than a piece of somebody: it hardly bounces, it slides less,
@@ -232,6 +258,7 @@ export class Gibs {
       g.maxLife = 14 + Math.random() * 8;
       g.life = g.maxLife;
       g.resting = false;
+      g.body = true; g.landed = false; g.born = ++this._born;
       g.mass = 0.8;
       g.heap = null;
       g.dripAt = 0;
@@ -274,6 +301,7 @@ export class Gibs {
       g.maxLife = 9 + Math.random() * 5;
       g.life = g.maxLife;
       g.resting = false;
+      g.body = true; g.landed = false; g.born = ++this._born;
       g.mass = 1;
       g.heap = null;
       g.dripAt = 0;
@@ -342,6 +370,11 @@ export class Gibs {
         rest += Math.min(3.5, g.heap.radius * 0.07) * k * k;
       }
       if (g.y <= rest) {
+        // The first time a piece of somebody meets the street, for the splat.
+        if (g.body && !g.landed) {
+          g.landed = true;
+          if (this.onLand) this.onLand(g, -g.vy);
+        }
         g.y = rest;
         // Restitution falls with mass: a lump of concrete lands once and
         // stays, a piece of somebody skips.
@@ -373,6 +406,8 @@ export class Gibs {
             g.resting = true;
             g.pitch = 0;
             g.roll = 0;
+            // And with ultra comical gore it stays there.
+            if (g.body && this.keep > 0) { g.life = this.keep; g.maxLife = this.keep; }
             // Not every piece leaves one, or a burst paints the whole
             // square rather than marking where the pieces came to rest.
             if (g.wet && this.onPool && Math.random() < 0.34) {

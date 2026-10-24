@@ -4993,6 +4993,214 @@ So there are two cities now, and a profile picks which:
   backdoor-05-steam.png, backdoor-06-night.png and
   backdoor-07-blackout.png.
 
+## 130. The title in three pages, the build under it, and the hour for every game
+
+- The title card is three pages in the one overlay. The start: the
+  Brandenburg Gate, SPREE|FALL. (the dot in the accent), the line on what
+  this is, Neues Spiel, and under it the build. Neues Spiel: the seven games
+  one under another as a menu, the last one played marked, and Zurück. A
+  game: its name, what it is, its settings, Spielen and Zurück. Zurück is one
+  page back from each. Past the start the logo and the name step back so a
+  list of seven fits a short screen. Berlin is listed as Berlin Phototour and
+  says so: twelve landmarks to find, P for the camera.
+- The build line: `build 263 | 24.10.2026 um 01:30`, on Berlin's own clock
+  whatever the visitor's is. `tools/build-dist.mjs` writes version.json next
+  to the page with the workflow's run number, the commit and the time;
+  `tools/serve.mjs` answers version.json from git when there is none on the
+  disk (build dev, the last commit's time); a page with neither says
+  `build dev`. `src/ui/version.js` formats it, with unit checks for summer
+  and winter time and for a missing or broken file.
+- The hour a game starts at can be picked on its page for every game, not
+  only Rise of the Machines, and the city behind the title shows it as the
+  slider moves; it is kept between visits, and a link's own hour wins. The
+  cheat menu has the time of day too, at any time, with the photo mode's
+  slider kept in step.
+- The difficulty is shown only where anybody is shooting at you (not Just a
+  Walk, not .BACKDOOR). The buttons say Spielen, and with an operation under
+  way Weiterspielen and Neu anfangen, the progress in the line above.
+- Every element the game and the checks already used (the mode buttons, the
+  play button, the operation's setup) is the same element in its new place.
+- Checks: unit (3 version); browser (ui suite, four more): the start page,
+  the seven games and Zurück, a game's page with its name, settings,
+  Spielen and Zurück, and the hour moving the sky; (cheats suite, one more)
+  the cheat menu's clock; the hunt suite's title check reads the new
+  buttons. Screenshots ui-01-title.png, ui-01b-modes.png, ui-01c-mode.png.
+
+## 131. Esc: the pause down the left side, with every game a click away
+
+- Esc in the street stops the world and puts a bar down the left edge: the
+  name, Pause, Weiter, the seven games under Spiel wechseln with the one
+  being played marked, and Hauptmenü at the foot. The city stays in view to
+  the right of it, dimmed. Esc again, Weiter, or a click beside the bar
+  carries on; Weiter and the click take the mouse back, Esc cannot (the
+  browser does not count Esc as a gesture), so the next click does.
+- The browser lets the mouse go before the page hears Esc, so the pause
+  opens on the mouse coming free in the street as well, which also covers
+  a switch to another window. Where one of our own panels took the mouse
+  (the cheat menu, the operation panel, the big map, the target map, the
+  bomb question, the crossing card, the completion card, the death card)
+  it does not, and photo mode keeps its free mouse.
+- Only the game's own step stops: the loop's fixed step is skipped while
+  paused, so nothing moves, burns down or counts down, and the frame is
+  still drawn.
+- A game picked from the bar starts at once where you stand: no title and
+  no flight in. Whatever the last game had out is cleared first (you are
+  taken out of a mech or a vehicle, a bomb question is answered no, the
+  soldiers, mechs, vehicles, jets, shots, a crime under way, a blackout and
+  hacked lights all go), then the game is set up as Spielen would set it
+  up, with its own weapons and the hour picked on the title. Hauptmenü
+  reloads the page onto the start.
+- Checks: browser (ui suite, six more): Esc opens the bar at the left edge
+  and at most 400 px wide, a second and a half of the real loop moves the
+  clock not at all, the seven games are listed with the one being played
+  marked, Esc and Weiter each carry on, a game picked there starts at once
+  within five metres of where you stood with the phone up for .BACKDOOR,
+  and the bar then marks .BACKDOOR and goes back to Berlin the same way.
+  The URL check now closes the pause it opens by letting the mouse go.
+  Screenshot ui-09-pause.png.
+
+## 132. The shield on the left arm, out of the line of sight
+
+- The ask: the shield should not sit in the middle of the screen, where it
+  hides everything, but to the left the way Doom has it. (The shield saw is
+  from DOOM: The Dark Ages, where it is held on the left trigger; its
+  players make the same complaint about a raised shield.)
+- At the hip it sat a little left of the middle at two thirds of a metre,
+  which at the viewmodel's 55 degree lens is a disc over most of the frame;
+  held up it took the shared aim pose, which puts a sight on the centre
+  line, and so put the shield dead in front of your eyes.
+- Now a pose of its own for both. At the hip a quarter of it shows in the
+  bottom left corner. Held up it covers the left third of the screen with
+  its face turned in, the crosshair and the street clear to the right of
+  it. The block itself is unchanged: it still stops fire from in front and
+  a raise just in time still sends it back.
+- Checks: ops suite, one more: where the disc falls on the screen worked
+  out from the pose and the lens, at the hip and held up, its middle left
+  of two fifths of the way out and its nearest edge left of the crosshair
+  by a tenth of the half width (measured: middle -1.09 and -0.78, edge
+  -0.57 and -0.22). The arsenal suite screenshots it:
+  arsenal-03-shield-hip.png and arsenal-04-shield-up.png.
+
+## 133. Eight more, out of Crysis, DOOM, Far Cry and Halo
+
+- The ask: more weapons, the way Crysis, Doom, Far Cry and Halo have them.
+  Eight, each the idea of one weapon there under a name and numbers of our
+  own, and checked against what the sources say the weapon does:
+  - Hailstorm, after Crysis 3's Typhoon, eight barrels that do not turn and
+    about 500 rounds a second
+    ([MP1st](https://mp1st.com/news/the-7-wonders-of-crysis-3-episode-4-typhoon),
+    [Game Informer](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2013/01/16/new-crysis-3-video-shows-off-the-mighty-typhoon.aspx)).
+    Here: three rounds a pull, thirty pulls a second, 12 each, wide and
+    short, a 150 pull drum. No spin up, because the barrels do not turn.
+  - The volt caster, after the K-Volt of Crysis 2 and 3, which fires
+    electrified pellets ([Crysis wiki](https://crysis.fandom.com/wiki/File:Kvoltreflex.png)).
+    Here: 20 a hit, and the charge holds whoever it hit for 1.2 s and jumps
+    on to the nearest other within 7 m, and from him to the next, three
+    jumps at most at 70 % each, never back. The hold and the jumps are ours.
+  - The arbalest, after DOOM Eternal's Ballista, whose bolt sticks into the
+    target and goes off a short time later
+    ([DoomWiki](https://doomwiki.org/wiki/Ballista)). Here: a bolt at
+    130 m/s, 60 going in, and 0.45 s later a 6 m blast of 210; in a man it
+    rides on him until then.
+  - The disc ripper, after Far Cry New Dawn's saw launcher, whose blades
+    ricochet off any surface but the floor
+    ([Wikipedia](https://en.wikipedia.org/wiki/Far_Cry_New_Dawn),
+    [Trusted Reviews](https://trustedreviews.com/reviews/far-cry-new-dawn)).
+    Here: a blade at 38 m/s, 140 into everybody it passes through, off a
+    wall at the speed it arrived four times, and into the ground for good.
+  - The flare pistol, after Far Cry's, which ignites what it lands in
+    ([Far Cry wiki](https://farcry.fandom.com/wiki/File:FC3_Flare_Gun_Iron_Sights.png)).
+    Here: a slow arc, a small pop, and three pools of fire for 8 s.
+  - From Halo (Halopedia on the [plasma grenade](https://halopedia.org/Type-1_plasma_grenade/Gameplay),
+    the [sword's lunge](https://halopedia.org/Grenade_lunge) and the
+    [gravity hammer](https://halopedia.org/Gravity_hammer/Gameplay)): the cling
+    charge, which holds on to the first thing it touches and goes off 1.1 s
+    later (7 m, 250), riding on a man wherever he goes; the lunge blade, 600
+    a cut within 2.6 m, and within 9 m and a narrow cone in front it takes
+    you onto him at 30 m/s first, stopping at a wall; and the quake hammer,
+    brought down in front of you: everybody in the half circle out to 7 m
+    takes up to 220 and whoever lives is knocked off his feet, a car or bus
+    goes into the air, and none of it touches you.
+- Groups: 1 Hailstorm, 3 the arbalest and the ripper, 4 the cling charge, 6
+  the blade and the hammer, 7 the flare pistol, 8 the volt caster. 35 in
+  all. The kits of Tactics, Slayer and The Hunt are unchanged.
+- The stun the EMP put on machines is now anybody's: the volt caster sets the
+  same timer on a man and he stands still while it runs.
+- Projectiles: `cling` on a kind (the bolt and the cling charge) holds on to
+  what it touched and shortens the fuse to that many seconds, and if that
+  was somebody it keeps its place on him; `blade` (the disc) goes through
+  bodies, reflects off walls at full speed and stops in the ground. The disc
+  cuts through the same handler as the shield saw, at its own damage.
+- Each has its own viewmodel (two new viewmodel colours: a hot orange and an
+  electric blue white, and an orange red plastic for the flare pistol), its
+  own pose, and the four that fly their own shapes. The two you swing are
+  not brought onto the centre line by the second trigger.
+- Checks (arsenal suite, ten more): Hailstorm puts out thirty pulls in a
+  second and a man at 18 m does not last it; the volt caster's charge jumps
+  to the two near the one it hit and not to the one 15 m off, and they hold
+  still while it has them; the arbalest's bolt holds and goes off and he is
+  dead; the cling charge holds, goes where he goes and kills him; the ripper
+  goes through two in a line and comes off a wall at 38 m/s; the blade
+  lunges 5 m onto a man 7 m off and kills him, and does not go for one at
+  15 m; the hammer floors the three in front, throws the car, and leaves the
+  one behind and you untouched; the flare leaves three pools and they burn
+  a man standing in one. Every weapon in the loadout still fires.
+  Screenshots arsenal-05-hailstorm.png, arsenal-06-blade.png,
+  arsenal-07-hammer.png, arsenal-08-flare.png.
+
+## 134. Ultra comical gore, red footprints, pieces that stay, and a limit for slow machines
+
+- The ask, four new things in the cheat menu: red footprints, through a pool
+  of blood and out the other side, for you and for them; Ultra comical
+  gore, one past comic carnage, with absurd amounts of blood, bodies in many
+  more pieces, a splat when a piece lands or you walk through it, and the
+  pieces left lying; whether they lie there for good or go after so many
+  seconds; and a performance switch that clears them when the frame rate
+  falls under a limit you set.
+- Ultra comical gore (`ultraComic`) is comic carnage and then some. The
+  gore multiplier is 18 rather than 12, which goes into the blood; the
+  pieces a burst throws stay capped where they were, because one burst past
+  that emptied the whole pool. A kill throws two more bursts, one up and
+  one out (593 pieces where comic carnage throws 385), a second fountain twice as tall, a red rain three times as
+  wide (12 m) for twice as long, two dozen pools out to 12 m, sixteen rays
+  for the walls instead of eight and out to 14 m, twice the splashes on the
+  lens from 20 m, and words of its own. Every hit gushes for twice as long
+  and sprays three times over. The pieces of a body splat when they first
+  meet the street: a little blood where they hit, now and then a small
+  pool, and a wet slap of filtered noise with a thud under it, as many as
+  can be told apart (one every 45 ms) within 70 m. Walking through a pool
+  squelches at every step.
+- The pieces stay (`piecesForever`, on by default), or with it off go after
+  `pieceTime` seconds (90 by default, 5 to 600); the pools stay as long.
+  The street holds 320 pools rather than 128 while it is on. The gib pool
+  is 1536 pieces rather than 256, enough for three such kills and what they
+  leave, and the effects pool and the blood buffer 3072 rather than 2048
+  and 1536, so a street full of it still draws.
+- Red footprints (`footprints`): a step in a pool puts fourteen steps of it
+  on your boots, or on anybody else's. One print every 0.75 m, left and
+  right of the line, each one fainter and smaller than the one before, for
+  40 s, in a thinner, redder red than a pool. A print is the pool's ragged disc drawn long and narrow along the
+  way the foot was pointing (the heading rides in the slot that was nought
+  for a pool), with its own budget of 200 so a long walk does not take the
+  massacre off the street.
+- The performance limit (`goreBudget`, with `fpsFloor`, 30 by default):
+  every second spent under the floor takes half of what is lying about off
+  the street, pieces of people and pools and prints, oldest first. The
+  checks run under a software rasteriser well below 30, so they say what
+  the frame rate is (`state.fpsOverride`) rather than leave the limit
+  clearing the street while they count it.
+- Checks (cheats suite, eight more): ultra comical gore throws at least half
+  as many pieces again as comic carnage and more pools, scale 18, its own
+  word; the pieces splat and are heard; twenty seconds on every one of them
+  is still lying there; with a time of five seconds set instead they are all
+  gone ten seconds on; the limit halves what is lying about at 12 fps and
+  leaves it alone at 60 and when switched off; out of a pool you leave
+  prints left and right, fading, pointing the way you walked, and a man
+  walking out of one does too; the boots run dry after fourteen; every step
+  in a pool squelches. Measured: 593 pieces against 385, all still there
+  twenty seconds on; 1186 pieces and 320 pools halved to 593 and 160 at
+  12 fps. Screenshots cheat-13-ultra-comic.png and cheat-14-footprints.png.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

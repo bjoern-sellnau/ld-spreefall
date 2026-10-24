@@ -13,7 +13,7 @@ import {
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
-const MAX_SPARKS = 1536;
+const MAX_SPARKS = 3072;
 const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
@@ -24,7 +24,7 @@ const MAX_SIGNALS = 96;
 const MAX_COVERS = 64;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
-const MAX_GIBS = 256;
+const MAX_GIBS = 1536;
 // Ultra plasma's balls in the air at once, which is its own ceiling.
 const MAX_ULTRA = 480;
 // And the void storm's balls, which VOID_STORM.maxLive holds to 48.
@@ -386,6 +386,27 @@ export function buildProjectileMesh(kind) {
       const a = (i / 14) * Math.PI * 2;
       m.box(Math.cos(a) * 0.32, 0.025, Math.sin(a) * 0.32, 0.06, 0.04, 0.06, 44, a);
     }
+  } else if (kind === 'bolt') {
+    // Forty centimetres of steel with a glowing head at the front, -z.
+    m.cylinder(0, 0, 0.20, 0.008, 0.008, -0.40, 6, 8, 'z');
+    m.cylinder(0, 0, -0.20, 0.022, 0.0, -0.07, 8, 48, 'z');
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.016, Math.sin(a) * 0.016, 0.17, 0.004 + Math.abs(Math.cos(a)) * 0.026,
+        0.004 + Math.abs(Math.sin(a)) * 0.026, 0.06, 44);
+    }
+  } else if (kind === 'cling') {
+    // A ball of light the size of a fist, which is what you see stuck to him.
+    m.icosphere(0, 0, 0, 0.09, 10, 6, 11);
+  } else if (kind === 'disc') {
+    m.cylinder(0, 0, 0, 0.18, 0.18, 0.02, 18, 44, 'y');
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.19, 0.01, Math.sin(a) * 0.19, 0.04, 0.02, 0.04, 44, a);
+    }
+  } else if (kind === 'flare') {
+    m.icosphere(0, 0, 0, 0.06, 8, 5, 48);
+    m.cylinder(0, 0, 0.05, 0.03, 0.01, 0.25, 6, 48, 'z');
   } else if (kind === 'fireball') {
     // A demon's fire: a ball of the blast orange.
     m.icosphere(0, 0, 0, 0.3, 10, 6, 48);
@@ -768,6 +789,110 @@ export function buildFlailMesh() {
   for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1], [0.7, 0.7, 0], [-0.7, 0.7, 0]]) {
     m.box(0.05 + dx * 0.085, 0.360 + dy * 0.085, -0.290 + dz * 0.085, 0.025, 0.025, 0.025, 3);
   }
+  return m;
+}
+
+/** Eight short barrels stacked two by four in a block: Hailstorm. */
+export function buildHailstormMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.200, 0.056, 0.090, 0.170, 2);      // stock
+  m.box(0, 0.000, -0.400, 0.110, 0.120, 0.240, 0);       // the block
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 2; c++) {
+      m.cylinder(-0.026 + c * 0.052, -0.040 + r * 0.027, -0.520, 0.012, 0.012, -0.090, 8, 1, 'z');
+    }
+  }
+  m.box(0, -0.100, -0.320, 0.044, 0.100, 0.056, 2);      // grip
+  m.box(0, -0.075, -0.480, 0.040, 0.060, 0.070, 2);      // fore grip
+  m.box(0, 0.070, -0.380, 0.024, 0.024, 0.080, 3);       // sight
+  muzzleFlash(m, 0, 0.000, -0.612, 0.20, 0.09);
+  return m;
+}
+
+/** A stubby gun with coils down the barrel that crackle: the Volt caster. */
+export function buildVoltMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.000, -0.260, 0.060, 0.082, 0.240, 0);       // body
+  m.cylinder(0, 0.004, -0.380, 0.020, 0.020, -0.200, 10, 1, 'z');
+  for (let i = 0; i < 4; i++) m.cylinder(0, 0.004, -0.400 - i * 0.045, 0.034, 0.034, -0.016, 12, 36, 'z');
+  m.box(0, 0.052, -0.250, 0.030, 0.020, 0.110, 36);      // the cell on top
+  m.box(0, -0.090, -0.260, 0.042, 0.110, 0.056, 2);      // grip
+  muzzleFlash(m, 0, 0.004, -0.590, 0.10, 0.05);
+  return m;
+}
+
+/** A crossbow in steel with a bolt laid on it, its head glowing. */
+export function buildArbalestMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.200, 0.050, 0.080, 0.180, 2);      // stock
+  m.box(0, 0.000, -0.420, 0.060, 0.060, 0.300, 0);       // tiller
+  m.box(0, 0.010, -0.600, 0.340, 0.024, 0.030, 1);       // the prod
+  m.box(-0.170, 0.010, -0.580, 0.020, 0.030, 0.060, 3);
+  m.box(0.170, 0.010, -0.580, 0.020, 0.030, 0.060, 3);
+  m.cylinder(0, 0.040, -0.300, 0.006, 0.006, -0.330, 6, 3, 'z');   // the bolt
+  m.cylinder(0, 0.040, -0.630, 0.014, 0.0, -0.050, 8, 35, 'z');    // its head
+  m.box(0, -0.090, -0.300, 0.040, 0.100, 0.056, 2);      // grip
+  m.box(0, 0.074, -0.360, 0.030, 0.040, 0.090, 3);       // scope
+  return m;
+}
+
+/** A frame with a saw blade sitting in it, ready to go. */
+export function buildRipperMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.020, -0.200, 0.052, 0.080, 0.160, 2);      // stock
+  m.box(0, -0.010, -0.420, 0.070, 0.050, 0.300, 0);      // the rail
+  m.cylinder(0, 0.030, -0.480, 0.110, 0.110, 0.012, 20, 3, 'y');   // the blade
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    m.box(Math.cos(a) * 0.118, 0.036, -0.480 + Math.sin(a) * 0.118, 0.022, 0.012, 0.022, 1, a);
+  }
+  m.box(0, -0.096, -0.300, 0.040, 0.100, 0.056, 2);      // grip
+  return m;
+}
+
+/** A ball of blue light in a cage you can hold: the cling charge. */
+export function buildClingMesh() {
+  const m = new MeshBuild();
+  m.icosphere(0, 0, -0.16, 0.032, 10, 6, 32);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    m.box(Math.cos(a) * 0.034, 0, -0.16 + Math.sin(a) * 0.034, 0.008, 0.07, 0.008, 1, a);
+  }
+  return m;
+}
+
+/** A hilt and two prongs of light pointing forward: the lunge blade. */
+export function buildBladeMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.070, -0.120, 0.034, 0.110, 0.040, 2);      // the hilt
+  m.box(0, -0.005, -0.140, 0.070, 0.030, 0.050, 0);      // guard
+  m.box(-0.020, 0.000, -0.330, 0.010, 0.016, 0.340, 32); // two prongs
+  m.box(0.020, 0.000, -0.330, 0.010, 0.016, 0.340, 32);
+  m.box(-0.014, 0.000, -0.520, 0.006, 0.010, 0.050, 32);
+  m.box(0.014, 0.000, -0.520, 0.006, 0.010, 0.050, 32);
+  return m;
+}
+
+/** A long haft and a head like a paving stone, its striking face hot. */
+export function buildHammerMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, -0.260, -0.300, 0.016, 0.016, 0.440, 8, 2, 'y');  // haft
+  m.box(0, 0.200, -0.300, 0.090, 0.100, 0.200, 0);       // head
+  m.box(0, 0.200, -0.405, 0.096, 0.106, 0.012, 35);      // the face
+  m.box(0, 0.200, -0.195, 0.070, 0.080, 0.012, 1);
+  for (const y of [0.155, 0.245]) m.box(0, y, -0.300, 0.094, 0.010, 0.204, 3);
+  return m;
+}
+
+/** A fat barrel in orange red plastic, and the flare in it glowing. */
+export function buildFlareMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.085, -0.230, 0.036, 0.110, 0.056, 37);     // grip
+  m.box(0, 0.000, -0.290, 0.044, 0.056, 0.100, 37);      // frame
+  m.cylinder(0, 0.008, -0.330, 0.030, 0.030, -0.170, 12, 37, 'z');
+  m.cylinder(0, 0.008, -0.497, 0.022, 0.022, -0.004, 12, 35, 'z');  // the flare in the barrel
+  m.box(0, -0.040, -0.290, 0.010, 0.030, 0.030, 0);      // trigger guard
+  muzzleFlash(m, 0, 0.008, -0.502, 0.12, 0.06);
   return m;
 }
 
@@ -1593,6 +1718,14 @@ export class Actors {
       minigun: this._uploadMesh(buildMinigunMesh(), 0, 0),
       launcher: this._uploadMesh(buildLauncherMesh(), 0, 0),
       swarm: this._uploadMesh(buildSwarmMesh(), 0, 0),
+      hailstorm: this._uploadMesh(buildHailstormMesh(), 0, 0),
+      volt: this._uploadMesh(buildVoltMesh(), 0, 0),
+      arbalest: this._uploadMesh(buildArbalestMesh(), 0, 0),
+      ripper: this._uploadMesh(buildRipperMesh(), 0, 0),
+      cling: this._uploadMesh(buildClingMesh(), 0, 0),
+      blade: this._uploadMesh(buildBladeMesh(), 0, 0),
+      hammer: this._uploadMesh(buildHammerMesh(), 0, 0),
+      flare: this._uploadMesh(buildFlareMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
 
@@ -1627,6 +1760,10 @@ export class Actors {
       arrow: this._uploadMesh(buildProjectileMesh('arrow'), MAX_PROPS, 2),
       fireball: this._uploadMesh(buildProjectileMesh('fireball'), MAX_PROPS * 2, 2),
       shieldsaw: this._uploadMesh(buildProjectileMesh('shieldsaw'), 4, 2),
+      bolt: this._uploadMesh(buildProjectileMesh('bolt'), MAX_PROPS, 2),
+      cling: this._uploadMesh(buildProjectileMesh('cling'), MAX_PROPS, 2),
+      disc: this._uploadMesh(buildProjectileMesh('disc'), MAX_PROPS, 2),
+      flare: this._uploadMesh(buildProjectileMesh('flare'), MAX_PROPS, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -1738,7 +1875,8 @@ export class Actors {
   updateProjectiles(list) {
     const gl = this.gl;
     const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0, fireball: 0, shieldsaw: 0 };
+      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0, fireball: 0, shieldsaw: 0,
+      bolt: 0, cling: 0, disc: 0, flare: 0 };
     for (const b of list) {
       const mesh = this.props[b.kind];
       if (!mesh || counts[b.kind] === undefined) continue;
@@ -1752,7 +1890,7 @@ export class Actors {
       // A rocket points where it is going; everything else tumbles.
       const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke'
         || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast' || b.kind === 'arrow'
-        || b.kind === 'fireball';
+        || b.kind === 'fireball' || b.kind === 'bolt' || b.kind === 'flare';
       // An arrow that has gone in keeps pointing the way it was going.
       const vx = b.stuck && b.fx !== undefined ? b.fx : b.vx;
       const vy = b.stuck && b.fx !== undefined ? b.fy : b.vy;

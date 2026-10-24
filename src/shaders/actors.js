@@ -1100,7 +1100,17 @@ void main() {
     // full size over the first second.
     vec3 centre = iA.xyz;
     float s = iC.w * mix(0.35, 1.0, iB.x);
-    pos = centre + vec3((c.x - 0.5) * 2.0 * s, 0.0, (c.y - 0.5) * 2.0 * s);
+    if (iB.y > 0.5) {
+      // A footprint: the same ragged disc, long and narrow along the way the
+      // foot was pointing. The heading is carried ten up.
+      float yaw = iB.y - 10.0;
+      vec2 along = vec2(-sin(yaw), -cos(yaw));
+      vec2 across = vec2(along.y, -along.x);
+      vec2 o = along * (c.y - 0.5) * 2.0 * s + across * (c.x - 0.5) * 2.0 * s * 0.42;
+      pos = centre + vec3(o.x, 0.0, o.y);
+    } else {
+      pos = centre + vec3((c.x - 0.5) * 2.0 * s, 0.0, (c.y - 0.5) * 2.0 * s);
+    }
   } else {
     // Spark, flash or a drop of blood: a billboard at a point.
     vec3 centre = iA.xyz;
@@ -1282,6 +1292,25 @@ void main() {
     emissive = vec3(0.30, 1.0, 0.25) * (1.6 + uMuzzle * 3.0) * pulse;
     rough = 0.2;
     metal = 0.0;
+  } else if (vPart > 34.5 && vPart < 35.5) {
+    // A hot orange: the flare in its chamber, the bolt's head, the hammer's
+    // face, glowing harder for a moment after each one.
+    albedo = vec3(0.02);
+    emissive = vec3(2.6, 0.55, 0.06) * (0.9 + uMuzzle * 2.5);
+    rough = 0.3;
+    metal = 0.0;
+  } else if (vPart > 35.5 && vPart < 36.5) {
+    // Electricity: blue white, never still, and a crack of it on each shot.
+    albedo = vec3(0.02);
+    float crackle = step(0.45, fract(sin(uCamPos.w * 61.0 + vModel.z * 40.0) * 43758.5));
+    emissive = vec3(0.55, 0.75, 1.6) * (0.8 + crackle * 0.9 + uMuzzle * 3.0);
+    rough = 0.2;
+    metal = 0.0;
+  } else if (vPart > 36.5 && vPart < 37.5) {
+    // The flare pistol's moulded orange red, so it is not mistaken for a gun.
+    albedo = vec3(0.48, 0.10, 0.035);
+    rough = 0.6;
+    metal = 0.02;
   } else {
     // The muzzle flash. It is geometry that exists all the time, so it takes
     // itself out of the picture between shots rather than drawing as a black

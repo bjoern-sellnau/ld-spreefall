@@ -49,6 +49,7 @@ import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
 import { CompassBar, bearing, distanceLabel } from './ui/compassbar.js';
+import { loadBuildLine } from './ui/version.js';
 import { CockpitHud, project as projectPoint, glassClip } from './ui/cockpit.js';
 import { Visor, VISOR } from './ui/visor.js';
 import { Campaign, OPS, SITE } from './game/campaign.js';
@@ -110,6 +111,9 @@ const el = {
   crossFill: $('crossfill'), crossHint: $('crosshint'),
   crossSightLine: $('crosssightline'), crossSight: $('crosssight'),
   modeNote: $('modenote'), timePick: $('timepick'),
+  newGame: $('newgame'), buildLine: $('buildline'), modeName: $('modename'), diffBlock: $('diffblock'),
+  pause: $('pause'), pauseResume: $('pauseresume'), pauseMenu: $('pausemenu'),
+  cheatTod: $('cheattod'), cheatTodLabel: $('cheattodlabel'),
   opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
   opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
   opsProgress: $('opsprogress'), opsWipe: $('opswipe'),
@@ -655,7 +659,8 @@ async function main() {
     }
     const m = muzzlePoint(shot.from);
     if (shot.end) {
-      effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
+      if (spec.arc) zap(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z);
+      else effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
       // A round into a man sprays rather than sparks, and only when the cheat
       // menu says so. Everything else in the city still throws grit.
       if (shot.surface === 'soldier' && cheats.bleeding) {
@@ -664,7 +669,7 @@ async function main() {
         effects.blood(shot.end.x, shot.end.y, shot.end.z,
           -shot.end.nx, Math.abs(shot.end.ny) * 0.4 + 0.3, -shot.end.nz,
           cheats.goreScale * (shot.core ? 1.8 : 1));
-        if (cheats.comicGore) {
+        if (cheats.comical) {
           // Out of the far side and onto whatever wall is behind them.
           const bx = -shot.end.nx, bz = -shot.end.nz, bl = Math.hypot(bx, bz) || 1;
           const behind = world.raycast(shot.end.x, shot.end.y, shot.end.z, bx / bl, -0.1, bz / bl, 6);
@@ -673,7 +678,15 @@ async function main() {
             state.wallSplats = (state.wallSplats || 0) + 1;
           }
           // Every hit gushes for a moment, out of the far side.
-          gushes.push({ x: shot.end.x, y: shot.end.y, z: shot.end.z, nx: -shot.end.nx, nz: -shot.end.nz, life: 0.7 });
+          gushes.push({ x: shot.end.x, y: shot.end.y, z: shot.end.z, nx: -shot.end.nx, nz: -shot.end.nz,
+            life: cheats.ultraComic ? 1.6 : 0.7 });
+          // And past the comic book, three times the spray out of every hit.
+          if (cheats.ultraComic) {
+            for (let k = 0; k < 3; k++) {
+              effects.blood(shot.end.x, shot.end.y, shot.end.z, -shot.end.nx + (Math.random() - 0.5),
+                0.6 + Math.random(), -shot.end.nz + (Math.random() - 0.5), cheats.goreScale);
+            }
+          }
           // And a head shot that kills takes the head with it.
           if (shot.core && shot.killed) {
             gibs.burst(shot.end.x, shot.end.y, shot.end.z, { x: -shot.end.nx, y: 0.6, z: -shot.end.nz }, 3, 10);
@@ -702,8 +715,63 @@ async function main() {
       audio.hitMarker(shot.core);
       showHitmarker(shot.killed ? 'kill' : (shot.core ? 'core' : ''));
       if (shot.killed) creditTarget(shot.target, shot.core, shot.surface);
+      if (spec.arc && (shot.surface === 'soldier' || shot.surface === 'drone')) voltArc(shot.target, shot.surface, spec);
     }
   };
+
+  /** Electricity from one point to another: a line broken into a few jags. */
+  function zap(ax, ay, az, bx, by, bz) {
+    const n = 5;
+    const jag = Math.min(0.5, Math.hypot(bx - ax, by - ay, bz - az) * 0.06);
+    let px = ax, py = ay, pz = az;
+    for (let i = 1; i <= n; i++) {
+      const k = i / n, off = i === n ? 0 : jag;
+      const qx = ax + (bx - ax) * k + (Math.random() - 0.5) * off;
+      const qy = ay + (by - ay) * k + (Math.random() - 0.5) * off;
+      const qz = az + (bz - az) * k + (Math.random() - 0.5) * off;
+      effects.lance(px, py, pz, qx, qy, qz, 0.6, 0.8, 1.6);
+      px = qx; py = qy; pz = qz;
+    }
+  }
+
+  /**
+   * The volt caster's charge, once it is in somebody: he holds still, and it
+   * jumps on to the nearest one standing within reach of him, and from there
+   * to the next, weaker each time, never back to one it has been through.
+   */
+  function voltArc(first, kind, spec) {
+    const A = spec.arc;
+    first.stunLeft = Math.max(first.stunLeft || 0, A.stun);
+    const been = new Set([first]);
+    const chest = (o, k) => (k === 'drone' ? o.y : o.y + 1.1);
+    let from = first, fromKind = kind;
+    let amount = spec.damage * (weapon.damageScale || 1);
+    for (let j = 0; j < A.jumps; j++) {
+      amount *= A.share;
+      let next = null, nextKind = null, best = A.reach;
+      const fy = chest(from, fromKind);
+      for (const o of soldiers.active) {
+        if (been.has(o) || !o.alive || o.health <= 0 || o.civilian || o.state === 5 || o.rise > 0) continue;
+        const d = Math.hypot(o.x - from.x, o.y + 1.1 - fy, o.z - from.z);
+        if (d < best) { best = d; next = o; nextKind = 'soldier'; }
+      }
+      for (const g of drones.active) {
+        if (been.has(g) || !g.alive || g.health <= 0) continue;
+        const d = Math.hypot(g.x - from.x, g.y - fy, g.z - from.z);
+        if (d < best) { best = d; next = g; nextKind = 'drone'; }
+      }
+      if (!next) break;
+      been.add(next);
+      zap(from.x, fy, from.z, next.x, chest(next, nextKind), next.z);
+      const dx = next.x - from.x, dz = next.z - from.z, dl = Math.hypot(dx, dz) || 1;
+      const killed = nextKind === 'drone' ? drones.damage(next, amount)
+        : soldiers.damage(next, amount, { x: dx / dl, y: 0.1, z: dz / dl });
+      next.stunLeft = Math.max(next.stunLeft || 0, A.stun);
+      if (killed) creditTarget(next, false, nextKind);
+      state.voltJumps = (state.voltJumps || 0) + 1;
+      from = next; fromKind = nextKind;
+    }
+  }
 
   /**
    * A blast, wherever it came from. Everything inside the radius takes damage
@@ -1103,6 +1171,23 @@ async function main() {
     }
     if (n) feed(`<b>void</b> ${n} taken`);
     return n;
+  }
+
+  /**
+   * A flare burning on its way, and a cling charge pulsing where it holds:
+   * both are lights you can follow across a street.
+   */
+  function glowTick() {
+    for (const b of projectiles.active) {
+      if (!b.alive) continue;
+      if (b.kind === 'flare') {
+        effects.spark(b.x + (Math.random() - 0.5) * 0.2, b.y + (Math.random() - 0.5) * 0.2,
+          b.z + (Math.random() - 0.5) * 0.2, 1.6, 0.45, 0.08);
+      } else if (b.kind === 'cling' && Math.random() < (b.stuck ? 0.9 : 0.4)) {
+        effects.spark(b.x + (Math.random() - 0.5) * 0.25, b.y + (Math.random() - 0.5) * 0.25,
+          b.z + (Math.random() - 0.5) * 0.25, 0.35, 0.75, 1.6);
+      }
+    }
   }
 
   /**
@@ -3983,6 +4068,13 @@ async function main() {
   const OVERKILL_WORDS = ['OVERKILL', 'SPLATTER', 'TOTAL CARNAGE', 'NO MERCY', 'EXCESSIVE', 'MESSY'];
   const COMIC_WORDS = ['SPLAT!', 'KA-SPLAT!', 'GUTS!', 'SQUELCH!', 'OBLITERATED!', 'SPLATTERED!', 'GIBBED!',
     'CARNAGE!', 'MESSY!!'];
+  const ULTRA_WORDS = ['MEGA SPLAT!!', 'SPLATTERAMA!', 'GIBTASTIC!', 'RED RAIN!!', 'JUICY!!!', 'KA-BLOOSH!',
+    'CONFETTI!', 'EVERYWHERE!!', 'WAY TOO MUCH!'];
+  // Ultra comical gore: how many pools the street may hold (and how many it
+  // held before), how much more of everything a kill throws, and how close
+  // together the splats of pieces landing may be heard.
+  const ULTRA_COMIC = { usualPools: 128, pools: 320, rain: 4.5, rainWide: 12, fountain: 7,
+    stains: 24, stainWide: 12, rays: 16, wallReach: 14, splatGap: 0.045 };
   // Blood falling out of the sky after a comic kill, and short gushes from
   // every wound: on the render clock, beside the fountains.
   const bloodRain = [];
@@ -4012,7 +4104,8 @@ async function main() {
     // everyone standing near for a second or two after the kill.
     gibs.burst(s.x, s.y, s.z, { x: 0, y: 0, z: 0 }, 4, 16);
     // And a fountain where they stood, on the render clock below.
-    const comic = cheats.comicGore;
+    const comic = cheats.comical;
+    const ultra = cheats.ultraComic;
     fountains.push({ x: s.x, y: floor, z: s.z, life: comic ? 5 : 2.8, max: comic ? 5 : 2.8, next: 0, comic });
     if (comic) {
       // It comes back down: a red rain over everything for a few metres
@@ -4020,7 +4113,24 @@ async function main() {
       bloodRain.push({ x: s.x, y: floor, z: s.z, life: 2.2, next: 0 });
       gibs.burst(s.x, s.y + 1.2, s.z, dir, 6, 22);
       const away = Math.hypot(player.x - s.x, player.z - s.z);
-      if (away < 12) splashLens(Math.round(1 + (12 - away) * 0.22));
+      const reach = ultra ? 20 : 12;
+      if (away < reach) splashLens(Math.round((1 + (reach - away) * 0.22) * (ultra ? 2 : 1)));
+    }
+    if (ultra) {
+      // And then it stops making sense: two more bursts, one up and one out,
+      // a second fountain twice as tall, a rain three times as wide and twice
+      // as long, and the street round it painted.
+      const U = ULTRA_COMIC;
+      gibs.burst(s.x, s.y + 1.2, s.z, dir, 8, 26);
+      gibs.burst(s.x, s.y + 0.6, s.z, { x: 0, y: 0, z: 0 }, 5, 34);
+      fountains.push({ x: s.x + 0.5, y: floor, z: s.z, life: U.fountain, max: U.fountain, next: 0, comic, ultra });
+      bloodRain.push({ x: s.x, y: floor, z: s.z, life: U.rain, next: 0, wide: U.rainWide });
+      for (let i = 0; i < U.stains; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 1 + Math.random() * U.stainWide;
+        const px = s.x + Math.cos(a) * r, pz = s.z + Math.sin(a) * r;
+        effects.stain(px, world.groundHeight(px, pz), pz, 0.4 + Math.random() * 1.1, 60);
+      }
     }
     effects.stain(s.x, floor, s.z, 2.8, 60);
     for (let i = 0; i < 12; i++) {
@@ -4031,13 +4141,14 @@ async function main() {
     }
     // Whatever wall is within nine metres gets sprayed: eight rays out at
     // chest height, and a burst of blood against every face one of them meets.
-    for (let i = 0; i < 8; i++) {
-      const a = i * Math.PI / 4 + Math.random() * 0.3;
-      const hit = world.raycast(s.x, s.y + 1.2, s.z, Math.cos(a), 0, Math.sin(a), 9);
+    const rays = ultra ? ULTRA_COMIC.rays : 8;
+    for (let i = 0; i < rays; i++) {
+      const a = i * Math.PI * 2 / rays + Math.random() * 0.3;
+      const hit = world.raycast(s.x, s.y + 1.2, s.z, Math.cos(a), 0, Math.sin(a), ultra ? ULTRA_COMIC.wallReach : 9);
       if (!hit || hit.kind === 'ground') continue;
       effects.blood(hit.x + hit.nx * 0.15, hit.y, hit.z + hit.nz * 0.15, hit.nx, 0.15, hit.nz, 3);
       // The comic book leaves it there: a splat on the wall that runs.
-      if (cheats.comicGore) {
+      if (comic) {
         renderer.addBloodSplat(hit.x, hit.y + (Math.random() - 0.3) * 0.8, hit.z, 1.2 + Math.random() * 1.3);
         state.wallSplats = (state.wallSplats || 0) + 1;
       }
@@ -4049,9 +4160,9 @@ async function main() {
     overkillRun.streak = now - overkillRun.at < 3 ? overkillRun.streak + 1 : 1;
     overkillRun.at = now;
     overkillRun.shown++;
-    const words = cheats.comicGore ? COMIC_WORDS : OVERKILL_WORDS;
+    const words = ultra ? ULTRA_WORDS : comic ? COMIC_WORDS : OVERKILL_WORDS;
     const word = words[(Math.random() * words.length) | 0];
-    el.overkill.classList.toggle('comic', !!cheats.comicGore);
+    el.overkill.classList.toggle('comic', !!comic);
     el.overkill.textContent = overkillRun.streak > 1 ? `${word} x${overkillRun.streak}` : word;
     el.overkill.classList.remove('show');
     // Read the layout once so the animation starts again from its first frame.
@@ -4061,6 +4172,98 @@ async function main() {
     overkill._t = setTimeout(() => el.overkill.classList.remove('show'), 1400);
     audio.overkill(overkillRun.streak);
   }
+  // Ultra comical gore: every piece that lands is heard landing, as many as
+  // can be told apart, and leaves a little of itself where it hit.
+  let splatAt = -1;
+  gibs.onLand = (g, speed) => {
+    if (!cheats.ultraComic || speed < 1.5) return;
+    state.splats = (state.splats || 0) + 1;
+    effects.blood(g.x, g.y + 0.05, g.z, Math.random() - 0.5, 0.6, Math.random() - 0.5, 0.5);
+    if (Math.random() < 0.25) effects.stain(g.x, world.groundHeight(g.x, g.z), g.z, 0.12 + Math.random() * 0.2);
+    if (state.time < splatAt) return;
+    splatAt = state.time + ULTRA_COMIC.splatGap;
+    const d = Math.hypot(g.x - player.x, g.z - player.z);
+    if (d < 70) {
+      audio.splat(d, Math.min(1, speed / 8));
+      state.splatSounds = (state.splatSounds || 0) + 1;
+    }
+  };
+
+  // --- red footprints -------------------------------------------------------
+  // Walk through a pool and you carry it on your boots for a dozen steps,
+  // fainter with every one, and so does anybody else. And with ultra comical
+  // gore every step in it is heard. steps a pool gives you, stride between
+  // prints, side either side of the line you walk, every how often the pools
+  // are looked for, and seconds a print stays.
+  const FOOT = { steps: 14, stride: 0.75, side: 0.13, every: 0.1, seconds: 40 };
+  let footClock = 0;
+  /** The pools of blood on the street, not the footprints. */
+  const poolsNow = () => effects.list.filter((p) => p.alive && p.kind === 4 && !p.by);
+  /** Whether a point is standing in one of them. */
+  function inBlood(x, z, pools = poolsNow()) {
+    for (const p of pools) {
+      const r = p.size * 0.8 * (0.35 + 0.65 * Math.min(1, p.bx));
+      if (Math.abs(p.ax - x) < r && Math.abs(p.az - z) < r && Math.hypot(p.ax - x, p.az - z) < r) return true;
+    }
+    return false;
+  }
+  function footprintStep(dt) {
+    const prints = cheats.footprints, squelch = cheats.ultraComic;
+    if (!prints && !squelch) return;
+    footClock -= dt;
+    const look = footClock <= 0;
+    if (look) footClock = FOOT.every;
+    const pools = look ? poolsNow() : null;
+    const feet = [];
+    if (!state.inVehicle && !state.inMech && player.onGround) {
+      feet.push({ o: state.boots || (state.boots = {}), x: player.x, z: player.z, me: true });
+    }
+    for (const s of soldiers.active) {
+      if (s.alive && s.health > 0 && s.state !== 5 && !(s.rise > 0) && !s.held) feet.push({ o: s, x: s.x, z: s.z, me: false });
+    }
+    for (const f of feet) {
+      const o = f.o;
+      if (look) {
+        o.inBlood = inBlood(f.x, f.z, pools);
+        if (o.inBlood && prints) o.bloodSteps = FOOT.steps;
+      }
+      if (o.stepX === undefined) { o.stepX = f.x; o.stepZ = f.z; continue; }
+      const dx = f.x - o.stepX, dz = f.z - o.stepZ, d = Math.hypot(dx, dz);
+      // Somewhere else entirely: a teleport, or a body taken from the pool
+      // for somebody new. Nothing on the boots carries over.
+      if (d > 4) { o.stepX = f.x; o.stepZ = f.z; o.bloodSteps = 0; continue; }
+      if (d < FOOT.stride) continue;
+      o.stepX = f.x; o.stepZ = f.z;
+      if (f.me && squelch && o.inBlood) {
+        audio.squelch();
+        state.squelches = (state.squelches || 0) + 1;
+      }
+      if (!prints || !(o.bloodSteps > 0)) continue;
+      o.foot = o.foot ? 0 : 1;
+      const side = (o.foot ? 1 : -1) * FOOT.side;
+      const px = f.x + (dz / d) * side, pz = f.z - (dx / d) * side;
+      effects.footprint(px, world.groundHeight(px, pz), pz, Math.atan2(-dx, -dz), o.bloodSteps / FOOT.steps, FOOT.seconds);
+      o.bloodSteps--;
+      state.prints = (state.prints || 0) + 1;
+    }
+  }
+
+  // --- the performance limit -------------------------------------------------
+  // With it on, a second spent under the frame rate set for it takes half of
+  // what is lying about off the street, the oldest first, and again for every
+  // second it stays down there. A test can say what the frame rate is.
+  let slowFor = 0;
+  function goreBudgetStep(dt) {
+    const fps = state.fpsOverride ?? loop.stats.fps;
+    if (!cheats.goreBudget || !(fps > 0) || fps >= cheats.value('fpsFloor')) { slowFor = 0; return; }
+    slowFor += dt;
+    if (slowFor < 1) return;
+    slowFor = 0;
+    const n = gibs.trim(0.5) + effects.trimStains(0.5);
+    state.goreTrims = (state.goreTrims || 0) + 1;
+    state.goreTrimmed = (state.goreTrimmed || 0) + n;
+  }
+
   function updateFountains(dt) {
     for (let i = fountains.length - 1; i >= 0; i--) {
       const f = fountains[i];
@@ -4072,7 +4275,7 @@ async function main() {
       // Strongest at the start and dying away, the way a pulse does.
       const k = f.life / f.max;
       const pulse = 0.75 + 0.25 * Math.sin(f.life * 18);
-      const tall = f.comic ? 2.2 : 1;
+      const tall = f.ultra ? 3.6 : f.comic ? 2.2 : 1;
       effects.blood(f.x, f.y + 0.3, f.z, (Math.random() - 0.5) * 0.25,
         (1.2 + 1.4 * k) * pulse * tall, (Math.random() - 0.5) * 0.25, (1.2 + 2.2 * k) * (f.comic ? 1.6 : 1));
     }
@@ -4084,7 +4287,7 @@ async function main() {
       if (r.next > 0) continue;
       r.next = 0.05;
       for (let k = 0; k < 3; k++) {
-        const a = Math.random() * Math.PI * 2, d = Math.random() * 7;
+        const a = Math.random() * Math.PI * 2, d = Math.random() * (r.wide || 7);
         const x = r.x + Math.cos(a) * d, z = r.z + Math.sin(a) * d;
         effects.blood(x, r.y + 6 + Math.random() * 3, z, 0, -1, 0, 0.6);
         if (Math.random() < 0.15) effects.stain(x, world.groundHeight(x, z), z, 0.25 + Math.random() * 0.4, 50);
@@ -4209,7 +4412,12 @@ async function main() {
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;
     // The comic book draws its blood in a red you can see from orbit.
-    effects.comic = !!cheats.comicGore;
+    effects.comic = !!cheats.comical;
+    // Ultra comical gore keeps what it leaves for as long as it is told to,
+    // and the street holds more pools of it.
+    gibs.keep = cheats.pieceLife;
+    effects.keep = cheats.pieceLife;
+    effects.poolBudget = cheats.ultraComic ? ULTRA_COMIC.pools : ULTRA_COMIC.usualPools;
     soldiers.boneTime = cheats.value('boneTime');
     // Wave after wave of help, and of demons, with extreme enemies on.
     tactics.extreme = cheats.extremeEnemies ? cheats.value('extremeWaves') : 0;
@@ -4683,6 +4891,8 @@ async function main() {
       state.lockWanted = input.pointerLocked;
       input.exitLock();
       applyCheats();
+      el.cheatTod.value = String(renderer.timeOfDay);
+      el.cheatTodLabel.textContent = timeLabel(renderer.timeOfDay);
     } else {
       relock();
     }
@@ -5921,7 +6131,11 @@ async function main() {
 
   input.onLockChange = (locked) => {
     el.canvas.classList.toggle('locked', locked);
-    if (!locked && state.mode === 'walk' && !photo.active) toast('click to look around again');
+    // Esc lets the mouse go before the page hears the key, so the pause opens
+    // on the mouse coming free, unless a panel of ours took it.
+    if (!locked && state.mode === 'walk' && !photo.active && !openPause()) {
+      if (!panelUp()) toast('click to look around again');
+    }
   };
 
   // --- operations: Tactics and Slayer ---------------------------------------
@@ -5931,7 +6145,7 @@ async function main() {
   /** The setup under the mode buttons on the title card. */
   function showOps() {
     el.opsSetup.classList.toggle('hidden', !campaign.active);
-    el.play.textContent = 'Press to walk';
+    el.play.textContent = 'Spielen';
     el.playNew.classList.add('hidden');
     if (!campaign.active) return;
     const set = campaign.settings;
@@ -5971,8 +6185,8 @@ async function main() {
     // it. Said so on the button, with a new one beside it, because a run
     // that opened with grounds already taken looked like a fault.
     if (sum.free > 0 || sum.score > 0) {
-      el.play.textContent = `Continue: ${sum.free} of ${sum.total} ${opsWord()}s taken`;
-      el.playNew.textContent = campaign.mode === 'hunt' ? 'New hunt' : 'New operation';
+      el.play.textContent = 'Weiterspielen';
+      el.playNew.textContent = 'Neu anfangen';
       el.playNew.classList.remove('hidden');
     }
   }
@@ -7806,6 +8020,20 @@ async function main() {
   }
 
   weapon.onMelee = (spec, eye, dir) => {
+    if (spec.lunge) {
+      // The blade: a cut if he is in reach, and if he is further off but in
+      // front of you and within the lunge, you go to him first.
+      audio.swoosh(0);
+      const near = inReach(spec.reach, 0.5)[0];
+      if (near) { bladeCut(near, spec); return; }
+      const far = inReach(spec.lunge.range, spec.lunge.cone).find((h) => h.kind === 'soldier');
+      if (!far) return;
+      state.lunge = { target: far.t, kind: far.kind, spec, t: 0 };
+      effects.shake = Math.min(1, effects.shake + 0.12);
+      state.lunges = (state.lunges || 0) + 1;
+      return;
+    }
+    if (spec.quake) { quake(spec); return; }
     if (spec.fuel) {
       // The saw takes the nearest thing in front of you, if it has the fuel
       // for something that size.
@@ -7845,9 +8073,113 @@ async function main() {
     }
   };
 
+  /** One cut of the blade, into whoever it reached. */
+  function bladeCut(h, spec) {
+    const t = h.t;
+    const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+    const amount = spec.damage * (weapon.damageScale || 1);
+    const killed = h.kind === 'drone' ? drones.damage(t, amount)
+      : soldiers.damage(t, amount, { x: dx / dl, y: 0.3, z: dz / dl });
+    for (let i = 0; i < 3; i++) effects.blood(t.x, t.y + 1.1, t.z, dx / dl, 0.4, dz / dl, cheats.goreScale * 1.5);
+    if (killed && h.kind === 'soldier' && cheats.bleeding) gibs.burst(t.x, t.y + 1.2, t.z, { x: dx / dl, y: 0.5, z: dz / dl }, 0.6, 2);
+    for (let i = 0; i < 6; i++) effects.spark(t.x, t.y + 1.1, t.z, 0.5, 0.8, 1.6);
+    effects.shake = Math.min(1.2, effects.shake + 0.3);
+    audio.hitMarker(true);
+    showHitmarker(killed ? 'kill' : '');
+    if (killed) { creditTarget(t, false, h.kind); state.bladeKills = (state.bladeKills || 0) + 1; }
+  }
+
+  /**
+   * The lunge, a step at a time: straight at him, fast, until he is in reach,
+   * and the cut lands there. A wall in the way, or half a second without
+   * getting there, and it is over without one.
+   */
+  function lungeStep(dt) {
+    const L = state.lunge;
+    if (!L) return false;
+    const t = L.target;
+    L.t += dt;
+    if (!t.alive || t.health <= 0 || L.t > 0.5) { state.lunge = null; return false; }
+    const dx = t.x - player.x, dz = t.z - player.z, d = Math.hypot(dx, dz) || 1;
+    const stop = L.spec.reach * 0.6 + 0.42 * (t.scale || 1);
+    // A little inside the stop, because the step lands on it exactly.
+    if (d <= stop + 0.1) { state.lunge = null; bladeCut({ t, kind: L.kind }, L.spec); return false; }
+    const step = Math.min(d - stop, L.spec.lunge.speed * dt);
+    if (world.raycast(player.x, player.y + 1.0, player.z, dx / d, 0, dz / d, step + 0.35)) {
+      state.lunge = null;
+      return false;
+    }
+    player.x += dx / d * step;
+    player.z += dz / d * step;
+    player.y = Math.max(player.y, world.groundHeight(player.x, player.z));
+    player.vy = 0;
+    return true;
+  }
+
+  /**
+   * The hammer brought down on the street in front of you. Everybody in the
+   * half circle is hurt, the nearest worst, and whoever it did not kill is
+   * thrown off his feet; a car or a bus goes into the air. You are not
+   * touched by it.
+   */
+  function quake(spec) {
+    const Q = spec.quake;
+    const fx = camera.forward[0], fz = camera.forward[2], fl = Math.hypot(fx, fz) || 1;
+    const cx = player.x + fx / fl * 2.2, cz = player.z + fz / fl * 2.2;
+    const gy = world.groundHeight(cx, cz);
+    effects.dust(cx, gy, cz, spec.reach * 0.8);
+    effects.flash(cx, gy + 0.3, cz, 3.5, 1.0, 0.55, 0.15, 0.12);
+    renderer.addScar(cx, gy, cz, 3.2, 0.5);
+    audio.explosion();
+    effects.shake = Math.min(1.4, effects.shake + 0.6);
+    let down = 0, thrown = 0;
+    for (const h of inReach(spec.reach, spec.arc)) {
+      const t = h.t;
+      const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+      const k = 1 - Math.min(1, Math.max(0, h.d) / spec.reach) * (1 - Q.edge);
+      const amount = spec.damage * k * (weapon.damageScale || 1);
+      const killed = h.kind === 'drone' ? drones.damage(t, amount)
+        : soldiers.damage(t, amount, { x: dx / dl, y: 0.6, z: dz / dl });
+      if (h.kind === 'soldier' && !killed && soldiers.knockDown(t, dx / dl, dz / dl, Q.push * k)) down++;
+      if (killed) creditTarget(t, false, h.kind);
+    }
+    for (const v of vehicles.active) {
+      if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground' || v === state.inVehicle) continue;
+      const dx = v.x - player.x, dz = v.z - player.z, d = Math.hypot(dx, dz) || 1;
+      if (d > spec.reach + 1.5 || (dx * fx + dz * fz) / (fl * d) < spec.arc) continue;
+      const k = 1 - Math.min(1, d / (spec.reach + 1.5)) * (1 - Q.edge);
+      vehicles.launch(v, Q.up * k * (v.type === 'bus' ? 0.45 : 1), (Math.random() - 0.5) * 2 * k);
+      vehicles.damage(v, v.spec.health * Q.hull * k);
+      if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
+      thrown++;
+    }
+    soldiers.scare(cx, cz, 40);
+    state.quakes = (state.quakes || 0) + 1;
+    return { down, thrown };
+  }
+
+  // A bolt or a cling charge has taken hold. The bolt does some harm going
+  // in; either way you hear it catch.
+  projectiles.onCling = (b, hit) => {
+    audio.hitMarker(false);
+    const spec = WEAPONS[b.weapon];
+    if (!spec || !spec.impact || hit.kind !== 'actor') return;
+    const t = hit.target;
+    const sp = Math.hypot(b.fx || 0, b.fz || 0) || 1;
+    const amount = spec.impact * (weapon.damageScale || 1);
+    let killed = false;
+    if (hit.actorKind === 'soldier') killed = soldiers.damage(t, amount, { x: (b.fx || 0) / sp, y: 0, z: (b.fz || 0) / sp });
+    else if (hit.actorKind === 'drone') killed = drones.damage(t, amount);
+    effects.blood(hit.x, hit.y, hit.z, (b.fx || 0) / sp, 0.2, (b.fz || 0) / sp, cheats.goreScale);
+    showHitmarker(killed ? 'kill' : '');
+    if (killed) creditTarget(t, false, hit.actorKind);
+  };
+
   projectiles.onSaw = (b, hit) => {
     const t = hit.target;
-    const amount = (WEAPONS.shieldsaw.damage || 150) * (weapon.damageScale || 1);
+    // The shield saw's, or a disc out of the ripper: each carries its own.
+    const amount = ((WEAPONS[b.weapon] && WEAPONS[b.weapon].damage) || WEAPONS.shieldsaw.damage || 150)
+      * (weapon.damageScale || 1);
     const sp = Math.hypot(b.vx, b.vz) || 1;
     let killed = false;
     if (hit.actorKind === 'soldier') killed = soldiers.damage(t, amount, { x: b.vx / sp, y: 0, z: b.vz / sp });
@@ -8035,9 +8367,67 @@ async function main() {
   el.opsReset.addEventListener('click', () => giveBack(false));
   el.opsHarder.addEventListener('click', () => giveBack(true));
 
-  function beginWalk() {
+  // --- the pause, on Esc -----------------------------------------------------------
+  //
+  // The world stops and a menu runs down the left edge: carry on, another
+  // game straight away from where you stand, or the title.
+  const pauseItems = [...document.querySelectorAll('#pausemodes .pitem')];
+  /** Another panel of ours has the screen, and the mouse with it. */
+  function panelUp() {
+    return !el.cheats.classList.contains('hidden') || !el.opsPanel.classList.contains('hidden')
+      || !el.opsEnd.classList.contains('hidden') || !el.down.classList.contains('hidden')
+      || !el.crossing.classList.contains('hidden') || !el.completion.classList.contains('hidden')
+      || minimap.big || !!state.targeting || photo.active || !!rigging || !!state.death;
+  }
+  function openPause() {
+    if (state.mode !== 'walk' || state.paused || panelUp()) return false;
+    state.paused = true;
+    const now = modeNow();
+    for (const b of pauseItems) b.classList.toggle('on', b.dataset.mode === now);
+    el.pause.classList.remove('hidden');
+    input.fire = false;
+    if (input.keys) input.keys.clear();
+    if (input.pointerLocked) input.exitLock();
+    return true;
+  }
+  function closePause(lock = true) {
+    if (!state.paused) return;
+    state.paused = false;
+    el.pause.classList.add('hidden');
+    if (lock && !isTouch) input.requestLock();
+  }
+  /** Another game, straight away and from where you stand: no title, no flight in. */
+  function switchGame(mode) {
+    if (state.inMech) leaveMech(false);
+    if (state.inVehicle) leaveVehicle(true);
+    if (rigging) choose(null);
+    soldiers.reset();
+    mechs.reset();
+    vehicles.reset();
+    jets.reset();
+    projectiles.clear();
+    if (crimes.live) { for (const sd of [crimes.live.o, crimes.live.v]) if (sd) { sd.directed = null; sd.crime = null; } crimes.live = null; }
+    blackout.left = 0;
+    for (const j of trafficJunctions()) j.hack = null;
+    pickMode(mode);
+    state.paused = false;
+    el.pause.classList.add('hidden');
+    beginWalk(true);
+    toast(modeLabel(mode));
+  }
+  el.pauseResume.addEventListener('click', () => closePause(true));
+  el.pauseMenu.addEventListener('click', () => { location.reload(); });
+  for (const b of pauseItems) b.addEventListener('click', () => switchGame(b.dataset.mode));
+  // A click beside the menu is a click back into the game.
+  el.pause.addEventListener('click', (ev) => { if (ev.target === el.pause) closePause(true); });
+
+  function beginWalk(direct = false) {
     el.title.classList.add('hidden');
+    state.lunge = null;
     el.hud.classList.remove('hidden');
+    // The hour picked on the title, for every game but the end of the world,
+    // which keeps its own.
+    if (!machines.active) setDayTime(state.startTod);
     startOps();
     landmarks.reset();
     combat.reset();
@@ -8059,7 +8449,7 @@ async function main() {
     effects.clear();
     audio.start();
     el.btnSound.textContent = 'sound on';
-    if (deepLink) {
+    if (deepLink || direct) {
       state.mode = 'walk';
       state.walking = true;
     } else {
@@ -8069,13 +8459,49 @@ async function main() {
     }
     if (!isTouch) input.requestLock();
   }
-  el.play.addEventListener('click', beginWalk);
+  el.play.addEventListener('click', () => beginWalk());
 
   // The difficulty buttons on the title screen.
   // Which game this is. Berlin is the city as it stands; Rise of the Machines
   // is the same city after it has gone, and it is picked here rather than in
   // the cheat menu because it is a mode, not a cheat: the score counts.
+  // The title in three pages: the start with the build under it, the list of
+  // games, and one game with what can be set for it.
+  const titlePages = [...document.querySelectorAll('#title .tpage')];
+  function titlePage(id) {
+    for (const pg of titlePages) pg.classList.toggle('hidden', pg.id !== id);
+    el.title.classList.toggle('sub', id !== 'tpmain');
+    state.titlePage = id;
+  }
+  el.newGame.addEventListener('click', () => titlePage('tpmodes'));
+  for (const b of document.querySelectorAll('#title .tback')) b.addEventListener('click', () => titlePage(b.dataset.to));
+  loadBuildLine().then((line) => { el.buildLine.textContent = line; });
+
+  // The hour a game starts at. Rise of the Machines keeps its own, the hour
+  // it really is unless moved; the rest start at whatever was last picked on
+  // the title, or at the golden hour the city has always started at, or at
+  // the hour a link says.
+  const TOD_KEY = 'spreefall.tod';
+  state.startTod = spawn.tod;
+  if (!deepLink) {
+    try {
+      const kept = parseFloat(localStorage.getItem(TOD_KEY));
+      if (Number.isFinite(kept)) state.startTod = kept;
+    } catch { /* private mode */ }
+  }
+  /** The time of day, everywhere it is shown and kept. */
+  function setDayTime(t) {
+    renderer.timeOfDay = t;
+    if (machines.active) machines.setTime(t);
+    el.tod.value = String(t);
+    el.todLabel.textContent = timeLabel(t);
+    el.cheatTod.value = String(t);
+    el.cheatTodLabel.textContent = timeLabel(t);
+  }
+  el.cheatTod.addEventListener('input', () => setDayTime(parseFloat(el.cheatTod.value)));
+
   const modeButtons = [...document.querySelectorAll('.diff.mode')];
+  const modeLabel = (m) => (modeButtons.find((b) => b.dataset.mode === m) || { textContent: m }).textContent;
   const modeNow = () => (campaign.active ? campaign.mode
     : state.backdoor ? 'backdoor'
     : state.peaceful ? 'walk' : (machines.active ? 'machines' : 'berlin'));
@@ -8094,38 +8520,57 @@ async function main() {
       ? 'Warheads come down every few seconds, the sky is gone, and what walks the streets is steel with one red eye. G flame, V an EMP to stop them, then anything you like.'
       : now === 'walk'
         ? 'Nothing is hunting you. The whole of Berlin to walk about in, and the cheat menu to bring anything out by hand if you change your mind.'
-        : 'A walk through the real city, with the real fight in it.';
-    el.timePick.classList.toggle('hidden', now !== 'machines');
+        : 'The real city to walk and to photograph: twelve landmarks to find, P for the camera and a link to the view, and the real fight in it.';
+    el.modeName.textContent = modeLabel(now);
+    // Nobody is shooting at you in these two, so there is nothing to set.
+    el.diffBlock.classList.toggle('hidden', now === 'walk' || now === 'backdoor');
+    // The hour it starts at, for every game; the city behind the title shows it.
+    el.timePick.classList.remove('hidden');
     applyMachineLook();
+    if (!machines.active && state.mode === 'title') renderer.timeOfDay = state.startTod;
+    showModeTime();
     showOps();
   };
+  /** Which game, from the title or from the pause, kept for the next visit. */
+  function pickMode(mode) {
+    state.backdoor = mode === 'backdoor';
+    state.peaceful = mode === 'walk' || state.backdoor;
+    campaign.setMode(mode);
+    try {
+      localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0');
+      localStorage.setItem('spreefall.backdoor', state.backdoor ? '1' : '0');
+    } catch { /* private mode */ }
+    machines.set(mode === 'machines');
+    // Picking the mode puts the clock back on the hour it actually is,
+    // unless the slider has been moved: a tab left open since the morning
+    // should still start the end of the world at this afternoon.
+    machines.syncClock();
+    showModeTime();
+    showMode();
+  }
   for (const b of modeButtons) {
     b.addEventListener('click', () => {
-      state.backdoor = b.dataset.mode === 'backdoor';
-      state.peaceful = b.dataset.mode === 'walk' || state.backdoor;
-      campaign.setMode(b.dataset.mode);
-      try {
-        localStorage.setItem('spreefall.walk', state.peaceful ? '1' : '0');
-        localStorage.setItem('spreefall.backdoor', state.backdoor ? '1' : '0');
-      } catch { /* private mode */ }
-      machines.set(b.dataset.mode === 'machines');
-      // Picking the mode puts the clock back on the hour it actually is,
-      // unless the slider has been moved: a tab left open since the morning
-      // should still start the end of the world at this afternoon.
-      machines.syncClock();
-      showModeTime();
-      showMode();
+      pickMode(b.dataset.mode);
+      titlePage('tpmode');
     });
   }
   el.modeTime.addEventListener('input', () => {
-    machines.setTime(parseFloat(el.modeTime.value));
-    el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
-    if (machines.active) renderer.timeOfDay = machines.timeOfDay;
+    const t = parseFloat(el.modeTime.value);
+    if (modeNow() === 'machines') {
+      machines.setTime(t);
+      if (machines.active) renderer.timeOfDay = machines.timeOfDay;
+    } else {
+      state.startTod = t;
+      renderer.timeOfDay = t;
+      try { localStorage.setItem(TOD_KEY, String(t)); } catch { /* private mode */ }
+    }
+    el.modeTimeLabel.textContent = timeLabel(t);
   });
   /** The slider and its label, from whatever the mode's time is now. */
   function showModeTime() {
-    el.modeTime.value = String(machines.timeOfDay.toFixed(1));
-    el.modeTimeLabel.textContent = timeLabel(machines.timeOfDay);
+    const t = modeNow() === 'machines' ? machines.timeOfDay : state.startTod;
+    el.modeTime.value = String(t.toFixed(1));
+    el.modeTimeLabel.textContent = timeLabel(t);
   }
   showModeTime();
   showMode();
@@ -8355,6 +8800,9 @@ async function main() {
       if (code === 'Digit3' || code === 'Escape') { choose(null); return; }
     }
     if (code === 'Escape') {
+      // The pause: Esc again carries on, and Esc with nothing else up opens it.
+      if (state.paused) { closePause(false); return; }
+      if (state.mode === 'walk' && !panelUp() && el.help.classList.contains('hidden') && openPause()) return;
       el.help.classList.add('hidden');
       // One step back rather than straight out: if a target is armed, Escape
       // disarms it and leaves the map up.
@@ -8624,6 +9072,7 @@ async function main() {
       combat.update(worldDt);
       projectiles.update(worldDt);
       voidTick(worldDt);
+      glowTick();
       gibs.update(worldDt);
       demolition.update(worldDt);
       fires.update(worldDt, player);
@@ -8772,7 +9221,7 @@ async function main() {
       boost = reflex.leap();
       if (boost > 1) audio.leap();
     }
-    if (!slamStep(selfDt)) player.step(selfDt, wishX, wishZ, jumped, boost);
+    if (!slamStep(selfDt) && !lungeStep(selfDt)) player.step(selfDt, wishX, wishZ, jumped, boost);
     // Held, the suit puts its strength into the jump: a moment after leaving
     // the ground, still rising, it goes most of the way up again.
     if (jumped && boost === 1) state.suitJump = { t: 0, done: false };
@@ -8875,6 +9324,9 @@ async function main() {
     pickups.update(worldDt, { x: player.x, y: player.y, z: player.z });
     projectiles.update(worldDt);
     voidTick(worldDt);
+    glowTick();
+    footprintStep(worldDt);
+    goreBudgetStep(dt);
     gibs.update(worldDt);
     demolition.update(worldDt);
     fires.update(worldDt, player);
@@ -9454,7 +9906,8 @@ async function main() {
     }
   }
 
-  const loop = new Loop({ hz: 60, onFixed: fixed, onRender: render });
+  // Paused, the world does not move; a check's own steps still do.
+  const loop = new Loop({ hz: 60, onFixed: (dt) => { if (!state.paused) fixed(dt); }, onRender: render });
 
   el.loading.classList.add('hidden');
   el.title.classList.remove('hidden');
@@ -9484,6 +9937,8 @@ async function main() {
     trafficSpec: TRAFFIC, spawnTraffic: (type, near) => spawnTraffic(type, near), trafficRoads: () => trafficRoads(),
     get crashes() { return state.crashes; },
     signalSpec: SIGNALS, junctions: () => trafficJunctions(), signalMasts: (r) => signalMasts(r),
+    openPause: () => openPause(), closePause: (lock) => closePause(lock), switchGame: (mode) => switchGame(mode),
+    footSpec: FOOT, ultraComicSpec: ULTRA_COMIC, inBlood: (x, z) => inBlood(x, z),
     citySpec: CITY, pipes: () => cityPipes(), coversNear: (r) => coversNear(r), blackout, blackoutKey: () => blackoutKey(),
     lightAt: (j, phase) => lightAt(j, phase, state.signalClock), get signalClock() { return state.signalClock; },
     crimes, crimeSpec: CRIME, crimeBegin: (kind) => crimeBegin(kind), subdue: (sd) => subdue(sd),

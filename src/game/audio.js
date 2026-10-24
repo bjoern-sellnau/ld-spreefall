@@ -916,6 +916,62 @@ export class Audio {
     n.stop(t + seconds + 0.05);
   }
 
+  /**
+   * A wet piece of somebody landing on the street: a slap of filtered noise
+   * that drops in pitch as it goes, with a small thud under it.
+   * @param {number} size nought to one, how hard it came down
+   */
+  splat(distance = 0, size = 1) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const level = 0.2 * (0.5 + 0.5 * size) * Math.max(0.04, 1 - distance / 70);
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(900 + Math.random() * 700, t);
+    bp.frequency.exponentialRampToValueAtTime(260, t + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(level, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    n.connect(bp).connect(g).connect(this.master);
+    n.start(t, Math.random() * 3);
+    n.stop(t + 0.18);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(55, t + 0.09);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(level * 0.8, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    o.connect(og).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.12);
+  }
+
+  /** A boot coming down in it: a short wet suck, low and closing. */
+  squelch() {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 6;
+    lp.frequency.setValueAtTime(1800, t);
+    lp.frequency.exponentialRampToValueAtTime(280, t + 0.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.13, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    n.connect(lp).connect(g).connect(this.master);
+    n.start(t, Math.random() * 3);
+    n.stop(t + 0.26);
+  }
+
   /** The power going: a clunk and the hum of the street falling away under it. */
   blackout() {
     const ctx = this.ctx;
