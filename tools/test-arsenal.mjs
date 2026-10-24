@@ -95,6 +95,7 @@ async function run() {
       out.push({ id, ok, before, after: s.weapon.carried[id].ammo, name: s.weapon.spec.name,
         swung: melee && s.weapon.shotsFired > swings });
     }
+    s.projectiles.clear();
     return out;
   }).catch(() => null);
   if (arsenal) {
@@ -1020,15 +1021,19 @@ async function run() {
     for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
     const start = { x: s.player.x, z: s.player.z };
     // A wall, looked for again from the same place before every weapon,
-    // because the ones before it may have opened the first one up.
+    // because the ones before it may have opened the first one up. The
+    // nearest one there is, as far as eighty metres: in the live city this
+    // spot is out on Pariser Platz, and the frontages round it are further
+    // off than in the offline one.
     const findWall = () => {
       s.teleport(start.x, start.z);
+      let best = null;
       for (let k = 0; k < 32; k++) {
         const ang = (k / 32) * Math.PI * 2;
-        const h = s.world.raycast(s.player.x, s.player.y + 1.4, s.player.z, Math.cos(ang), 0, Math.sin(ang), 30);
-        if (h && h.kind === 'wall' && h.t > 7) return { h, ang };
+        const h = s.world.raycast(s.player.x, s.player.y + 1.4, s.player.z, Math.cos(ang), 0, Math.sin(ang), 80);
+        if (h && h.kind === 'wall' && h.t > 7 && (!best || h.t < best.h.t)) best = { h, ang };
       }
-      return null;
+      return best;
     };
     if (!findWall()) return { skip: true };
     const total = () => { let n = 0; for (const v of s.demolition.damage.values()) n += v; return n; };
@@ -1057,7 +1062,7 @@ async function run() {
       moves[move] = Math.round(total());
     }
     const blasts = (id) => (s.weapons[id].splash ? 1 : 0);
-    const order = [...s.loadout].sort((a, b) => blasts(a) - blasts(b));
+    const order = [...s.loadout].filter((id) => id !== 'warhead').sort((a, b) => blasts(a) - blasts(b));
     for (const id of order) {
       s.demolition.damage.clear();
       s.projectiles.clear();
@@ -1093,7 +1098,7 @@ async function run() {
   const moves = walls.moves || {};
   if (!walls.skip) Object.assign(walls, walls.out);
   delete walls.out; delete walls.moves;
-  const none = walls.skip ? ['no wall found'] : Object.keys(walls).filter((id) => !(walls[id] > 0) && id !== 'banana' && id !== 'emp');
+  const none = walls.skip ? ['no wall found'] : Object.keys(walls).filter((id) => !(walls[id] > 0) && id !== 'banana' && id !== 'emp' && id !== 'translocator');
   check('every weapon in the loadout wears a frontage down, rounds, swings, flame, arrows and saws as well as blasts',
     !walls.skip && none.length === 0,
     walls.skip ? 'no wall' : `${none.length ? `nothing from ${none.join(', ')}; ` : ''}${Object.entries(walls).map(([k, v]) => `${k}:${v}`).join(' ')}`);
@@ -1196,12 +1201,14 @@ async function run() {
     for (let i = 0; i < 60 && p && p.alive && r2.health === r2.maxHealth; i++) s.fixedForTest(1 / 60);
     out.ripper = { both: r1.health < r1.maxHealth && r2.health < r2.maxHealth };
     fresh(); ready('ripper');
+    // The nearest wall there is, as far as sixty metres: further than the
+    // offline city needs, because in the live one this is the open square.
     let wall = null;
-    for (let k = 0; k < 32 && !wall; k++) {
+    for (let k = 0; k < 32; k++) {
       const ang = (k / 32) * Math.PI * 2;
       const e = eye();
-      const h = s.world.raycast(e.x, e.y - 0.3, e.z, Math.cos(ang), 0, Math.sin(ang), 35);
-      if (h && h.kind === 'wall' && h.t > 5) wall = h;
+      const h = s.world.raycast(e.x, e.y - 0.3, e.z, Math.cos(ang), 0, Math.sin(ang), 60);
+      if (h && h.kind === 'wall' && h.t > 5 && (!wall || h.t < wall.t)) wall = h;
     }
     out.ripper.wall = !!wall;
     if (wall) {
@@ -1443,6 +1450,171 @@ async function run() {
   check('the butt of a rifle staggers him without a round going off; a launcher\'s tube floors him; a knife in hand is the knife; bare hands punch',
     close.bash.hurt && close.bash.dazed && close.bash.noRound && close.bash.held && close.bash.tube
       && close.bash.knife && close.bash.bare, JSON.stringify(close.bash));
+
+  // --- out of the arena shooters, and the meat hook ---------------------------
+  const arena = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    const fresh = () => {
+      s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.combat.reset(); s.vehicles.reset();
+      s.grab.reset();
+      s.burningGround.length = 0; s.fires.reset(); s.fireWalls.reset(); s.poisonClouds.length = 0;
+      s.soldiers.enabled = false;
+      s.state.lunge = null; s.state.hook = null; s.state.holstered = false;
+      s.setAim(false);
+      s.teleport(81, 0); s.look(90, 0); s.camera.update(16 / 9);
+    };
+    const eye = () => ({ x: s.player.x, y: s.player.y + 1.7, z: s.player.z });
+    const aimAt = (x, y, z) => {
+      const e = eye();
+      const to = { x: x - e.x, y: y - e.y, z: z - e.z };
+      const l = Math.hypot(to.x, to.y, to.z);
+      s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+    };
+    const step = (sec) => { for (let i = 0; i < Math.round(sec * 60); i++) s.fixedForTest(1 / 60); };
+    const ready = (id) => { s.weapon.giveAll(); s.weapon.select(id); s.weapon.cooldown = 0; s.weapon.spread = 0; };
+    const dir = () => ({ x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] });
+    const hurt = (t) => t.health < t.maxHealth;
+    const find = (kind) => s.projectiles.active.find((b) => b.alive && b.kind === kind);
+    s.setCheat('godmode', true);
+
+    // The combo rifle: a ball out, and the beam put through it.
+    fresh(); ready('combo');
+    let men = [s.spawnSoldier(-9, 1.5), s.spawnSoldier(-9, -1.5), s.spawnSoldier(-10, 0)];
+    s.alt();
+    step(0.45);
+    const core = find('core');
+    out.combo = { core: !!core, went: 0 };
+    if (core) {
+      aimAt(core.x, core.y, core.z);
+      const c0 = s.state.combos || 0;
+      s.weapon.cooldown = 0; s.shoot();
+      out.combo.went = (s.state.combos || 0) - c0;
+      out.combo.hurt = men.filter(hurt).length;
+      out.combo.dead = men.filter((m) => m.health <= 0).length;
+    }
+
+    // The storm beam: a second on a man twelve metres off, and nothing on one twenty five off.
+    fresh(); ready('storm');
+    let t = s.spawnSoldier(-12, 0);
+    aimAt(t.x, t.y + 1.1, t.z);
+    for (let i = 0; i < 60; i++) s.weapon.update(1 / 60, true, eye(), dir());
+    s.weapon.update(1 / 60, false, eye(), dir());
+    out.storm = { near: t.health <= 0 };
+    fresh(); ready('storm');
+    t = s.spawnSoldier(-25, 0);
+    aimAt(t.x, t.y + 1.1, t.z);
+    for (let i = 0; i < 60; i++) s.weapon.update(1 / 60, true, eye(), dir());
+    s.weapon.update(1 / 60, false, eye(), dir());
+    out.storm.far = t.health === t.maxHealth;
+
+    // The sludge gun: into the street, where it sticks and waits, and goes
+    // off on a man who walks up to it, leaving poison behind.
+    fresh(); ready('sludge');
+    let gx = s.player.x - 6, gz = s.player.z;
+    aimAt(gx, s.world.groundHeight(gx, gz), gz);
+    s.shoot();
+    for (let i = 0; i < 90 && !(find('goo') && find('goo').stuck); i++) s.fixedForTest(1 / 60);
+    const goo = find('goo');
+    out.sludge = { stuck: !!(goo && goo.stuck) };
+    if (goo) {
+      step(0.5);
+      out.sludge.waits = goo.alive;
+      t = s.spawnSoldier(goo.x - s.player.x, goo.z - s.player.z + 1.0);
+      step(0.3);
+      out.sludge.went = !goo.alive;
+      out.sludge.hurt = hurt(t);
+      out.sludge.poison = s.poisonClouds.length > 0;
+    }
+    // And the big glob, which breaks into five where it lands.
+    fresh(); ready('sludge');
+    aimAt(gx, s.world.groundHeight(gx, gz), gz);
+    const g0 = s.state.globBursts || 0;
+    s.alt();
+    for (let i = 0; i < 120 && (s.state.globBursts || 0) === g0; i++) s.fixedForTest(1 / 60);
+    s.fixedForTest(1 / 60);
+    out.sludge.glob = (s.state.globBursts || 0) - g0;
+    out.sludge.pieces = s.projectiles.active.filter((b) => b.alive && b.kind === 'goo').length;
+
+    // The translocator: the disc into the street, a man standing on it, and you there.
+    fresh(); ready('translocator');
+    gx = s.player.x - 10;
+    aimAt(gx, s.world.groundHeight(gx, gz) + 2, gz);
+    s.shoot();
+    step(1.6);
+    const disc = find('beacon');
+    out.trans = { disc: !!disc };
+    if (disc) {
+      const dx = disc.x, dz = disc.z;
+      t = s.spawnSoldier(dx - s.player.x + 0.4, dz - s.player.z);
+      const f0 = s.state.telefrags || 0;
+      out.trans.went = s.alt();
+      out.trans.off = +Math.hypot(s.player.x - dx, s.player.z - dz).toFixed(2);
+      out.trans.frag = (s.state.telefrags || 0) - f0 === 1 && t.health <= 0;
+      out.trans.gone = !find('beacon');
+    }
+    // A second disc throws away the first.
+    fresh(); ready('translocator');
+    s.shoot(); step(0.2); s.weapon.cooldown = 0; s.weapon.ammo = 1; s.shoot(); step(0.2);
+    out.trans.one = s.projectiles.active.filter((b) => b.alive && b.kind === 'beacon').length;
+
+    // The warhead, with the city told to stand: straight, it takes everybody
+    // round where it lands; held, it turns to where you look.
+    s.demolition.enabled = false;
+    fresh(); ready('warhead');
+    men = [s.spawnSoldier(-32, 0), s.spawnSoldier(-34, 6), s.spawnSoldier(-30, -7)];
+    aimAt(men[0].x, men[0].y + 1, men[0].z);
+    s.shoot();
+    for (let i = 0; i < 240 && find('warhead'); i++) s.fixedForTest(1 / 60);
+    out.warhead = { went: !find('warhead'), dead: men.filter((m) => m.health <= 0).length };
+    fresh(); ready('warhead');
+    s.look(90, 2); s.camera.update(16 / 9);
+    s.shoot();
+    step(0.2);
+    let w = find('warhead');
+    const head0 = w ? Math.atan2(-w.vx, -w.vz) * 180 / Math.PI : null;
+    s.look(60, 2); s.camera.update(16 / 9);
+    s.setAim(true);
+    step(1.2);
+    s.setAim(false);
+    w = find('warhead');
+    out.warhead.turned = w && head0 !== null ? +(Math.atan2(-w.vx, -w.vz) * 180 / Math.PI - head0).toFixed(1) : null;
+    s.projectiles.clear();
+    s.demolition.enabled = true;
+    // And nothing of it left for the pictures after: the smoke, the marks on
+    // the road and the trees it set alight.
+    s.effects.clear(); s.renderer.clearScars(); s.fires.reset(); s.state.flash = 0;
+
+    // The meat hook: a man fifteen metres off, and you pulled to him.
+    fresh(); ready('doublebarrel');
+    t = s.spawnSoldier(-15, 0);
+    aimAt(t.x, t.y + 1.1, t.z);
+    const h0 = s.state.hooked || 0;
+    out.hook = { hooked: s.alt() && (s.state.hooked || 0) - h0 === 1 };
+    step(0.9);
+    out.hook.near = +Math.hypot(t.x - s.player.x, t.z - s.player.z).toFixed(2);
+    fresh(); ready('doublebarrel');
+    out.hook.nothing = !s.alt();
+    s.setCheat('godmode', false);
+    fresh();
+    return out;
+  });
+  check('the combo rifle: its beam through its own ball sets off a blast that takes the men round it',
+    arena.combo.core && arena.combo.went === 1 && arena.combo.hurt >= 2, JSON.stringify(arena.combo));
+  check('the storm beam: a second on a man twelve metres off kills him, one twenty five off is out of its reach',
+    arena.storm.near && arena.storm.far, JSON.stringify(arena.storm));
+  check('the sludge gun: it sticks and waits, goes off on a man who walks up, and leaves poison; the big glob breaks into five',
+    arena.sludge.stuck && arena.sludge.waits && arena.sludge.went && arena.sludge.hurt && arena.sludge.poison
+      && arena.sludge.glob === 1 && arena.sludge.pieces >= 5, JSON.stringify(arena.sludge));
+  check('the translocator puts you where the disc is, in pieces whoever was on it, and keeps one disc at a time',
+    arena.trans.disc && arena.trans.went && arena.trans.off < 0.6 && arena.trans.frag && arena.trans.gone
+      && arena.trans.one === 1, JSON.stringify(arena.trans));
+  check('the warhead takes everybody round where it lands, and held, turns to where you look',
+    arena.warhead.went && arena.warhead.dead === 3 && arena.warhead.turned !== null && arena.warhead.turned < -15,
+    JSON.stringify(arena.warhead));
+  check('the meat hook pulls you to the man in the sight, and takes nobody when there is nobody',
+    arena.hook.hooked && arena.hook.near < 3.2 && arena.hook.nothing, JSON.stringify(arena.hook));
   await page.evaluate(() => {
     const s = window.spreefall;
     s.projectiles.clear(); s.weapon.select('minigun');
@@ -1503,6 +1675,22 @@ async function run() {
     const s = window.spreefall;
     s.state.paused = false; s.state.kickT = 0; s.state.swingT = 0;
   });
+
+  // The five out of the arena shooters in the hand, the storm beam on.
+  for (const [n, id] of [[14, 'combo'], [15, 'storm'], [16, 'sludge'], [17, 'translocator'], [18, 'warhead']]) {
+    await page.evaluate((w) => {
+      const s = window.spreefall;
+      s.state.paused = false;
+      s.weapon.giveAll(); s.weapon.select(w);
+      for (let k = 0; k < 40; k++) s.fixedForTest(1 / 60);
+      // The beam is drawn fresh every step and gone the next, so it is
+      // pictured while the trigger is held.
+      if (w === 'storm') s.input.fire = true;
+    }, id);
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: path.join(SHOTS, `arsenal-${n}-${id}.png`) });
+    await page.evaluate(() => { window.spreefall.input.fire = false; });
+  }
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

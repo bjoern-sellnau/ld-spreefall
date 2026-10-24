@@ -539,6 +539,77 @@ export const WEAPONS = {
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.004, recoilSide: 0.003, recoilRetain: 0, aimFov: 66, sound: 'throw',
   },
+  // Out of the arena shooters, each the idea of one weapon there under a
+  // name and numbers of our own. alt says what the second trigger does with
+  // it, in place of aiming down a sight.
+  combo: {
+    // Unreal Tournament's shock rifle: a beam there the instant you pull,
+    // and on the second trigger a slow ball of energy. Put the beam through
+    // the ball and the two go off together, far harder than either.
+    name: 'Combo rifle', short: 'COMBO', kind: KIND.HITSCAN, slot: 8,
+    magazine: 20, reserve: 100, reloadTime: 1.6, fireInterval: 0.7, auto: false,
+    damage: 45, range: 320,
+    spreadHip: 0.0015, spreadAim: 0.0004, spreadPerShot: 0, spreadMax: 0.0015, spreadRecover: 1,
+    recoilKick: 0.014, recoilSide: 0.003, recoilRetain: 0.05, aimFov: 58, sound: 'railgun',
+    alt: 'core',
+    // The ball: how fast it goes, what it costs, how soon another, and what
+    // it does on what it touches.
+    core: { speed: 12, cost: 1, interval: 0.6, splash: { radius: 2.4, damage: 55, force: 6, punch: false } },
+    // The two together: how near the beam has to pass, and what it does.
+    combo: { reach: 1.2, splash: { radius: 7, damage: 260, force: 26 } },
+  },
+  storm: {
+    // Quake's lightning gun, the Thunderbolt in the first one: a steady beam
+    // of electricity for as long as you hold the trigger, twenty metres and
+    // no further, thirty every tenth of a second on whatever it is on.
+    name: 'Storm beam', short: 'STORM', kind: KIND.STREAM, slot: 8,
+    magazine: 150, reserve: 300, reloadTime: 1.6, fireInterval: 0.1, auto: true,
+    beam: { reach: 20, damagePerSecond: 300 },
+    stream: { fuelPerSecond: 10 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.002, recoilSide: 0.002, recoilRetain: 0, aimFov: 60, sound: 'railgun',
+  },
+  sludge: {
+    // Unreal Tournament's bio rifle: green sludge lobbed in an arc. It sticks
+    // to what it lands on and goes off a few seconds later, at once on a man,
+    // or on whoever walks up to it, and leaves a breath of poison behind.
+    // The second trigger lobs a big glob that breaks into five where it lands.
+    name: 'Sludge gun', short: 'SLUDGE', kind: KIND.LAUNCH, slot: 7,
+    magazine: 25, reserve: 100, reloadTime: 1.8, fireInterval: 0.3, auto: true,
+    projectile: 'goo', muzzleSpeed: 24, range: 80,
+    splash: { radius: 2.4, damage: 50, force: 4, punch: false, goo: true },
+    spreadHip: 0.01, spreadAim: 0.006, spreadPerShot: 0, spreadMax: 0.01, spreadRecover: 0.3,
+    recoilKick: 0.006, recoilSide: 0.003, recoilRetain: 0.02, aimFov: 60, sound: 'throw',
+    alt: 'glob',
+    goo: {
+      near: 1.5,
+      poison: { radius: 2.2, seconds: 4, damagePerSecond: 22 },
+      glob: { cost: 5, speed: 18, pieces: 5, spread: 6, interval: 0.9 },
+    },
+  },
+  translocator: {
+    // Unreal Tournament's: throw the disc, and the second trigger puts you
+    // where it is. Anybody standing on it when you arrive is in pieces.
+    name: 'Translocator', short: 'TRANS', kind: KIND.THROW, slot: 4,
+    magazine: 1, reserve: 999, reloadTime: 0.2, fireInterval: 0.5, auto: false,
+    projectile: 'beacon', muzzleSpeed: 20, range: 60,
+    spreadHip: 0.002, spreadAim: 0.001, spreadPerShot: 0, spreadMax: 0.002, spreadRecover: 1,
+    recoilKick: 0.002, recoilSide: 0.001, recoilRetain: 0, aimFov: 60, sound: 'throw',
+    alt: 'teleport', telefrag: 1.3,
+  },
+  warhead: {
+    // Unreal Tournament's Redeemer and the TAC gun of Crysis: a small
+    // nuclear round, slow enough to watch go, that takes a block with it,
+    // and you with it if you are too near. Hold the second trigger while it
+    // flies and it goes where you look.
+    name: 'Warhead', short: 'WARHEAD', kind: KIND.LAUNCH, slot: 0,
+    magazine: 1, reserve: 2, reloadTime: 3.0, fireInterval: 1.0, auto: false,
+    projectile: 'warhead', muzzleSpeed: 26, range: 450,
+    splash: { radius: 18, damage: 900, force: 40, nuke: true },
+    spreadHip: 0.002, spreadAim: 0.001, spreadPerShot: 0, spreadMax: 0.002, spreadRecover: 1,
+    recoilKick: 0.05, recoilSide: 0.006, recoilRetain: 0.1, aimFov: 60, sound: 'rpg',
+    alt: 'guide', guide: { turn: 1.8, reach: 600 },
+  },
   flare: {
     // One flare: whatever it goes into is alight, and the ground round it
     // burns for a while after.
@@ -614,6 +685,17 @@ WEAPONS.bat.hold = { x: 0.220, y: -0.300, z: -0.350, pitch: 1.100, yaw: -0.600, 
 WEAPONS.bat.aimHold = { x: 0.200, y: -0.290, z: -0.350, pitch: 1.050, yaw: -0.550, roll: 0.00 };
 WEAPONS.fists.hold = { x: 0.170, y: -0.190, z: -0.430, pitch: 0.500, yaw: 0.250, roll: -0.30 };
 WEAPONS.fists.aimHold = { x: 0.140, y: -0.170, z: -0.410, pitch: 0.450, yaw: 0.200, roll: -0.25 };
+WEAPONS.combo.hold = { x: 0.215, y: -0.145, z: -0.440, pitch: -0.012, yaw: 0.125, roll: 0.04 };
+WEAPONS.storm.hold = { x: 0.210, y: -0.150, z: -0.400, pitch: -0.010, yaw: 0.125, roll: 0.04 };
+WEAPONS.sludge.hold = { x: 0.215, y: -0.150, z: -0.400, pitch: -0.010, yaw: 0.125, roll: 0.05 };
+WEAPONS.translocator.hold = { x: 0.190, y: -0.130, z: -0.320, pitch: 0.000, yaw: 0.140, roll: 0.05 };
+WEAPONS.warhead.hold = { x: 0.215, y: -0.140, z: -0.460, pitch: -0.012, yaw: 0.112, roll: 0.04 };
+// DOOM Eternal's super shotgun has a meat hook under its barrels: fired into
+// a demon, it pulls you to him for the blast at arm's length, and holds a
+// small one where he is. The double barrel has one now, on the second
+// trigger: anybody in front of you within reach, pulled to stop metres off.
+WEAPONS.doublebarrel.alt = 'hook';
+WEAPONS.doublebarrel.hook = { reach: 28, cone: 0.96, speed: 32, stop: 2.6, seconds: 1.4 };
 
 /**
  * The heads a bow can carry. Fire and poison do their own harm where they
@@ -651,13 +733,13 @@ export const BUCKETS = {
   1: { name: 'Rifles', ids: ['m16', 'marksman', 'minigun', 'bow', 'hailstorm'] },
   2: { name: 'Shotguns', ids: ['shotgun', 'doublebarrel', 'autoshotgun', 'flak'] },
   3: { name: 'Launchers', ids: ['rpg', 'swarm', 'launcher', 'arbalest', 'ripper'] },
-  4: { name: 'Thrown', ids: ['grenade', 'incendiary', 'banana', 'c4', 'cling'] },
+  4: { name: 'Thrown', ids: ['grenade', 'incendiary', 'banana', 'c4', 'cling', 'translocator'] },
   5: { name: 'Pistols', ids: ['sdpistol', 'magnum'] },
   6: { name: 'Close', ids: ['chainsaw', 'flail', 'shieldsaw', 'blade', 'hammer', 'knife', 'baton', 'bat', 'fists'] },
-  7: { name: 'Fire', ids: ['flamer', 'flare'] },
-  8: { name: 'Energy', ids: ['plasma', 'railgun', 'splinter', 'volt'] },
+  7: { name: 'Fire', ids: ['flamer', 'flare', 'sludge'] },
+  8: { name: 'Energy', ids: ['plasma', 'railgun', 'splinter', 'volt', 'combo', 'storm'] },
   9: { name: 'Anti armour', ids: ['mechkiller', 'emp'] },
-  0: { name: 'Void', ids: ['void'] },
+  0: { name: 'Void', ids: ['void', 'warhead'] },
 };
 export const BUCKET_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 

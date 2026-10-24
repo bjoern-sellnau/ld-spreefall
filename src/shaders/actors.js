@@ -492,6 +492,13 @@ void main() {
     else if (k == 118) { albedo = vec3(0.01); rough = 0.3; metal = 0.0; }
     else if (k == 119) albedo = vec3(0.18, 0.18, 0.19);
     else { albedo = vec3(0.5, 0.04, 0.03); emissive = vec3(0.6, 0.03, 0.02); rough = 0.3; metal = 0.1; }
+  } else if (vPart > 120.5 && vPart < 121.5) {
+    // The combo rifle's ball: violet, and never still.
+    albedo = vec3(0.02);
+    float pulse = 0.75 + 0.25 * sin(uCamPos.w * 14.0 + vWorld.y * 5.0);
+    emissive = vec3(1.1, 0.35, 2.4) * pulse;
+    rough = 0.1;
+    metal = 0.0;
   } else if (vPart > 106.5 && vPart < 109.5) {
     // The cover: cast iron with a raised grid you can see, red hot about to
     // go, and a hole once it has.
@@ -1389,6 +1396,17 @@ void main() {
     albedo = vec3(0.17, 0.10, 0.055);
     rough = 0.65;
     metal = 0.0;
+  } else if (vPart > 44.5 && vPart < 45.5) {
+    // The combo rifle's violet, brighter for a moment after each shot.
+    albedo = vec3(0.02);
+    emissive = vec3(0.75, 0.3, 1.6) * (1.0 + uMuzzle * 3.0) * (0.85 + 0.15 * sin(uCamPos.w * 6.0));
+    rough = 0.2;
+    metal = 0.0;
+  } else if (vPart > 45.5 && vPart < 46.5) {
+    // A pale shell, enamel over metal.
+    albedo = vec3(0.34, 0.36, 0.40);
+    rough = 0.3;
+    metal = 0.35;
   } else {
     // The muzzle flash. It is geometry that exists all the time, so it takes
     // itself out of the picture between shots rather than drawing as a black

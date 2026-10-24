@@ -662,7 +662,9 @@ async function main() {
     const m = muzzlePoint(shot.from);
     if (shot.end) {
       if (spec.arc) zap(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z);
+      else if (spec.combo) effects.lance(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, 0.55, 0.4, 1.6);
       else effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
+      if (spec.combo && first && shot.from) comboCheck(shot.from, shot.end, spec);
       // A round into a man sprays rather than sparks, and only when the cheat
       // menu says so. Everything else in the city still throws grit.
       if (shot.surface === 'soldier' && cheats.bleeding) {
@@ -725,6 +727,31 @@ async function main() {
       if (spec.arc && (shot.surface === 'soldier' || shot.surface === 'drone')) voltArc(shot.target, shot.surface, spec);
     }
   };
+
+  /**
+   * The combo: the beam went through one of the rifle's balls on its way,
+   * near enough, and the two go off together where the ball was.
+   */
+  function comboCheck(a, e, spec) {
+    const C = spec.combo;
+    const dx = e.x - a.x, dy = e.y - a.y, dz = e.z - a.z;
+    const l2 = dx * dx + dy * dy + dz * dz || 1;
+    for (const b of [...projectiles.active]) {
+      if (!b.alive || b.kind !== 'core') continue;
+      const t = Math.max(0, Math.min(1, ((b.x - a.x) * dx + (b.y - a.y) * dy + (b.z - a.z) * dz) / l2));
+      const px = a.x + dx * t - b.x, py = a.y + dy * t - b.y, pz = a.z + dz * t - b.z;
+      if (Math.hypot(px, py, pz) > C.reach) continue;
+      projectiles._remove(b);
+      effects.flash(b.x, b.y, b.z, C.splash.radius * 1.3, 0.7, 0.35, 1.0, 0.3);
+      for (let i = 0; i < 28; i++) {
+        effects.spark(b.x + (Math.random() - 0.5) * 3, b.y + (Math.random() - 0.5) * 3,
+          b.z + (Math.random() - 0.5) * 3, 0.75, 0.4, 1.6);
+      }
+      explode(b.x, b.y, b.z, weapon._scaledSplash(C.splash), { weapon: 'combo' });
+      feed('<b>combo</b>');
+      state.combos = (state.combos || 0) + 1;
+    }
+  }
 
   /** Electricity from one point to another: a line broken into a few jags. */
   function zap(ax, ay, az, bx, by, bz) {
@@ -879,9 +906,18 @@ async function main() {
     } else {
       // A hundred of these a second is one roar, not a hundred bangs: the
       // quiet ones are heard one time in twelve.
-      if (!splash.quiet || Math.random() < 0.08) audio.explosion();
-      effects.explode(x, y, z);
-      effects.blast(x, y, z, splash.radius);
+      if (splash.goo) {
+        // Sludge: a wet burst and green, not a fireball.
+        audio.splat(dist, 1);
+        for (let i = 0; i < 14; i++) {
+          effects.spark(x + (Math.random() - 0.5) * splash.radius, y + Math.random() * 1.2,
+            z + (Math.random() - 0.5) * splash.radius, 0.35, 1.0, 0.25);
+        }
+      } else {
+        if (!splash.quiet || Math.random() < 0.08) audio.explosion();
+        effects.explode(x, y, z);
+        effects.blast(x, y, z, splash.radius);
+      }
       // Mark whatever it went off against, and open it. The soot reaches
       // further than the damage does, which is how a blast looks on a wall;
       // the hole is a fraction of the blast, the same way a crater is, and
@@ -1013,6 +1049,15 @@ async function main() {
           toast('systems jammed');
         }
       }
+    }
+
+    // Sludge leaves a breath of poison where it went off, and the big glob
+    // breaks into five that fly off and stick where they come down.
+    if (body && (body.kind === 'goo' || body.kind === 'glob')) {
+      const P = WEAPONS.sludge.goo.poison;
+      const g = world.groundHeight(x, z);
+      poisonClouds.push({ x, y: g, z, radius: P.radius, left: P.seconds, damagePerSecond: P.damagePerSecond, puff: 0 });
+      if (body.kind === 'glob') globBurst(x, y, z);
     }
 
     // The void cannon's ball, landing: a green flash the size of the blast,
@@ -2662,6 +2707,7 @@ async function main() {
   }
 
   weapon.onStream = (eye, dir, dt, spec) => {
+    if (spec.beam) { stormBeam(eye, dir, dt, spec); return; }
     const reach = spec.stream.reach;
     // Where the stream stops: the first wall in front of you, so you cannot
     // burn somebody through the Brandenburg Gate.
@@ -2692,6 +2738,50 @@ async function main() {
       2.2, 1.0, 0.55, 0.2, 0.05);
   };
   weapon.onStreamEnd = () => audio.flameLoop(false);
+
+  /**
+   * The storm beam, a step at a time: as far as its reach or the first wall,
+   * into the first body on the way, and drawn fresh every step so it never
+   * holds still.
+   */
+  function stormBeam(eye, dir, dt, spec) {
+    const B = spec.beam;
+    const wall = world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, B.reach);
+    let far = wall ? wall.t : B.reach;
+    const a = projectiles.hitActors(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, far);
+    const amount = B.damagePerSecond * dt * (weapon.damageScale || 1);
+    if (a) {
+      far = a.t;
+      const t = a.target;
+      let killed = false;
+      if (a.kind === 'soldier') {
+        killed = soldiers.damage(t, amount, { x: dir.x * 0.2, y: 0, z: dir.z * 0.2 });
+        // Held where he stands while it is on him, sparking.
+        t.stunLeft = Math.max(t.stunLeft || 0, 0.15);
+      } else if (a.kind === 'drone') killed = drones.damage(t, amount);
+      else if (a.kind === 'vehicle') vehicles.damage(t, amount);
+      state.beamOn = (state.beamOn || 0) + dt;
+      if (killed) {
+        creditTarget(t, false, a.kind);
+        showHitmarker('kill');
+      }
+    } else if (wall && wall.kind === 'wall') {
+      hitWall(wall.x, wall.y, wall.z, WALL.stream * dt);
+    }
+    // From in front of the coils, or the gun hides the near end of it, and
+    // the far end, which is what you see of a beam pointing away from you,
+    // alight where it lands.
+    const m = muzzlePoint(eye);
+    const ex = eye.x + dir.x * far, ey = eye.y + dir.y * far, ez = eye.z + dir.z * far;
+    const sx = m.x + dir.x * 0.3, sy = m.y + dir.y * 0.3, sz = m.z + dir.z * 0.3;
+    zap(sx, sy, sz, ex, ey, ez);
+    effects.lance(sx, sy, sz, ex, ey, ez, 1.0, 1.3, 2.8);
+    effects.flash(ex, ey, ez, 1.4, 0.55, 0.75, 1.6, 0.06);
+    for (let i = 0; i < 2; i++) effects.spark(ex, ey, ez, 0.6, 0.8, 1.6);
+    state.beamTick = (state.beamTick || 0) - dt;
+    if (state.beamTick <= 0) { state.beamTick = 0.1; audio.laser(0); }
+    state.muzzle = Math.max(state.muzzle, 0.4);
+  }
 
   weapon.onWall = (eye, dir, spec) => {
     const wall = fireWalls.throw_({ x: player.x, y: player.y, z: player.z },
@@ -8470,6 +8560,198 @@ async function main() {
     return { down, thrown };
   }
 
+  // --- the second triggers of the arena weapons ----------------------------------
+
+  /**
+   * The second trigger of a weapon that has one of its own: the combo
+   * rifle's ball, the sludge gun's big glob, the translocator's jump, the
+   * double barrel's hook. The warhead's is held rather than pressed, and is
+   * read where the warhead flies.
+   * @returns {boolean} whether it did anything
+   */
+  function altAction(spec, eye, dir) {
+    if (weapon.cooldown > 0 || weapon.reloadLeft > 0) return false;
+    const pay = (n) => {
+      if (weapon.infiniteAmmo) return true;
+      if (weapon.ammo < n) { audio.dryFire(); weapon.cooldown = 0.3; return false; }
+      weapon.ammo -= n;
+      return true;
+    };
+    const from = { x: eye.x + dir.x * 0.6, y: eye.y + dir.y * 0.6 - 0.12, z: eye.z + dir.z * 0.6 };
+    if (spec.alt === 'core') {
+      const C = spec.core;
+      if (!pay(C.cost)) return false;
+      projectiles.launch('core', { ...from, vx: dir.x * C.speed, vy: dir.y * C.speed, vz: dir.z * C.speed,
+        splash: weapon._scaledSplash(C.splash), weapon: weapon.id });
+      weapon.cooldown = C.interval;
+      weapon.kick = 0.6;
+      audio.whoomp(0);
+      state.cores = (state.cores || 0) + 1;
+      return true;
+    }
+    if (spec.alt === 'glob') {
+      const G = spec.goo.glob;
+      if (!pay(G.cost)) return false;
+      projectiles.launch('glob', { ...from, vx: dir.x * G.speed, vy: dir.y * G.speed + 3, vz: dir.z * G.speed,
+        splash: weapon._scaledSplash(spec.splash), weapon: weapon.id });
+      weapon.cooldown = G.interval;
+      weapon.kick = 0.8;
+      audio.squelch();
+      state.globs = (state.globs || 0) + 1;
+      return true;
+    }
+    if (spec.alt === 'teleport') return translocate(spec);
+    if (spec.alt === 'hook') return meatHook(spec.hook);
+    return false;
+  }
+
+  /**
+   * The big glob, landed: five pieces off in a ring, each a sludge of its own.
+   * They are thrown on the next step rather than this one: the glob has just
+   * given its place in the pool back, the first piece would be given it, and
+   * the step that is still finishing with the glob would put that piece out.
+   */
+  const pendingGoo = [];
+  function globBurst(x, y, z) {
+    const S = WEAPONS.sludge, G = S.goo.glob;
+    for (let i = 0; i < G.pieces; i++) {
+      const a = (i / G.pieces) * Math.PI * 2 + Math.random() * 0.5;
+      pendingGoo.push({
+        x: x + Math.cos(a) * 0.3, y: y + 0.5, z: z + Math.sin(a) * 0.3,
+        vx: Math.cos(a) * G.spread, vy: 4, vz: Math.sin(a) * G.spread,
+        splash: weapon._scaledSplash(S.splash), weapon: 'sludge',
+      });
+    }
+    state.globBursts = (state.globBursts || 0) + 1;
+  }
+
+  /**
+   * The translocator: you, where the disc is, and anybody who was standing
+   * on it is in pieces. One disc at a time; the last one thrown is the one.
+   */
+  function translocate(spec) {
+    let disc = null;
+    for (const b of projectiles.active) if (b.alive && b.kind === 'beacon' && (!disc || b.age < disc.age)) disc = b;
+    if (!disc) { toast('throw the disc first'); audio.dryFire(); return false; }
+    const g = world.groundHeight(disc.x, disc.z);
+    for (const s of [...soldiers.active]) {
+      if (!s.alive || s.health <= 0 || s.state === 5) continue;
+      if (Math.hypot(s.x - disc.x, s.z - disc.z) > spec.telefrag || Math.abs(s.y - g) > 2.2) continue;
+      soldiers.damage(s, 1e6, { x: 0, y: 1, z: 0 });
+      gibs.burst(s.x, s.y + 1.1, s.z, { x: 0, y: 1, z: 0 }, 1.2, 8);
+      effects.blood(s.x, s.y + 1.2, s.z, 0, 1, 0, cheats.goreScale * 2);
+      creditTarget(s, false, 'soldier');
+      feed('<b>telefrag</b>');
+      state.telefrags = (state.telefrags || 0) + 1;
+    }
+    effects.flash(player.x, player.y + 1, player.z, 2.4, 0.3, 0.8, 1.6, 0.2);
+    // On the roof, if that is where it lies, rather than in the street under it.
+    player.teleport(disc.x, disc.z, Math.max(g, disc.y - 0.1));
+    state.prev = { x: player.x, y: player.y, z: player.z };
+    state.curr = { x: player.x, y: player.y, z: player.z };
+    projectiles._remove(disc);
+    effects.flash(player.x, player.y + 1, player.z, 2.4, 0.3, 0.8, 1.6, 0.2);
+    audio.whoomp(0);
+    state.translocations = (state.translocations || 0) + 1;
+    return true;
+  }
+
+  /**
+   * The meat hook: into the man nearest the middle of the sight within
+   * reach, and you are pulled to him. A small one is held where he is while
+   * it pulls.
+   */
+  function meatHook(H) {
+    const fx = camera.forward[0], fz = camera.forward[2], fl = Math.hypot(fx, fz) || 1;
+    const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    let best = null, bestDot = H.cone;
+    for (const s of soldiers.active) {
+      if (!s.alive || s.health <= 0 || s.state === 5 || s.rise > 0 || s.held) continue;
+      const dx = s.x - player.x, dz = s.z - player.z, d = Math.hypot(dx, dz);
+      if (d > H.reach || d < H.stop) continue;
+      const dot = (dx * fx + dz * fz) / (fl * (d || 1));
+      if (dot < bestDot) continue;
+      if (!world.lineOfSight(eye.x, eye.y, eye.z, s.x, s.y + 1.1, s.z)) continue;
+      best = s; bestDot = dot;
+    }
+    if (!best) { toast('nothing to hook'); return false; }
+    state.hook = { t: best, H, age: 0 };
+    weapon.cooldown = Math.max(weapon.cooldown, 0.3);
+    audio.whoomp(0);
+    feed('<b>hooked</b>');
+    state.hooked = (state.hooked || 0) + 1;
+    return true;
+  }
+
+  /** The pull, a step at a time. A wall in the way, or too long, and it lets go. */
+  function hookStep(dt) {
+    const K = state.hook;
+    if (!K) return false;
+    const t = K.t;
+    K.age += dt;
+    if (!t.alive || t.health <= 0 || K.age > K.H.seconds) { state.hook = null; return false; }
+    const dx = t.x - player.x, dz = t.z - player.z, d = Math.hypot(dx, dz) || 1;
+    if (d <= K.H.stop) { state.hook = null; return false; }
+    const step = Math.min(d - K.H.stop, K.H.speed * dt);
+    if (world.raycast(player.x, player.y + 1.0, player.z, dx / d, 0, dz / d, step + 0.35)) {
+      state.hook = null;
+      return false;
+    }
+    player.x += dx / d * step;
+    player.z += dz / d * step;
+    player.y = Math.max(player.y, world.groundHeight(player.x, player.z));
+    player.vy = 0;
+    if ((t.scale || 1) <= 1.3) t.stunLeft = Math.max(t.stunLeft || 0, 0.2);
+    const m = muzzlePoint({ x: player.x, y: player.y + PLAYER.eye, z: player.z });
+    effects.lance(m.x, m.y, m.z, t.x, t.y + 1.2, t.z, 0.5, 0.5, 0.55);
+    return true;
+  }
+
+  /**
+   * Every step: the warhead goes where you look while the second trigger is
+   * held, sludge lying about goes off on whoever walks up to it, and only the
+   * last disc thrown is kept.
+   */
+  function arenaTick(dt) {
+    while (pendingGoo.length) projectiles.launch('goo', pendingGoo.shift());
+    const guiding = weapon.id === 'warhead' && input.secondary && !photo.active;
+    const G = WEAPONS.warhead.guide;
+    const near = WEAPONS.sludge.goo.near;
+    let disc = null;
+    for (const b of [...projectiles.active]) {
+      if (!b.alive) continue;
+      if (b.kind === 'warhead' && guiding) {
+        const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+        const f = camera.forward;
+        const hit = world.raycast(eye.x, eye.y, eye.z, f[0], f[1], f[2], G.reach);
+        const r = hit ? hit.t : G.reach;
+        const tx = eye.x + f[0] * r - b.x, ty = eye.y + f[1] * r - b.y, tz = eye.z + f[2] * r - b.z;
+        const tl = Math.hypot(tx, ty, tz) || 1;
+        const speed = Math.hypot(b.vx, b.vy, b.vz) || 1;
+        const k = Math.min(1, G.turn * dt);
+        b.vx += (tx / tl * speed - b.vx) * k;
+        b.vy += (ty / tl * speed - b.vy) * k;
+        b.vz += (tz / tl * speed - b.vz) * k;
+        const now = Math.hypot(b.vx, b.vy, b.vz) || 1;
+        b.vx *= speed / now; b.vy *= speed / now; b.vz *= speed / now;
+        state.guided = (state.guided || 0) + dt;
+      } else if (b.kind === 'goo' && b.stuck && !b.host && b.fuse > 0.05) {
+        for (const s of soldiers.active) {
+          if (!s.alive || s.health <= 0 || s.state === 5) continue;
+          if (Math.hypot(s.x - b.x, s.z - b.z) < near && Math.abs(s.y + 0.9 - b.y) < 1.6) { b.fuse = 0.05; break; }
+        }
+        if (Math.random() < 0.3) effects.spark(b.x, b.y + 0.05, b.z, 0.25, 0.9, 0.2);
+      } else if (b.kind === 'beacon') {
+        if (disc && disc.age <= b.age) projectiles._remove(b);
+        else { if (disc) projectiles._remove(disc); disc = b; }
+        if (Math.random() < 0.4) effects.spark(b.x, b.y + 0.15, b.z, 0.3, 0.85, 1.6);
+      } else if (b.kind === 'core' && Math.random() < 0.8) {
+        effects.spark(b.x + (Math.random() - 0.5) * 0.6, b.y + (Math.random() - 0.5) * 0.6,
+          b.z + (Math.random() - 0.5) * 0.6, 0.75, 0.4, 1.6);
+      }
+    }
+  }
+
   // --- hands, feet and the butt of a rifle ------------------------------------
   // The knife, the baton, the bat and bare fists take the nearest in front of
   // you and in reach, passers by as well: a thief can be stopped with the
@@ -8710,6 +8992,11 @@ async function main() {
   // A bolt or a cling charge has taken hold. The bolt does some harm going
   // in; either way you hear it catch.
   projectiles.onCling = (b, hit) => {
+    if (b.kind === 'goo') {
+      if (hit.kind === 'actor') b.fuse = Math.min(b.fuse, 0.02);
+      audio.squelch();
+      return;
+    }
     audio.hitMarker(false);
     const spec = WEAPONS[b.weapon];
     if (!spec || !spec.impact || hit.kind !== 'actor') return;
@@ -8974,6 +9261,7 @@ async function main() {
     el.title.classList.add('hidden');
     state.lunge = null;
     state.kickLeft = 0; state.bashLeft = 0; state.kickT = 0; state.bashT = 0; state.swingT = 0;
+    state.hook = null;
     el.hud.classList.remove('hidden');
     // The hour picked on the title, for every game but the end of the world,
     // which keeps its own.
@@ -9775,8 +10063,9 @@ async function main() {
       boost = reflex.leap();
       if (boost > 1) audio.leap();
     }
-    if (!slamStep(selfDt) && !lungeStep(selfDt)) player.step(selfDt, wishX, wishZ, jumped, boost);
+    if (!slamStep(selfDt) && !lungeStep(selfDt) && !hookStep(selfDt)) player.step(selfDt, wishX, wishZ, jumped, boost);
     meleeTick(selfDt);
+    arenaTick(selfDt);
     // Held, the suit puts its strength into the jump: a moment after leaving
     // the ground, still rising, it goes most of the way up again.
     if (jumped && boost === 1) state.suitJump = { t: 0, done: false };
@@ -9817,7 +10106,7 @@ async function main() {
     // The second trigger is the flamethrower's wall of fire. Only a wall
     // with fuel to pay for it counts: wallHit, what a swing does to a
     // frontage, is something else.
-    const hasAlt = !!(weapon.spec.wall && weapon.spec.wall.fuel);
+    const hasAlt = !!((weapon.spec.wall && weapon.spec.wall.fuel) || weapon.spec.alt);
     weapon.aiming = input.secondary && !holstered && !hasAlt;
 
     const dir = {
@@ -9825,7 +10114,8 @@ async function main() {
     };
     if (hasAlt && input.secondary && !state.altWasDown && !holstered
         && !photo.active && combat.health > 0 && !paused) {
-      weapon.altFire(eye, dir);
+      if (weapon.spec.alt) altAction(weapon.spec, eye, dir);
+      else weapon.altFire(eye, dir);
     }
     state.altWasDown = input.secondary;
     const wantFire = input.fire && !photo.active && combat.health > 0 && !paused && !holding;
@@ -10355,8 +10645,9 @@ async function main() {
           (combat.maxShield - combat.shield) / combat.rules.shieldRate);
       }
       drawPowers();
-      el.ammonum.textContent = String(weapon.ammo);
-      el.reservenum.textContent = String(weapon.reserve);
+      // Fuel and cells drain by the second, so what is left is shown whole.
+      el.ammonum.textContent = String(Math.ceil(weapon.ammo));
+      el.reservenum.textContent = String(Math.ceil(weapon.reserve));
       el.combat.classList.toggle('empty', weapon.ammo === 0);
       el.reloadhint.classList.toggle('hidden', weapon.state !== 2);
       el.tiernum.textContent = String(combat.tier + 1);
@@ -10498,6 +10789,9 @@ async function main() {
     storm, stormSpec: VOID_STORM,
     takedown: () => takedown(), takedownTarget: () => takedownTarget(),
     kick: () => kick(), bash: () => bash(), meleeTarget: (r, a) => meleeTarget(r, a), moves: MOVES, grab,
+    alt: () => altAction(weapon.spec, { x: player.x, y: player.y + PLAYER.eye, z: player.z },
+      { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] }),
+    get poisonClouds() { return poisonClouds; },
     airTakedown: () => airTakedown(), airTakedownTarget: () => airTakedownTarget(), slamSpec: SLAM, suitKill: (k) => suitKill(k),
     phone, backdoorSpec: BACKDOOR, hackKey: (slot) => hackKey(slot), hackables: () => hackables(),
     trafficSpec: TRAFFIC, spawnTraffic: (type, near) => spawnTraffic(type, near), trafficRoads: () => trafficRoads(),

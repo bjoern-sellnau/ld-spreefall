@@ -140,6 +140,34 @@ export const PROJECTILE = {
     radius: 0.06, gravity: 9, drag: 0.02, bounce: 0, armTime: 0.02, maxAge: 6,
     detonateOnContact: true, trail: 'glow', light: true, spin: 6,
   },
+  core: {
+    // The combo rifle's ball: big, slow and bright, so the beam can find it
+    // again. It goes off on the first thing it touches.
+    radius: 0.32, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 4,
+    detonateOnContact: true, trail: 'glow', light: true, spin: 2,
+  },
+  goo: {
+    // Sludge: it takes hold of what it lands on, a wall or a man, and goes
+    // off when its time is up (on a man the game layer makes that now).
+    radius: 0.11, gravity: 12, drag: 0.02, bounce: 0, armTime: 0.03,
+    detonateOnContact: false, cling: 3.5, trail: 'none', light: true, spin: 5,
+  },
+  glob: {
+    // The big one, which breaks into five where it lands.
+    radius: 0.26, gravity: 12, drag: 0.02, bounce: 0, armTime: 0.03, maxAge: 8,
+    detonateOnContact: true, trail: 'none', light: true, spin: 3,
+  },
+  beacon: {
+    // The translocator's disc: it bounces a little and lies where it stops,
+    // waiting for you.
+    radius: 0.12, gravity: 19.6, drag: 0.15, bounce: 0.3, armTime: 0.1,
+    detonateOnContact: false, inert: true, trail: 'none', light: true, spin: 8,
+  },
+  warhead: {
+    // Slow on purpose, so it can be watched and steered.
+    radius: 0.3, gravity: 0, drag: 0, bounce: 0, armTime: 0.15, maxAge: 18,
+    detonateOnContact: true, trail: 'smoke', light: true, spin: 1,
+  },
   banana: {
     radius: 0.12, gravity: 19.6, drag: 0.2, bounce: 0.25, armTime: 0.2,
     detonateOnContact: false, sticks: true, trail: 'none', light: false, spin: 10,

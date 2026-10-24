@@ -227,12 +227,13 @@ What is under the hood:
   launcher, a swarm launcher (four rockets a shot, each after what the sight
   is on), a grenade launcher (lobbed a long way, goes off on what it meets),
   the arbalest and the disc ripper; 4 the grenade, the incendiary, the
-  banana, C4 and the cling charge; 5 the suppressed pistol and a hand cannon
+  banana, C4, the cling charge and the translocator; 5 the suppressed pistol and a hand cannon
   whose round goes through one man into the next; 6 the chainsaw, the flail,
   the shield saw, the lunge blade, the quake hammer, the knife, the baton,
-  the baseball bat and bare fists; 7 the flamethrower
-  and the flare pistol; 8 plasma, the railgun, the splinter gun and the volt
-  caster; 9 the mech killer and the EMP; 0 the void cannon.
+  the baseball bat and bare fists; 7 the flamethrower, the flare pistol and
+  the sludge gun; 8 plasma, the railgun, the splinter gun, the volt caster,
+  the combo rifle and the storm beam; 9 the mech killer and the EMP; 0 the
+  void cannon and the warhead.
 - Eight of those come out of Crysis, DOOM, Far Cry and Halo, each the idea of
   one weapon there under a name and numbers of our own. Hailstorm (Crysis 3's
   Typhoon): eight stacked barrels, three rounds a pull thirty times a second.
@@ -255,6 +256,22 @@ What is under the hood:
   behind him. Bare fists (DOOM): jabs left and right, and every third in a
   row a hook that floors him. Each one takes the nearest in front of you,
   passers by included, and wears a wall down a little.
+- Five out of the arena shooters, and the meat hook. The combo rifle (Unreal
+  Tournament's shock rifle): a beam there the instant you pull, and on the
+  right button a slow violet ball; put the beam through the ball and the two
+  go off together, seven metres across. The storm beam (Quake's lightning
+  gun): a steady beam of electricity as far as twenty metres, holding still
+  whoever it is on and killing him in well under a second. The sludge gun
+  (the bio rifle): green sludge that sticks where it lands and goes off a
+  few seconds later, at once on a man, or on whoever walks up to it, and
+  leaves poison behind; the right button lobs a big glob that breaks into
+  five. The translocator: throw the disc, and the right button puts you where
+  it lies, and whoever was standing on it is in pieces. The warhead (the
+  Redeemer, and Crysis' TAC gun): a small nuclear round, slow enough to
+  watch, that takes everybody within eighteen metres; hold the right button
+  while it flies and it goes where you look. And the double barrel has DOOM
+  Eternal's meat hook under it now: the right button pulls you to the man in
+  the sight, up to twenty eight metres off.
 - And two things you can do whatever is in your hands. **Tab** or the middle
   mouse button hits with it, as F.E.A.R. lets you with any weapon: the butt
   of a rifle staggers a man without a round going off, the grip of a pistol

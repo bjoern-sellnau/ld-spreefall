@@ -407,6 +407,24 @@ export function buildProjectileMesh(kind) {
       const a = (i / 12) * Math.PI * 2;
       m.box(Math.cos(a) * 0.19, 0.01, Math.sin(a) * 0.19, 0.04, 0.02, 0.04, 44, a);
     }
+  } else if (kind === 'core') {
+    // The combo rifle's ball, violet and the size of a head.
+    m.icosphere(0, 0, 0, 0.32, 12, 6, 121);
+  } else if (kind === 'goo' || kind === 'glob') {
+    // Sludge, the void cannon's green, a handful or a bucketful.
+    m.icosphere(0, 0, 0, kind === 'glob' ? 0.26 : 0.11, 8, 5, 30);
+  } else if (kind === 'beacon') {
+    // The translocator's disc, lying flat with its light on top.
+    m.cylinder(0, 0, 0, 0.12, 0.12, 0.03, 16, 44, 'y');
+    m.cylinder(0, 0.03, 0, 0.04, 0.04, 0.012, 10, 11, 'y');
+  } else if (kind === 'warhead') {
+    // A fat rocket with a warning nose: three quarters of a metre of it.
+    m.cylinder(0, 0, 0.45, 0.16, 0.16, -0.75, 12, 8, 'z');
+    m.cylinder(0, 0, -0.30, 0.16, 0.03, -0.30, 12, 18, 'z');
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      m.box(Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0.36, 0.16, 0.025, 0.2, 8, a);
+    }
   } else if (kind === 'flare') {
     m.icosphere(0, 0, 0, 0.06, 8, 5, 48);
     m.cylinder(0, 0, 0.05, 0.03, 0.01, 0.25, 6, 48, 'z');
@@ -935,6 +953,64 @@ export function buildBootMesh() {
   m.box(0, 0.002, -0.238, 0.090, 0.056, 0.060, 43);      // the toe cap
   m.box(0, 0.068, -0.120, 0.070, 0.008, 0.120, 2);       // the laces
   m.cylinder(0, 0.050, 0.010, 0.050, 0.062, 0.460, 10, 42, 'z');   // the trouser leg
+  return m;
+}
+
+/** The combo rifle: a pale body, a barrel with three violet rings, a cell on its side. */
+export function buildComboMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.200, 0.050, 0.070, 0.160, 2);       // stock
+  m.box(0, 0.006, -0.380, 0.066, 0.096, 0.240, 46);      // the pale body
+  m.box(0, -0.080, -0.300, 0.040, 0.090, 0.050, 2);      // grip
+  m.cylinder(0, 0.012, -0.500, 0.030, 0.030, -0.180, 12, 1, 'z');
+  for (const z of [-0.430, -0.470, -0.510]) m.cylinder(0, 0.012, z, 0.042, 0.042, -0.012, 14, 45, 'z');
+  m.box(0, 0.064, -0.360, 0.020, 0.020, 0.140, 3);        // sight rail
+  m.box(0.036, 0.010, -0.380, 0.006, 0.050, 0.120, 45);  // the cell
+  muzzleFlash(m, 0, 0.012, -0.690, 0.12, 0.05);
+  return m;
+}
+
+/** The storm beam: a short body and a rod wound with five coils that are alight. */
+export function buildStormMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.004, -0.300, 0.058, 0.080, 0.220, 0);       // body
+  m.box(0, -0.085, -0.270, 0.040, 0.100, 0.055, 2);       // grip
+  m.cylinder(0, 0.004, -0.410, 0.020, 0.020, -0.260, 10, 1, 'z');
+  for (let i = 0; i < 5; i++) m.cylinder(0, 0.004, -0.440 - i * 0.045, 0.034, 0.034, -0.016, 12, 36, 'z');
+  m.cylinder(0, 0.004, -0.672, 0.028, 0.012, -0.030, 10, 36, 'z');
+  return m;
+}
+
+/** The sludge gun: a body, a tank of green on top, and a flared nozzle. */
+export function buildSludgeMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.300, 0.060, 0.080, 0.240, 0);       // body
+  m.box(0, -0.090, -0.280, 0.040, 0.100, 0.055, 2);       // grip
+  m.cylinder(0, 0.070, -0.460, 0.040, 0.040, 0.200, 12, 30, 'z');   // the tank
+  m.cylinder(0, -0.004, -0.420, 0.028, 0.036, -0.120, 12, 1, 'z');  // the nozzle
+  m.cylinder(0, -0.004, -0.545, 0.038, 0.038, -0.010, 12, 30, 'z');
+  return m;
+}
+
+/** The translocator: a small launcher with the disc sitting flat on its front. */
+export function buildTranslocatorMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.250, 0.050, 0.060, 0.160, 0);
+  m.box(0, -0.080, -0.230, 0.036, 0.090, 0.050, 2);
+  m.cylinder(0, 0.020, -0.360, 0.060, 0.060, 0.016, 18, 3, 'y');   // the disc
+  m.cylinder(0, 0.037, -0.360, 0.022, 0.022, 0.006, 12, 32, 'y');  // its light
+  return m;
+}
+
+/** The warhead launcher: a fat tube with a warning band, the nose of the round out of the end. */
+export function buildWarheadMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0.010, -0.120, 0.070, 0.070, -0.520, 16, 1, 'z');   // the tube
+  m.cylinder(0, 0.010, -0.640, 0.074, 0.074, -0.030, 16, 0, 'z');   // its lip
+  m.cylinder(0, 0.010, -0.380, 0.072, 0.072, -0.040, 16, 37, 'z');  // the band
+  m.cylinder(0, 0.010, -0.640, 0.050, 0.010, -0.090, 12, 37, 'z');  // the nose
+  m.box(0, -0.090, -0.300, 0.040, 0.100, 0.055, 2);                 // grip
+  m.box(0, 0.090, -0.320, 0.030, 0.030, 0.100, 3);                  // sight
   return m;
 }
 
@@ -1843,6 +1919,11 @@ export class Actors {
       // boot that comes up into view for a kick.
       fistL: this._uploadMesh(buildFistMesh(-1), 0, 0),
       boot: this._uploadMesh(buildBootMesh(), 0, 0),
+      combo: this._uploadMesh(buildComboMesh(), 0, 0),
+      storm: this._uploadMesh(buildStormMesh(), 0, 0),
+      sludge: this._uploadMesh(buildSludgeMesh(), 0, 0),
+      translocator: this._uploadMesh(buildTranslocatorMesh(), 0, 0),
+      warhead: this._uploadMesh(buildWarheadMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
 
@@ -1881,6 +1962,11 @@ export class Actors {
       cling: this._uploadMesh(buildProjectileMesh('cling'), MAX_PROPS, 2),
       disc: this._uploadMesh(buildProjectileMesh('disc'), MAX_PROPS, 2),
       flare: this._uploadMesh(buildProjectileMesh('flare'), MAX_PROPS, 2),
+      core: this._uploadMesh(buildProjectileMesh('core'), MAX_PROPS, 2),
+      goo: this._uploadMesh(buildProjectileMesh('goo'), MAX_PROPS, 2),
+      glob: this._uploadMesh(buildProjectileMesh('glob'), MAX_PROPS, 2),
+      beacon: this._uploadMesh(buildProjectileMesh('beacon'), 8, 2),
+      warhead: this._uploadMesh(buildProjectileMesh('warhead'), 8, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.

@@ -5393,6 +5393,91 @@ So there are two cities now, and a profile picks which:
   hand. Screenshots arsenal-09-knife.png to arsenal-13-kick.png, each held
   half way through its move.
 
+## 139. Out of Unreal Tournament and Quake, a warhead, and the meat hook
+
+- The ask: more weapons out of DOOM 1 and 2, Eternal and The Dark Ages,
+  Far Cry 3, 5 and 6, Crysis 1 to 3, F.E.A.R. 1 and 2, Max Payne, 007 First
+  Light, Hitman, UT99, UT2004 and UT3, and Quake 1 to 3. A good part of that
+  was here already: DOOM's fist, chainsaw, shotguns, chaingun, rockets,
+  plasma and BFG (the void cannon), The Dark Ages' shield saw and flail,
+  Eternal's Ballista (the arbalest), Quake's railgun and nails (the
+  splinter gun), Crysis' Typhoon (Hailstorm) and K-Volt, Far Cry's bow,
+  flamethrower and flare gun, UT's flak cannon and ripper, Max Payne's bat.
+  This phase takes what was missing from the arena shooters; the next takes
+  Hitman, 007, Max Payne, F.E.A.R. and Far Cry.
+- The combo rifle (Unreal Tournament's shock rifle): a beam (45) there the
+  instant you pull, violet, and on the right button a slow ball (12 m/s, 55
+  on what it touches, one cell). Put the beam within 1.2 m of the ball and
+  the two go off together where the ball was: 260 over 7 m, a violet flash,
+  "combo".
+- The storm beam (Quake's lightning gun, the Thunderbolt in Quake 1): a
+  steady beam for as long as you hold the trigger, as far as 20 m and no
+  further, 300 a second on the first thing it meets (the original's 30 every
+  tenth of a second), holding him where he stands while it is on him, ten
+  cells a second. A wall in the way stops it and is worn down like by the
+  flamethrower.
+- The sludge gun (the bio rifle): green sludge lobbed at 24 m/s that takes
+  hold of what it lands on and goes off 3.5 s later, at once on a man, or
+  on whoever comes within 1.5 m of it, 50 over 2.4 m and a cloud of poison
+  (22 a second for four seconds) where it went. The right button lobs a big
+  glob for five that breaks into five where it lands. Its burst is a wet
+  green splat, not a fireball, and it opens no holes.
+- The translocator: a disc thrown like a grenade that bounces a little and
+  lies where it stops; the right button puts you where it lies (on a roof,
+  if that is where it is), and anybody within 1.3 m of it is in pieces, the
+  telefrag. One disc at a time: a second throw takes the first back.
+- The warhead (Unreal Tournament's Redeemer and the TAC gun of Crysis): a
+  slow round (26 m/s) that goes off on what it meets, 900 over 18 m with the
+  warhead's flash and fire, which is too close for you inside that. Hold the
+  right button while it flies and it turns towards where you look, as the
+  Redeemer can be steered.
+- The meat hook (DOOM Eternal's super shotgun): the double barrel's right
+  button hooks the man nearest the middle of the sight within 28 m and pulls
+  you to 2.6 m from him at 32 m/s, holding a small one where he is; a wall
+  in the way lets go.
+- The right button: a weapon's row can now say what its second trigger does
+  (`alt`), in place of aiming down a sight. In view: a pale combo rifle with
+  violet rings, the storm beam's rod with five live coils, the sludge gun's
+  green tank, the translocator with the disc on its front, the warhead's
+  tube with the nose of the round out of the end; in flight a violet ball,
+  green sludge, the disc and a fat rocket with a warning nose.
+- Two fixes found on the way. The ammunition on the screen showed every
+  fraction of the flamethrower's fuel (and now the storm beam's cells): it is
+  shown whole. And something launched by a blast as it goes off could be
+  given the blast's own place in the projectile pool and be put out by the
+  step that was finishing with it: the sludge glob's five pieces are thrown
+  on the next step.
+- Where the ideas come from:
+  [Unreal Wiki, Shock Rifle](https://unreal.fandom.com/wiki/Shock_Rifle)
+  (a beam, a slow core, and the beam into the core for a combo),
+  [The Liandri Archives, Bio Rifle](https://liandri.beyondunreal.com/Bio_Rifle)
+  and [Unreal Wiki, Bio Rifle](https://unreal.fandom.com/wiki/Bio_Rifle)
+  (sludge that sticks and bursts, a charged glob that breaks into smaller
+  ones), [QuakeWorld wiki, Lightning Gun](https://www.quakeworld.nu/wiki/LG)
+  (30 a shot, 300 a second, a short reach),
+  [Unreal Wiki, Translocator](https://unreal.fandom.com/wiki/Translocator)
+  (throw, teleport, telefrag),
+  [The Liandri Archives, Redeemer](https://liandri.beyondunreal.com/Redeemer)
+  (the secondary fire steers it),
+  [Crysis Wiki, TAC Gun](https://crysis.fandom.com/wiki/TAC_Gun) (a handheld
+  nuclear grenade launcher that kills the user too close to it),
+  [DoomWiki, Super shotgun (Doom Eternal)](https://doomwiki.org/wiki/Super_shotgun_(Doom_Eternal))
+  (the meat hook). Checked through search excerpts; this session cannot
+  open the pages themselves. The names and numbers here are ours.
+- Checks (arsenal suite, six more): the combo rifle's beam through its own
+  ball sets off one combo that kills the two men round it; a second of the
+  storm beam kills a man 12 m off and leaves one 25 m off untouched; sludge
+  sticks, waits half a second, goes off on a man put a metre from it, hurts
+  him and leaves poison, and a glob breaks into five; the translocator puts
+  you on the disc (0 m off), telefrags the man on it, takes the disc and
+  keeps one at a time; the warhead takes all three men round where it lands
+  (with the city told to stand, so the checks after it are not in a crater),
+  and held it turns 29.5 degrees towards a look 30 degrees off; the meat hook
+  pulls you from 15 m to 2.6 m, and hooks nobody when there is nobody. The
+  every weapon against a wall check leaves out the translocator (a disc) and
+  the warhead (checked on its own). Screenshots arsenal-14-combo.png to
+  arsenal-18-warhead.png, the storm beam firing.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m
