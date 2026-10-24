@@ -58,6 +58,25 @@ test('at the end of a road it takes the one that begins there, and turns round w
   assert.deepEqual([back.li, back.dir], [0, 1]);
 });
 
+test('one that knows where it is going keeps straight on, whatever the dice say', () => {
+  // A crossing at x = 200: the road in from the west ends there, and one goes
+  // on east, one north and one south.
+  const idx = roadIndex([
+    line('secondary', [0, 0], [200, 0]),
+    line('secondary', [200, 0], [400, 0]),
+    line('secondary', [200, 0], [200, -200]),
+    line('secondary', [200, 0], [200, 200]),
+  ]);
+  const east = { x: 1, z: 0 };
+  for (const roll of [0, 0.4, 0.7, 0.99]) {
+    const n = nextLeg(idx, 0, 1, () => roll, east);
+    assert.equal(n.li, 1, `rolled ${roll}, took ${n.li}`);
+  }
+  // And it is the dice without one: not always the same way.
+  const ways = new Set([0, 0.4, 0.7, 0.99].map((roll) => nextLeg(idx, 0, 1, () => roll).li));
+  assert.ok(ways.size > 1, `only ever ${[...ways]}`);
+});
+
 test('a car drives the road in its lane and goes round the corner onto the next', () => {
   const idx = roadIndex(LINES);
   const v = car({ x: 10, z: laneOffset(idx.roads[0]), yaw: Math.atan2(-1, 0), li: 0, i: 1, dir: 1 });

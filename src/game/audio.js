@@ -951,6 +951,108 @@ export class Audio {
     o.stop(t + 0.12);
   }
 
+  /**
+   * Something swung past your ear: a short whip of air, lower and longer the
+   * heavier it is (0 a jab, 1 a bat).
+   */
+  swing(weight = 0.6) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 2.2;
+    const f0 = 2400 - weight * 1300;
+    bp.frequency.setValueAtTime(f0 * 0.6, t);
+    bp.frequency.exponentialRampToValueAtTime(f0, t + 0.06 + weight * 0.05);
+    bp.frequency.exponentialRampToValueAtTime(f0 * 0.5, t + 0.16 + weight * 0.1);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.1 + weight * 0.08, t + 0.05 + weight * 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2 + weight * 0.12);
+    n.connect(bp).connect(g).connect(this.master);
+    n.start(t, Math.random() * 3);
+    n.stop(t + 0.36);
+  }
+
+  /**
+   * A blow landing. Under every one a low thump; over it what it was: flesh,
+   * a blade going in, the crack of a bat, the steel of a baton, a boot, the
+   * butt of a rifle. size 0 to 1.
+   */
+  strike(kind = 'flesh', size = 0.6) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(kind === 'boot' ? 100 : 130, t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.16 + 0.16 * size, t + 0.005);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(og).connect(this.master);
+    o.start(t); o.stop(t + 0.18);
+    // The surface of it, in noise.
+    const n = ctx.createBufferSource();
+    n.buffer = this._noiseBuffer;
+    const f = ctx.createBiquadFilter();
+    const cut = kind === 'blade';
+    f.type = cut ? 'highpass' : 'bandpass';
+    f.Q.value = cut ? 0.7 : 1.6;
+    const hz = { flesh: 700, blade: 2600, wood: 1500, baton: 2100, boot: 500, stock: 1100 }[kind] || 700;
+    f.frequency.setValueAtTime(hz, t);
+    f.frequency.exponentialRampToValueAtTime(hz * (cut ? 1.6 : 0.45), t + 0.1);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime((cut ? 0.1 : 0.14) * (0.6 + size * 0.6), t + 0.004);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + (cut ? 0.14 : 0.09));
+    n.connect(f).connect(ng).connect(this.master);
+    n.start(t, Math.random() * 3);
+    n.stop(t + 0.16);
+    // Wood and steel ring for a moment: the bat a hollow tock, the baton
+    // and the butt of a rifle a short clank.
+    if (kind === 'wood' || kind === 'baton' || kind === 'stock') {
+      const r = ctx.createOscillator();
+      r.type = kind === 'wood' ? 'triangle' : 'square';
+      const r0 = kind === 'wood' ? 820 : kind === 'baton' ? 1350 : 610;
+      r.frequency.setValueAtTime(r0, t);
+      r.frequency.exponentialRampToValueAtTime(r0 * 0.82, t + 0.07);
+      const rg = ctx.createGain();
+      rg.gain.setValueAtTime(0.0001, t);
+      rg.gain.exponentialRampToValueAtTime(kind === 'wood' ? 0.12 : 0.04, t + 0.003);
+      rg.gain.exponentialRampToValueAtTime(0.0001, t + (kind === 'wood' ? 0.11 : 0.07));
+      r.connect(rg).connect(this.master);
+      r.start(t); r.stop(t + 0.13);
+    }
+  }
+
+  /** A rubber duck: a short squeezed honk, falling at the end. */
+  quack(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const near = Math.max(0.05, 1 - distance / 60);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(620, t);
+    o.frequency.linearRampToValueAtTime(700, t + 0.05);
+    o.frequency.exponentialRampToValueAtTime(380, t + 0.16);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 3;
+    f.frequency.value = 1100;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12 * near, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.connect(f).connect(g).connect(this.master);
+    o.start(t); o.stop(t + 0.2);
+  }
+
   /** A boot coming down in it: a short wet suck, low and closing. */
   squelch() {
     const ctx = this.ctx;

@@ -401,7 +401,7 @@ export class Weapon {
   altFire(eye, dir) {
     const spec = this.spec;
     if (this.holstered || this.state === STATE.RELOADING) return false;
-    if (!spec.wall || !this.onWall) return false;
+    if (!spec.wall || !spec.wall.fuel || !this.onWall) return false;
     if (this.cooldown > 0) return false;
     const cost = spec.wall.fuel;
     if (!this.infiniteAmmo && this.ammo < cost) {
@@ -851,6 +851,7 @@ export class Weapon {
   /** Blow every piece of C4 you have put down. */
   detonate() {
     if (!this.projectiles) return 0;
-    return this.projectiles.detonateAll('c4');
+    // The rubber duck goes off on the same trigger as the C4.
+    return this.projectiles.detonateAll('c4') + this.projectiles.detonateAll('duck');
   }
 }

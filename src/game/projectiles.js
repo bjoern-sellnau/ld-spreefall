@@ -140,6 +140,49 @@ export const PROJECTILE = {
     radius: 0.06, gravity: 9, drag: 0.02, bounce: 0, armTime: 0.02, maxAge: 6,
     detonateOnContact: true, trail: 'glow', light: true, spin: 6,
   },
+  core: {
+    // The combo rifle's ball: big, slow and bright, so the beam can find it
+    // again. It goes off on the first thing it touches.
+    radius: 0.32, gravity: 0, drag: 0, bounce: 0, armTime: 0.05, maxAge: 4,
+    detonateOnContact: true, trail: 'glow', light: true, spin: 2,
+  },
+  goo: {
+    // Sludge: it takes hold of what it lands on, a wall or a man, and goes
+    // off when its time is up (on a man the game layer makes that now).
+    radius: 0.11, gravity: 12, drag: 0.02, bounce: 0, armTime: 0.03,
+    detonateOnContact: false, cling: 3.5, trail: 'none', light: true, spin: 5,
+  },
+  glob: {
+    // The big one, which breaks into five where it lands.
+    radius: 0.26, gravity: 12, drag: 0.02, bounce: 0, armTime: 0.03, maxAge: 8,
+    detonateOnContact: true, trail: 'none', light: true, spin: 3,
+  },
+  beacon: {
+    // The translocator's disc: it bounces a little and lies where it stops,
+    // waiting for you.
+    radius: 0.12, gravity: 19.6, drag: 0.15, bounce: 0.3, armTime: 0.1,
+    detonateOnContact: false, inert: true, trail: 'none', light: true, spin: 8,
+  },
+  warhead: {
+    // Slow on purpose, so it can be watched and steered.
+    radius: 0.3, gravity: 0, drag: 0, bounce: 0, armTime: 0.15, maxAge: 18,
+    detonateOnContact: true, trail: 'smoke', light: true, spin: 1,
+  },
+  dart: {
+    // The dart phone's: flat and quick, into whoever it meets and done.
+    radius: 0.02, gravity: 1.5, drag: 0, bounce: 0, armTime: 0.0, maxAge: 6,
+    detonateOnContact: false, sticks: true, arrow: true, trail: 'none', light: false, spin: 0,
+  },
+  tknife: {
+    // A throwing knife: it turns over in the air and goes in point first.
+    radius: 0.03, gravity: 9, drag: 0.01, bounce: 0, armTime: 0.0, maxAge: 25,
+    detonateOnContact: false, sticks: true, arrow: true, trail: 'none', light: false, spin: 18,
+  },
+  duck: {
+    // Sits where it lands and waits, like the C4, for T.
+    radius: 0.1, gravity: 19.6, drag: 0.3, bounce: 0.2, armTime: 0.2,
+    detonateOnContact: false, sticks: true, trail: 'none', light: true, spin: 7,
+  },
   banana: {
     radius: 0.12, gravity: 19.6, drag: 0.2, bounce: 0.25, armTime: 0.2,
     detonateOnContact: false, sticks: true, trail: 'none', light: false, spin: 10,
@@ -172,6 +215,7 @@ export class Projectiles {
     this.onSaw = null;       // fn(body, hit) the shield saw goes through somebody
     this.onSawBack = null;   // fn(body) and comes back to the hand
     this.onCling = null;     // fn(body, hit) a bolt or a cling charge takes hold
+    this.onWall = null;      // fn(body, hit) an arrow or a saw blade meets a wall
     // Set by the game layer: the same raycast the bullets use against drones
     // and soldiers. Without it a rocket flies through the man it was aimed at
     // and goes off on the wall behind him, which is exactly what the first
@@ -450,6 +494,7 @@ export class Projectiles {
             remaining = 0;
             break;
           }
+          if (this.onWall) this.onWall(b, hit);
           b.returning = true;
           remaining = 0;
           break;
@@ -465,6 +510,7 @@ export class Projectiles {
             break;
           }
           if (this.onArrowHead) this.onArrowHead(b, b.x + dx * 0.22, b.y + dy * 0.22, b.z + dz * 0.22);
+          if (this.onWall) this.onWall(b, hit);
           b.stuck = true;
           b.fx = b.vx; b.fy = b.vy; b.fz = b.vz;
           b.vx = b.vy = b.vz = 0;
@@ -505,6 +551,7 @@ export class Projectiles {
             remaining = 0;
             break;
           }
+          if (this.onWall) this.onWall(b, hit);
           if (hit.ny > 0.6 || b.bouncesLeft <= 0) {
             b.stuck = true;
             b.vx = b.vy = b.vz = 0;

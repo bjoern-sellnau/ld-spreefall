@@ -2187,14 +2187,18 @@ async function run() {
         s.combat.hurt = hurt;
       }
       s.combat.hurt = hurt;
-      if (!m) { out.push({ key, skip: true }); continue; }
-      out.push({ key, kind: m.spec.chaingun.kind || 'auto', taken: Math.round(taken) });
+      // The gun is the chassis' whether or not there was room to stand one
+      // where it could see you: read from the table spawn takes it from, a
+      // street with no such room once left the count of kinds one short.
+      const kind = s.mechSpec[key].chaingun.kind || 'auto';
+      if (!m) { out.push({ key, kind, skip: true }); continue; }
+      out.push({ key, kind, taken: Math.round(taken) });
     }
     s.mechs.reset(); s.projectiles.clear(); s.burningGround.length = 0;
     s.machines.active = modeWas;
     return out;
   });
-  const foeKinds = new Set(foes.filter((f) => !f.skip).map((f) => f.kind));
+  const foeKinds = new Set(foes.map((f) => f.kind));
   check('theirs fire seven different kinds of gun', foeKinds.size >= 7,
     [...foeKinds].join(', '));
   check('and every one of them can hurt you',

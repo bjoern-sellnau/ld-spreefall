@@ -122,6 +122,8 @@ with no title and no flight in) and **Hauptmenü**. Esc again carries on.
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight; with a grenade, a banana or an incendiary in hand, the harder throw, 1.6 times as fast, nearly twice as far |
 | G | holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt |
+| Tab, or the middle mouse button, or R3 | hit with what is in your hands: the butt of a rifle, the grip of a pistol, the tube of a launcher; a knife, baton, bat or bare hands are swung |
+| ^ (left of 1), or B on a pad | a kick; in the air, a flying kick |
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | F1 F2 F3 | quality tier: low, medium, high |
@@ -225,11 +227,15 @@ What is under the hood:
   launcher, a swarm launcher (four rockets a shot, each after what the sight
   is on), a grenade launcher (lobbed a long way, goes off on what it meets),
   the arbalest and the disc ripper; 4 the grenade, the incendiary, the
-  banana, C4 and the cling charge; 5 the suppressed pistol and a hand cannon
-  whose round goes through one man into the next; 6 the chainsaw, the flail,
-  the shield saw, the lunge blade and the quake hammer; 7 the flamethrower
-  and the flare pistol; 8 plasma, the railgun, the splinter gun and the volt
-  caster; 9 the mech killer and the EMP; 0 the void cannon.
+  banana, C4, the cling charge, the translocator, throwing knives and a
+  rubber duck; 5 the suppressed pistol, a hand cannon
+  whose round goes through one man into the next, two pistols and the dart
+  phone; 6 the chainsaw, the flail, the shield saw, the lunge blade, the
+  quake hammer, the knife, the baton, the baseball bat, bare fists and the
+  fibre wire; 7 the flamethrower, the flare pistol, the sludge gun and the
+  fire ring; 8 plasma, the railgun, the splinter gun, the volt caster, the
+  combo rifle and the storm beam; 9 the mech killer, the EMP and the particle
+  rifle; 0 the void cannon and the warhead.
 - Eight of those come out of Crysis, DOOM, Far Cry and Halo, each the idea of
   one weapon there under a name and numbers of our own. Hailstorm (Crysis 3's
   Typhoon): eight stacked barrels, three rounds a pull thirty times a second.
@@ -242,6 +248,50 @@ What is under the hood:
   charge sticks to what it hits and rides on him; the lunge blade takes you
   nine metres onto a man and cuts him down; the quake hammer floors
   everybody in the half circle in front of you and throws the cars.
+- Four for arm's length, after the games that made each one. The knife
+  (Crysis, Far Cry 3's machete): quick and silent, and one from behind is
+  enough. The baton (the telescopic one Aiden Pearce carries in Watch Dogs):
+  a blow staggers a man, the third in a row puts him on the ground, and in
+  .BACKDOOR a thief or the one who started a fight is subdued by it. The
+  baseball bat (Max Payne): a slow swing that lifts him off his feet and
+  sends him eight or ten metres down the street, through whoever is standing
+  behind him. Bare fists (DOOM): jabs left and right, and every third in a
+  row a hook that floors him. Each one takes the nearest in front of you,
+  passers by included, and wears a wall down a little.
+- Five out of the arena shooters, and the meat hook. The combo rifle (Unreal
+  Tournament's shock rifle): a beam there the instant you pull, and on the
+  right button a slow violet ball; put the beam through the ball and the two
+  go off together, seven metres across. The storm beam (Quake's lightning
+  gun): a steady beam of electricity as far as twenty metres, holding still
+  whoever it is on and killing him in well under a second. The sludge gun
+  (the bio rifle): green sludge that sticks where it lands and goes off a
+  few seconds later, at once on a man, or on whoever walks up to it, and
+  leaves poison behind; the right button lobs a big glob that breaks into
+  five. The translocator: throw the disc, and the right button puts you where
+  it lies, and whoever was standing on it is in pieces. The warhead (the
+  Redeemer, and Crysis' TAC gun): a small nuclear round, slow enough to
+  watch, that takes everybody within eighteen metres; hold the right button
+  while it flies and it goes where you look. And the double barrel has DOOM
+  Eternal's meat hook under it now: the right button pulls you to the man in
+  the sight, up to twenty eight metres off.
+- Seven out of the stealth and action games. Two pistols (Max Payne's
+  Berettas), firing left and right in turn. The dart phone (007 First
+  Light): a quiet dart that puts a man down asleep for twelve seconds.
+  Throwing knives (Far Cry 3): silent, and one is enough. The rubber duck
+  (Hitman): it sits where it lands with a light blinking on its back until
+  **T** sets it off with the C4. The fibre wire (Hitman): from behind, the
+  end of him; from the front, nothing. The fire ring (Far Cry 6's Supremo
+  backpack): a ring of fire out from where you stand to seventeen metres,
+  and then ten seconds to fill again. The particle rifle (F.E.A.R.'s
+  Type-7): one shot, and he is left standing as a burnt skeleton.
+- And two things you can do whatever is in your hands. **Tab** or the middle
+  mouse button hits with it, as F.E.A.R. lets you with any weapon: the butt
+  of a rifle staggers a man without a round going off, the grip of a pistol
+  is quicker and lighter, the tube of a launcher or the rotary cannon puts
+  him on the ground; a knife, a baton, a bat or bare hands are swung, and
+  with the weapon holstered it is a punch. **^** (the key left of 1) is a
+  kick that puts him on the ground, and in the air a flying kick that sends
+  him off down the street like the bat.
 - Down the left side of the screen is what you carry: a row a key with the key
   in a box and the weapon it would give you, the row you are on lit, a bar of
   ammunition under each name, and the group you just picked from opened out
@@ -771,6 +821,14 @@ three cells and what you have taken so far.
   across the road and the traffic stops for it, **E** blows it after a
   second of hiss, and whatever is standing on it goes up in the air and
   whoever is near it is knocked off their feet.
+- **Power boxes** on the pavement: **Q** overloads one, and after a second
+  of sparks it blows, knocking everybody round it off their feet and
+  stalling the cars beside it; **E** sets it as a trap that goes off on the
+  first person who walks up to it.
+- **ATMs** in the walls: **Q** withdraws what is in one, **E** makes it throw
+  its notes into the street, and the people near come running.
+- **Road blockers** at the junctions: **Q** raises a row of posts out of the
+  road, and a car that drives into them is stopped dead; **E** lowers them.
 - **B** is the **blackout**: the whole battery for fifteen seconds without
   power. The windows and the street lamps go out, the lights at the
   junctions go dark, and everybody stops to look at a phone with no signal.
@@ -779,8 +837,8 @@ three cells and what you have taken so far.
 
 Where the ideas come from: the Watch Dogs games, whose phone profiles every
 citizen in the street and hacks the city's traffic lights, steam pipes,
-phones and cars, and can black out everything electric nearby for a short
-while. The people, names, facts and numbers here are ours. The lights keep
+fuse boxes, barriers, bollards, ATMs, phones and cars, and can black out
+everything electric nearby for a short while. The people, names, facts and numbers here are ours. The lights keep
 German time: three seconds of amber where the limit is 50 km/h, and one
 second of red and amber before green, as the RiLSA 2015 sets it.
 

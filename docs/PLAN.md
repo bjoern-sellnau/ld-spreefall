@@ -5201,6 +5201,461 @@ So there are two cities now, and a profile picks which:
   twenty seconds on; 1186 pieces and 320 pools halved to 593 and 160 at
   12 fps. Screenshots cheat-13-ultra-comic.png and cheat-14-footprints.png.
 
+## 135. Every weapon against a wall
+
+- The ask: not every weapon can destroy buildings. True: a frontage came
+  down only for things that went off. A blast adds damage to the grid of
+  22 m cells and every 180 of it takes another quarter of the building, but
+  nothing else ever added to that grid. Rifles, pistols, shotguns, the
+  rotary cannon, the railgun, every blade and club, the flamethrower,
+  arrows, the shield saw and the ripper's discs could hit a wall all day.
+- Now every hit on a wall adds to the same grid, spread over 1.5 m:
+  - a round: 0.3 of its damage, or 0.8 for a round that goes through men
+    (the railgun, the hand cannon);
+  - a swing at a wall within reach: what its row says (chainsaw 70, flail
+    100, lunge blade 120);
+  - the quake hammer: a blast of its own of 320 over its whole 7 m;
+  - the flamethrower on a wall: 35 a second;
+  - an arrow 25, and the shield saw or a disc 45 each time it meets a wall.
+  The way a frontage comes down is unchanged: in quarters, with rubble,
+  dust and the collision opening.
+- Checks (arsenal suite, two more): every weapon in the loadout fired at a
+  frontage from where it would be used (a swing from 1.6 m, the rest from
+  6 m, in god mode, the ones that go off last, the wall looked for again
+  before each) leaves damage on the grid. The only exception is the banana,
+  which never goes off. Measured for one shot or swing (the flamethrower for
+  a second): M16 15, rotary 14, Hailstorm 16, shotgun 64, double barrel 154,
+  railgun 138, hand cannon 150, chainsaw 105, flail 150, blade 180, quake
+  hammer 530, flamethrower 35, bow 25, ripper 45, volt 9, EMP 69. One rail
+  shot is many times one rifle round.
+
+## 136. A vehicle that goes up stays there, burnt out
+
+- The ask: vehicles should explode, not simply disappear. They did explode:
+  since phase 118 one that is done for catches, burns for a few seconds and
+  goes up in a fireball with fire left round it. But fourteen seconds after
+  it died the vehicle layer took it out of the street, so a wreck went up and
+  then, a few seconds later, was not there any more. Parked cars were never
+  like that (they stay as burnt out shells); the jeeps, tanks, helicopters,
+  fighters, and .BACKDOOR's cars and buses were.
+- Now the shell stays where it went up, drawn burnt black, for good. Only
+  past a dozen of them does the oldest go, and when every one of the forty
+  slots is taken a new vehicle takes the place of the oldest wreck rather
+  than not appearing at all. The renderer draws the live ones before the
+  wrecks, so a street full of shells never leaves a car that is still
+  driving without a body, and a burnt out car does not count towards the
+  traffic, so the road keeps its cars.
+- Checks (city suite, one more): twenty seconds after a jeep goes up its
+  shell is still in the street; with sixty jeeps spawned and destroyed in
+  forty slots, a fresh one still comes out, in the oldest wreck's place.
+
+## 137. .BACKDOOR: power boxes that blow, ATMs, and road blockers
+
+- The ask: the phone needs more to get into, exploding power boxes for one.
+  Three new things now stand in the street, worked out by
+  `src/game/city.js` from the same centrelines as the traffic, the lights
+  and the steam covers, the same every time.
+- Power boxes: a grey cabinet every 55 m along every carriageway, on
+  alternate sides, 1.3 m out past the kerb, never within 12 m of a junction
+  and never two within 24 m, and only where the line from the road to the
+  spot is clear and the ground there is level with the road. Pointed at
+  one, the phone says "Power box, 400 V, three phases, 250 A". Q overloads
+  it (25 battery): it crackles and sparks for a second and goes. Everybody
+  within 6 m is off their feet and slid along the ground, the soldiers are
+  hurt by up to 45 (the people who live here by less than a third of that),
+  any car within 8 m stalls, and you, within 4 m, take up to 22. E sets it
+  as a trap (20 battery): for twenty seconds it waits, and the first person
+  who comes within 3.2 m sets it off. It is burnt out for 45 seconds after,
+  drawn black, and the phone can do nothing with it until then.
+- ATMs: every third place, where there is a wall within 9 m behind the
+  pavement, a cash machine in that wall instead of a box. It holds between
+  80 and 420 euro in tens, the same for the same machine every time. Q
+  withdraws it (30 battery, 1.6 s with the phone on it, like the bank
+  accounts) and it is empty for two minutes; E makes it throw its notes
+  into the street for eight seconds (20 battery), and the people within
+  25 m come running for them.
+- Road blockers: a row of posts across every road into every junction, 7 m
+  before it, flush with the road. Q raises them (15 battery) over half a
+  second for twelve seconds; E lowers them again for nothing. A vehicle
+  whose nose meets a row that is up is stopped dead, damaged by its speed,
+  and crashes.
+- The three are drawn through the actor shader like the masts and the
+  covers (parts 110 to 120: the cabinet grey green with a green lamp,
+  crackling blue before it goes, its lamp blinking red while a trap is set,
+  burnt black once it has gone; the machine in brushed steel with its
+  screen lit, green and flickering while it throws its notes, dead once
+  empty; the posts grey with a red band, sunk into the road by as much as
+  they are not up), and cast shadows. A rebuild
+  of the street as districts stream in keeps the state of whatever was
+  already there.
+- Where the ideas come from: the Watch Dogs games, whose phone can overload
+  nearby fuse boxes and raise security barriers
+  ([Giant Bomb](https://www.giantbomb.com/games/3030-38538/)), primes
+  gates, barriers and bollards as a proximity trap in Watch Dogs 2's City
+  Disruption
+  ([Prima Games](https://primagames.com/eguides/watch-dogs-2-eguide/training/part-10-research-app/city-disruption)),
+  and hacks ATMs to pay a customer or take from them
+  ([Watch Dogs Wiki, Bottom Dollar](https://watchdogs.fandom.com/wiki/Bottom_Dollar)).
+  The machine that throws its cash into the street is after the Watch Dogs
+  launch stunt in which a real ATM in Canada spat out money
+  ([God is a Geek](https://godisageek.com/2013/07/real-money-spat-canadian-atm-watch-dogs-live-app/)).
+  These were checked through search excerpts, as this session cannot open
+  the pages themselves. The numbers here are ours.
+- Checks: unit (4, `tools/test/furniture.test.mjs`) on where the boxes and
+  ATMs go and do not, the fuse, the trap and the burnt out box, the blast
+  falling off to its edge, the ATM's cash and its clock, and the blockers
+  coming up, meeting a nose and going down; browser (backdoor suite, seven
+  more): 25 boxes, 16 ATMs (6 of them in walls) and the junction rows in
+  the test street, drawn and hackable; an overload floors the 3 people
+  round the box and stalls the car beside it; a trap waits and goes off
+  2.5 s later on a man walking up to it (closest 2.8 m); an ATM pays out
+  80 euro and is empty after, another sprays and draws all 4 people near it
+  closer; and the blockers stop a car driven into them at 44 km/h, damaged.
+  Screenshot backdoor-08-power-box.png.
+
+## 138. A knife, a baton, a bat and bare fists; a kick; and the butt of a rifle
+
+- The ask: more weapons for close quarters (a knife, a baton, a baseball
+  bat with punch, a kick, a punch) and a blow with the weapon in your
+  hands. Four new rows on 6 and two moves on keys of their own, each after
+  the game that made it, under numbers of our own.
+- The knife (the stealth knife in Crysis, the machete in Far Cry 3): quick
+  (0.36 s), silent, 55 a cut, and ten times that from behind, so one from
+  behind is enough and one from the front only hurts. Behind is where he
+  faces away from you, within 70 degrees either side.
+- The baton (the telescopic police baton Aiden Pearce knocks people out
+  with in Watch Dogs): 20 a blow and a stagger of 0.7 s, and the third blow
+  within 2.5 s of the last puts him on the ground. In .BACKDOOR a thief or
+  the one who started a fight is subdued by it, the same as the takedown by
+  hand: the crime stopped, paid, and your name better for it.
+- The baseball bat (Max Payne's): a slow swing (0.85 s) that does 55 and
+  lifts him off his feet at 18 m/s, a third of it upwards, into a body in
+  flight like one the suit throws (`grab.launch`): whoever he goes through
+  on the way is hurt, and so is he when he comes down, at 0.55 of a thrown
+  man. Anybody too big to lift is knocked flat instead.
+- Bare fists (the fist DOOM starts with): 15 a jab, left and right in turn,
+  and the third that lands in a row (none more than 0.9 s apart) a hook at
+  twice that which puts him on the ground. One into the air starts the run
+  again.
+- Each of the four takes the nearest in front of you and in reach, passers
+  by included (it counts against your name in .BACKDOOR, the way a shot
+  does), and wears a frontage down by its own row like every swing.
+- Tab, the middle mouse button or R3 on a pad: a blow with what is in your
+  hands, as F.E.A.R. lets you with any firearm. Its weight is by the group:
+  a pistol 0.7, a rifle 1, a launcher, the anti armour pair, the void
+  cannon, the rotary cannon and Hailstorm 1.4 to 1.5. 40 times the weight;
+  the light ones stagger him for half a second, the heavy ones put him on
+  the ground; no round goes off in the middle of it. With a knife, a baton,
+  a bat or bare hands it is their swing, and with the weapon holstered a
+  punch.
+- ^, the key left of 1 (B on a pad): a kick, 35 and on the ground, after
+  F.E.A.R.'s kicks and Duke Nukem 3D's Mighty Foot; in the air a flying kick
+  at 1.8 times that which sends him off like the bat. 0.7 s between kicks.
+- In view: the knife, a baton run out, a bat in pale ash with a taped
+  handle and two fists with their forearms, each with a move of its own out
+  and back (a stab, a chop, a swing across the screen, a jab or a hook);
+  the rifle thrust forward and turned for a blow with the butt; a boot and
+  a trouser leg coming up from below for a kick, the weapon moving out of
+  its way. The viewmodel can now draw more than one thing (`pose.extras`).
+- A fix to phase 135: what a swing does to a frontage was a field called
+  `wall` on the weapon's row, and `wall` was already the flamethrower's
+  second trigger. With a chainsaw, a flail, the blade or the hammer in hand
+  the right button threw a wall of fire and left the magazine reading NaN.
+  The field is `wallHit` now, and only a `wall` with fuel to pay for it is
+  a second trigger; a unit check holds every other row to that.
+- Where the ideas come from:
+  [Crysis Wiki, Knife](https://crysis.fandom.com/wiki/Knife),
+  [Far Cry Wiki, Machete](https://farcry.fandom.com/wiki/Machete),
+  [Giant Bomb, Watch Dogs](https://www.giantbomb.com/games/3030-38538/)
+  (the baton that knocks out a single enemy),
+  [Max Payne Wiki, Baseball Bat](https://maxpayne.fandom.com/wiki/Baseball_Bat),
+  [Doom Wiki, Berserk](https://doom.fandom.com/wiki/Berserk) (the fist),
+  [Wikipedia, F.E.A.R.](https://en.wikipedia.org/wiki/F.E.A.R._(video_game))
+  (the butts of all firearms in close combat) and
+  [Giant Bomb, F.E.A.R.](https://www.giantbomb.com/games/3030-4800/)
+  (the slide kick and the jump kick),
+  [Ludo guide, Duke Nukem 3D's Mighty Foot](https://www.ludo.guide/guide/duke-nukem-3d/03-03-01-mighty-foot-non-gun).
+  Checked through search excerpts; this session cannot open the pages.
+- Checks: unit (5, `tools/test/melee.test.mjs`) on behind and not behind,
+  the hook on every third punch and the run starting again after a pause,
+  the baton's count per man, the curve a move draws, the four rows on 6
+  with their wall damage, the weight of a blow by weapon, and no `wall`
+  but the flamethrower's; browser (arsenal suite, seven more): one stab
+  from behind kills and one from the front does not; the baton staggers,
+  and the third blow floors him alive; the bat sends a man 8.1 m down the
+  street into the man behind him; two jabs and a hook that floors him; a
+  kick floors him, not twice at once, and a flying kick launches him; the
+  butt of a rifle staggers him with no round fired, a launcher's tube
+  floors him, with a knife in hand it is the knife and holstered a punch;
+  and a kick (45) and the butt of a rifle (30) wear a frontage down
+  like the knife (21), baton (33), bat (90) and fists (12). Backdoor suite,
+  one more: the baton on the one who started a fight is the takedown by
+  hand. Screenshots arsenal-09-knife.png to arsenal-13-kick.png, each held
+  half way through its move.
+
+## 139. Out of Unreal Tournament and Quake, a warhead, and the meat hook
+
+- The ask: more weapons out of DOOM 1 and 2, Eternal and The Dark Ages,
+  Far Cry 3, 5 and 6, Crysis 1 to 3, F.E.A.R. 1 and 2, Max Payne, 007 First
+  Light, Hitman, UT99, UT2004 and UT3, and Quake 1 to 3. A good part of that
+  was here already: DOOM's fist, chainsaw, shotguns, chaingun, rockets,
+  plasma and BFG (the void cannon), The Dark Ages' shield saw and flail,
+  Eternal's Ballista (the arbalest), Quake's railgun and nails (the
+  splinter gun), Crysis' Typhoon (Hailstorm) and K-Volt, Far Cry's bow,
+  flamethrower and flare gun, UT's flak cannon and ripper, Max Payne's bat.
+  This phase takes what was missing from the arena shooters; the next takes
+  Hitman, 007, Max Payne, F.E.A.R. and Far Cry.
+- The combo rifle (Unreal Tournament's shock rifle): a beam (45) there the
+  instant you pull, violet, and on the right button a slow ball (12 m/s, 55
+  on what it touches, one cell). Put the beam within 1.2 m of the ball and
+  the two go off together where the ball was: 260 over 7 m, a violet flash,
+  "combo".
+- The storm beam (Quake's lightning gun, the Thunderbolt in Quake 1): a
+  steady beam for as long as you hold the trigger, as far as 20 m and no
+  further, 300 a second on the first thing it meets (the original's 30 every
+  tenth of a second), holding him where he stands while it is on him, ten
+  cells a second. A wall in the way stops it and is worn down like by the
+  flamethrower.
+- The sludge gun (the bio rifle): green sludge lobbed at 24 m/s that takes
+  hold of what it lands on and goes off 3.5 s later, at once on a man, or
+  on whoever comes within 1.5 m of it, 50 over 2.4 m and a cloud of poison
+  (22 a second for four seconds) where it went. The right button lobs a big
+  glob for five that breaks into five where it lands. Its burst is a wet
+  green splat, not a fireball, and it opens no holes.
+- The translocator: a disc thrown like a grenade that bounces a little and
+  lies where it stops; the right button puts you where it lies (on a roof,
+  if that is where it is), and anybody within 1.3 m of it is in pieces, the
+  telefrag. One disc at a time: a second throw takes the first back.
+- The warhead (Unreal Tournament's Redeemer and the TAC gun of Crysis): a
+  slow round (26 m/s) that goes off on what it meets, 900 over 18 m with the
+  warhead's flash and fire, which is too close for you inside that. Hold the
+  right button while it flies and it turns towards where you look, as the
+  Redeemer can be steered.
+- The meat hook (DOOM Eternal's super shotgun): the double barrel's right
+  button hooks the man nearest the middle of the sight within 28 m and pulls
+  you to 2.6 m from him at 32 m/s, holding a small one where he is; a wall
+  in the way lets go.
+- The right button: a weapon's row can now say what its second trigger does
+  (`alt`), in place of aiming down a sight. In view: a pale combo rifle with
+  violet rings, the storm beam's rod with five live coils, the sludge gun's
+  green tank, the translocator with the disc on its front, the warhead's
+  tube with the nose of the round out of the end; in flight a violet ball,
+  green sludge, the disc and a fat rocket with a warning nose.
+- Two fixes found on the way. The ammunition on the screen showed every
+  fraction of the flamethrower's fuel (and now the storm beam's cells): it is
+  shown whole. And something launched by a blast as it goes off could be
+  given the blast's own place in the projectile pool and be put out by the
+  step that was finishing with it: the sludge glob's five pieces are thrown
+  on the next step.
+- Where the ideas come from:
+  [Unreal Wiki, Shock Rifle](https://unreal.fandom.com/wiki/Shock_Rifle)
+  (a beam, a slow core, and the beam into the core for a combo),
+  [The Liandri Archives, Bio Rifle](https://liandri.beyondunreal.com/Bio_Rifle)
+  and [Unreal Wiki, Bio Rifle](https://unreal.fandom.com/wiki/Bio_Rifle)
+  (sludge that sticks and bursts, a charged glob that breaks into smaller
+  ones), [QuakeWorld wiki, Lightning Gun](https://www.quakeworld.nu/wiki/LG)
+  (30 a shot, 300 a second, a short reach),
+  [Unreal Wiki, Translocator](https://unreal.fandom.com/wiki/Translocator)
+  (throw, teleport, telefrag),
+  [The Liandri Archives, Redeemer](https://liandri.beyondunreal.com/Redeemer)
+  (the secondary fire steers it),
+  [Crysis Wiki, TAC Gun](https://crysis.fandom.com/wiki/TAC_Gun) (a handheld
+  nuclear grenade launcher that kills the user too close to it),
+  [DoomWiki, Super shotgun (Doom Eternal)](https://doomwiki.org/wiki/Super_shotgun_(Doom_Eternal))
+  (the meat hook). Checked through search excerpts; this session cannot
+  open the pages themselves. The names and numbers here are ours.
+- Checks (arsenal suite, six more): the combo rifle's beam through its own
+  ball sets off one combo that kills the two men round it; a second of the
+  storm beam kills a man 12 m off and leaves one 25 m off untouched; sludge
+  sticks, waits half a second, goes off on a man put a metre from it, hurts
+  him and leaves poison, and a glob breaks into five; the translocator puts
+  you on the disc (0 m off), telefrags the man on it, takes the disc and
+  keeps one at a time; the warhead takes all three men round where it lands
+  (with the city told to stand, so the checks after it are not in a crater),
+  and held it turns 29.5 degrees towards a look 30 degrees off; the meat hook
+  pulls you from 15 m to 2.6 m, and hooks nobody when there is nobody. The
+  every weapon against a wall check leaves out the translocator (a disc) and
+  the warhead (checked on its own). Screenshots arsenal-14-combo.png to
+  arsenal-18-warhead.png, the storm beam firing.
+
+## 140. Out of Max Payne, Hitman, 007 First Light, F.E.A.R. and Far Cry
+
+- The rest of the ask: seven more, each the idea of one weapon there under a
+  name and numbers of our own.
+- Twin pistols (Max Payne's two Berettas): a pistol in each hand, firing
+  left and right in turn, the flash and the tracer from whichever hand it
+  was, 36 rounds for the pair. They do not come onto the centre line when
+  you aim; they close in a little, one each side.
+- The dart phone (007 First Light): a dart, flat and quiet, that puts a man
+  down asleep for twelve seconds rather than for good. A thief or a brawler
+  in .BACKDOOR is subdued by it.
+- Throwing knives (Far Cry 3): silent, eight of them, and one is enough if
+  it lands.
+- The rubber duck (Hitman's explosive one): thrown, it sits where it lands
+  being a duck, a light blinking on its back, and quacks as it leaves your
+  hand; T sets it off with the C4, 320 over 6 m.
+- The fibre wire (Hitman): from behind, quietly the end of him; from in front
+  of him it does nothing at all, and says so.
+- The fire ring (Far Cry 6's Supremo backpacks, the Furioso's Fuego Loco): a
+  ring of fire out from where you stand to 17 m at 16 m/s, burning and
+  throwing back everybody it runs through (90 each), scorching every
+  frontage it reaches (60 once in each cell of the city's damage grid, the
+  way the flamethrower wears one down, 64 rays round so a column of the
+  Gate a few metres off is not missed) and setting the trees at its edge
+  alight; then the pack takes ten seconds to fill. The game's goes
+  out ahead of you; this one goes all the way round.
+- The particle rifle (F.E.A.R.'s Type-7): four shots, 400 each, and what it
+  kills is left standing as a burnt skeleton, the bones the ion cannon
+  leaves.
+- Where the ideas come from:
+  [Max Payne Wiki, Dual wielding](https://maxpayne.fandom.com/wiki/Dual-wielding)
+  (two Berettas, twice as fast, 36 rounds),
+  [GamingBolt, 007 First Light's gadgets](https://gamingbolt.com/?p=644606)
+  and [Narcosis, 007 First Light gadgets](https://www.narcosis-the-game.com/?p=2861)
+  (darts that immobilise for a limited time),
+  [Far Cry Wiki, Throwing Knife](https://farcry.fandom.com/wiki/Throwing_Knife)
+  (silent, one hit),
+  [Twinfinite, Hitman 3 remote explosives](https://twinfinite.net/guides/hitman-3-use-remote-explosives/)
+  and [GamesRadar, the rubber duck challenge](https://gamesradar.com/hitman-rubber-duck-challenge)
+  (the duck, dropped and set off), the
+  [Steam discussion](https://steamcommunity.com/app/236870/discussions/0/392183857633731206/?ctp=2)
+  on its light giving it away,
+  [Hitman Wiki, Fiber Wire](https://hitman.fandom.com/wiki/Fiber_Wire) (from
+  behind, silent),
+  [PC Gamer, Far Cry 6's Supremo backpacks](https://www.pcgamer.com/uk/far-cry-6s-supremo-backpacks-are-so-op-they-feel-like-cheat-codes)
+  (the Furioso's ring of fire), and
+  [Giant Bomb, F.E.A.R.](https://www.giantbomb.com/games/3030-4800/) (the
+  particle weapon leaves a scorched skeleton). Checked through search
+  excerpts; this session cannot open the pages themselves.
+- Checks (arsenal suite, seven more): two pistols fire left and right in
+  turn (two of three from the left), hold 36 and put a man 14 m off down
+  in three; the dart phone puts a man down asleep for 12 s, alive, and he is
+  still down 6 s later; one throwing knife kills a man 12 m off; the duck
+  sits where it lands, waits, and T sets it off and both men by it; the
+  fibre wire kills from behind and leaves a man facing you untouched; the
+  fire ring catches all three round you within 17 m, none at 22 m, and is
+  gone, with ten seconds to fill again; one particle shot kills a man 30 m
+  off and leaves him standing as bones. The every weapon against a wall
+  check takes the new ones too: the duck is set off there like the C4, the
+  ring is given a second and a half to get to the wall, and the fibre wire
+  is left out, with the banana and the translocator's disc, as something
+  that was never going to dent a wall.
+  Screenshots arsenal-19-twins.png to arsenal-24-particle.png, the last with
+  what the rifle left.
+- The live run found the ring at 0 against a wall now and then, and once at
+  1350. The 1350 was a ray every few degrees all scorching the same
+  frontage, hence the once a cell. The 0 was the world's raycast: it hands
+  back one answer object it reuses, and the ring kept that object for
+  each wall it found, so every one of them ended up holding the last ray's
+  distance and was reached late or never. It now keeps a copy of each hit,
+  and the storm beam copies its own before it asks the bodies in the way.
+  Three runs of the wall check in a row: the ring at 276 each time.
+- The next live run had the ring at 502 and the grenade launcher at 0, and
+  that was the same mistake in the check itself: its search for the nearest
+  wall kept the world's answer object too, so it walked up to the last ray's
+  point along the first ray's line, and which frontage that was depended on
+  what the weapons before had opened up. The ripper's wall search did the
+  same. Both keep a copy now. Here every weapon wears the frontage down
+  (the launcher 388) and the suite passes 92 of 92; the live city cannot be
+  fetched from this session, so the CI run is the check there.
+- That run passed the wall check (the launcher 345) and failed the ripper's
+  ricochet: no wall within sixty metres. With every weapon now going at the
+  one nearest frontage, the wall check brings it down, where before its
+  damage was spread round the square. It puts the city back when it is
+  done now (`demolition.reset()` and the collapses cleared, as the cheats
+  and city suites do). Measured here: rays at eight metres find 17 walls
+  within forty, 4 after six heavy blasts on the nearest frontage, and 17
+  again after the reset.
+- With that the live run got through the arsenal, cheats, city, districts
+  and machines suites, and the interface suite failed one check: the pause
+  bar 24 px off the left edge, 1.8 s after Esc. That is the first frame of
+  its 0.16 s slide in. The world goes on being drawn behind the pause, the
+  check comes just after F3 puts the high tier on, and a frame of the live
+  city at that tier on the runner's software GL can take longer than the
+  wait; the animation's clock only moves a frame at a time, so the box
+  read where the slide in starts. Shown here: one two second frame right
+  after the menu comes up and the box reads -24 px while its layout reads
+  0, and both read 0 once frames come again. The check now reads where the
+  bar is laid out, which is what it was asking.
+- The run after that failed in the machines suite instead, which had passed
+  the time before: theirs fire seven kinds of gun counted six, because
+  there had been no room to stand the Mantis where it could see you, and
+  the count only took the kind from a mech that was stood up. Placement is
+  random; here the next run had no room for the Ram. The kind belongs to
+  the chassis, so the count now reads it from the table the spawn takes it
+  from (`mechSpec`): auto, shotgun, rail, shell, swarm, thermite and laser.
+  Whether each gun can hurt you still needs one standing.
+- The next run passed the interface, Tactics and Slayer and The Hunt, and
+  failed two checks in .BACKDOOR, both a car let go that was measured as
+  if it had to go straight on: after the lights went green both ways it was
+  1.3 m past the middle of the junction along the way it came in, and after
+  the steam stopped it was 27 m back from where it had waited. At the end
+  of a stretch of road a driver takes one of the ways on at random, and
+  turns back where there is none (`nextLeg`); the live city's ways end at
+  most junctions and now and then in between, so a car turned, or came
+  back round. Both checks now ask what they are about, whether it drives
+  on: through the junction (within its radius of the middle, and further
+  than its approach and the radius together in five seconds, which a car
+  stopped in the junction is not) and away from the steam. Here 55.6 m and
+  2.4 m from the middle, and 55.8 m; the suite passes 48 of 48.
+- The run on that failed early, in the arsenal: one rifle round is a dent
+  read 31 against a ceiling of 30. A hit gives the cell of the damage grid
+  it lands in all of it and the cells within a metre and a half across a
+  line a share, so the sum over the grid for one round is anything up to
+  four times it, by where it lands; since the wall check goes at the one
+  nearest frontage, which in the live city stands on a line of the 22 m
+  grid, the kick and the butt read exactly twice what they did (90 and 60
+  for 45 and 30). Shown here with one round's 15: 15 in the middle of a
+  cell, 30 on a line, 60 on a corner, and 15 in the cell it hit each time.
+  The check now reads the cell it hit, and the other checks keep the sum.
+- The run on that got to .BACKDOOR again, the green light check passing
+  (50.5 m on, 1.7 m from the middle), and failed two others. The two cars
+  sent at each other on green both ways missed by 8.4 m: one of them took
+  another way where its stretch of road ended. And the car at the steam
+  waited 12.9 m short and then did not move at all: a car stops 0.6 of its
+  8 m gap short of whatever is in its lane, people and you included, you
+  stood 8 m short of the pipe to get into it, and 8 and 4.8 is 12.8, so
+  where the lane ran near the kerb it was you it was waiting for, and still
+  was after the steam. A driver can now be told to keep straight on where a
+  stretch ends (`through`: the way on that leaves most nearly the way it is
+  facing, with a unit check of its own); the three checks' cars are, and
+  everybody else still takes a way at random. And you step off the road
+  once the steam is going, and back to blow the pipe. Here the cars crash
+  (4.4 m), the car waits 5.6 m short and goes 55.8 m after, and the suite
+  passes 48 of 48.
+- The run on that passed the interface, its pause check included, and
+  Tactics and Slayer, and failed one check in The Hunt: X changed the
+  draw weight none of three times. The cheat menu puts the weapon away
+  while it is up and gives it back on the game's next step after it
+  closes, the check had just used the menu, and X does nothing to a bow
+  that is put away. Shown here: closed with no step after, the bow is
+  still away and the draw does not change; one step later it is in hand
+  and goes to strong. On a slow frame in the live city all three presses
+  fell before that step. The check now steps the game until the bow is
+  back; the suite passes 38 of 38.
+- The run on that passed every suite but one check in .BACKDOOR: the two
+  cars sent at each other on green both ways, both going straight on now,
+  went through 4.9 m apart, and two cars meet when their boxes do, under
+  4.5 m. The check set them off the same distance back along straight lines
+  from where they started, but a car keeps to its lane, the live city's
+  lanes are not those lines, and half a second either way is a miss. Each
+  is now driven through on its own first and its line kept step by step;
+  where the two lines cross is where they meet, and each is put back on its
+  own line the same time short of it, going as it went there. Here the
+  lines cross within 0.2 m, two seconds out, and they crash; the suite
+  passes 48 of 48.
+- The run on that passed every suite to The Hunt and every traffic check in
+  .BACKDOOR (the two cars crashed, 4.1 m, their lines 0.1 m apart), and
+  failed one: the ATM threw its cash into the street and none of the four
+  people put by it came. They were put anywhere in a ring 10 to 16 m out,
+  which in the middle of the city is as likely behind the frontage the
+  machine is in, or a block away, as in front of it, and the traffic was
+  left running on Unter den Linden: somebody in a panic runs from what
+  frightened him, cash or no cash, and a crash nearby is enough. They are
+  now put out in front of it, where they can see it, and the street is kept
+  clear of traffic while it sprays. Here all four come; the suite passes
+  48 of 48.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

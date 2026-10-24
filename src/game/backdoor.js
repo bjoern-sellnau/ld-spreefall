@@ -33,6 +33,17 @@ export const BACKDOOR = {
     vent: { name: 'Vent steam', cost: 10, seconds: 0 },
     blow: { name: 'Blow the pipe', cost: 35, seconds: 0 },
     blackout: { name: 'Blackout', cost: 100, seconds: 0 },
+    // A power box on the pavement: blown now, or set to blow on whoever
+    // comes near it, the way the hacker games let you.
+    overload: { name: 'Overload', cost: 25, seconds: 0 },
+    trap: { name: 'Set a trap', cost: 20, seconds: 0 },
+    // A cash machine: into it, which takes a moment, or made to throw its
+    // notes into the street.
+    withdraw: { name: 'Withdraw', cost: 30, seconds: 1.6 },
+    spray: { name: 'Spray the cash', cost: 20, seconds: 0 },
+    // The blockers at a junction.
+    raise: { name: 'Raise blockers', cost: 15, seconds: 0 },
+    lower: { name: 'Lower them', cost: 0, seconds: 0 },
   },
 };
 

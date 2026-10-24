@@ -12,6 +12,9 @@
 // front of the bumper, from the same raycast the bullets use. Nothing here
 // has a physics library behind it and nothing here needs one.
 
+// How many burnt out shells may stand about at once before the oldest goes.
+const KEEP_WRECKS = 12;
+
 export const KIND = { GROUND: 'ground', AIR: 'air' };
 
 export const VEHICLE = {
@@ -144,7 +147,29 @@ export class Vehicles {
     this.driving = null;
   }
 
-  free() { return this.pool.find((v) => !v.alive) || null; }
+  /**
+   * A slot for a new one. When every slot is taken, the oldest burnt out
+   * shell makes way: a wreck is scenery, a car that cannot be spawned is a
+   * hole in the traffic.
+   */
+  free() {
+    const v = this.pool.find((x) => !x.alive);
+    if (v) return v;
+    const old = this._oldestWreck();
+    if (!old) return null;
+    this.remove(old);
+    return old;
+  }
+
+  /** The shell that has been burnt out longest. */
+  _oldestWreck() {
+    let old = null;
+    for (const w of this.active) if (w.health <= 0 && (!old || w.dying > old.dying)) old = w;
+    return old;
+  }
+
+  /** How many burnt out shells are standing about. */
+  get wrecks() { return this.active.reduce((n, v) => n + (v.health <= 0 ? 1 : 0), 0); }
 
   /** Takes one out of the street at once, with nothing left behind. */
   remove(v) {
@@ -286,7 +311,14 @@ export class Vehicles {
         } else {
           v.speed *= Math.max(0, 1 - 3 * dt);
         }
-        if (v.dying > 14) { v.alive = false; this.active.splice(i, 1); }
+        // And then it stays, a burnt out shell where it went up. It used to
+        // be taken away fourteen seconds on, which from the street looked
+        // like the wreck going up in smoke a second time. Only past a dozen
+        // of them does the oldest go, so a long fight does not fill the pool.
+        if (v.dying > 14 && this.wrecks > KEEP_WRECKS && this._oldestWreck() === v) {
+          v.alive = false;
+          this.active.splice(i, 1);
+        }
         continue;
       }
 

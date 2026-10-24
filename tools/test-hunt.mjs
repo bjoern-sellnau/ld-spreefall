@@ -472,7 +472,14 @@ async function run() {
       && bows.chosen.model === 'bowTactic' && /TACTIC BOW/.test(bows.chosen.label), JSON.stringify(bows));
 
   // --- the bow: draw weights and the shock head ---------------------------------------
-  await page.evaluate(() => { const s = window.spreefall; s.weapon.select('bow'); s.weapon.drawWeight = 0; s.weapon.arrowHead = 0; });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.weapon.select('bow'); s.weapon.drawWeight = 0; s.weapon.arrowHead = 0;
+    // The menu gives the bow back on the game's next step after it closes,
+    // and until then X has nothing to change: on a slow frame in the live
+    // city all three presses fell before it, and read medium three times.
+    for (let i = 0; i < 10 && s.weapon.holstered; i++) s.fixedForTest(1 / 60);
+  });
   const draws = [];
   for (let i = 0; i < 3; i++) {
     draws.push(await page.evaluate(() => {

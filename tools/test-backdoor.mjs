@@ -490,6 +490,25 @@ async function run() {
   check('and his phone ringing breaks it up, nobody hurt any further',
     broken.rang && broken.over === 'brokenUp' && broken.rep > 0 && broken.oUp, JSON.stringify(broken));
 
+  // The baton on the one who started a fight: the takedown by hand, from a swing.
+  await crime('brawl', [-9, 1], [-13, 1]);
+  await steps(60 * 5);
+  const batoned = await page.evaluate(() => {
+    const s = window.spreefall;
+    const o = window.live.o;
+    s.teleport(o.x + 1.4, o.z);
+    const dx = o.x - s.player.x, dz = o.z - s.player.z;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, -10);
+    s.camera.update(16 / 9);
+    s.weapon.giveAll(); s.weapon.select('baton'); s.weapon.cooldown = 0;
+    const rep = s.crimes.rep;
+    s.shoot();
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    return { phase: window.live.c.phase, over: window.live.c.over, rep: s.crimes.rep - rep };
+  });
+  check('the baton on the one who started it is the takedown by hand: subdued, and your name better for it',
+    batoned.over === 'subdued' && batoned.rep > 0, JSON.stringify(batoned));
+
   await crime('theft', [-6, 1], [-8, 1]);
   const got = await page.evaluate(() => {
     const s = window.spreefall;
@@ -608,6 +627,8 @@ async function run() {
     const l = j.legs.find((k) => k.phase === 0);
     const v = s.spawnTraffic('car', { x: j.x + l.dx * 60, z: j.z + l.dz * 60, yaw: Math.atan2(l.dx, l.dz) });
     v.speed = 10;
+    // Straight on where its stretch of road ends, not a turning at random.
+    v.traffic.through = true;
     for (let i = 0; i < 60 * 7; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
     const short = Math.hypot(v.x - j.x, v.z - j.z);
     const held = { speed: +v.speed.toFixed(2), short: +short.toFixed(1) };
@@ -615,16 +636,28 @@ async function run() {
     s.phone.battery = s.backdoorSpec.battery.most;
     const ok2 = s.hackKey(1);
     const green = [s.lightAt(j, 0), s.lightAt(j, 1)];
-    for (let i = 0; i < 60 * 5; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
+    // Through, whichever way out it takes: at the end of a stretch of road
+    // a driver picks one of the ways on at random, and in the live city the
+    // map's ways end at most junctions, so straight on is one choice of
+    // several. Into the junction and the length of its approach and more.
+    let moved = 0, closest = Infinity;
+    for (let i = 0; i < 60 * 5; i++) {
+      const x0 = v.x, z0 = v.z;
+      s.fixedForTest(1 / 60); window.keepClear([v]);
+      moved += Math.hypot(v.x - x0, v.z - z0);
+      closest = Math.min(closest, Math.hypot(v.x - j.x, v.z - j.z));
+    }
     const past = (v.x - j.x) * l.dx + (v.z - j.z) * l.dz;
     for (const k of j.group || [j]) k.hack = null;
-    return { ok, both, held, r: j.r, ok2, green, past: +past.toFixed(1) };
+    return { ok, both, held, r: j.r, ok2, green, past: +past.toFixed(1), moved: +moved.toFixed(1),
+      closest: +closest.toFixed(1) };
   });
   check('Q turns it red both ways, and a car coming up to it waits short of it',
     red.ok && red.both.every((b) => b === 'red') && red.held.speed < 0.5 && red.held.short > red.r && red.held.short < red.r + 12,
     JSON.stringify(red));
-  check('E turns it green both ways, and the car goes on through', red.ok2 && red.green.every((b) => b === 'green') && red.past < -red.r,
-    JSON.stringify({ green: red.green, past: red.past }));
+  check('E turns it green both ways, and the car goes on through',
+    red.ok2 && red.green.every((b) => b === 'green') && red.closest < red.r && red.moved > red.held.short + red.r,
+    JSON.stringify({ green: red.green, closest: red.closest, moved: red.moved, past: red.past }));
 
   // Green both ways with somebody coming each way: nobody gives way.
   const pile = await page.evaluate(async () => {
@@ -632,17 +665,42 @@ async function run() {
     const j = window.junction;
     s.vehicles.reset();
     const a = j.legs.find((k) => k.phase === 0), b = j.legs.find((k) => k.phase === 1);
-    const A = s.spawnTraffic('car', { x: j.x + a.dx * 30, z: j.z + a.dz * 30, yaw: Math.atan2(a.dx, a.dz) });
-    const B = s.spawnTraffic('car', { x: j.x + b.dx * 30, z: j.z + b.dz * 30, yaw: Math.atan2(b.dx, b.dz) });
-    // Each the same way short of where their lanes cross, so they get there together.
-    const fa = [-Math.sin(A.yaw), -Math.cos(A.yaw)], fb = [-Math.sin(B.yaw), -Math.cos(B.yaw)];
-    const den = fa[0] * fb[1] - fa[1] * fb[0];
-    const t = ((B.x - A.x) * fb[1] - (B.z - A.z) * fb[0]) / den;
-    const P = { x: A.x + fa[0] * t, z: A.z + fa[1] * t };
-    A.x = P.x - fa[0] * 32; A.z = P.z - fa[1] * 32;
-    B.x = P.x - fb[0] * 32; B.z = P.z - fb[1] * 32;
-    A.speed = B.speed = 9;
-    for (const k of j.group || [j]) k.hack = { kind: 'green', left: 8 };
+    for (const k of j.group || [j]) k.hack = { kind: 'green', left: 60 };
+    // Each driven through on its own first, from 30 m out, straight on, and
+    // where it was at every step: the line it really takes and when. Set
+    // off together along straight lines from where they started, they once
+    // went through 4.9 m apart, the live city's lanes not being straight
+    // lines, and half a second either way is a miss.
+    const alone = (l) => {
+      const V = s.spawnTraffic('car', { x: j.x + l.dx * 30, z: j.z + l.dz * 30, yaw: Math.atan2(l.dx, l.dz) });
+      V.speed = 9;
+      V.traffic.through = true;
+      const path = [];
+      for (let i = 0; i < 60 * 6; i++) {
+        path.push({ x: V.x, z: V.z, yaw: V.yaw, speed: V.speed });
+        s.fixedForTest(1 / 60);
+        window.keepClear([V]);
+      }
+      s.vehicles.remove(V);
+      return path;
+    };
+    const pa = alone(a), pb = alone(b);
+    // Where the two lines cross, and each put back on its own line the same
+    // time short of it, going as it was going there.
+    let meet = { d: Infinity, ia: 0, ib: 0 };
+    for (let ia = 0; ia < pa.length; ia += 2) {
+      for (let ib = 0; ib < pb.length; ib += 2) {
+        const d = Math.hypot(pa[ia].x - pb[ib].x, pa[ia].z - pb[ib].z);
+        if (d < meet.d) meet = { d, ia, ib };
+      }
+    }
+    const lead = Math.min(120, meet.ia, meet.ib);
+    const sa = pa[meet.ia - lead], sb = pb[meet.ib - lead];
+    const A = s.spawnTraffic('car', { x: sa.x, z: sa.z, yaw: sa.yaw });
+    const B = s.spawnTraffic('car', { x: sb.x, z: sb.z, yaw: sb.yaw });
+    A.x = sa.x; A.z = sa.z; A.yaw = sa.yaw; A.speed = sa.speed;
+    B.x = sb.x; B.z = sb.z; B.yaw = sb.yaw; B.speed = sb.speed;
+    A.traffic.through = B.traffic.through = true;
     const crashes = s.crashes;
     let closest = Infinity;
     for (let i = 0; i < 60 * 6 && s.crashes === crashes; i++) {
@@ -652,7 +710,8 @@ async function run() {
     }
     for (const k of j.group || [j]) k.hack = null;
     return { crashed: s.crashes - crashes, a: !!A.traffic.crashed, b: !!B.traffic.crashed,
-      hurt: A.health < A.spec.health && B.health < B.spec.health, closest: +closest.toFixed(1) };
+      hurt: A.health < A.spec.health && B.health < B.spec.health, closest: +closest.toFixed(1),
+      lines: +meet.d.toFixed(1), lead: +(lead / 60).toFixed(1) };
   });
   check('green both ways with a car coming each way: nobody gives way, and they crash',
     pile.crashed > 0 && pile.a && pile.b && pile.hurt, JSON.stringify(pile));
@@ -713,8 +772,14 @@ async function run() {
     s.phone.battery = s.backdoorSpec.battery.most;
     const ok = s.hackKey(0);
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
+    // Off the road once it is going: you stood eight metres short of the
+    // pipe to get into it, and where the lane runs near the kerb a car
+    // stopped for you there, 13 m short, and stayed stopped after.
+    const stood = { x: s.player.x, z: s.player.z };
+    s.teleport(p.x + fz * 40, p.z - fx * 40);
     const v = s.spawnTraffic('car', { x: p.x - fx * 45, z: p.z - fz * 45, yaw: p.yaw });
     v.speed = 10;
+    v.traffic.through = true;
     let steam = 0;
     for (let i = 0; i < 60 * 5; i++) {
       s.fixedForTest(1 / 60);
@@ -723,16 +788,30 @@ async function run() {
     }
     const gap = Math.hypot(v.x - p.x, v.z - p.z);
     const out = { ok, venting: p.vent > 0, steam, speed: +v.speed.toFixed(2), gap: +gap.toFixed(1) };
-    // And once it stops, on it goes.
+    // And once it stops, on it goes: on down the road, whichever way the
+    // road takes it, since at the end of a stretch the driver picks the way
+    // on at random, and in the live city that is sometimes back round.
     p.vent = 0;
-    for (let i = 0; i < 60 * 5; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
+    let moved = 0;
+    for (let i = 0; i < 60 * 5; i++) {
+      const x0 = v.x, z0 = v.z;
+      s.fixedForTest(1 / 60); window.keepClear([v]);
+      moved += Math.hypot(v.x - x0, v.z - z0);
+    }
+    out.moved = +moved.toFixed(1);
     out.past = +(((v.x - p.x) * fx + (v.z - p.z) * fz)).toFixed(1);
     s.vehicles.remove(v);
     for (const j of held) j.hack = null;
+    // And back where you stood, looking at the cover, for blowing it.
+    s.teleport(stood.x, stood.z);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    const dx = p.x - s.player.x, dz = p.z - s.player.z, dy = s.world.groundHeight(p.x, p.z) + 0.1 - (s.player.y + 1.7);
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
     return out;
   });
   check('Q vents steam across the road, and a car stops short of it until it stops',
-    vent.ok && vent.venting && vent.steam > 5 && vent.speed < 0.5 && vent.gap > 2.5 && vent.past > 3, JSON.stringify(vent));
+    vent.ok && vent.venting && vent.steam > 5 && vent.speed < 0.5 && vent.gap > 2.5 && vent.moved > vent.gap + 3, JSON.stringify(vent));
 
   const blow = await page.evaluate(async () => {
     const s = window.spreefall;
@@ -874,6 +953,264 @@ async function run() {
     for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
   });
   await page.screenshot({ path: path.join(SHOTS, 'backdoor-07-blackout.png') });
+
+  // --- power boxes, ATMs and road blockers -----------------------------------
+  // Daylight and the power back for these.
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.blackout.left = 0; s.blackout.dark = 0; s.setTime(14);
+    s.vehicles.reset(); s.soldiers.reset();
+    s.crimes.live = null; s.crimes.next = 1e9;
+    s.teleport(81, 0);
+    for (let i = 0; i < 3; i++) s.fixedForTest(1 / 60);
+    // Stand somewhere that can see it, look at it, and see whether the phone
+    // is on it.
+    window.onTo = async (ref, x, y, z) => {
+      for (const off of [6, 8, 5, 10]) {
+        for (let k = 0; k < 12; k++) {
+          const a = (k / 12) * Math.PI * 2;
+          const px = x + Math.cos(a) * off, pz = z + Math.sin(a) * off;
+          const g = s.world.groundHeight(px, pz);
+          if (!s.world.lineOfSight(px, g + 1.7, pz, x, y, z)) continue;
+          s.teleport(px, pz);
+          for (let i = 0; i < 2; i++) s.fixedForTest(1 / 60);
+          const dx = x - s.player.x, dz = z - s.player.z, dy = y - (s.player.y + 1.7);
+          s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
+          for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+          // The same one, or the one standing in its place if the street was
+          // worked out again since.
+          const t = s.hackTarget;
+          if (t && (t.ref === ref || (Math.abs(t.ref.x - ref.x) < 0.3 && Math.abs(t.ref.z - ref.z) < 0.3))) return true;
+        }
+      }
+      return false;
+    };
+  });
+  const street = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const boxes = s.boxesNear(250), atms = s.atmsNear(400), rows = s.bollardRows();
+    // An ATM is in a wall: within half a metre of one, behind it.
+    const inWall = atms.slice(0, 6).filter((a) => {
+      const f = a.f, g = s.world.groundHeight(f.x, f.z);
+      const h = s.world.raycast(f.x - Math.sin(f.yaw) * 0.3, g + 1.2, f.z - Math.cos(f.yaw) * 0.3, Math.sin(f.yaw), 0, Math.cos(f.yaw), 1.2);
+      return h && h.kind === 'wall';
+    }).length;
+    // The nearest one the phone can be got onto: something else can stand
+    // between you and the first.
+    let on = false;
+    for (const k of boxes.slice(0, 8)) {
+      const b = k.f;
+      if (await window.onTo(b, b.x, s.world.groundHeight(b.x, b.z) + 0.9, b.z)) { on = true; break; }
+    }
+    return { boxes: boxes.length, atms: atms.length, inWall, rows: rows.length, on,
+      card: document.getElementById('hcname').textContent, acts: document.getElementById('hcacts').textContent,
+      drawn: s.renderer.actors.powerBox.instanceCount };
+  });
+  check('power boxes stand along the pavements, ATMs are in the walls behind them, blockers wait at the junctions',
+    street.boxes >= 5 && street.atms >= 1 && street.inWall >= 1 && street.rows >= 8 && street.drawn >= 3, JSON.stringify(street));
+  check('and the phone gets into a power box: overload it, or set it as a trap',
+    street.on && street.card === 'Power box' && /Q\s*Overload/.test(street.acts) && /E\s*Set a trap/.test(street.acts),
+    JSON.stringify(street));
+
+  const zapped = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const b = s.hackTarget.ref;
+    // Three people beside it and a car at the kerb next to it.
+    const people = [];
+    for (let i = 0; i < 3; i++) {
+      const c = s.soldiers.spawnCivilianNear(b.x, b.z, 2, 6);
+      if (!c) continue;
+      const a = (i / 3) * Math.PI * 2;
+      c.x = b.x + Math.cos(a) * 2.5; c.z = b.z + Math.sin(a) * 2.5; c.y = s.world.groundHeight(c.x, c.z);
+      c.targetX = c.x; c.targetZ = c.z; c.rise = 0;
+      people.push(c);
+    }
+    const car = s.spawnTraffic('car', { x: b.x - Math.sin(b.yaw) * 4, z: b.z - Math.cos(b.yaw) * 4, yaw: b.yaw + Math.PI / 2 });
+    // Waiting at the kerb beside it.
+    if (car) { car.x = b.x - Math.sin(b.yaw) * 4; car.z = b.z - Math.cos(b.yaw) * 4; car.speed = 0; }
+    s.phone.battery = s.backdoorSpec.battery.most;
+    const blown = s.state.boxesBlown || 0;
+    const ok = s.hackKey(0);
+    const crackling = s.boxesNear(250).some((k) => k.f === b && k.light === 1);
+    let floored = 0;
+    for (let i = 0; i < 60 * 1.6; i++) {
+      s.fixedForTest(1 / 60);
+      if (i === 70) floored = people.filter((c) => c.state === 4 || c.health <= 0).length;
+    }
+    const out = { ok, crackling, blown: (s.state.boxesBlown || 0) - blown, floored, people: people.length,
+      stalled: car && car.traffic ? car.traffic.stalled > 0 : null, burnt: s.boxesNear(250).some((k) => k.f === b && k.light === 3) };
+    s.soldiers.reset();
+    if (car) s.vehicles.remove(car);
+    return out;
+  });
+  check('overloaded, it crackles, then blows: the people round it are off their feet and the car beside it stalls',
+    zapped.ok && zapped.crackling && zapped.blown === 1 && zapped.floored >= 2 && zapped.stalled !== false && zapped.burnt,
+    JSON.stringify(zapped));
+
+  const trapped = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const b0 = s.boxesNear(250).map((k) => k.f).find((f) => f.spent <= 0 && f.fuse <= 0);
+    const on = await window.onTo(b0, b0.x, s.world.groundHeight(b0.x, b0.z) + 0.9, b0.z);
+    const b = s.hackTarget.ref;
+    s.phone.battery = s.backdoorSpec.battery.most;
+    const ok = s.hackKey(1);
+    const set = b.trap > 0;
+    // Nothing near it: it waits.
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    const waited = b.spent <= 0 && b.trap > 0;
+    // Somebody walking along the pavement past it.
+    const fx = -Math.sin(b.yaw), fz = -Math.cos(b.yaw);
+    const ax = -fz, az = fx;
+    const c = s.soldiers.spawnCivilianNear(b.x, b.z, 8, 12);
+    c.rise = 0;
+    c.x = b.x + ax * 9 + fx * 0.8; c.z = b.z + az * 9 + fz * 0.8; c.y = s.world.groundHeight(c.x, c.z);
+    c.directed = { x: b.x - ax * 5 + fx * 0.8, z: b.z - az * 5 + fz * 0.8, speed: 2.5 };
+    const blown = s.state.boxesBlown || 0;
+    let t = 0, closest = 99;
+    while ((s.state.boxesBlown || 0) === blown && t < 8) {
+      s.fixedForTest(1 / 60); t += 1 / 60;
+      closest = Math.min(closest, Math.hypot(c.x - b.x, c.z - b.z));
+    }
+    const out = { on, ok, set, waited, went: (s.state.boxesBlown || 0) - blown, after: +t.toFixed(1),
+      floored: c.state === 4 || c.health <= 0, closest: +closest.toFixed(1) };
+    c.directed = null;
+    s.soldiers.reset();
+    return out;
+  });
+  check('a trap waits, and goes off on whoever walks up to it',
+    trapped.on && trapped.ok && trapped.set && trapped.waited && trapped.went === 1 && trapped.floored, JSON.stringify(trapped));
+
+  const atm = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const list = s.atmsNear(400);
+    let a = null;
+    for (const k of list) {
+      const f = k.f;
+      const fx = -Math.sin(f.yaw), fz = -Math.cos(f.yaw);
+      const y = s.world.groundHeight(f.x, f.z) + 1.3;
+      // In front of it, on the pavement.
+      for (const off of [4, 6, 3]) {
+        const px = f.x + fx * off, pz = f.z + fz * off;
+        const g = s.world.groundHeight(px, pz);
+        if (!s.world.lineOfSight(px, g + 1.7, pz, f.x + fx * 0.2, y, f.z + fz * 0.2)) continue;
+        s.teleport(px, pz);
+        for (let i = 0; i < 2; i++) s.fixedForTest(1 / 60);
+        const dx = f.x - s.player.x, dz = f.z - s.player.z, dy = y - (s.player.y + 1.7);
+        s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
+        for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+        const t = s.hackTarget;
+        if (t && t.kind === 'atm' && Math.abs(t.ref.x - f.x) < 0.3 && Math.abs(t.ref.z - f.z) < 0.3) { a = t.ref; break; }
+      }
+      if (a) break;
+    }
+    if (!a) return { found: false, count: list.length };
+    const card = document.getElementById('hcname').textContent, acts = document.getElementById('hcacts').textContent;
+    s.phone.battery = s.backdoorSpec.battery.most;
+    const money = s.phone.money;
+    const ok = s.hackKey(0);
+    // It takes a moment, with the phone kept on it.
+    const t0 = performance.now();
+    while (s.phone.job && performance.now() - t0 < 30000) await new Promise((r) => requestAnimationFrame(r));
+    const got = s.phone.money - money;
+    const empty = a.empty > 0;
+    // And the next one: spray it, with people about: out in front of it, on
+    // its side of the wall where they can see it, and with the traffic kept
+    // off the street. Anywhere in a ring round it put some behind the
+    // frontage it is in, and a crash in the traffic sends people running
+    // the other way, cash or no cash; once none of four came.
+    a.empty = 0;
+    window.keepClear([]);
+    const fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw);
+    const ga = s.world.groundHeight(a.x, a.z);
+    const people = [];
+    for (const [out, along] of [[6, -6], [7, 6], [9, -9], [10, 9], [5, -3], [8, 3], [12, 0], [4, 7]]) {
+      if (people.length >= 4) break;
+      const x = a.x + fx * out - fz * along, z = a.z + fz * out + fx * along;
+      const g = s.world.groundHeight(x, z);
+      if (!s.world.lineOfSight(x, g + 1, z, a.x + fx * 0.5, ga + 1, a.z + fz * 0.5)) continue;
+      const c = s.soldiers.spawnCivilianNear(a.x, a.z, 2, 8);
+      if (!c) break;
+      c.x = x; c.z = z; c.y = g; c.targetX = x; c.targetZ = z;
+      c.rise = 0; c.panicLeft = 0;
+      people.push(c);
+    }
+    const before = people.map((c) => Math.hypot(c.x - a.x, c.z - a.z));
+    s.phone.battery = s.backdoorSpec.battery.most;
+    const ok2 = s.hackKey(1);
+    for (let i = 0; i < 60 * 3; i++) { s.fixedForTest(1 / 60); window.keepClear([]); }
+    const closer = people.filter((c, i) => Math.hypot(c.x - a.x, c.z - a.z) < before[i] - 3).length;
+    const out = { found: true, card, acts, ok, got, empty, ok2, spraying: a.spray > 0, people: people.length, closer };
+    s.soldiers.reset();
+    return out;
+  });
+  check('an ATM in the wall pays out what it holds, and is empty after',
+    atm.found && atm.card === 'ATM' && /Q\s*Withdraw/.test(atm.acts) && atm.ok && atm.got >= 80 && atm.empty, JSON.stringify(atm));
+  check('or throws its cash into the street, and the people near come running for it',
+    atm.found && atm.ok2 && atm.spraying && atm.people >= 2 && atm.closer >= 2, JSON.stringify(atm));
+
+  const blockers = await page.evaluate(async () => {
+    const s = window.spreefall;
+    // A row with straight road behind it, coming into the junction.
+    const rows = s.bollardRows().filter((r) => Math.hypot(r.x - 81, r.z) < 400)
+      .sort((a, b) => Math.hypot(a.x - 81, a.z) - Math.hypot(b.x - 81, b.z));
+    for (const row of rows) {
+      const yaw = Math.atan2(row.nx, row.nz);
+      const v = s.spawnTraffic('car', { x: row.x + row.nx * 30, z: row.z + row.nz * 30, yaw });
+      if (!v) continue;
+      const along = (v.x - row.x) * row.nx + (v.z - row.z) * row.nz;
+      const across = (v.x - row.x) * row.ax + (v.z - row.z) * row.az;
+      if (Math.cos(v.yaw - yaw) < 0.95 || Math.abs(along - 30) > 4 || Math.abs(across) > row.w / 2) { s.vehicles.remove(v); continue; }
+      const on = await window.onTo(row, row.x, s.world.groundHeight(row.x, row.z) + 0.4, row.z);
+      if (!on) { s.vehicles.remove(v); continue; }
+      const live = s.hackTarget.ref;
+      const card = document.getElementById('hcname').textContent, acts = document.getElementById('hcacts').textContent;
+      // The lights held green, so what stops it is the blockers.
+      for (const j of s.junctions()) if (Math.hypot(j.x - row.x, j.z - row.z) < 60) j.hack = { kind: 'green', left: 1e9 };
+      s.phone.battery = s.backdoorSpec.battery.most;
+      const ok = s.hackKey(0);
+      v.speed = 11;
+      const hull = v.health;
+      let t = 0;
+      for (; t < 6; t += 1 / 60) {
+        s.fixedForTest(1 / 60);
+        window.keepClear([v]);
+        if (v.traffic && v.traffic.crashed) break;
+      }
+      for (let i = 0; i < 30; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
+      const nose = (v.x - row.x) * row.nx + (v.z - row.z) * row.nz - (v.spec.length || 4) / 2;
+      const out = { ok, card, acts, up: +live.up.toFixed(2), crashed: !!(v.traffic && v.traffic.crashed), hurt: v.health < hull,
+        speed: +Math.abs(v.speed).toFixed(2), nose: +nose.toFixed(2), crashes: s.state.bollardCrashes || 0 };
+      for (const j of s.junctions()) j.hack = null;
+      live.left = 0;
+      s.vehicles.remove(v);
+      return out;
+    }
+    return { found: false };
+  });
+  check('road blockers come up out of the road at a junction, and a car driving into them is stopped dead and damaged',
+    blockers.ok && blockers.card === 'Road blockers' && blockers.up === 1 && blockers.crashed && blockers.hurt
+      && blockers.speed < 1.5 && blockers.nose > -1.5, JSON.stringify(blockers));
+
+  // The picture: a power box going up on the pavement, held at the moment it
+  // goes (the world stopped, the frame still drawn).
+  await page.evaluate(async () => {
+    const s = window.spreefall;
+    const b0 = s.boxesNear(250).map((k) => k.f).find((f) => f.spent <= 0 && f.fuse <= 0);
+    await window.onTo(b0, b0.x, s.world.groundHeight(b0.x, b0.z) + 0.9, b0.z);
+    const b = s.hackTarget.ref;
+    const fx = -Math.sin(b.yaw), fz = -Math.cos(b.yaw);
+    s.teleport(b.x + fx * 7 - fz * 2, b.z + fz * 7 + fx * 2);
+    const dx = b.x - s.player.x, dz = b.z - s.player.z;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, -6);
+    s.effects.clear();
+    s.phone.battery = s.backdoorSpec.battery.most;
+    s.hackKey(0);
+    for (let i = 0; i < 64 && !(b.spent > 0); i++) s.fixedForTest(1 / 60);
+    s.state.paused = true;
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'backdoor-08-power-box.png') });
+  await page.evaluate(() => { window.spreefall.state.paused = false; });
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
