@@ -1172,6 +1172,9 @@ async function run() {
       const hull = v.health;
       let t = 0;
       for (; t < 6; t += 1 / 60) {
+        // Held at it until it meets them: the driver would brake for you
+        // standing ahead with the phone, and then it is not eleven.
+        v.speed = 11;
         s.fixedForTest(1 / 60);
         window.keepClear([v]);
         if (v.traffic && v.traffic.crashed) break;
@@ -1268,8 +1271,10 @@ async function run() {
       }
       if (share < 0.15) break;
     }
-    // A second of it on fire, for the picture.
+    // A second of it on fire, for the picture; and the world held still for
+    // it, or a slow machine burns the car out while the picture is taken.
     for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    s.state.paused = true;
     for (let i = 0; i < 3; i++) await new Promise((res) => requestAnimationFrame(res));
     return { stages, shots, lit: +v.health.toFixed(1) };
   });
@@ -1280,6 +1285,7 @@ async function run() {
     // On fire it burns down by itself, and goes up.
     let t = 0;
     for (; t < 15 && v.health > 0; t += 1 / 60) s.fixedForTest(1 / 60);
+    s.state.paused = false;
     return { burnt: +t.toFixed(1), dead: v.health <= 0 };
   });
   const stage = (st) => burning.stages.find((x) => x.st === st);

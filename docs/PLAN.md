@@ -6014,6 +6014,19 @@ So there are two cities now, and a profile picks which:
   [tornado](screenshots/extreme-03-tornado.png),
   [firestorm](screenshots/extreme-04-fire.png).
 
+## CI: two of the vehicle checks against the live city
+
+- The first live run to get as far as .BACKDOOR since phase 142 failed two
+  of its checks. A car sent into the blockers at eleven metres a second met
+  them at under five, a dent of 0.21 and no glass broken: it is driven by
+  the traffic, which brakes for somebody standing in its lane, and on the
+  live street that is you, where you stand to point the phone. It is held
+  at eleven now until it meets them. And the car on fire had burnt out
+  before the check that times it began: the picture is taken between the
+  two with the world running, and on a slow machine that takes the five
+  seconds it had left. The world is held still for the picture. Both are
+  the checks, not the game; locally 54 of 54.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m
