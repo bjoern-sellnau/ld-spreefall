@@ -5566,6 +5566,17 @@ So there are two cities now, and a profile picks which:
   and city suites do). Measured here: rays at eight metres find 17 walls
   within forty, 4 after six heavy blasts on the nearest frontage, and 17
   again after the reset.
+- With that the live run got through the arsenal, cheats, city, districts
+  and machines suites, and the interface suite failed one check: the pause
+  bar 24 px off the left edge, 1.8 s after Esc. That is the first frame of
+  its 0.16 s slide in. The world goes on being drawn behind the pause, the
+  check comes just after F3 puts the high tier on, and a frame of the live
+  city at that tier on the runner's software GL can take longer than the
+  wait; the animation's clock only moves a frame at a time, so the box
+  read where the slide in starts. Shown here: one two second frame right
+  after the menu comes up and the box reads -24 px while its layout reads
+  0, and both read 0 once frames come again. The check now reads where the
+  bar is laid out, which is what it was asking.
 
 ## CI: the EMP check clears the street in front of the launcher
 

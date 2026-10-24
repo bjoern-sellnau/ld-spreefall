@@ -475,11 +475,15 @@ async function run() {
     const from = s.state.time;
     // The real loop, not the test's own steps: a second and a half of it.
     await new Promise((r) => setTimeout(r, 1500));
-    const bar = document.querySelector('#pause .pausebar').getBoundingClientRect();
+    // Where it is laid out, not where its slide in has got to: that is a
+    // sixth of a second on a clock that moves a frame at a time, and in the
+    // live city at the high tier a frame on the runner's software GL can
+    // take longer than this whole wait, which once read it still 24 px out.
+    const bar = document.querySelector('#pause .pausebar');
     return {
       shown: !document.getElementById('pause').classList.contains('hidden'),
       paused: s.state.paused, moved: s.state.time - from,
-      left: Math.round(bar.left), width: Math.round(bar.width),
+      left: bar.offsetLeft, width: bar.offsetWidth,
       games: [...document.querySelectorAll('#pausemodes .pitem')].map((b) => b.dataset.mode),
       on: (document.querySelector('#pausemodes .pitem.on') || {}).dataset?.mode,
     };
