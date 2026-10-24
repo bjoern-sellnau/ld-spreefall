@@ -22,6 +22,9 @@ const MAX_VEHICLES = 8;
 const MAX_CAMPS = 12;
 const MAX_SIGNALS = 96;
 const MAX_COVERS = 64;
+const MAX_BOXES = 48;
+const MAX_ATMS = 24;
+const MAX_POSTS = 160;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
 const MAX_GIBS = 1536;
@@ -1299,6 +1302,47 @@ export function buildCoverMesh() {
   return m;
 }
 
+/**
+ * A power box on the pavement: a grey green cabinet with a lip on top and a
+ * lamp in the door (parts 110 and 111). The instance says what it is doing:
+ * crackling blue before it goes (112), its lamp blinking red while a trap is
+ * set (114), and burnt black once it has gone (113).
+ */
+export function buildPowerBoxMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.62, 0, 0.92, 1.24, 0.42, 110);
+  m.box(0, 1.27, 0, 0.98, 0.05, 0.48, 110);
+  m.box(-0.23, 0.64, -0.215, 0.42, 1.1, 0.012, 110);           // the two doors
+  m.box(0.23, 0.64, -0.215, 0.42, 1.1, 0.012, 110);
+  m.box(0.3, 1.08, -0.226, 0.06, 0.06, 0.012, 111);            // the lamp
+  return m;
+}
+
+/**
+ * An ATM let into a wall: a steel fascia (115) with a screen lit blue (116),
+ * green and flickering while it throws its notes (117), dead once empty (118).
+ */
+export function buildAtmMesh() {
+  const m = new MeshBuild();
+  m.box(0, 1.2, 0.02, 0.74, 1.04, 0.2, 115);
+  m.box(0, 1.42, -0.085, 0.36, 0.26, 0.02, 116);              // the screen
+  m.box(0, 1.1, -0.1, 0.26, 0.16, 0.06, 115);                  // the keypad
+  m.box(0, 0.92, -0.09, 0.3, 0.03, 0.04, 116);                 // the slot
+  return m;
+}
+
+/**
+ * One road blocker: a steel post (119) with a red reflective band (120). The
+ * whole post sinks into the road by as much as the instance says it is not up.
+ */
+export function buildBollardMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, 0, 0.12, 0.12, 0.9, 10, 119);
+  m.cylinder(0, 0.6, 0, 0.125, 0.125, 0.14, 10, 120);
+  m.cylinder(0, 0.9, 0, 0.12, 0.1, 0.03, 10, 119);
+  return m;
+}
+
 export function buildJeepMesh() {
   const m = new MeshBuild();
   const P = 31;
@@ -1679,6 +1723,9 @@ export class Actors {
     // The traffic lights round you in .BACKDOOR, through the same shader.
     this.signal = this._uploadMesh(buildSignalMesh(), MAX_SIGNALS, 2);
     this.cover = this._uploadMesh(buildCoverMesh(), MAX_COVERS, 2);
+    this.powerBox = this._uploadMesh(buildPowerBoxMesh(), MAX_BOXES, 2);
+    this.atm = this._uploadMesh(buildAtmMesh(), MAX_ATMS, 2);
+    this.bollard = this._uploadMesh(buildBollardMesh(), MAX_POSTS, 2);
     this.vehicles = {
       car: this._uploadMesh(buildCarMesh(), 24, 2),
       bus: this._uploadMesh(buildBusMesh(), 6, 2),
@@ -2258,6 +2305,11 @@ export class Actors {
   /** @param {{x:number,y:number,z:number,yaw:number,light:number}[]} list covers in the road, light their state */
   updateCovers(list) { this._fillStreet(this.cover, MAX_COVERS, list); }
 
+  /** Power boxes, ATMs and blocker posts, each with its state in the light channel. */
+  updateBoxes(list) { this._fillStreet(this.powerBox, MAX_BOXES, list); }
+  updateAtms(list) { this._fillStreet(this.atm, MAX_ATMS, list); }
+  updateBollards(list) { this._fillStreet(this.bollard, MAX_POSTS, list); }
+
   _fillStreet(mesh, most, list) {
     const gl = this.gl;
     const d = mesh.instData;
@@ -2281,7 +2333,7 @@ export class Actors {
   drawCamps() {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest, this.signal, this.cover]) {
+    for (const mesh of [this.camp, this.nest, this.signal, this.cover, this.powerBox, this.atm, this.bollard]) {
       if (!mesh.instanceCount) continue;
       this.progDrone.use();
       gl.bindVertexArray(mesh.vao);
@@ -2295,7 +2347,7 @@ export class Actors {
   drawCampShadows(lightViewProj) {
     const gl = this.gl;
     let draws = 0;
-    for (const mesh of [this.camp, this.nest, this.signal, this.cover]) {
+    for (const mesh of [this.camp, this.nest, this.signal, this.cover, this.powerBox, this.atm, this.bollard]) {
       if (!mesh.instanceCount) continue;
       this.progDroneShadow.use().mat4('uLightViewProj', lightViewProj);
       gl.bindVertexArray(mesh.vao);

@@ -771,6 +771,14 @@ three cells and what you have taken so far.
   across the road and the traffic stops for it, **E** blows it after a
   second of hiss, and whatever is standing on it goes up in the air and
   whoever is near it is knocked off their feet.
+- **Power boxes** on the pavement: **Q** overloads one, and after a second
+  of sparks it blows, knocking everybody round it off their feet and
+  stalling the cars beside it; **E** sets it as a trap that goes off on the
+  first person who walks up to it.
+- **ATMs** in the walls: **Q** withdraws what is in one, **E** makes it throw
+  its notes into the street, and the people near come running.
+- **Road blockers** at the junctions: **Q** raises a row of posts out of the
+  road, and a car that drives into them is stopped dead; **E** lowers them.
 - **B** is the **blackout**: the whole battery for fifteen seconds without
   power. The windows and the street lamps go out, the lights at the
   junctions go dark, and everybody stops to look at a phone with no signal.
@@ -779,8 +787,8 @@ three cells and what you have taken so far.
 
 Where the ideas come from: the Watch Dogs games, whose phone profiles every
 citizen in the street and hacks the city's traffic lights, steam pipes,
-phones and cars, and can black out everything electric nearby for a short
-while. The people, names, facts and numbers here are ours. The lights keep
+fuse boxes, barriers, bollards, ATMs, phones and cars, and can black out
+everything electric nearby for a short while. The people, names, facts and numbers here are ours. The lights keep
 German time: three seconds of amber where the limit is 50 km/h, and one
 second of red and amber before green, as the RiLSA 2015 sets it.
 

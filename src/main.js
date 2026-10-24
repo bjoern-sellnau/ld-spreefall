@@ -63,7 +63,8 @@ import {
   TRAFFIC, SIGNALS, roadIndex, pickSpawn, nearestLane, straightNear, drive as trafficDrive,
   junctionsOf, mastsOf, lightAt,
 } from './game/traffic.js';
-import { CITY, pipesOf, pipeStep, pipeState, pipeReady, blastOn, Blackout } from './game/city.js';
+import { CITY, pipesOf, pipeStep, pipeState, pipeReady, blastOn, Blackout, furnitureOf, boxState, boxReady,
+  boxStep, zapOn, atmCash, atmState, atmReady, atmStep, bollardsOf, postsOf, bollardStep, intoBollards } from './game/city.js';
 import { CRIME, newCrime, crimeStep, crimeRecord, repFor, stopped as crimeStopped } from './game/crime.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -6298,6 +6299,12 @@ async function main() {
     }
     for (const m of signalMasts(BACKDOOR.reach + 10)) out.push({ kind: 'signal', ref: m.j, x: m.x, y: m.y + 2.9, z: m.z });
     for (const c of coversNear(BACKDOOR.reach + 10)) out.push({ kind: 'pipe', ref: c.p, x: c.x, y: c.y + 0.1, z: c.z });
+    for (const b of boxesNear(BACKDOOR.reach + 10)) out.push({ kind: 'box', ref: b.f, x: b.x, y: b.y + 0.9, z: b.z });
+    for (const a of atmsNear(BACKDOOR.reach + 10)) out.push({ kind: 'atm', ref: a.f, x: a.x, y: a.y + 1.3, z: a.z });
+    for (const row of cityBollards()) {
+      if (Math.hypot(row.x - player.x, row.z - player.z) > BACKDOOR.reach + 10) continue;
+      out.push({ kind: 'bollard', ref: row, x: row.x, y: world.groundHeight(row.x, row.z) + 0.4, z: row.z });
+    }
     return out;
   }
   /** A number plate, from the car's own seed: B for Berlin, letters and digits. */
@@ -6318,6 +6325,21 @@ async function main() {
     }
     if (t.kind === 'car') {
       return [{ kind: 'stall', label: 'Stall engine' }, { kind: 'ram', label: 'Ram' }];
+    }
+    if (t.kind === 'box') {
+      const ready = boxReady(t.ref);
+      return [{ kind: 'overload', label: ready ? 'Overload' : 'Burnt out', off: !ready },
+        { kind: 'trap', label: t.ref.trap > 0 ? 'Trap set' : 'Set a trap', off: !ready || t.ref.trap > 0 }];
+    }
+    if (t.kind === 'atm') {
+      const ready = atmReady(t.ref);
+      return [{ kind: 'withdraw', label: ready ? `Withdraw ${euro(atmCash(t.ref))}` : 'Empty', off: !ready },
+        { kind: 'spray', label: ready ? 'Spray the cash' : 'Empty', off: !ready }];
+    }
+    if (t.kind === 'bollard') {
+      const up = t.ref.left > 0;
+      return [{ kind: 'raise', label: up ? 'Raised' : 'Raise blockers', off: up },
+        { kind: 'lower', label: 'Lower them', off: !up }];
     }
     if (t.kind === 'bus') {
       return [{ kind: 'stall', label: 'Stop the bus' },
@@ -6402,6 +6424,30 @@ async function main() {
       // The whole crossing, both carriageways of an avenue included.
       for (const j of t.ref.group || [t.ref]) j.hack = { kind: green ? 'green' : 'red', left: BACKDOOR.hacks[job.kind].effect };
       feed(`<b>${green ? 'all green' : 'all red'}</b> ${junctionName(t.ref)}`);
+    } else if (job.kind === 'overload') {
+      t.ref.fuse = CITY.box.fuse;
+      t.ref.trap = 0;
+      // A crackle and a second, which is no warning at all to anybody
+      // standing next to it.
+      audio.hiss(away, CITY.box.fuse);
+    } else if (job.kind === 'trap') {
+      t.ref.trap = CITY.box.trap;
+      feed(`<b>trap set</b> on a power box, ${CITY.box.trap} s`);
+    } else if (job.kind === 'withdraw') {
+      const got = atmCash(t.ref);
+      t.ref.empty = CITY.atm.empty;
+      phone.money += got;
+      saveMoney();
+      toast(`+${euro(got)} from the machine`);
+      feed(`<b>ATM</b> ${euro(got)} out`);
+      state.atmCash = (state.atmCash || 0) + got;
+    } else if (job.kind === 'spray') {
+      sprayAtm(t.ref);
+    } else if (job.kind === 'raise') {
+      t.ref.left = CITY.bollards.up;
+      feed(`<b>blockers up</b> ${junctionName(t.ref.j)}`);
+    } else if (job.kind === 'lower') {
+      t.ref.left = 0;
     } else if (job.kind === 'bank') {
       const p = profileOf(t.ref);
       const got = p.bank;
@@ -6490,6 +6536,27 @@ async function main() {
       el.hcFact.textContent = st === 3 ? `blown, ${Math.ceil(pp.spent)} s to a new cover`
         : st === 2 ? 'about to go' : st === 1 ? `venting, ${Math.ceil(pp.vent)} s` : '17 bar, 180 °C';
       el.hcRec.textContent = '';
+    } else if (found.kind === 'box') {
+      const b = found.ref;
+      const st = boxState(b);
+      el.hcName.textContent = 'Power box';
+      el.hcJob.textContent = `On ${streetAt(b.x, b.z) || 'the pavement'}`;
+      el.hcFact.textContent = st === 3 ? `burnt out, ${Math.ceil(b.spent)} s`
+        : st === 1 ? 'about to go' : st === 2 ? `TRAP set, ${Math.ceil(b.trap)} s` : '400 V, three phases, 250 A';
+      el.hcRec.textContent = '';
+    } else if (found.kind === 'atm') {
+      const a = found.ref;
+      el.hcName.textContent = 'ATM';
+      el.hcJob.textContent = `On ${streetAt(a.x, a.z) || 'the street'}`;
+      el.hcFact.textContent = a.spray > 0 ? 'throwing its notes into the street'
+        : a.empty > 0 ? `empty, ${Math.ceil(a.empty)} s to the next fill` : `holds ${euro(atmCash(a))}`;
+      el.hcRec.textContent = '';
+    } else if (found.kind === 'bollard') {
+      const row = found.ref;
+      el.hcName.textContent = 'Road blockers';
+      el.hcJob.textContent = junctionName(row.j);
+      el.hcFact.textContent = row.left > 0 ? `UP for ${Math.ceil(row.left)} s` : 'down, flush with the road';
+      el.hcRec.textContent = '';
     } else if (found.kind === 'signal') {
       const j = found.ref;
       el.hcName.textContent = 'Traffic lights';
@@ -6575,6 +6642,74 @@ async function main() {
   // The pipes under the street and the power: where the covers are is
   // worked out once from the same lines, beside the junctions.
   let pipeList = [], pipeIdx = null;
+  // The power boxes and ATMs along the same roads, and the blockers at the
+  // same junctions, each worked out once for the roads that are loaded.
+  let furniture = { boxes: [], atms: [] }, furnitureIdx = null;
+  let bollardRows = [], bollardJunctions = null;
+  function cityFurniture() {
+    const idx = trafficRoads();
+    if (furnitureIdx !== idx) {
+      const was = furniture.boxes.concat(furniture.atms);
+      furniture = furnitureOf(idx, trafficJunctions(), (cx, cz, x, z) => {
+        if (world.isLoaded && !world.isLoaded(x, z)) return false;
+        const gc = world.groundHeight(cx, cz), g = world.groundHeight(x, z);
+        return world.lineOfSight(cx, gc + 1, cz, x, g + 1, z) && Math.abs(g - gc) < 1.2;
+      }, (x, z, nx, nz) => {
+        const g = world.groundHeight(x, z);
+        const hit = world.raycast(x, g + 1.2, z, nx, 0, nz, CITY.street.wallReach);
+        return hit && hit.kind === 'wall' && Math.abs(hit.ny) < 0.3 ? { x: hit.x, z: hit.z, nx: hit.nx, nz: hit.nz } : null;
+      });
+      // The roads are worked out again as the city streams round you, and a
+      // box set as a trap, or one about to go, must still be one after.
+      carryOver(was, furniture.boxes.concat(furniture.atms), ['fuse', 'spent', 'trap', 'empty', 'spray']);
+      furnitureIdx = idx;
+    }
+    return furniture;
+  }
+  /** What the old ones were doing, onto the new ones standing in the same place. */
+  function carryOver(old, now, keys) {
+    if (!old.length) return;
+    const at = new Map();
+    for (const o of old) at.set(`${Math.round(o.x * 2)},${Math.round(o.z * 2)}`, o);
+    for (const n of now) {
+      const o = at.get(`${Math.round(n.x * 2)},${Math.round(n.z * 2)}`);
+      if (o) for (const k of keys) if (o[k] !== undefined) n[k] = o[k];
+    }
+  }
+  function cityBollards() {
+    const js = trafficJunctions();
+    if (bollardJunctions !== js) {
+      const was = bollardRows;
+      bollardRows = bollardsOf(js);
+      carryOver(was, bollardRows, ['up', 'left']);
+      bollardJunctions = js;
+    }
+    return bollardRows;
+  }
+  /** Within r of you, nearest first, on the ground, with what each is doing. */
+  function furnitureNear(list, r, light, lift = 0) {
+    if (!state.backdoor || state.mode !== 'walk') return [];
+    const out = [];
+    for (const f of list) {
+      if (Math.abs(f.x - player.x) > r || Math.abs(f.z - player.z) > r) continue;
+      const d = Math.hypot(f.x - player.x, f.z - player.z);
+      if (d > r) continue;
+      out.push({ x: f.x, y: world.groundHeight(f.x, f.z) + lift, z: f.z, yaw: f.yaw, f, d, light: light(f) });
+    }
+    out.sort((a, b) => a.d - b.d);
+    return out;
+  }
+  const boxesNear = (r = 140) => furnitureNear(cityFurniture().boxes, r, boxState);
+  const atmsNear = (r = 140) => furnitureNear(cityFurniture().atms, r, atmState);
+  function postsNear(r = 140) {
+    if (!state.backdoor || state.mode !== 'walk') return [];
+    const out = [];
+    for (const row of cityBollards()) {
+      if (Math.abs(row.x - player.x) > r || Math.abs(row.z - player.z) > r) continue;
+      for (const p of postsOf(row)) out.push({ x: p.x, y: world.groundHeight(p.x, p.z), z: p.z, yaw: 0, light: row.up });
+    }
+    return out;
+  }
   const blackout = new Blackout();
   state.pipesBlown = 0;
   function cityPipes() {
@@ -6660,6 +6795,7 @@ async function main() {
     const dark = blackout.on;
     for (const j of trafficJunctions()) j.dark = dark;
     if (!on) return;
+    furnitureStep(dt);
     for (const p of cityPipes()) {
       if (!p.vent && !p.fuse && !p.spent) continue;
       if (pipeStep(p, dt) === 'blow') { blowPipe(p); continue; }
@@ -6674,6 +6810,134 @@ async function main() {
       }
     }
   }
+  /**
+   * A power box going off: a blue white flash and a fan of arcs, everybody
+   * within six metres off their feet (the soldiers hurt, the people who live
+   * here a little), the cars near it stalled, and you hurt if you were next
+   * to it.
+   */
+  function zapBox(b) {
+    const Z = CITY.zap;
+    const y = world.groundHeight(b.x, b.z);
+    effects.flash(b.x, y + 1, b.z, 4.5, 0.55, 0.75, 1.6, 0.3);
+    for (let i = 0; i < 36; i++) {
+      effects.spark(b.x + (Math.random() - 0.5) * 2, y + 0.4 + Math.random() * 1.6, b.z + (Math.random() - 0.5) * 2, 0.6, 0.8, 1.6);
+    }
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * (Z.radius - 2);
+      zap(b.x, y + 1, b.z, b.x + Math.cos(a) * r, y + 0.2 + Math.random(), b.z + Math.sin(a) * r);
+    }
+    effects.dust(b.x, y, b.z, 2.5);
+    renderer.addScar(b.x, y, b.z, 1.8, 0.6);
+    const away = Math.hypot(b.x - player.x, b.z - player.z);
+    audio.emp(away);
+    audio.explosion();
+    effects.shake = Math.min(1.2, effects.shake + Math.max(0, 0.6 - away / 60));
+    let down = 0, stalled = 0;
+    for (const sd of soldiers.active) {
+      if (!sd.alive || sd.health <= 0 || sd.state === 5) continue;
+      const z = zapOn(b, sd.x, sd.z);
+      if (!z) continue;
+      const killed = soldiers.damage(sd, Z.hurt * z.share * (sd.civilian ? Z.civil : 1), { x: z.dx, y: 0.4, z: z.dz });
+      if (!killed && soldiers.knockDown(sd, z.dx, z.dz, Z.push * (0.4 + z.share))) down++;
+      if (killed && !sd.civilian) creditTarget(sd, false, 'soldier');
+      for (let k = 0; k < 4; k++) effects.spark(sd.x, sd.y + 0.5 + Math.random() * 1.2, sd.z, 0.6, 0.8, 1.6);
+    }
+    for (const v of vehicles.active) {
+      if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground') continue;
+      const z = zapOn(b, v.x, v.z, Z.cars);
+      if (!z) continue;
+      if (v.traffic) v.traffic.stalled = Math.max(v.traffic.stalled || 0, Z.stall);
+      v.speed *= 0.3;
+      stalled++;
+    }
+    const you = zapOn(b, player.x, player.z, Z.youReach);
+    if (you && !state.inVehicle && combat.health > 0) combat.hurt(Z.you * you.share, b.x, b.z, player.x, player.z);
+    soldiers.scare(b.x, b.z, 30);
+    state.boxesBlown = (state.boxesBlown || 0) + 1;
+    feed(`<b>power box blown</b>${down ? `, ${down} down` : ''}${stalled ? `, ${stalled} stalled` : ''}`);
+    return { down, stalled };
+  }
+  // The people a spraying ATM has drawn in, and for how long.
+  const lured = [];
+  /** An ATM throwing its notes into the street, and everybody near coming for them. */
+  function sprayAtm(a) {
+    const A = CITY.atm;
+    a.spray = A.spray;
+    a.empty = A.empty;
+    let came = 0;
+    for (const sd of soldiers.active) {
+      if (!sd.civilian || !sd.alive || sd.health <= 0 || sd.state === 5 || sd.crime || sd.directed) continue;
+      if (Math.hypot(sd.x - a.x, sd.z - a.z) > A.lure) continue;
+      const ang = Math.random() * Math.PI * 2, r = 1 + Math.random() * 2.5;
+      const d = { x: a.x + Math.cos(ang) * r, z: a.z + Math.sin(ang) * r, speed: A.run };
+      sd.directed = d;
+      lured.push({ sd, d, left: A.spray + 4 });
+      came++;
+    }
+    state.lured = (state.lured || 0) + came;
+    feed(`<b>ATM</b> cash everywhere${came ? `, ${came} coming for it` : ''}`);
+  }
+  /** The boxes, the machines, the blockers and the people at the machines, a step on. */
+  function furnitureStep(dt) {
+    const F = cityFurniture();
+    for (const b of F.boxes) {
+      if (!b.fuse && !b.spent && !b.trap) continue;
+      // A trap goes when anybody but you comes near it.
+      if (b.trap > 0 && !b.fuse) {
+        for (const sd of soldiers.active) {
+          if (!sd.alive || sd.health <= 0 || sd.state === 5) continue;
+          if (Math.hypot(sd.x - b.x, sd.z - b.z) < CITY.box.trapReach) { b.fuse = 0.15; break; }
+        }
+      }
+      if (boxStep(b, dt) === 'blow') { zapBox(b); continue; }
+      if (b.fuse > 0 && Math.random() < dt * 40) {
+        const y = world.groundHeight(b.x, b.z);
+        effects.spark(b.x + (Math.random() - 0.5) * 0.9, y + 0.3 + Math.random(), b.z + (Math.random() - 0.5) * 0.9, 0.6, 0.8, 1.6);
+      }
+    }
+    for (const a of F.atms) {
+      if (!a.spray && !a.empty) continue;
+      atmStep(a, dt);
+      // Notes in the air in front of it while it sprays.
+      if (a.spray > 0 && Math.random() < dt * 30) {
+        const y = world.groundHeight(a.x, a.z);
+        const fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw);
+        effects.spark(a.x + fx * (0.4 + Math.random() * 2) + (Math.random() - 0.5), y + 0.8 + Math.random() * 1.4,
+          a.z + fz * (0.4 + Math.random() * 2) + (Math.random() - 0.5), 0.55, 0.9, 0.5);
+      }
+    }
+    for (let i = lured.length - 1; i >= 0; i--) {
+      const L = lured[i];
+      L.left -= dt;
+      if (L.left > 0 && L.sd.alive && L.sd.health > 0) continue;
+      if (L.sd.directed === L.d) L.sd.directed = null;
+      lured.splice(i, 1);
+    }
+    for (const row of cityBollards()) {
+      if (row.left > 0 || row.up > 0) bollardStep(row, dt);
+      if (row.up < 0.6) continue;
+      for (const v of vehicles.active) {
+        if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground') continue;
+        if (Math.abs(v.x - row.x) > 12 || Math.abs(v.z - row.z) > 12) continue;
+        if (!intoBollards(row, v)) continue;
+        const hit = Math.abs(v.speed);
+        v.speed = -Math.sign(v.speed) * Math.min(1, hit * 0.1);
+        if (hit < 2) continue;
+        vehicles.damage(v, hit * 22 * (v.spec.mass > 2 ? 0.5 : 1));
+        if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
+        const g = world.groundHeight(v.x, v.z);
+        for (let k = 0; k < 16; k++) {
+          effects.spark(v.x + (Math.random() - 0.5) * 2, g + 0.5 + Math.random(), v.z + (Math.random() - 0.5) * 2, 1.0, 0.8, 0.45);
+        }
+        effects.dust(v.x, g + 0.3, v.z, 2.5);
+        audio.collapse && audio.collapse(Math.hypot(v.x - player.x, v.z - player.z) + 20, 3);
+        state.bollardCrashes = (state.bollardCrashes || 0) + 1;
+        feed(`<b>into the blockers</b> ${Math.round(hit * 3.6)} km/h`);
+      }
+    }
+  }
+
   /** B: the power to the whole street, for all the phone has. */
   function blackoutKey() {
     if (blackout.on) { toast('the power is already off'); audio.hackChirp(false); return false; }
@@ -9752,6 +10016,9 @@ async function main() {
       renderer.actors.updateNests(slayer.enabled ? slayer.drawList(player.x, player.z) : []);
       renderer.actors.updateSignals(signalMasts());
       renderer.actors.updateCovers(coversNear());
+      renderer.actors.updateBoxes(boxesNear());
+      renderer.actors.updateAtms(atmsNear());
+      renderer.actors.updateBollards(postsNear());
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -9778,6 +10045,9 @@ async function main() {
         ? slayer.drawList(camera.position[0], camera.position[2], 1600) : []);
       renderer.actors.updateSignals(live ? signalMasts() : []);
       renderer.actors.updateCovers(live ? coversNear() : []);
+      renderer.actors.updateBoxes(live ? boxesNear() : []);
+      renderer.actors.updateAtms(live ? atmsNear() : []);
+      renderer.actors.updateBollards(live ? postsNear() : []);
       renderer.drawActors = live;
     }
 
@@ -9984,6 +10254,8 @@ async function main() {
     openPause: () => openPause(), closePause: (lock) => closePause(lock), switchGame: (mode) => switchGame(mode),
     footSpec: FOOT, ultraComicSpec: ULTRA_COMIC, inBlood: (x, z) => inBlood(x, z),
     citySpec: CITY, pipes: () => cityPipes(), coversNear: (r) => coversNear(r), blackout, blackoutKey: () => blackoutKey(),
+    furniture: () => cityFurniture(), bollardRows: () => cityBollards(), boxesNear: (r) => boxesNear(r),
+    atmsNear: (r) => atmsNear(r), postsNear: (r) => postsNear(r), zapBox: (b) => zapBox(b),
     lightAt: (j, phase) => lightAt(j, phase, state.signalClock), get signalClock() { return state.signalClock; },
     crimes, crimeSpec: CRIME, crimeBegin: (kind) => crimeBegin(kind), subdue: (sd) => subdue(sd),
     straightNear: (x, z, minLen) => straightNear(trafficRoads(), x, z, minLen),

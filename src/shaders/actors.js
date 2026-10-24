@@ -107,6 +107,22 @@ void main() {
       p *= 1.0 + 0.08 * max(0.0, sin(uCamPos.w * 7.0));
     }
   }
+  // A power box: crackling blue before it goes, its lamp blinking red while a
+  // trap is set, burnt black once it has gone.
+  if (part > 109.5 && part < 111.5) {
+    int st = int(iState.w + 0.5);
+    if (st == 1) part = 112.0;
+    else if (st == 3) part = 113.0;
+    else if (st == 2 && part > 110.5) part = 114.0;
+  }
+  // An ATM's screen: lit, throwing cash, or dead.
+  if (part > 115.5 && part < 116.5) {
+    int st = int(iState.w + 0.5);
+    if (st == 1) part = 117.0;
+    else if (st == 2) part = 118.0;
+  }
+  // A road blocker sinks into the road by as much as it is not up.
+  if (part > 118.5 && part < 120.5) p.y -= (1.0 - clamp(iState.w, 0.0, 1.0)) * 0.96;
   mat3 body = rotY(-iPosYaw.w) * rotZ(iState.y) * rotX(iState.x);
   vec3 world = body * p + iPosYaw.xyz;
   vWorld = world;
@@ -445,6 +461,37 @@ void main() {
     else if (k == 96) { albedo = vec3(0.86, 0.66, 0.05); rough = 0.4; metal = 0.25; }
     else if (k == 97) { albedo = vec3(0.04, 0.04, 0.045); rough = 0.7; metal = 0.2; }
     else if (k == 98) { albedo = vec3(0.1); emissive = vec3(1.6, 0.9, 0.1); rough = 0.3; }
+  } else if (vPart > 109.5 && vPart < 120.5) {
+    // The phone's street furniture. A power box in grey green with a green
+    // lamp; crackling blue before it goes; burnt black after; its lamp red
+    // and blinking while a trap is set. An ATM in brushed steel with its
+    // screen lit, green and flickering while it throws its notes, dead once
+    // empty. A road blocker in grey steel with a red reflective band.
+    int k = int(vPart + 0.5);
+    rough = 0.5; metal = 0.5;
+    if (k == 110) albedo = vec3(0.16, 0.19, 0.17);
+    else if (k == 111) { albedo = vec3(0.02, 0.1, 0.03); emissive = vec3(0.1, 1.2, 0.2); rough = 0.2; }
+    else if (k == 112) {
+      float c = step(0.5, fract(sin(uCamPos.w * 53.0 + vWorld.y * 9.0) * 43758.5));
+      albedo = vec3(0.12, 0.14, 0.16);
+      emissive = vec3(0.5, 0.75, 1.8) * (0.4 + c * 1.6);
+    }
+    else if (k == 113) { albedo = vec3(0.015); rough = 1.0; metal = 0.0; }
+    else if (k == 114) {
+      albedo = vec3(0.2, 0.01, 0.01);
+      emissive = vec3(3.0, 0.1, 0.05) * step(0.5, fract(uCamPos.w * 2.0));
+      rough = 0.2;
+    }
+    else if (k == 115) { albedo = vec3(0.3, 0.31, 0.33); rough = 0.35; metal = 0.8; }
+    else if (k == 116) { albedo = vec3(0.02, 0.04, 0.08); emissive = vec3(0.25, 0.6, 1.4); rough = 0.15; metal = 0.0; }
+    else if (k == 117) {
+      albedo = vec3(0.02, 0.08, 0.03);
+      emissive = vec3(0.3, 2.2, 0.5) * (0.6 + 0.4 * sin(uCamPos.w * 18.0));
+      rough = 0.15; metal = 0.0;
+    }
+    else if (k == 118) { albedo = vec3(0.01); rough = 0.3; metal = 0.0; }
+    else if (k == 119) albedo = vec3(0.18, 0.18, 0.19);
+    else { albedo = vec3(0.5, 0.04, 0.03); emissive = vec3(0.6, 0.03, 0.02); rough = 0.3; metal = 0.1; }
   } else if (vPart > 106.5 && vPart < 109.5) {
     // The cover: cast iron with a raised grid you can see, red hot about to
     // go, and a hole once it has.

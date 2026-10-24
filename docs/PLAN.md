@@ -5249,6 +5249,70 @@ So there are two cities now, and a profile picks which:
   shell is still in the street; with sixty jeeps spawned and destroyed in
   forty slots, a fresh one still comes out, in the oldest wreck's place.
 
+## 137. .BACKDOOR: power boxes that blow, ATMs, and road blockers
+
+- The ask: the phone needs more to get into, exploding power boxes for one.
+  Three new things now stand in the street, worked out by
+  `src/game/city.js` from the same centrelines as the traffic, the lights
+  and the steam covers, the same every time.
+- Power boxes: a grey cabinet every 55 m along every carriageway, on
+  alternate sides, 1.3 m out past the kerb, never within 12 m of a junction
+  and never two within 24 m, and only where the line from the road to the
+  spot is clear and the ground there is level with the road. Pointed at
+  one, the phone says "Power box, 400 V, three phases, 250 A". Q overloads
+  it (25 battery): it crackles and sparks for a second and goes. Everybody
+  within 6 m is off their feet and slid along the ground, the soldiers are
+  hurt by up to 45 (the people who live here by less than a third of that),
+  any car within 8 m stalls, and you, within 4 m, take up to 22. E sets it
+  as a trap (20 battery): for twenty seconds it waits, and the first person
+  who comes within 3.2 m sets it off. It is burnt out for 45 seconds after,
+  drawn black, and the phone can do nothing with it until then.
+- ATMs: every third place, where there is a wall within 9 m behind the
+  pavement, a cash machine in that wall instead of a box. It holds between
+  80 and 420 euro in tens, the same for the same machine every time. Q
+  withdraws it (30 battery, 1.6 s with the phone on it, like the bank
+  accounts) and it is empty for two minutes; E makes it throw its notes
+  into the street for eight seconds (20 battery), and the people within
+  25 m come running for them.
+- Road blockers: a row of posts across every road into every junction, 7 m
+  before it, flush with the road. Q raises them (15 battery) over half a
+  second for twelve seconds; E lowers them again for nothing. A vehicle
+  whose nose meets a row that is up is stopped dead, damaged by its speed,
+  and crashes.
+- The three are drawn through the actor shader like the masts and the
+  covers (parts 110 to 120: the cabinet grey green with a green lamp,
+  crackling blue before it goes, its lamp blinking red while a trap is set,
+  burnt black once it has gone; the machine in brushed steel with its
+  screen lit, green and flickering while it throws its notes, dead once
+  empty; the posts grey with a red band, sunk into the road by as much as
+  they are not up), and cast shadows. A rebuild
+  of the street as districts stream in keeps the state of whatever was
+  already there.
+- Where the ideas come from: the Watch Dogs games, whose phone can overload
+  nearby fuse boxes and raise security barriers
+  ([Giant Bomb](https://www.giantbomb.com/games/3030-38538/)), primes
+  gates, barriers and bollards as a proximity trap in Watch Dogs 2's City
+  Disruption
+  ([Prima Games](https://primagames.com/eguides/watch-dogs-2-eguide/training/part-10-research-app/city-disruption)),
+  and hacks ATMs to pay a customer or take from them
+  ([Watch Dogs Wiki, Bottom Dollar](https://watchdogs.fandom.com/wiki/Bottom_Dollar)).
+  The machine that throws its cash into the street is after the Watch Dogs
+  launch stunt in which a real ATM in Canada spat out money
+  ([God is a Geek](https://godisageek.com/2013/07/real-money-spat-canadian-atm-watch-dogs-live-app/)).
+  These were checked through search excerpts, as this session cannot open
+  the pages themselves. The numbers here are ours.
+- Checks: unit (4, `tools/test/furniture.test.mjs`) on where the boxes and
+  ATMs go and do not, the fuse, the trap and the burnt out box, the blast
+  falling off to its edge, the ATM's cash and its clock, and the blockers
+  coming up, meeting a nose and going down; browser (backdoor suite, seven
+  more): 25 boxes, 16 ATMs (6 of them in walls) and the junction rows in
+  the test street, drawn and hackable; an overload floors the 3 people
+  round the box and stalls the car beside it; a trap waits and goes off
+  2.5 s later on a man walking up to it (closest 2.8 m); an ATM pays out
+  80 euro and is empty after, another sprays and draws all 4 people near it
+  closer; and the blockers stop a car driven into them at 44 km/h, damaged.
+  Screenshot backdoor-08-power-box.png.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m
