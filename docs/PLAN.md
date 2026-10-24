@@ -5623,6 +5623,16 @@ So there are two cities now, and a profile picks which:
   once the steam is going, and back to blow the pipe. Here the cars crash
   (4.4 m), the car waits 5.6 m short and goes 55.8 m after, and the suite
   passes 48 of 48.
+- The run on that passed the interface, its pause check included, and
+  Tactics and Slayer, and failed one check in The Hunt: X changed the
+  draw weight none of three times. The cheat menu puts the weapon away
+  while it is up and gives it back on the game's next step after it
+  closes, the check had just used the menu, and X does nothing to a bow
+  that is put away. Shown here: closed with no step after, the bow is
+  still away and the draw does not change; one step later it is in hand
+  and goes to strong. On a slow frame in the live city all three presses
+  fell before that step. The check now steps the game until the bow is
+  back; the suite passes 38 of 38.
 
 ## CI: the EMP check clears the street in front of the launcher
 
