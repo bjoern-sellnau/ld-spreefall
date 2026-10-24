@@ -724,9 +724,9 @@ export class Soldiers {
       // him, not his legs, and nobody fires a rifle from there.
       if (s.held) { s.walk = 0; continue; }
 
-      // An EMP has it: nothing moves, nothing shoots, and whatever you do to
-      // it next lands four times as hard.
-      if (s.machine && s.stunLeft > 0) {
+      // An EMP has it, or the volt caster's charge has him: nothing moves and
+      // nothing shoots until it lets go.
+      if (s.stunLeft > 0) {
         s.stunLeft -= dt;
         s.walk = 0;
         s.beamCharge = 0;

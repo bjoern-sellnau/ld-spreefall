@@ -659,7 +659,8 @@ async function main() {
     }
     const m = muzzlePoint(shot.from);
     if (shot.end) {
-      effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
+      if (spec.arc) zap(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z);
+      else effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
       // A round into a man sprays rather than sparks, and only when the cheat
       // menu says so. Everything else in the city still throws grit.
       if (shot.surface === 'soldier' && cheats.bleeding) {
@@ -706,8 +707,63 @@ async function main() {
       audio.hitMarker(shot.core);
       showHitmarker(shot.killed ? 'kill' : (shot.core ? 'core' : ''));
       if (shot.killed) creditTarget(shot.target, shot.core, shot.surface);
+      if (spec.arc && (shot.surface === 'soldier' || shot.surface === 'drone')) voltArc(shot.target, shot.surface, spec);
     }
   };
+
+  /** Electricity from one point to another: a line broken into a few jags. */
+  function zap(ax, ay, az, bx, by, bz) {
+    const n = 5;
+    const jag = Math.min(0.5, Math.hypot(bx - ax, by - ay, bz - az) * 0.06);
+    let px = ax, py = ay, pz = az;
+    for (let i = 1; i <= n; i++) {
+      const k = i / n, off = i === n ? 0 : jag;
+      const qx = ax + (bx - ax) * k + (Math.random() - 0.5) * off;
+      const qy = ay + (by - ay) * k + (Math.random() - 0.5) * off;
+      const qz = az + (bz - az) * k + (Math.random() - 0.5) * off;
+      effects.lance(px, py, pz, qx, qy, qz, 0.6, 0.8, 1.6);
+      px = qx; py = qy; pz = qz;
+    }
+  }
+
+  /**
+   * The volt caster's charge, once it is in somebody: he holds still, and it
+   * jumps on to the nearest one standing within reach of him, and from there
+   * to the next, weaker each time, never back to one it has been through.
+   */
+  function voltArc(first, kind, spec) {
+    const A = spec.arc;
+    first.stunLeft = Math.max(first.stunLeft || 0, A.stun);
+    const been = new Set([first]);
+    const chest = (o, k) => (k === 'drone' ? o.y : o.y + 1.1);
+    let from = first, fromKind = kind;
+    let amount = spec.damage * (weapon.damageScale || 1);
+    for (let j = 0; j < A.jumps; j++) {
+      amount *= A.share;
+      let next = null, nextKind = null, best = A.reach;
+      const fy = chest(from, fromKind);
+      for (const o of soldiers.active) {
+        if (been.has(o) || !o.alive || o.health <= 0 || o.civilian || o.state === 5 || o.rise > 0) continue;
+        const d = Math.hypot(o.x - from.x, o.y + 1.1 - fy, o.z - from.z);
+        if (d < best) { best = d; next = o; nextKind = 'soldier'; }
+      }
+      for (const g of drones.active) {
+        if (been.has(g) || !g.alive || g.health <= 0) continue;
+        const d = Math.hypot(g.x - from.x, g.y - fy, g.z - from.z);
+        if (d < best) { best = d; next = g; nextKind = 'drone'; }
+      }
+      if (!next) break;
+      been.add(next);
+      zap(from.x, fy, from.z, next.x, chest(next, nextKind), next.z);
+      const dx = next.x - from.x, dz = next.z - from.z, dl = Math.hypot(dx, dz) || 1;
+      const killed = nextKind === 'drone' ? drones.damage(next, amount)
+        : soldiers.damage(next, amount, { x: dx / dl, y: 0.1, z: dz / dl });
+      next.stunLeft = Math.max(next.stunLeft || 0, A.stun);
+      if (killed) creditTarget(next, false, nextKind);
+      state.voltJumps = (state.voltJumps || 0) + 1;
+      from = next; fromKind = nextKind;
+    }
+  }
 
   /**
    * A blast, wherever it came from. Everything inside the radius takes damage
@@ -1107,6 +1163,23 @@ async function main() {
     }
     if (n) feed(`<b>void</b> ${n} taken`);
     return n;
+  }
+
+  /**
+   * A flare burning on its way, and a cling charge pulsing where it holds:
+   * both are lights you can follow across a street.
+   */
+  function glowTick() {
+    for (const b of projectiles.active) {
+      if (!b.alive) continue;
+      if (b.kind === 'flare') {
+        effects.spark(b.x + (Math.random() - 0.5) * 0.2, b.y + (Math.random() - 0.5) * 0.2,
+          b.z + (Math.random() - 0.5) * 0.2, 1.6, 0.45, 0.08);
+      } else if (b.kind === 'cling' && Math.random() < (b.stuck ? 0.9 : 0.4)) {
+        effects.spark(b.x + (Math.random() - 0.5) * 0.25, b.y + (Math.random() - 0.5) * 0.25,
+          b.z + (Math.random() - 0.5) * 0.25, 0.35, 0.75, 1.6);
+      }
+    }
   }
 
   /**
@@ -7816,6 +7889,20 @@ async function main() {
   }
 
   weapon.onMelee = (spec, eye, dir) => {
+    if (spec.lunge) {
+      // The blade: a cut if he is in reach, and if he is further off but in
+      // front of you and within the lunge, you go to him first.
+      audio.swoosh(0);
+      const near = inReach(spec.reach, 0.5)[0];
+      if (near) { bladeCut(near, spec); return; }
+      const far = inReach(spec.lunge.range, spec.lunge.cone).find((h) => h.kind === 'soldier');
+      if (!far) return;
+      state.lunge = { target: far.t, kind: far.kind, spec, t: 0 };
+      effects.shake = Math.min(1, effects.shake + 0.12);
+      state.lunges = (state.lunges || 0) + 1;
+      return;
+    }
+    if (spec.quake) { quake(spec); return; }
     if (spec.fuel) {
       // The saw takes the nearest thing in front of you, if it has the fuel
       // for something that size.
@@ -7855,9 +7942,113 @@ async function main() {
     }
   };
 
+  /** One cut of the blade, into whoever it reached. */
+  function bladeCut(h, spec) {
+    const t = h.t;
+    const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+    const amount = spec.damage * (weapon.damageScale || 1);
+    const killed = h.kind === 'drone' ? drones.damage(t, amount)
+      : soldiers.damage(t, amount, { x: dx / dl, y: 0.3, z: dz / dl });
+    for (let i = 0; i < 3; i++) effects.blood(t.x, t.y + 1.1, t.z, dx / dl, 0.4, dz / dl, cheats.goreScale * 1.5);
+    if (killed && h.kind === 'soldier' && cheats.bleeding) gibs.burst(t.x, t.y + 1.2, t.z, { x: dx / dl, y: 0.5, z: dz / dl }, 0.6, 2);
+    for (let i = 0; i < 6; i++) effects.spark(t.x, t.y + 1.1, t.z, 0.5, 0.8, 1.6);
+    effects.shake = Math.min(1.2, effects.shake + 0.3);
+    audio.hitMarker(true);
+    showHitmarker(killed ? 'kill' : '');
+    if (killed) { creditTarget(t, false, h.kind); state.bladeKills = (state.bladeKills || 0) + 1; }
+  }
+
+  /**
+   * The lunge, a step at a time: straight at him, fast, until he is in reach,
+   * and the cut lands there. A wall in the way, or half a second without
+   * getting there, and it is over without one.
+   */
+  function lungeStep(dt) {
+    const L = state.lunge;
+    if (!L) return false;
+    const t = L.target;
+    L.t += dt;
+    if (!t.alive || t.health <= 0 || L.t > 0.5) { state.lunge = null; return false; }
+    const dx = t.x - player.x, dz = t.z - player.z, d = Math.hypot(dx, dz) || 1;
+    const stop = L.spec.reach * 0.6 + 0.42 * (t.scale || 1);
+    // A little inside the stop, because the step lands on it exactly.
+    if (d <= stop + 0.1) { state.lunge = null; bladeCut({ t, kind: L.kind }, L.spec); return false; }
+    const step = Math.min(d - stop, L.spec.lunge.speed * dt);
+    if (world.raycast(player.x, player.y + 1.0, player.z, dx / d, 0, dz / d, step + 0.35)) {
+      state.lunge = null;
+      return false;
+    }
+    player.x += dx / d * step;
+    player.z += dz / d * step;
+    player.y = Math.max(player.y, world.groundHeight(player.x, player.z));
+    player.vy = 0;
+    return true;
+  }
+
+  /**
+   * The hammer brought down on the street in front of you. Everybody in the
+   * half circle is hurt, the nearest worst, and whoever it did not kill is
+   * thrown off his feet; a car or a bus goes into the air. You are not
+   * touched by it.
+   */
+  function quake(spec) {
+    const Q = spec.quake;
+    const fx = camera.forward[0], fz = camera.forward[2], fl = Math.hypot(fx, fz) || 1;
+    const cx = player.x + fx / fl * 2.2, cz = player.z + fz / fl * 2.2;
+    const gy = world.groundHeight(cx, cz);
+    effects.dust(cx, gy, cz, spec.reach * 0.8);
+    effects.flash(cx, gy + 0.3, cz, 3.5, 1.0, 0.55, 0.15, 0.12);
+    renderer.addScar(cx, gy, cz, 3.2, 0.5);
+    audio.explosion();
+    effects.shake = Math.min(1.4, effects.shake + 0.6);
+    let down = 0, thrown = 0;
+    for (const h of inReach(spec.reach, spec.arc)) {
+      const t = h.t;
+      const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+      const k = 1 - Math.min(1, Math.max(0, h.d) / spec.reach) * (1 - Q.edge);
+      const amount = spec.damage * k * (weapon.damageScale || 1);
+      const killed = h.kind === 'drone' ? drones.damage(t, amount)
+        : soldiers.damage(t, amount, { x: dx / dl, y: 0.6, z: dz / dl });
+      if (h.kind === 'soldier' && !killed && soldiers.knockDown(t, dx / dl, dz / dl, Q.push * k)) down++;
+      if (killed) creditTarget(t, false, h.kind);
+    }
+    for (const v of vehicles.active) {
+      if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground' || v === state.inVehicle) continue;
+      const dx = v.x - player.x, dz = v.z - player.z, d = Math.hypot(dx, dz) || 1;
+      if (d > spec.reach + 1.5 || (dx * fx + dz * fz) / (fl * d) < spec.arc) continue;
+      const k = 1 - Math.min(1, d / (spec.reach + 1.5)) * (1 - Q.edge);
+      vehicles.launch(v, Q.up * k * (v.type === 'bus' ? 0.45 : 1), (Math.random() - 0.5) * 2 * k);
+      vehicles.damage(v, v.spec.health * Q.hull * k);
+      if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
+      thrown++;
+    }
+    soldiers.scare(cx, cz, 40);
+    state.quakes = (state.quakes || 0) + 1;
+    return { down, thrown };
+  }
+
+  // A bolt or a cling charge has taken hold. The bolt does some harm going
+  // in; either way you hear it catch.
+  projectiles.onCling = (b, hit) => {
+    audio.hitMarker(false);
+    const spec = WEAPONS[b.weapon];
+    if (!spec || !spec.impact || hit.kind !== 'actor') return;
+    const t = hit.target;
+    const sp = Math.hypot(b.fx || 0, b.fz || 0) || 1;
+    const amount = spec.impact * (weapon.damageScale || 1);
+    let killed = false;
+    if (hit.actorKind === 'soldier') killed = soldiers.damage(t, amount, { x: (b.fx || 0) / sp, y: 0, z: (b.fz || 0) / sp });
+    else if (hit.actorKind === 'drone') killed = drones.damage(t, amount);
+    effects.blood(hit.x, hit.y, hit.z, (b.fx || 0) / sp, 0.2, (b.fz || 0) / sp, cheats.goreScale);
+    showHitmarker(killed ? 'kill' : '');
+    if (killed) creditTarget(t, false, hit.actorKind);
+  };
+
   projectiles.onSaw = (b, hit) => {
     const t = hit.target;
-    const amount = (WEAPONS.shieldsaw.damage || 150) * (weapon.damageScale || 1);
+    // The shield saw's, or a disc out of the ripper: each carries its own.
+    const amount = ((WEAPONS[b.weapon] && WEAPONS[b.weapon].damage) || WEAPONS.shieldsaw.damage || 150)
+      * (weapon.damageScale || 1);
     const sp = Math.hypot(b.vx, b.vz) || 1;
     let killed = false;
     if (hit.actorKind === 'soldier') killed = soldiers.damage(t, amount, { x: b.vx / sp, y: 0, z: b.vz / sp });
@@ -8101,6 +8292,7 @@ async function main() {
 
   function beginWalk(direct = false) {
     el.title.classList.add('hidden');
+    state.lunge = null;
     el.hud.classList.remove('hidden');
     // The hour picked on the title, for every game but the end of the world,
     // which keeps its own.
@@ -8749,6 +8941,7 @@ async function main() {
       combat.update(worldDt);
       projectiles.update(worldDt);
       voidTick(worldDt);
+      glowTick();
       gibs.update(worldDt);
       demolition.update(worldDt);
       fires.update(worldDt, player);
@@ -8897,7 +9090,7 @@ async function main() {
       boost = reflex.leap();
       if (boost > 1) audio.leap();
     }
-    if (!slamStep(selfDt)) player.step(selfDt, wishX, wishZ, jumped, boost);
+    if (!slamStep(selfDt) && !lungeStep(selfDt)) player.step(selfDt, wishX, wishZ, jumped, boost);
     // Held, the suit puts its strength into the jump: a moment after leaving
     // the ground, still rising, it goes most of the way up again.
     if (jumped && boost === 1) state.suitJump = { t: 0, done: false };
@@ -9000,6 +9193,7 @@ async function main() {
     pickups.update(worldDt, { x: player.x, y: player.y, z: player.z });
     projectiles.update(worldDt);
     voidTick(worldDt);
+    glowTick();
     gibs.update(worldDt);
     demolition.update(worldDt);
     fires.update(worldDt, player);

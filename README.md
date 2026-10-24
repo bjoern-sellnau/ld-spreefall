@@ -219,15 +219,29 @@ What is under the hood:
   weapons of a kind and pressing it again goes to the next, and coming back to
   a key gives you the one you last had there. The first on each key is what
   that key always was. 1 is the M16, the marksman rifle, a rotary cannon (six
-  barrels, spins up for 0.4 s and then puts out twenty five rounds a second)
-  and the bow; 2 the pump, the double barrel, a drum shotgun that fires as
-  fast as you can hold it, and the flak cannon; 3 the rocket launcher, a swarm
-  launcher (four rockets a shot, each after what the sight is on) and a
-  grenade launcher (lobbed a long way, goes off on what it meets); 4 the
-  grenade, the incendiary, the banana and C4; 5 the suppressed pistol and a
-  hand cannon whose round goes through one man into the next; 6 the chainsaw,
-  the flail and the shield saw; 7 the flamethrower; 8 plasma, the railgun and
-  the splinter gun; 9 the mech killer and the EMP; 0 the void cannon.
+  barrels, spins up for 0.4 s and then puts out twenty five rounds a second),
+  the bow and Hailstorm; 2 the pump, the double barrel, a drum shotgun that
+  fires as fast as you can hold it, and the flak cannon; 3 the rocket
+  launcher, a swarm launcher (four rockets a shot, each after what the sight
+  is on), a grenade launcher (lobbed a long way, goes off on what it meets),
+  the arbalest and the disc ripper; 4 the grenade, the incendiary, the
+  banana, C4 and the cling charge; 5 the suppressed pistol and a hand cannon
+  whose round goes through one man into the next; 6 the chainsaw, the flail,
+  the shield saw, the lunge blade and the quake hammer; 7 the flamethrower
+  and the flare pistol; 8 plasma, the railgun, the splinter gun and the volt
+  caster; 9 the mech killer and the EMP; 0 the void cannon.
+- Eight of those come out of Crysis, DOOM, Far Cry and Halo, each the idea of
+  one weapon there under a name and numbers of our own. Hailstorm (Crysis 3's
+  Typhoon): eight stacked barrels, three rounds a pull thirty times a second.
+  The volt caster (the Crysis K-Volt): whoever it hits holds still, and the
+  charge jumps on to the next two within seven metres. The arbalest (DOOM
+  Eternal's Ballista): the bolt goes into a wall or a man and goes off a
+  moment later. The disc ripper (Far Cry New Dawn's saw launcher): a saw
+  blade through everybody in the line and off the walls, four times. The
+  flare pistol (Far Cry): alight where it lands. And from Halo: the cling
+  charge sticks to what it hits and rides on him; the lunge blade takes you
+  nine metres onto a man and cuts him down; the quake hammer floors
+  everybody in the half circle in front of you and throws the cars.
 - Down the left side of the screen is what you carry: a row a key with the key
   in a box and the weapon it would give you, the row you are on lit, a bar of
   ammunition under each name, and the group you just picked from opened out

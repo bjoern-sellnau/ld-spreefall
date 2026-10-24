@@ -5081,6 +5081,73 @@ So there are two cities now, and a profile picks which:
   -0.57 and -0.22). The arsenal suite screenshots it:
   arsenal-03-shield-hip.png and arsenal-04-shield-up.png.
 
+## 133. Eight more, out of Crysis, DOOM, Far Cry and Halo
+
+- The ask: more weapons, the way Crysis, Doom, Far Cry and Halo have them.
+  Eight, each the idea of one weapon there under a name and numbers of our
+  own, and checked against what the sources say the weapon does:
+  - Hailstorm, after Crysis 3's Typhoon, eight barrels that do not turn and
+    about 500 rounds a second
+    ([MP1st](https://mp1st.com/news/the-7-wonders-of-crysis-3-episode-4-typhoon),
+    [Game Informer](https://gameinformer.com/games/crysis_3/b/xbox360/archive/2013/01/16/new-crysis-3-video-shows-off-the-mighty-typhoon.aspx)).
+    Here: three rounds a pull, thirty pulls a second, 12 each, wide and
+    short, a 150 pull drum. No spin up, because the barrels do not turn.
+  - The volt caster, after the K-Volt of Crysis 2 and 3, which fires
+    electrified pellets ([Crysis wiki](https://crysis.fandom.com/wiki/File:Kvoltreflex.png)).
+    Here: 20 a hit, and the charge holds whoever it hit for 1.2 s and jumps
+    on to the nearest other within 7 m, and from him to the next, three
+    jumps at most at 70 % each, never back. The hold and the jumps are ours.
+  - The arbalest, after DOOM Eternal's Ballista, whose bolt sticks into the
+    target and goes off a short time later
+    ([DoomWiki](https://doomwiki.org/wiki/Ballista)). Here: a bolt at
+    130 m/s, 60 going in, and 0.45 s later a 6 m blast of 210; in a man it
+    rides on him until then.
+  - The disc ripper, after Far Cry New Dawn's saw launcher, whose blades
+    ricochet off any surface but the floor
+    ([Wikipedia](https://en.wikipedia.org/wiki/Far_Cry_New_Dawn),
+    [Trusted Reviews](https://trustedreviews.com/reviews/far-cry-new-dawn)).
+    Here: a blade at 38 m/s, 140 into everybody it passes through, off a
+    wall at the speed it arrived four times, and into the ground for good.
+  - The flare pistol, after Far Cry's, which ignites what it lands in
+    ([Far Cry wiki](https://farcry.fandom.com/wiki/File:FC3_Flare_Gun_Iron_Sights.png)).
+    Here: a slow arc, a small pop, and three pools of fire for 8 s.
+  - From Halo (Halopedia on the [plasma grenade](https://halopedia.org/Type-1_plasma_grenade/Gameplay),
+    the [sword's lunge](https://halopedia.org/Grenade_lunge) and the
+    [gravity hammer](https://halopedia.org/Gravity_hammer/Gameplay)): the cling
+    charge, which holds on to the first thing it touches and goes off 1.1 s
+    later (7 m, 250), riding on a man wherever he goes; the lunge blade, 600
+    a cut within 2.6 m, and within 9 m and a narrow cone in front it takes
+    you onto him at 30 m/s first, stopping at a wall; and the quake hammer,
+    brought down in front of you: everybody in the half circle out to 7 m
+    takes up to 220 and whoever lives is knocked off his feet, a car or bus
+    goes into the air, and none of it touches you.
+- Groups: 1 Hailstorm, 3 the arbalest and the ripper, 4 the cling charge, 6
+  the blade and the hammer, 7 the flare pistol, 8 the volt caster. 35 in
+  all. The kits of Tactics, Slayer and The Hunt are unchanged.
+- The stun the EMP put on machines is now anybody's: the volt caster sets the
+  same timer on a man and he stands still while it runs.
+- Projectiles: `cling` on a kind (the bolt and the cling charge) holds on to
+  what it touched and shortens the fuse to that many seconds, and if that
+  was somebody it keeps its place on him; `blade` (the disc) goes through
+  bodies, reflects off walls at full speed and stops in the ground. The disc
+  cuts through the same handler as the shield saw, at its own damage.
+- Each has its own viewmodel (two new viewmodel colours: a hot orange and an
+  electric blue white, and an orange red plastic for the flare pistol), its
+  own pose, and the four that fly their own shapes. The two you swing are
+  not brought onto the centre line by the second trigger.
+- Checks (arsenal suite, ten more): Hailstorm puts out thirty pulls in a
+  second and a man at 18 m does not last it; the volt caster's charge jumps
+  to the two near the one it hit and not to the one 15 m off, and they hold
+  still while it has them; the arbalest's bolt holds and goes off and he is
+  dead; the cling charge holds, goes where he goes and kills him; the ripper
+  goes through two in a line and comes off a wall at 38 m/s; the blade
+  lunges 5 m onto a man 7 m off and kills him, and does not go for one at
+  15 m; the hammer floors the three in front, throws the car, and leaves the
+  one behind and you untouched; the flare leaves three pools and they burn
+  a man standing in one. Every weapon in the loadout still fires.
+  Screenshots arsenal-05-hailstorm.png, arsenal-06-blade.png,
+  arsenal-07-hammer.png, arsenal-08-flare.png.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

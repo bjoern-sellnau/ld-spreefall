@@ -402,6 +402,107 @@ export const WEAPONS = {
     // Every rocket of the four goes after what the sight was on.
     homing: { turn: 3.2, range: 260 },
   },
+
+  // Eight out of the shooters this one keeps being compared to, each the
+  // idea of one weapon there under a name and numbers of our own: the eight
+  // stacked barrels of Crysis 3's Typhoon, the electric K-Volt of the Crysis
+  // games, DOOM Eternal's Ballista bolt that goes in and goes off a moment
+  // later, Far Cry New Dawn's saw launcher, Far Cry's flare gun, and three of
+  // Halo's: the plasma grenade that sticks, the sword that closes the
+  // distance for you, and the hammer.
+  hailstorm: {
+    // Eight barrels that do not turn, so no spin up: it simply pours, three
+    // rounds a pull thirty times a second, wide and short.
+    name: 'Hailstorm', short: 'HAIL', kind: KIND.HITSCAN, slot: 1,
+    magazine: 150, reserve: 450, reloadTime: 2.8, fireInterval: 0.033, auto: true,
+    damage: 12, coreMultiplier: 1.6, range: 160, pellets: 3,
+    spreadHip: 0.032, spreadAim: 0.022, spreadPerShot: 0.0008, spreadMax: 0.05,
+    spreadRecover: 0.15,
+    recoilKick: 0.0022, recoilSide: 0.0016, recoilRetain: 0.06,
+    aimFov: 56, sound: 'minigun',
+  },
+  volt: {
+    // What it hits holds still, and the charge jumps on from there to the
+    // next one standing near, and on again, a little weaker each time.
+    name: 'Volt caster', short: 'VOLT', kind: KIND.HITSCAN, slot: 8,
+    magazine: 60, reserve: 240, reloadTime: 2.0, fireInterval: 0.09, auto: true,
+    damage: 20, coreMultiplier: 1.4, range: 80, pellets: 1,
+    spreadHip: 0.012, spreadAim: 0.005, spreadPerShot: 0.0015, spreadMax: 0.03,
+    spreadRecover: 0.1,
+    recoilKick: 0.003, recoilSide: 0.0015, recoilRetain: 0.1,
+    aimFov: 52, sound: 'plasma',
+    arc: { jumps: 3, reach: 7, share: 0.7, stun: 1.2 },
+  },
+  arbalest: {
+    // The bolt goes into whatever it meets, a wall or a man, and goes off
+    // there a moment later. impact is what the bolt itself does going in.
+    name: 'Arbalest', short: 'ARBALEST', kind: KIND.LAUNCH, slot: 3,
+    magazine: 4, reserve: 24, reloadTime: 2.2, fireInterval: 0.9, auto: false,
+    projectile: 'bolt', muzzleSpeed: 130, range: 500, impact: 60,
+    spreadHip: 0.004, spreadAim: 0, spreadPerShot: 0, spreadMax: 0.004,
+    spreadRecover: 0.2,
+    recoilKick: 0.022, recoilSide: 0.003, recoilRetain: 0.25,
+    aimFov: 30, sound: 'rail',
+    splash: { radius: 6, damage: 210, force: 20 },
+  },
+  ripper: {
+    // A saw blade, flat and fast: through everybody in the way, and off a
+    // wall at the same speed it arrived, four times before it is spent. Off
+    // the ground it does not come back up: it goes in and stays.
+    name: 'Disc ripper', short: 'RIPPER', kind: KIND.LAUNCH, slot: 3,
+    magazine: 5, reserve: 30, reloadTime: 2.4, fireInterval: 0.6, auto: false,
+    projectile: 'disc', muzzleSpeed: 38, range: 120, damage: 140,
+    spreadHip: 0.004, spreadAim: 0.001, spreadPerShot: 0, spreadMax: 0.004,
+    spreadRecover: 0.2,
+    recoilKick: 0.012, recoilSide: 0.002, recoilRetain: 0.15,
+    aimFov: 54, sound: 'throw',
+  },
+  cling: {
+    // Sticks to the first thing it touches, a wall or a man, and goes off
+    // there a second later, whichever way he runs.
+    name: 'Cling charge', short: 'CLING', kind: KIND.THROW, slot: 4,
+    magazine: 1, reserve: 8, reloadTime: 0.75, fireInterval: 0.95, auto: false,
+    projectile: 'cling', muzzleSpeed: 24, fuse: 4, range: 120,
+    spreadHip: 0.004, spreadAim: 0.001, spreadPerShot: 0, spreadMax: 0.004,
+    spreadRecover: 0.2,
+    recoilKick: 0.004, recoilSide: 0.001, recoilRetain: 0.1,
+    aimFov: 58, sound: 'throw',
+    splash: { radius: 7, damage: 250, force: 22 },
+  },
+  blade: {
+    // Anybody in front of you within the lunge, you are on before he can
+    // turn, and one cut does it. Nearer than reach, it is only the cut.
+    name: 'Lunge blade', short: 'BLADE', kind: KIND.MELEE, slot: 6,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.55, auto: false,
+    reach: 2.6, damage: 600,
+    lunge: { range: 9, cone: 0.94, speed: 30 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.004, recoilSide: 0.004, recoilRetain: 0, aimFov: 62, sound: 'saw',
+  },
+  hammer: {
+    // Brought down on the street in front of you: everybody in the half
+    // circle is hurt and thrown off his feet, a car is thrown into the air,
+    // and none of it comes back at you.
+    name: 'Quake hammer', short: 'HAMMER', kind: KIND.MELEE, slot: 6,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 1.15, auto: false,
+    reach: 7, arc: -0.1, damage: 220,
+    quake: { push: 9, up: 7, hull: 0.25, edge: 0.4 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.03, recoilSide: 0.004, recoilRetain: 0, aimFov: 62, sound: 'rpg',
+  },
+  flare: {
+    // One flare: whatever it goes into is alight, and the ground round it
+    // burns for a while after.
+    name: 'Flare pistol', short: 'FLARE', kind: KIND.LAUNCH, slot: 7,
+    magazine: 1, reserve: 14, reloadTime: 1.1, fireInterval: 0.6, auto: false,
+    projectile: 'flare', muzzleSpeed: 50, range: 200,
+    spreadHip: 0.006, spreadAim: 0.002, spreadPerShot: 0, spreadMax: 0.006,
+    spreadRecover: 0.2,
+    recoilKick: 0.016, recoilSide: 0.003, recoilRetain: 0.2,
+    aimFov: 54, sound: 'launcher',
+    splash: { radius: 3, damage: 55, force: 3, punch: false },
+    incendiary: { radius: 6, pools: 3, burnSeconds: 8, damagePerSecond: 85 },
+  },
 };
 
 /**
@@ -440,6 +541,18 @@ WEAPONS.minigun.hold = { x: 0.215, y: -0.175, z: -0.440, pitch: -0.010, yaw: 0.1
 WEAPONS.launcher.hold = { x: 0.215, y: -0.145, z: -0.420, pitch: -0.012, yaw: 0.122, roll: 0.04 };
 WEAPONS.swarm.hold = { x: 0.205, y: -0.135, z: -0.440, pitch: -0.012, yaw: 0.115, roll: 0.04 };
 WEAPONS.flail.hold = { x: 0.190, y: -0.120, z: -0.320, pitch: 0.100, yaw: 0.180, roll: 0.10 };
+WEAPONS.hailstorm.hold = { x: 0.215, y: -0.165, z: -0.430, pitch: -0.010, yaw: 0.115, roll: 0.03 };
+WEAPONS.volt.hold = { x: 0.200, y: -0.135, z: -0.380, pitch: -0.012, yaw: 0.130, roll: 0.05 };
+WEAPONS.arbalest.hold = { x: 0.210, y: -0.140, z: -0.470, pitch: -0.014, yaw: 0.118, roll: 0.04 };
+WEAPONS.ripper.hold = { x: 0.215, y: -0.150, z: -0.420, pitch: -0.012, yaw: 0.125, roll: 0.05 };
+WEAPONS.cling.hold = { x: 0.185, y: -0.118, z: -0.175, pitch: 0.06, yaw: 0.22, roll: 0.10 };
+WEAPONS.flare.hold = { x: 0.180, y: -0.125, z: -0.300, pitch: -0.010, yaw: 0.150, roll: 0.05 };
+// The two you swing are held up and out to the side, and the second trigger
+// does not bring them onto the centre line: there is no sight on a sword.
+WEAPONS.blade.hold = { x: 0.200, y: -0.150, z: -0.220, pitch: 0.120, yaw: 0.200, roll: 0.25 };
+WEAPONS.blade.aimHold = { x: 0.150, y: -0.140, z: -0.220, pitch: 0.100, yaw: 0.150, roll: 0.15 };
+WEAPONS.hammer.hold = { x: 0.270, y: -0.250, z: -0.320, pitch: 0.000, yaw: 0.220, roll: 0.30 };
+WEAPONS.hammer.aimHold = { x: 0.230, y: -0.230, z: -0.320, pitch: 0.000, yaw: 0.180, roll: 0.22 };
 
 /**
  * The heads a bow can carry. Fire and poison do their own harm where they
@@ -474,14 +587,14 @@ export const ARROW_DRAWS = {
  * a grenade still finds them first.
  */
 export const BUCKETS = {
-  1: { name: 'Rifles', ids: ['m16', 'marksman', 'minigun', 'bow'] },
+  1: { name: 'Rifles', ids: ['m16', 'marksman', 'minigun', 'bow', 'hailstorm'] },
   2: { name: 'Shotguns', ids: ['shotgun', 'doublebarrel', 'autoshotgun', 'flak'] },
-  3: { name: 'Launchers', ids: ['rpg', 'swarm', 'launcher'] },
-  4: { name: 'Thrown', ids: ['grenade', 'incendiary', 'banana', 'c4'] },
+  3: { name: 'Launchers', ids: ['rpg', 'swarm', 'launcher', 'arbalest', 'ripper'] },
+  4: { name: 'Thrown', ids: ['grenade', 'incendiary', 'banana', 'c4', 'cling'] },
   5: { name: 'Pistols', ids: ['sdpistol', 'magnum'] },
-  6: { name: 'Close', ids: ['chainsaw', 'flail', 'shieldsaw'] },
-  7: { name: 'Fire', ids: ['flamer'] },
-  8: { name: 'Energy', ids: ['plasma', 'railgun', 'splinter'] },
+  6: { name: 'Close', ids: ['chainsaw', 'flail', 'shieldsaw', 'blade', 'hammer'] },
+  7: { name: 'Fire', ids: ['flamer', 'flare'] },
+  8: { name: 'Energy', ids: ['plasma', 'railgun', 'splinter', 'volt'] },
   9: { name: 'Anti armour', ids: ['mechkiller', 'emp'] },
   0: { name: 'Void', ids: ['void'] },
 };

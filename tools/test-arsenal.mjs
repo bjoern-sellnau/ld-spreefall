@@ -891,7 +891,7 @@ async function run() {
     const s = window.spreefall;
     const out = {};
     const press = (k) => { s.weapon.selectSlot(k); s.arms.poke(k); return s.weapon.id; };
-    out.one = [press(1), press(1), press(1), press(1), press(1)];
+    out.one = [press(1), press(1), press(1), press(1), press(1), press(1)];
     out.three = [press(3), press(3)];
     // Back to the rifles: the one last held there, not the first.
     out.back = press(1);
@@ -900,7 +900,7 @@ async function run() {
     return out;
   });
   check('a number key is a group: pressed again it goes through the group and round',
-    groups.one.join() === 'marksman,minigun,bow,m16,marksman' && groups.three.join() === 'rpg,swarm',
+    groups.one.join() === 'marksman,minigun,bow,hailstorm,m16,marksman' && groups.three.join() === 'rpg,swarm',
     JSON.stringify(groups));
   check('and coming back to a group gives the one you last had in it',
     groups.back === 'marksman' && groups.away === 'grenade' && groups.again === 'marksman', JSON.stringify(groups));
@@ -930,7 +930,7 @@ async function run() {
   await page.screenshot({ path: path.join(SHOTS, 'arsenal-01-side-panel.png') });
   check('the weapons are down the left side, a row a key, the one you are on lit and its group open',
     panel.shown && panel.left < 60 && panel.rows === 10 && panel.keys === '1234567890' && panel.cur === '1'
-      && panel.open && panel.listed === 4 && panel.on === 'MARKSMAN' && !panel.idle,
+      && panel.open && panel.listed === 5 && panel.on === 'MARKSMAN' && !panel.idle,
     JSON.stringify(panel));
   await page.waitForTimeout(3200);
   const folded = await page.evaluate(() => {
@@ -1006,6 +1006,192 @@ async function run() {
   check('the swarm launcher puts four rockets out at once', heavy.swarm === 4, `${heavy.swarm}`);
   check('the grenade launcher lobs a long way and goes off on the first thing it meets',
     heavy.shell && heavy.shellGone && heavy.shellFar > 30, JSON.stringify(heavy));
+
+  // --- the eight out of the other shooters ---------------------------------
+  // Each checked for the thing it is for: Hailstorm pours, the volt caster's
+  // charge jumps and holds them, the arbalest's bolt and the cling charge
+  // take hold and go off, the ripper cuts through a line and comes off a
+  // wall, the blade lunges, the hammer throws a street about, and the flare
+  // sets the ground alight.
+  const eight = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    const fresh = () => {
+      s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.combat.reset(); s.vehicles.reset();
+      s.soldiers.enabled = false;
+      s.state.lunge = null;
+      s.teleport(81, 0); s.look(90, 0); s.camera.update(16 / 9);
+    };
+    const eye = () => ({ x: s.player.x, y: s.player.y + 1.7, z: s.player.z });
+    const aim = (x, y, z) => {
+      const e = eye();
+      const to = { x: x - e.x, y: y - e.y, z: z - e.z };
+      const l = Math.hypot(to.x, to.y, to.z);
+      s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+    };
+    const step = (sec) => { for (let i = 0; i < Math.round(sec * 60); i++) s.fixedForTest(1 / 60); };
+    const ready = (id) => { s.weapon.giveAll(); s.weapon.select(id); s.weapon.cooldown = 0; s.weapon.spread = 0; };
+    const dir = () => ({ x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] });
+
+    // Hailstorm: a second of the trigger.
+    fresh(); ready('hailstorm');
+    let t = s.spawnSoldier(-18, 0);
+    aim(t.x, t.y + 1.1, t.z);
+    let n0 = s.weapon.shotsFired;
+    for (let i = 0; i < 60; i++) s.weapon.update(1 / 60, true, eye(), dir());
+    out.hail = { shots: s.weapon.shotsFired - n0, rounds: (s.weapon.shotsFired - n0) * s.weapon.spec.pellets,
+      dead: t.health <= 0 };
+
+    // The volt caster: one shot into the first of three standing four
+    // metres apart, and one fifteen metres off that it cannot reach.
+    fresh(); ready('volt');
+    const a = s.spawnSoldier(-14, 0), b = s.spawnSoldier(-17, 3), c = s.spawnSoldier(-20, 6);
+    const far = s.spawnSoldier(-14, 20);
+    aim(a.x, a.y + 1.1, a.z);
+    const j0 = s.state.voltJumps || 0;
+    s.shoot();
+    out.volt = { jumps: (s.state.voltJumps || 0) - j0, stunned: [a, b, c].filter((x) => x.stunLeft > 1).length,
+      hurt: [b, c].filter((x) => x.health < x.maxHealth).length, far: far.health === far.maxHealth && !(far.stunLeft > 0) };
+    // And they hold still while it has them, with the soldiers running.
+    s.setCheat('godmode', true);
+    s.soldiers.enabled = true;
+    const at = { x: b.x, z: b.z, stun: b.stunLeft };
+    step(0.6);
+    out.volt.held = Math.hypot(b.x - at.x, b.z - at.z) < 0.05 && b.stunLeft < at.stun;
+    s.soldiers.enabled = false;
+    s.setCheat('godmode', false);
+
+    // The arbalest: a bolt into a man twenty metres off.
+    fresh(); ready('arbalest');
+    t = s.spawnSoldier(-20, 0);
+    aim(t.x, t.y + 1.1, t.z);
+    s.shoot();
+    let p = s.projectiles.active.find((x) => x.kind === 'bolt');
+    let held = false;
+    for (let i = 0; i < 90 && p && p.alive; i++) { s.fixedForTest(1 / 60); if (p.host === t) held = true; }
+    out.bolt = { fired: !!p, held, gone: p ? !p.alive : false, dead: t.health <= 0 };
+
+    // The cling charge: thrown at a man nine metres off, who then moves.
+    fresh(); ready('cling');
+    t = s.spawnSoldier(-9, 0);
+    aim(t.x, t.y + 1.0, t.z);
+    s.shoot();
+    p = s.projectiles.active.find((x) => x.kind === 'cling');
+    held = false;
+    let rode = false;
+    for (let i = 0; i < 150 && p && p.alive; i++) {
+      s.fixedForTest(1 / 60);
+      if (!held && p.host === t) {
+        held = true;
+        t.x += 1.5;
+        s.fixedForTest(1 / 60);
+        rode = !p.alive || Math.abs(p.x - (t.x + p.hx)) < 0.01;
+      }
+    }
+    out.cling = { thrown: !!p, held, rode, dead: t.health <= 0 };
+
+    // The ripper: two in a line, and then a wall straight on.
+    fresh(); ready('ripper');
+    const r1 = s.spawnSoldier(-8, 0), r2 = s.spawnSoldier(-13, 0);
+    aim(r1.x, r1.y + 1.0, r1.z);
+    s.shoot();
+    p = s.projectiles.active.find((x) => x.kind === 'disc');
+    for (let i = 0; i < 60 && p && p.alive && r2.health === r2.maxHealth; i++) s.fixedForTest(1 / 60);
+    out.ripper = { both: r1.health < r1.maxHealth && r2.health < r2.maxHealth };
+    fresh(); ready('ripper');
+    let wall = null;
+    for (let k = 0; k < 32 && !wall; k++) {
+      const ang = (k / 32) * Math.PI * 2;
+      const e = eye();
+      const h = s.world.raycast(e.x, e.y - 0.3, e.z, Math.cos(ang), 0, Math.sin(ang), 35);
+      if (h && h.kind === 'wall' && h.t > 5) wall = h;
+    }
+    out.ripper.wall = !!wall;
+    if (wall) {
+      aim(wall.x, wall.y, wall.z);
+      s.shoot();
+      p = s.projectiles.active.find((x) => x.kind === 'disc');
+      for (let i = 0; i < 120 && p && p.alive && !(p.ricochets > 0); i++) s.fixedForTest(1 / 60);
+      out.ripper.ricochets = p ? p.ricochets || 0 : -1;
+      out.ripper.fast = p ? +Math.hypot(p.vx, p.vy, p.vz).toFixed(1) : 0;
+    }
+
+    // The blade: a man seven metres off, and then one fifteen off.
+    fresh(); ready('blade');
+    t = s.spawnSoldier(-7, 0);
+    aim(t.x, t.y + 1.1, t.z);
+    let from = { x: s.player.x, z: s.player.z };
+    s.shoot();
+    const lunging = !!s.state.lunge;
+    step(0.6);
+    out.blade = { lunging, moved: +Math.hypot(s.player.x - from.x, s.player.z - from.z).toFixed(2),
+      near: +Math.hypot(t.x - s.player.x, t.z - s.player.z).toFixed(2), dead: t.health <= 0 };
+    fresh(); ready('blade');
+    t = s.spawnSoldier(-15, 0);
+    aim(t.x, t.y + 1.1, t.z);
+    from = { x: s.player.x, z: s.player.z };
+    s.shoot();
+    out.blade.farLunge = !!s.state.lunge;
+    step(0.3);
+    out.blade.farMoved = +Math.hypot(s.player.x - from.x, s.player.z - from.z).toFixed(2);
+
+    // The hammer: three in front, one behind, and a car to the side.
+    fresh(); ready('hammer');
+    s.look(90, 0); s.camera.update(16 / 9);
+    const men = [s.spawnSoldier(-3, 0), s.spawnSoldier(-4.5, 1.5), s.spawnSoldier(-5, -1.5)];
+    const behind = s.spawnSoldier(4, 0);
+    const car = s.vehicles.spawn('jeep', s.player.x - 5, s.player.z + 5, 0);
+    const hp = s.combat.health + s.combat.shield;
+    s.shoot();
+    out.hammer = { down: men.filter((m) => m.health <= 0 || m.state === 4).length,
+      hurt: men.filter((m) => m.health < m.maxHealth).length,
+      behind: behind.health === behind.maxHealth && behind.state !== 4,
+      car: car ? !!car.airborne : null, you: s.combat.health + s.combat.shield === hp };
+
+    // The flare: into the street twelve metres off, and somebody standing
+    // in what it leaves.
+    fresh(); ready('flare');
+    const gx = s.player.x - 12, gz = s.player.z;
+    aim(gx, s.world.groundHeight(gx, gz), gz);
+    const pools = s.burningGround.length;
+    s.shoot();
+    p = s.projectiles.active.find((x) => x.kind === 'flare');
+    for (let i = 0; i < 180 && p && p.alive; i++) s.fixedForTest(1 / 60);
+    out.flare = { fired: !!p, burning: s.burningGround.length - pools };
+    const pool = s.burningGround[s.burningGround.length - 1];
+    if (pool) {
+      t = s.spawnSoldier(pool.x - s.player.x, pool.z - s.player.z);
+      const h0 = t.health;
+      s.setCheat('godmode', true);
+      step(1.2);
+      s.setCheat('godmode', false);
+      out.flare.hurt = t.health < h0;
+    }
+    fresh();
+    return out;
+  });
+  check('Hailstorm pours: thirty pulls of three in a second, and a man at eighteen metres does not last it',
+    eight.hail.shots >= 25 && eight.hail.dead, JSON.stringify(eight.hail));
+  check('the volt caster\'s charge jumps from the one it hit to the two near him, and not to the one too far off',
+    eight.volt.jumps === 2 && eight.volt.stunned === 3 && eight.volt.hurt === 2 && eight.volt.far, JSON.stringify(eight.volt));
+  check('and they hold still while it has them', eight.volt.held, JSON.stringify(eight.volt));
+  check('the arbalest\'s bolt goes into him, holds, and goes off',
+    eight.bolt.held && eight.bolt.gone && eight.bolt.dead, JSON.stringify(eight.bolt));
+  check('the cling charge holds on to the man it hits, goes where he goes, and goes off on him',
+    eight.cling.held && eight.cling.rode && eight.cling.dead, JSON.stringify(eight.cling));
+  check('the ripper\'s blade goes through two in a line',
+    eight.ripper.both, JSON.stringify(eight.ripper));
+  check('and comes off a wall at the speed it arrived',
+    eight.ripper.wall && eight.ripper.ricochets >= 1 && eight.ripper.fast > 30, JSON.stringify(eight.ripper));
+  check('the blade lunges seven metres onto a man and cuts him down, and does not go for one fifteen off',
+    eight.blade.lunging && eight.blade.moved > 3 && eight.blade.near < 2.6 && eight.blade.dead
+      && !eight.blade.farLunge && eight.blade.farMoved < 0.5, JSON.stringify(eight.blade));
+  check('the hammer hurts and floors the three in front, throws the car, and leaves the one behind and you alone',
+    eight.hammer.down === 3 && eight.hammer.hurt === 3 && eight.hammer.behind && eight.hammer.car && eight.hammer.you,
+    JSON.stringify(eight.hammer));
+  check('the flare sets the street alight where it lands, and the fire burns whoever stands in it',
+    eight.flare.fired && eight.flare.burning >= 2 && eight.flare.hurt, JSON.stringify(eight.flare));
   await page.evaluate(() => {
     const s = window.spreefall;
     s.projectiles.clear(); s.weapon.select('minigun');
@@ -1034,6 +1220,17 @@ async function run() {
   await page.waitForTimeout(900);
   await page.screenshot({ path: path.join(SHOTS, 'arsenal-04-shield-up.png') });
   await page.evaluate(() => window.spreefall.setAim(false));
+
+  // Four of the eight in the hand.
+  for (const [i, id] of [[5, 'hailstorm'], [6, 'blade'], [7, 'hammer'], [8, 'flare']]) {
+    await page.evaluate((w) => {
+      const s = window.spreefall;
+      s.weapon.select(w);
+      for (let k = 0; k < 40; k++) s.fixedForTest(1 / 60);
+    }, id);
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: path.join(SHOTS, `arsenal-0${i}-${id}.png`) });
+  }
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
