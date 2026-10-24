@@ -141,6 +141,62 @@ export class Audio {
     return { parts: [a], level: 0 };
   }
 
+  /** Rain on the city: a hiss high up and a softer patter under it. */
+  _rainBed() {
+    const a = this._bedSource('highpass', 2600, 0.5, 0.16);
+    const b = this._bedSource('bandpass', 900, 0.6, 0.12);
+    return { parts: [a, b], level: 0 };
+  }
+
+  /** Wind: low, and swelling in gusts. */
+  _windBed() {
+    const a = this._bedSource('lowpass', 380, 0.9, 0.34);
+    const lfo = this.ctx.createOscillator();
+    lfo.frequency.value = 0.13;
+    const lg = this.ctx.createGain();
+    lg.gain.value = 160;
+    lfo.connect(lg).connect(a.filter.frequency);
+    lfo.start();
+    return { parts: [a], level: 0 };
+  }
+
+  /** How hard it is raining and blowing, for the two beds. */
+  setWeather(rain, wind) {
+    if (!this.ctx || !this.enabled) return;
+    if (!this.beds.rain) this.beds.rain = this._rainBed();
+    if (!this.beds.wind) this.beds.wind = this._windBed();
+    this._setBed(this.beds.rain, Math.min(1.2, rain));
+    this._setBed(this.beds.wind, Math.min(1.2, wind * wind));
+  }
+
+  /**
+   * Thunder from a strike this far off. It comes as long after the flash as
+   * sound takes to cover the distance, about three seconds a kilometre: a
+   * near one is a crack and then the roll, a far one only a low rumble.
+   */
+  thunder(distance = 1000, speed = 343) {
+    this.lastThunder = { distance, delay: distance / speed };
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + distance / speed;
+    const near = Math.max(0.08, 1 - distance / 4500);
+    const roll = 2.5 + Math.min(4, distance / 900);
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(distance < 900 ? 2400 : 700, t);
+    lp.frequency.exponentialRampToValueAtTime(110, t + roll);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.9 * near, t + (distance < 900 ? 0.03 : 0.4));
+    g.gain.exponentialRampToValueAtTime(0.35 * near, t + roll * 0.4);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + roll);
+    src.connect(lp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 2);
+    src.stop(t + roll + 0.1);
+  }
+
   _setBed(bed, level) {
     if (!bed) return;
     bed.level = level;

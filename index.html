@@ -91,6 +91,10 @@
         <span>Time of day <b id="modetimelabel">20:12</b></span>
         <input id="modetime" type="range" min="0" max="23.9" step="0.1" value="20.2">
       </label>
+      <div class="weatherpick" id="weatherpick">
+        <span>Weather <b id="weatherlabel">Clear</b></span>
+        <div class="wxrow" id="weatherchips"></div>
+      </div>
       <div id="diffblock">
         <div class="difficulty" role="radiogroup" aria-label="Difficulty">
           <button class="diff" data-diff="easy">Easy</button>
@@ -379,7 +383,8 @@
     <tr><td>Q</td><td>back to the last weapon; in The Hunt, the suit's armour</td></tr>
     <tr><td>T</td><td>blow the C4 and the rubber ducks you have put down, and any vehicle rigged with a remote bomb</td></tr>
     <tr><td>G</td><td>holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt</td></tr>
-    <tr><td>C</td><td>cheats</td></tr>
+    <tr><td>C</td><td>cheats; the weather is in there too: off, any kind, random, how
+      strong, how often it turns and whether a storm throws lightning</td></tr>
     <tr><td>V</td><td>free travel: pick a place on the map and fly there</td></tr>
     <tr><td>Esc</td><td>release the mouse</td></tr>
   </table>
@@ -423,6 +428,11 @@
     <div class="grouplabel">time of day</div>
     <label class="todrow"><input id="cheattod" type="range" min="0" max="23.9" step="0.1" value="17.4">
       <b id="cheattodlabel">17:24</b></label>
+  </div>
+  <div class="group">
+    <div class="grouplabel">weather</div>
+    <div class="row chips" id="cheatweather"></div>
+    <div id="cheatweathervalues"></div>
   </div>
   <div class="group">
     <div class="grouplabel">switches</div>

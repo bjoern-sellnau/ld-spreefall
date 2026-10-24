@@ -5656,6 +5656,97 @@ So there are two cities now, and a profile picks which:
   clear of traffic while it sprays. Here all four come; the suite passes
   48 of 48.
 
+## 141. Weather, picked on the title and turned in the cheat menu
+
+- The ask: a weather system, picked in the menu, with a random setting that
+  changes by itself, and the cheat menu able to change it further or turn
+  it off.
+- Six kinds, each a look (cloud, rain, snow, wind, lightning, how dark) and
+  a visibility: clear 20 km, cloudy 14, rain 4, storm 1.2, snow 0.9 and fog
+  180 m. Fog is under a kilometre by the WMO's definition and under 180 m
+  in the Met Office's forecasts for the public, which is the one used.
+- Visibility is drawn as haze by Koschmieder: a dark object goes to the 2 %
+  contrast an eye can just see at 3.912 over the extinction coefficient, so
+  the coefficient is the fog density. A blend from one kind to another goes
+  in extinction, not in metres, so half way from clear to fog is a few
+  hundred metres and not ten kilometres. Every change blends over 30 s.
+- Random: a chain over the kinds, mostly to the next one (clear goes to
+  cloudy before rain, a storm to rain before it clears), each kind held 4
+  minutes on average (half to one and a half times that, 0.5 to 20 in the
+  cheat menu). Snow only from November to the middle of March, in place of
+  rain; that window is ours, not taken from a climate table.
+- What it does to the city: cloud greys the sky, closes over the stars and
+  the sun disc, and takes the sun out of the light and the shadows with it.
+  The street gets wet over 50 s of rain and dries over 5 minutes: darker,
+  glossier, and puddles from noise on what faces up. Snow settles over two
+  minutes on everything facing up and melts over nearly seven, or faster in
+  rain.
+  The camera block carries a fourth vec4 for it (cloud, wet, flash, snow).
+- Rain and snow: one instanced draw of up to 9000 in a 40 by 25 by 40 m box
+  laid over the world round the eye and wrapped, so you walk through them;
+  how hard it comes down is how many are drawn. Rain is a streak as long as
+  a drop moves in a 25th of a second, at 6.5 to 9.2 m/s (Atlas, Srivastava
+  and Sekhon's fit to the Gunn and Kinzer measurements, 9.65 - 10.3 e^(-0.6
+  D), gives 6.55 for 2 mm and 9.14 for 5 mm); snow a flake that sways, at
+  0.4 to 1.2 m/s (Locatelli and Hobbs, for aggregates). The wind leans
+  both.
+- Lightning in a storm, one strike every 9 s on average, 250 m to 4 km off
+  and mostly nearer: the sky flashes at once, a jagged bolt of nine legs
+  with a fork or two stands 650 to 950 m tall where it came down, and the
+  thunder is sent off distance over 343 m/s later, low passed harder the
+  further it is, rolling for 2.5 to 6.5 s. A flash is a few strokes down
+  the same channel: high speed video of 432 flashes over Arizona and Sao
+  Paulo gave 3.9 strokes a flash, 61.5 ms apart, so a strike is one to
+  seven strokes, 3.9 on average, about that far apart, which is the flicker.
+- Two things found on the way. The bolt was never on the screen: the
+  weather was stepped before the effects aged in the frame, and on a slow
+  frame a stroke was over before it was drawn; the weather now steps after.
+  Then it was drawn and still not seen, against a sky the flash had washed
+  white; the flash on the sky is a third of what it was, and the channel
+  brighter.
+- Soldiers see as far as the weather lets them: their sight times 0.6 of the
+  visibility over 165, between 0.3 and 1, so 108 m in fog and all of it on a
+  clear day. Rain and wind are two noise beds in the sound.
+- The title: a row of chips under the time of day on every game's page, the
+  pick shown and remembered; behind the title it goes straight there. The
+  cheat menu: Off (a clear sky whatever was picked), any kind or Random,
+  strength 25 to 200 %, how often Random turns, and a lightning switch. It
+  is kept in its own storage and does not mark a run as cheated.
+- Sources:
+  [Wikipedia, Visibility](https://en.wikipedia.org/wiki/Visibility) and the
+  [WMO CIMO guide, visibility](https://old.wmo.int/extranet/pages/prog/www/IMOP/publications/CIMO-Guide/Prelim_2018_ed/8_I_9_en_MR_tc.pdf)
+  (Koschmieder, 3.912 for 2 %);
+  [WMO, fog](https://codes.wmo.int/wmdr/ObservedVariableAtmosphere/507)
+  (under 1 km) and
+  [UNDRR on the Met Office's fog](https://undrr.org/understanding-disaster-risk/terminology/hips/mh0016)
+  (under 180 m for the public);
+  [disdrodb, rain fall velocity](https://disdrodb.readthedocs.io/en/latest/_modules/disdrodb/fall_velocity/rain.html)
+  (the Atlas, Srivastava and Sekhon 1973 fit, citing Rev. Geophys. 11);
+  [Locatelli and Hobbs 1974](https://www.inscc.utah.edu/~garrett/ewExternalFiles/Fall%20speeds%20and%20masses%20of%20solid%20precipitation%20particles.pdf)
+  and [ACP 25, 16729 (2025)](https://acp.copernicus.org/articles/25/16729/2025/)
+  (aggregates at 0.4 to 1.2 m/s);
+  [Saraiva et al. 2010, JGR 115](https://bv.fapesp.br/en/publicacao/242630)
+  (doi 10.1029/2009JD012604: 3.9 strokes, 61.5 ms, 226.5 ms a flash);
+  [Wikipedia, Speed of sound](https://en.wikipedia.org/wiki/Speed_of_sound)
+  (343 m/s in dry air at 20 C). Checked through search excerpts; this
+  session cannot open the pages themselves.
+- Checks: nine unit checks (the blend in extinction, the chain and the
+  winter, the half minute blend, random holding and turning, wet and dry
+  and snow, a strike's thunder a distance late, the cheat menu's off,
+  strength and lightning, a random start, and the strokes 61.5 ms apart),
+  and a weather suite in the browser, 16 of 16: the title's chips and the
+  pick kept, rain drawn (3600) and the street wet, fog at 180 m with the
+  fog density its extinction and a soldier's sight at 0.65, snow drawn and
+  lying, a storm's bolt over 600 m tall on the skyline with the sky
+  flashing, the thunder sent 4.37 s after a strike 1.5 km off, its strokes,
+  and in the cheat menu off and on, the strength halving the rain, the
+  minutes, no strike with the lightning off, random's first turn, and no
+  cheat counted. Screenshots: `weather-01-rain.png`, `weather-02-fog.png`,
+  `weather-03-snow.png`, `weather-04-storm.png`. With it in, the unit
+  checks pass 180 of 180, verify passes, the interface 46 of 46 and the
+  cheat menu 137 of 137. The seven chips sit centred in one row under the
+  time of day.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

@@ -77,9 +77,10 @@ number and the time of the Pages build, or `dev` and the last commit on a
 local server). Neues Spiel lists the seven games (Berlin Phototour, Rise of
 the Machines, Just a Walk, Tactics, Slayer, The Hunt, .BACKDOOR); picking one
 opens its page with what it is, what can be set for it (the time of day it
-starts at for every game, the difficulty where anybody is shooting, an
-operation's settings), **Spielen** and **Zurück**. Zurück is always one page
-back. The time of day can be set in the cheat menu as well, at any time.
+starts at and the weather for every game, the difficulty where anybody is
+shooting, an operation's settings), **Spielen** and **Zurück**. Zurück is
+always one page back. The time of day and the weather can be set in the
+cheat menu as well, at any time.
 
 **Esc** in the street pauses: the world stops and a bar runs down the left
 edge with **Weiter**, all seven games (one click starts it where you stand,
@@ -955,6 +956,40 @@ which is a city laid out the way the real one is. Flying it means you arrive
 knowing roughly where you are, which is what a map on its own never tells you.
 Nothing is off limits: walking into the memorial has always been allowed, it
 is firing there that is not.
+
+## The weather
+
+Each game's page has the weather under the time of day: **Clear**,
+**Cloudy**, **Rain**, **Storm**, **Fog**, **Snow** or **Random**, and it is
+remembered between visits. Random holds what it has for four minutes or so
+and then turns, mostly to the kind next to it (a clear sky clouds over before
+it rains, a storm eases to rain before it clears), and snows only from
+November to the middle of March, where it takes the place of rain. Every
+change blends over half a minute.
+
+- Cloud greys the sky, takes the sun and its shadows out of the light, and
+  closes over the stars.
+- Rain falls round you as streaks at six and a half to nine metres a second;
+  the street darkens, goes glossy and stands in puddles as it gets wet, and
+  dries over five minutes after.
+- Snow falls as flakes that sway, at under half a metre to a little over one,
+  and settles white on everything that faces up; rain washes it away.
+- Fog closes the view to 180 m, and a soldier sees you no further than the
+  weather lets him: a little over a hundred metres in fog, and the whole of
+  his sight on a clear day.
+- A storm throws lightning: the sky flashes at once, a bolt hundreds of
+  metres tall stands on the skyline where it came down and flickers as the
+  strokes come down it again, and the thunder arrives three seconds a
+  kilometre later.
+
+The cheat menu's **weather** group turns it further: **Off** for a clear sky
+whatever was picked, any kind straight away, or Random; how strong it is,
+from a quarter to twice as much; how often Random turns, from half a minute
+to twenty; and whether a storm throws lightning. None of it counts as a
+cheat.
+
+![Rain at the Brandenburg Gate](docs/screenshots/weather-01-rain.png)
+![A storm, and the bolt standing behind the Gate](docs/screenshots/weather-04-storm.png)
 
 ## Destruction
 

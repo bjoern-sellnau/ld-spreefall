@@ -201,6 +201,9 @@ export class Soldiers {
     // The suit's cloak: inside this many metres you are seen anyway, and
     // nought when it is off.
     this.cloak = 0;
+    // The weather's share of how far they see: one on a clear day, less in
+    // fog, where nobody sees anybody past the edge of it.
+    this.sightScale = 1;
     this.onSpot = null;           // fn(soldier, how) 'seen', 'heard' or 'hit'
     this.onDown = null;           // fn(soldier) the moment one is killed
     // Slayer: a demon's claws, its fire and its charge, which the game layer
@@ -816,7 +819,7 @@ export class Soldiers {
       if (time > s.lastSeen + 0.24) {
         s.lastSeen = time;
         // Cloaked, you are not there to be seen until they walk into you.
-        s.canSee = !playerSafe && dist < SPEC.sight && !(this.cloak && dist > this.cloak)
+        s.canSee = !playerSafe && dist < SPEC.sight * this.sightScale && !(this.cloak && dist > this.cloak)
           && w.lineOfSight(s.x, s.y + 1.6, s.z, player.x, player.y, player.z);
       }
 
@@ -875,7 +878,7 @@ export class Soldiers {
           if (s.post && !s.post.alert) {
             // A guard nobody has told: he has to notice you first, and while
             // he is making up his mind he stops and looks.
-            if (s.canSee && dist < SPEC.sight && this._notice(s, dt, player, dist, dx, dz)) {
+            if (s.canSee && dist < SPEC.sight * this.sightScale && this._notice(s, dt, player, dist, dx, dz)) {
               s.state = STATE.ADVANCE; s.stateTime = 0;
               s.sentry = false;
               if (this.onSpot) this.onSpot(s, 'seen');
@@ -883,7 +886,7 @@ export class Soldiers {
               s.suspicion = Math.max(0, s.suspicion - dt * (this.stealth ? this.stealth.decay : 0.25));
             }
             if (s.suspicion > 0.3) speed = 0;
-          } else if (s.canSee && dist < SPEC.sight) { s.state = STATE.ADVANCE; s.stateTime = 0; }
+          } else if (s.canSee && dist < SPEC.sight * this.sightScale) { s.state = STATE.ADVANCE; s.stateTime = 0; }
           break;
         }
         case STATE.ADVANCE: {

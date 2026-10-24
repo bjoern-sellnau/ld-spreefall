@@ -83,6 +83,24 @@ export class Effects {
     s.gravity = 0;
   }
 
+  /**
+   * A stroke of lightning, or one leg of it: a ribbon as wide as it has to be
+   * to be seen kilometres off, there for a moment.
+   */
+  bolt(ax, ay, az, bx, by, bz, width, life = 0.12) {
+    const s = this._get();
+    s.alive = true;
+    s.kind = 0;
+    s.ax = ax; s.ay = ay; s.az = az;
+    s.bx = bx; s.by = by; s.bz = bz;
+    s.maxLife = life;
+    s.life = life;
+    s.r = 6.0; s.g = 6.4; s.b = 8.0;
+    s.size = width;
+    s.vx = 0; s.vy = 0; s.vz = 0;
+    s.gravity = 0;
+  }
+
   /** One small bright point, for something electrical going wrong. */
   spark(x, y, z, r, g, b) {
     const s = this._get();

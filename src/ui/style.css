@@ -1026,25 +1026,38 @@ html, body {
 .timepick input { width: 100%; accent-color: var(--accent); margin-top: 6px; }
 .timepick.hidden { display: none; }
 
+/* The weather, picked on the same page, a button a kind. */
+.weatherpick {
+  display: block;
+  width: min(420px, 80vw);
+  margin: 0 auto 10px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.weatherpick b { color: var(--accent); }
+.weatherpick .wxrow { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 6px; }
+.weatherpick .opsbtn { padding: 6px 7px; }
+
 /* In Rise of the Machines the interface runs cold and red. */
 #hud.machines { --accent: #ff4a3d; }
 #hud.machines #district { color: #ff6a5a; }
 
 /* The cheat menu's sliders: a label, the number it is on, and the slider. */
-#cheatvalues .val {
+#cheatvalues .val, #cheatweathervalues .val {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 2px 10px;
   padding: 7px 2px 9px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-#cheatvalues .val b { font-weight: 600; font-size: 12px; letter-spacing: 0.04em; }
-#cheatvalues .val .num { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; }
-#cheatvalues .val i {
+#cheatvalues .val b, #cheatweathervalues .val b { font-weight: 600; font-size: 12px; letter-spacing: 0.04em; }
+#cheatvalues .val .num, #cheatweathervalues .val .num { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; }
+#cheatvalues .val i, #cheatweathervalues .val i {
   grid-column: 1 / -1;
   font-style: normal; color: var(--dim); font-size: 11px; margin: -2px 0 4px;
 }
-#cheatvalues .val input {
+#cheatvalues .val input, #cheatweathervalues .val input {
   grid-column: 1 / -1;
   width: 100%;
   accent-color: var(--accent);

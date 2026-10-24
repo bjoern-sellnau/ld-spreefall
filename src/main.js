@@ -21,6 +21,7 @@ import { ArmsPanel, armsRows } from './ui/arms.js';
 import { ARROW_HEADS, ARROW_DRAWS, MOVES, bashWeight } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
+import { Weather, WEATHER, KINDS as WEATHER_KINDS, RANDOM as WEATHER_RANDOM } from './game/weather.js';
 import { Projectiles, PROJECTILE } from './game/projectiles.js';
 import { throwArc, THROW as THROW_SPEC } from './game/throwarc.js';
 import { ArcView } from './ui/arcview.js';
@@ -116,6 +117,8 @@ const el = {
   newGame: $('newgame'), buildLine: $('buildline'), modeName: $('modename'), diffBlock: $('diffblock'),
   pause: $('pause'), pauseResume: $('pauseresume'), pauseMenu: $('pausemenu'),
   cheatTod: $('cheattod'), cheatTodLabel: $('cheattodlabel'),
+  weatherChips: $('weatherchips'), weatherLabel: $('weatherlabel'),
+  cheatWeather: $('cheatweather'), cheatWeatherValues: $('cheatweathervalues'),
   opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
   opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
   opsProgress: $('opsprogress'), opsWipe: $('opswipe'),
@@ -295,6 +298,8 @@ async function main() {
   const projectiles = new Projectiles(world, (x, y, z, splash, body) => explode(x, y, z, splash, body));
   const weapon = new Weapon(world, drones, { projectiles });
   const effects = new Effects();
+  // The weather, picked on each game's page and turned further in the cheat menu.
+  const weather = new Weather();
   const reflex = new Reflex();
   reflex.drainScale = combat.rules.reflexDrain;
   soldiers = new Soldiers(world);
@@ -4787,6 +4792,147 @@ async function main() {
     }
   }
   buildCheatMenu();
+
+  // --- the weather ---------------------------------------------------------
+  //
+  // Picked on each game's page, under the time of day, and turned further in
+  // the cheat menu. It goes on in real time, behind the title as much as in a
+  // game, and holds still with the pause.
+  const WEATHER_ALL = [...WEATHER_KINDS, WEATHER_RANDOM];
+  const weatherName = (id) => (WEATHER_ALL.find((k) => k.id === id) || { label: id }).label;
+  weather.onChange = (kind) => toast(`the weather turns: ${weatherName(kind).toLowerCase()}`);
+  // A strike: the flash at once, a fork of light standing on the skyline
+  // where it came down, and the thunder as long after as the distance says.
+  // The channel is kept so the strokes after the first come down it again.
+  let channel = [];
+  const stroke = (life) => {
+    for (const c of channel) effects.bolt(c[0], c[1], c[2], c[3], c[4], c[5], c[6], life);
+  };
+  weather.onStrike = ({ distance, bearing, delay }) => {
+    channel = [];
+    const x = player.x + Math.sin(bearing) * distance, z = player.z + Math.cos(bearing) * distance;
+    const g = world.groundHeight(x, z);
+    const top = g + 650 + Math.random() * 300;
+    const width = 1.2 + distance * 0.004;
+    let px = x + (Math.random() - 0.5) * 200, py = top, pz = z + (Math.random() - 0.5) * 200;
+    const legs = 9;
+    for (let i = 1; i <= legs; i++) {
+      const f = i / legs;
+      const nx = x + (px - x) * 0.45 + (Math.random() - 0.5) * 90 * (1 - f);
+      const ny = top + (g - top) * f;
+      const nz = z + (pz - z) * 0.45 + (Math.random() - 0.5) * 90 * (1 - f);
+      channel.push([px, py, pz, i === legs ? x : nx, i === legs ? g : ny, i === legs ? z : nz, width]);
+      // A fork off the main stroke, now and then, that dies out in the air.
+      if (i > 2 && i < legs - 1 && Math.random() < 0.3) {
+        channel.push([nx, ny, nz, nx + (Math.random() - 0.5) * 160, ny - 80 - Math.random() * 90,
+          nz + (Math.random() - 0.5) * 160, width * 0.6]);
+      }
+      px = nx; py = ny; pz = nz;
+    }
+    stroke(0.12);
+    audio.thunder(distance, WEATHER.sound);
+    state.strikes = (state.strikes || 0) + 1;
+    state.lastStrike = { distance, delay };
+  };
+  weather.onRestroke = () => {
+    stroke(0.08);
+    state.strokes = (state.strokes || 0) + 1;
+  };
+  function stepWeather(wall) {
+    const dt = Math.min(0.25, Math.max(0, wall - (state.weatherAt || wall)));
+    state.weatherAt = wall;
+    if (!state.paused) weather.update(dt, Math.random, renderer.dayOfYear);
+    const now = weather.now();
+    renderer.weather = now;
+    // How far they can see you: the weather's visibility, past which nobody
+    // sees anybody, a little short of it to be fair to you, and never more
+    // than a clear day allows.
+    soldiers.sightScale = Math.min(1, Math.max(0.3, now.visibility * 0.6 / 165));
+    audio.setWeather(now.rain + now.snow * 0.15, now.wind);
+  }
+  /** The title's chips and the cheat menu's, from what the weather is set to. */
+  function showWeather() {
+    for (const b of el.weatherChips.querySelectorAll('button')) b.classList.toggle('on', b.dataset.weather === weather.choice);
+    el.weatherLabel.textContent = weatherName(weather.choice);
+    for (const b of el.cheatWeather.querySelectorAll('button')) {
+      const id = b.dataset.wx;
+      b.classList.toggle('on', id === 'off' ? weather.off : (!weather.off && id === weather.choice));
+    }
+  }
+  for (const k of WEATHER_ALL) {
+    const b = document.createElement('button');
+    b.className = 'opsbtn';
+    b.dataset.weather = k.id;
+    b.textContent = k.label;
+    b.title = k.note;
+    b.addEventListener('click', () => {
+      weather.choose(k.id, Math.random, renderer.dayOfYear);
+      // Behind the title it can go straight there: nobody is out in it yet.
+      if (state.mode === 'title') weather.start(Math.random, renderer.dayOfYear);
+      showWeather();
+    });
+    el.weatherChips.appendChild(b);
+  }
+  // In the cheat menu: off, any of them now, or random; how strong; how often
+  // random turns; and whether a storm throws lightning.
+  {
+    const say = document.createElement('div');
+    say.className = 'mechsay';
+    for (const k of [{ id: 'off', label: 'Off', note: 'no weather at all: a clear sky whatever was picked' }, ...WEATHER_ALL]) {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.dataset.wx = k.id;
+      b.textContent = k.label;
+      b.title = k.note;
+      b.addEventListener('click', () => {
+        if (k.id === 'off') weather.setOff(!weather.off);
+        else {
+          if (weather.off) weather.setOff(false);
+          weather.choose(k.id, Math.random, renderer.dayOfYear);
+        }
+        say.textContent = k.id === 'off' && !weather.off ? 'the weather is back on' : k.note;
+        showWeather();
+        toast(k.id === 'off' ? `weather ${weather.off ? 'off' : 'on'}` : `weather: ${k.label.toLowerCase()}`);
+      });
+      el.cheatWeather.appendChild(b);
+    }
+    el.cheatWeather.appendChild(say);
+    const slider = (label, note, min, max, step, get, set, fmt) => {
+      const row = document.createElement('label');
+      row.className = 'val';
+      const name = document.createElement('b');
+      name.textContent = label;
+      const num = document.createElement('span');
+      num.className = 'num';
+      const i = document.createElement('i');
+      i.textContent = note;
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = String(min); input.max = String(max); input.step = String(step);
+      input.value = String(get());
+      const show = () => { num.textContent = fmt(get()); };
+      input.addEventListener('input', () => { set(parseFloat(input.value)); show(); });
+      row.append(name, num, i, input);
+      el.cheatWeatherValues.appendChild(row);
+      show();
+      return input;
+    };
+    slider('Weather strength', 'how hard it rains, snows and blows, and how thick the fog is', WEATHER.intensityMin * 100,
+      WEATHER.intensityMax * 100, 5, () => Math.round(weather.intensity * 100), (v) => weather.setIntensity(v / 100), (v) => `${v} %`)
+      .dataset.wx = 'intensity';
+    slider('Random weather turns every', 'on average, with random picked', WEATHER.minutesMin, WEATHER.minutesMax, 0.5,
+      () => weather.minutes, (v) => weather.setMinutes(v), (v) => `${v} min`).dataset.wx = 'minutes';
+    const sw = document.createElement('button');
+    sw.className = 'sw';
+    sw.dataset.wx = 'lightning';
+    sw.innerHTML = '<span class="box"></span><span>Lightning<i>strikes and thunder in a storm</i></span>';
+    const showSw = () => sw.classList.toggle('on', weather.lightning);
+    sw.addEventListener('click', () => { weather.setLightning(!weather.lightning); showSw(); toast(`lightning ${weather.lightning ? 'on' : 'off'}`); });
+    el.cheatWeatherValues.appendChild(sw);
+    showSw();
+  }
+  showWeather();
+  weather.start(Math.random, renderer.dayOfYear);
 
   /**
    * More of them, now. Each goes in through the same spawn the game uses, so
@@ -9418,6 +9564,9 @@ async function main() {
     renderer.clearCollapses();
     renderer.clearFires();
     effects.clear();
+    // Into the weather that was picked, already set in: random starts in
+    // one of the kinds, with the street as wet or as white as it would be.
+    weather.start(Math.random, renderer.dayOfYear);
     audio.start();
     el.btnSound.textContent = 'sound on';
     if (deepLink || direct) {
@@ -10564,6 +10713,9 @@ async function main() {
     // Screen shake from firing and from explosions, applied to the eye rather
     // than to the aim, so it never moves where your shots go.
     effects.update(elapsed);
+    // After the effects have aged, so a stroke of lightning struck this frame
+    // is drawn at least once however long the frame took.
+    stepWeather(wall);
     updateFountains(elapsed);
     // The beams are redrawn every frame rather than left to decay, because
     // unlike a spark a beam is a thing that is there until it is not.
@@ -10904,6 +11056,10 @@ async function main() {
 
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
+    weather,
+    weatherNow: () => weather.now(),
+    precipDrawn: () => renderer.precip.drawn,
+    showWeather,
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input, minimap,
     combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs, cars,
     trains, trainSpec: TRAIN,
