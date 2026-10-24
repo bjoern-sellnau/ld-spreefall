@@ -669,7 +669,7 @@ async function main() {
         effects.blood(shot.end.x, shot.end.y, shot.end.z,
           -shot.end.nx, Math.abs(shot.end.ny) * 0.4 + 0.3, -shot.end.nz,
           cheats.goreScale * (shot.core ? 1.8 : 1));
-        if (cheats.comicGore) {
+        if (cheats.comical) {
           // Out of the far side and onto whatever wall is behind them.
           const bx = -shot.end.nx, bz = -shot.end.nz, bl = Math.hypot(bx, bz) || 1;
           const behind = world.raycast(shot.end.x, shot.end.y, shot.end.z, bx / bl, -0.1, bz / bl, 6);
@@ -678,7 +678,15 @@ async function main() {
             state.wallSplats = (state.wallSplats || 0) + 1;
           }
           // Every hit gushes for a moment, out of the far side.
-          gushes.push({ x: shot.end.x, y: shot.end.y, z: shot.end.z, nx: -shot.end.nx, nz: -shot.end.nz, life: 0.7 });
+          gushes.push({ x: shot.end.x, y: shot.end.y, z: shot.end.z, nx: -shot.end.nx, nz: -shot.end.nz,
+            life: cheats.ultraComic ? 1.6 : 0.7 });
+          // And past the comic book, three times the spray out of every hit.
+          if (cheats.ultraComic) {
+            for (let k = 0; k < 3; k++) {
+              effects.blood(shot.end.x, shot.end.y, shot.end.z, -shot.end.nx + (Math.random() - 0.5),
+                0.6 + Math.random(), -shot.end.nz + (Math.random() - 0.5), cheats.goreScale);
+            }
+          }
           // And a head shot that kills takes the head with it.
           if (shot.core && shot.killed) {
             gibs.burst(shot.end.x, shot.end.y, shot.end.z, { x: -shot.end.nx, y: 0.6, z: -shot.end.nz }, 3, 10);
@@ -4060,6 +4068,13 @@ async function main() {
   const OVERKILL_WORDS = ['OVERKILL', 'SPLATTER', 'TOTAL CARNAGE', 'NO MERCY', 'EXCESSIVE', 'MESSY'];
   const COMIC_WORDS = ['SPLAT!', 'KA-SPLAT!', 'GUTS!', 'SQUELCH!', 'OBLITERATED!', 'SPLATTERED!', 'GIBBED!',
     'CARNAGE!', 'MESSY!!'];
+  const ULTRA_WORDS = ['MEGA SPLAT!!', 'SPLATTERAMA!', 'GIBTASTIC!', 'RED RAIN!!', 'JUICY!!!', 'KA-BLOOSH!',
+    'CONFETTI!', 'EVERYWHERE!!', 'WAY TOO MUCH!'];
+  // Ultra comical gore: how many pools the street may hold (and how many it
+  // held before), how much more of everything a kill throws, and how close
+  // together the splats of pieces landing may be heard.
+  const ULTRA_COMIC = { usualPools: 128, pools: 320, rain: 4.5, rainWide: 12, fountain: 7,
+    stains: 24, stainWide: 12, rays: 16, wallReach: 14, splatGap: 0.045 };
   // Blood falling out of the sky after a comic kill, and short gushes from
   // every wound: on the render clock, beside the fountains.
   const bloodRain = [];
@@ -4089,7 +4104,8 @@ async function main() {
     // everyone standing near for a second or two after the kill.
     gibs.burst(s.x, s.y, s.z, { x: 0, y: 0, z: 0 }, 4, 16);
     // And a fountain where they stood, on the render clock below.
-    const comic = cheats.comicGore;
+    const comic = cheats.comical;
+    const ultra = cheats.ultraComic;
     fountains.push({ x: s.x, y: floor, z: s.z, life: comic ? 5 : 2.8, max: comic ? 5 : 2.8, next: 0, comic });
     if (comic) {
       // It comes back down: a red rain over everything for a few metres
@@ -4097,7 +4113,24 @@ async function main() {
       bloodRain.push({ x: s.x, y: floor, z: s.z, life: 2.2, next: 0 });
       gibs.burst(s.x, s.y + 1.2, s.z, dir, 6, 22);
       const away = Math.hypot(player.x - s.x, player.z - s.z);
-      if (away < 12) splashLens(Math.round(1 + (12 - away) * 0.22));
+      const reach = ultra ? 20 : 12;
+      if (away < reach) splashLens(Math.round((1 + (reach - away) * 0.22) * (ultra ? 2 : 1)));
+    }
+    if (ultra) {
+      // And then it stops making sense: two more bursts, one up and one out,
+      // a second fountain twice as tall, a rain three times as wide and twice
+      // as long, and the street round it painted.
+      const U = ULTRA_COMIC;
+      gibs.burst(s.x, s.y + 1.2, s.z, dir, 8, 26);
+      gibs.burst(s.x, s.y + 0.6, s.z, { x: 0, y: 0, z: 0 }, 5, 34);
+      fountains.push({ x: s.x + 0.5, y: floor, z: s.z, life: U.fountain, max: U.fountain, next: 0, comic, ultra });
+      bloodRain.push({ x: s.x, y: floor, z: s.z, life: U.rain, next: 0, wide: U.rainWide });
+      for (let i = 0; i < U.stains; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 1 + Math.random() * U.stainWide;
+        const px = s.x + Math.cos(a) * r, pz = s.z + Math.sin(a) * r;
+        effects.stain(px, world.groundHeight(px, pz), pz, 0.4 + Math.random() * 1.1, 60);
+      }
     }
     effects.stain(s.x, floor, s.z, 2.8, 60);
     for (let i = 0; i < 12; i++) {
@@ -4108,13 +4141,14 @@ async function main() {
     }
     // Whatever wall is within nine metres gets sprayed: eight rays out at
     // chest height, and a burst of blood against every face one of them meets.
-    for (let i = 0; i < 8; i++) {
-      const a = i * Math.PI / 4 + Math.random() * 0.3;
-      const hit = world.raycast(s.x, s.y + 1.2, s.z, Math.cos(a), 0, Math.sin(a), 9);
+    const rays = ultra ? ULTRA_COMIC.rays : 8;
+    for (let i = 0; i < rays; i++) {
+      const a = i * Math.PI * 2 / rays + Math.random() * 0.3;
+      const hit = world.raycast(s.x, s.y + 1.2, s.z, Math.cos(a), 0, Math.sin(a), ultra ? ULTRA_COMIC.wallReach : 9);
       if (!hit || hit.kind === 'ground') continue;
       effects.blood(hit.x + hit.nx * 0.15, hit.y, hit.z + hit.nz * 0.15, hit.nx, 0.15, hit.nz, 3);
       // The comic book leaves it there: a splat on the wall that runs.
-      if (cheats.comicGore) {
+      if (comic) {
         renderer.addBloodSplat(hit.x, hit.y + (Math.random() - 0.3) * 0.8, hit.z, 1.2 + Math.random() * 1.3);
         state.wallSplats = (state.wallSplats || 0) + 1;
       }
@@ -4126,9 +4160,9 @@ async function main() {
     overkillRun.streak = now - overkillRun.at < 3 ? overkillRun.streak + 1 : 1;
     overkillRun.at = now;
     overkillRun.shown++;
-    const words = cheats.comicGore ? COMIC_WORDS : OVERKILL_WORDS;
+    const words = ultra ? ULTRA_WORDS : comic ? COMIC_WORDS : OVERKILL_WORDS;
     const word = words[(Math.random() * words.length) | 0];
-    el.overkill.classList.toggle('comic', !!cheats.comicGore);
+    el.overkill.classList.toggle('comic', !!comic);
     el.overkill.textContent = overkillRun.streak > 1 ? `${word} x${overkillRun.streak}` : word;
     el.overkill.classList.remove('show');
     // Read the layout once so the animation starts again from its first frame.
@@ -4138,6 +4172,98 @@ async function main() {
     overkill._t = setTimeout(() => el.overkill.classList.remove('show'), 1400);
     audio.overkill(overkillRun.streak);
   }
+  // Ultra comical gore: every piece that lands is heard landing, as many as
+  // can be told apart, and leaves a little of itself where it hit.
+  let splatAt = -1;
+  gibs.onLand = (g, speed) => {
+    if (!cheats.ultraComic || speed < 1.5) return;
+    state.splats = (state.splats || 0) + 1;
+    effects.blood(g.x, g.y + 0.05, g.z, Math.random() - 0.5, 0.6, Math.random() - 0.5, 0.5);
+    if (Math.random() < 0.25) effects.stain(g.x, world.groundHeight(g.x, g.z), g.z, 0.12 + Math.random() * 0.2);
+    if (state.time < splatAt) return;
+    splatAt = state.time + ULTRA_COMIC.splatGap;
+    const d = Math.hypot(g.x - player.x, g.z - player.z);
+    if (d < 70) {
+      audio.splat(d, Math.min(1, speed / 8));
+      state.splatSounds = (state.splatSounds || 0) + 1;
+    }
+  };
+
+  // --- red footprints -------------------------------------------------------
+  // Walk through a pool and you carry it on your boots for a dozen steps,
+  // fainter with every one, and so does anybody else. And with ultra comical
+  // gore every step in it is heard. steps a pool gives you, stride between
+  // prints, side either side of the line you walk, every how often the pools
+  // are looked for, and seconds a print stays.
+  const FOOT = { steps: 14, stride: 0.75, side: 0.13, every: 0.1, seconds: 40 };
+  let footClock = 0;
+  /** The pools of blood on the street, not the footprints. */
+  const poolsNow = () => effects.list.filter((p) => p.alive && p.kind === 4 && !p.by);
+  /** Whether a point is standing in one of them. */
+  function inBlood(x, z, pools = poolsNow()) {
+    for (const p of pools) {
+      const r = p.size * 0.8 * (0.35 + 0.65 * Math.min(1, p.bx));
+      if (Math.abs(p.ax - x) < r && Math.abs(p.az - z) < r && Math.hypot(p.ax - x, p.az - z) < r) return true;
+    }
+    return false;
+  }
+  function footprintStep(dt) {
+    const prints = cheats.footprints, squelch = cheats.ultraComic;
+    if (!prints && !squelch) return;
+    footClock -= dt;
+    const look = footClock <= 0;
+    if (look) footClock = FOOT.every;
+    const pools = look ? poolsNow() : null;
+    const feet = [];
+    if (!state.inVehicle && !state.inMech && player.onGround) {
+      feet.push({ o: state.boots || (state.boots = {}), x: player.x, z: player.z, me: true });
+    }
+    for (const s of soldiers.active) {
+      if (s.alive && s.health > 0 && s.state !== 5 && !(s.rise > 0) && !s.held) feet.push({ o: s, x: s.x, z: s.z, me: false });
+    }
+    for (const f of feet) {
+      const o = f.o;
+      if (look) {
+        o.inBlood = inBlood(f.x, f.z, pools);
+        if (o.inBlood && prints) o.bloodSteps = FOOT.steps;
+      }
+      if (o.stepX === undefined) { o.stepX = f.x; o.stepZ = f.z; continue; }
+      const dx = f.x - o.stepX, dz = f.z - o.stepZ, d = Math.hypot(dx, dz);
+      // Somewhere else entirely: a teleport, or a body taken from the pool
+      // for somebody new. Nothing on the boots carries over.
+      if (d > 4) { o.stepX = f.x; o.stepZ = f.z; o.bloodSteps = 0; continue; }
+      if (d < FOOT.stride) continue;
+      o.stepX = f.x; o.stepZ = f.z;
+      if (f.me && squelch && o.inBlood) {
+        audio.squelch();
+        state.squelches = (state.squelches || 0) + 1;
+      }
+      if (!prints || !(o.bloodSteps > 0)) continue;
+      o.foot = o.foot ? 0 : 1;
+      const side = (o.foot ? 1 : -1) * FOOT.side;
+      const px = f.x + (dz / d) * side, pz = f.z - (dx / d) * side;
+      effects.footprint(px, world.groundHeight(px, pz), pz, Math.atan2(-dx, -dz), o.bloodSteps / FOOT.steps, FOOT.seconds);
+      o.bloodSteps--;
+      state.prints = (state.prints || 0) + 1;
+    }
+  }
+
+  // --- the performance limit -------------------------------------------------
+  // With it on, a second spent under the frame rate set for it takes half of
+  // what is lying about off the street, the oldest first, and again for every
+  // second it stays down there. A test can say what the frame rate is.
+  let slowFor = 0;
+  function goreBudgetStep(dt) {
+    const fps = state.fpsOverride ?? loop.stats.fps;
+    if (!cheats.goreBudget || !(fps > 0) || fps >= cheats.value('fpsFloor')) { slowFor = 0; return; }
+    slowFor += dt;
+    if (slowFor < 1) return;
+    slowFor = 0;
+    const n = gibs.trim(0.5) + effects.trimStains(0.5);
+    state.goreTrims = (state.goreTrims || 0) + 1;
+    state.goreTrimmed = (state.goreTrimmed || 0) + n;
+  }
+
   function updateFountains(dt) {
     for (let i = fountains.length - 1; i >= 0; i--) {
       const f = fountains[i];
@@ -4149,7 +4275,7 @@ async function main() {
       // Strongest at the start and dying away, the way a pulse does.
       const k = f.life / f.max;
       const pulse = 0.75 + 0.25 * Math.sin(f.life * 18);
-      const tall = f.comic ? 2.2 : 1;
+      const tall = f.ultra ? 3.6 : f.comic ? 2.2 : 1;
       effects.blood(f.x, f.y + 0.3, f.z, (Math.random() - 0.5) * 0.25,
         (1.2 + 1.4 * k) * pulse * tall, (Math.random() - 0.5) * 0.25, (1.2 + 2.2 * k) * (f.comic ? 1.6 : 1));
     }
@@ -4161,7 +4287,7 @@ async function main() {
       if (r.next > 0) continue;
       r.next = 0.05;
       for (let k = 0; k < 3; k++) {
-        const a = Math.random() * Math.PI * 2, d = Math.random() * 7;
+        const a = Math.random() * Math.PI * 2, d = Math.random() * (r.wide || 7);
         const x = r.x + Math.cos(a) * d, z = r.z + Math.sin(a) * d;
         effects.blood(x, r.y + 6 + Math.random() * 3, z, 0, -1, 0, 0.6);
         if (Math.random() < 0.15) effects.stain(x, world.groundHeight(x, z), z, 0.25 + Math.random() * 0.4, 50);
@@ -4286,7 +4412,12 @@ async function main() {
     soldiers.gore.ragdoll = cheats.tumbling;
     soldiers.gore.scale = cheats.goreScale;
     // The comic book draws its blood in a red you can see from orbit.
-    effects.comic = !!cheats.comicGore;
+    effects.comic = !!cheats.comical;
+    // Ultra comical gore keeps what it leaves for as long as it is told to,
+    // and the street holds more pools of it.
+    gibs.keep = cheats.pieceLife;
+    effects.keep = cheats.pieceLife;
+    effects.poolBudget = cheats.ultraComic ? ULTRA_COMIC.pools : ULTRA_COMIC.usualPools;
     soldiers.boneTime = cheats.value('boneTime');
     // Wave after wave of help, and of demons, with extreme enemies on.
     tactics.extreme = cheats.extremeEnemies ? cheats.value('extremeWaves') : 0;
@@ -9194,6 +9325,8 @@ async function main() {
     projectiles.update(worldDt);
     voidTick(worldDt);
     glowTick();
+    footprintStep(worldDt);
+    goreBudgetStep(dt);
     gibs.update(worldDt);
     demolition.update(worldDt);
     fires.update(worldDt, player);
@@ -9805,6 +9938,7 @@ async function main() {
     get crashes() { return state.crashes; },
     signalSpec: SIGNALS, junctions: () => trafficJunctions(), signalMasts: (r) => signalMasts(r),
     openPause: () => openPause(), closePause: (lock) => closePause(lock), switchGame: (mode) => switchGame(mode),
+    footSpec: FOOT, ultraComicSpec: ULTRA_COMIC, inBlood: (x, z) => inBlood(x, z),
     citySpec: CITY, pipes: () => cityPipes(), coversNear: (r) => coversNear(r), blackout, blackoutKey: () => blackoutKey(),
     lightAt: (j, phase) => lightAt(j, phase, state.signalClock), get signalClock() { return state.signalClock; },
     crimes, crimeSpec: CRIME, crimeBegin: (kind) => crimeBegin(kind), subdue: (sd) => subdue(sd),

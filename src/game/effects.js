@@ -9,9 +9,12 @@ import { SURFACE_CLEARANCE } from '../shared/constants.js';
 // goes off would be a poor trade. The top gore switch asks for three sprays
 // of a hundred and thirty at once, hence the room above that.
 // The overkill setting asks for a fountain on top of that, hence 2048.
-const MAX = 2048;
+const MAX = 3072;
 // How many stains the street may carry at once. Past this the oldest goes.
 const MAX_POOLS = 128;
+// And footprints, which have a budget of their own so a long walk through a
+// massacre does not take the massacre off the street.
+const MAX_PRINTS = 200;
 
 class Spark {
   constructor() { this.alive = false; }
@@ -19,6 +22,11 @@ class Spark {
 
 export class Effects {
   constructor() {
+    // How many pools the street may carry, which ultra comical gore raises,
+    // and how long they stay, which it lengthens; nought is as they were.
+    this.poolBudget = MAX_POOLS;
+    this.keep = 0;
+    this._born = 0;
     this.pool = [];
     for (let i = 0; i < MAX; i++) this.pool.push(new Spark());
     this.shake = 0;
@@ -766,11 +774,13 @@ export class Effects {
     let live = 0;
     let oldest = null;
     for (const p of this.pool) {
-      if (!p.alive || p.kind !== 4) continue;
+      if (!p.alive || p.kind !== 4 || p.by) continue;
       live++;
-      if (!oldest || p.life < oldest.life) oldest = p;
+      if (!oldest || p.born < oldest.born) oldest = p;
     }
-    const s = live >= MAX_POOLS && oldest ? oldest : this._get();
+    const s = live >= this.poolBudget && oldest ? oldest : this._get();
+    // Ultra comical gore keeps them as long as it keeps the pieces.
+    if (this.keep > seconds) seconds = this.keep;
     s.alive = true;
     s.kind = 4;
     s.ax = x; s.ay = y + SURFACE_CLEARANCE; s.az = z;
@@ -782,11 +792,67 @@ export class Effects {
     s.size = size;
     if (this.comic) { s.r = 0.3; s.g = 0.008; s.b = 0.006; s.size = size * 1.25; }
     // The spread, in bx, and the seed that gives it an edge, in bz. A pool
-    // opens out over the first second or so and then stops.
+    // opens out over the first second or so and then stops. by is nought:
+    // something other than nought there is a footprint.
     s.bx = 0;
     s.by = 0;
     s.bz = Math.random() * 100;
+    s.born = ++this._born;
     return s;
+  }
+
+  /**
+   * A footprint in blood: the pool's ragged disc drawn long and narrow along
+   * the way the foot was pointing, fainter and smaller the further it is from
+   * where it was trodden in. by carries the heading, ten up, so that nought
+   * still means a pool.
+   */
+  footprint(x, y, z, yaw, strength = 1, seconds = 30) {
+    let live = 0;
+    let oldest = null;
+    for (const p of this.pool) {
+      if (!p.alive || p.kind !== 4 || !p.by) continue;
+      live++;
+      if (!oldest || p.born < oldest.born) oldest = p;
+    }
+    const s = live >= MAX_PRINTS && oldest ? oldest : this._get();
+    if (this.keep > seconds) seconds = this.keep;
+    s.alive = true;
+    s.kind = 4;
+    s.ax = x; s.ay = y + SURFACE_CLEARANCE; s.az = z;
+    s.vx = 0; s.vy = 0; s.vz = 0;
+    s.gravity = 0;
+    s.maxLife = seconds;
+    s.life = seconds;
+    const k = 0.45 + 0.55 * Math.max(0, Math.min(1, strength));
+    // Fresh and thin, so redder than a pool, which is deep enough to look
+    // nearly black.
+    s.r = (this.comic ? 0.34 : 0.17) * k; s.g = 0.008 * k; s.b = 0.006 * k;
+    s.size = 0.15 * (0.75 + 0.25 * k);
+    s.bx = 1;
+    s.by = yaw + 10;
+    s.bz = Math.random() * 100;
+    s.born = ++this._born;
+    return s;
+  }
+
+  /** What is lying on the street: pools and footprints, as two counts. */
+  get stains() {
+    let pools = 0, prints = 0;
+    for (const p of this.pool) if (p.alive && p.kind === 4) { if (p.by) prints++; else pools++; }
+    return { pools, prints };
+  }
+
+  /**
+   * Take a share of the pools and footprints off the street, the oldest
+   * first, for a machine that is struggling.
+   * @returns {number} how many went
+   */
+  trimStains(share = 0.5) {
+    const lying = this.pool.filter((p) => p.alive && p.kind === 4).sort((a, b) => a.born - b.born);
+    const n = Math.ceil(lying.length * share);
+    for (let i = 0; i < n; i++) lying[i].alive = false;
+    return n;
   }
 
   /** One drop falling off something in flight. */

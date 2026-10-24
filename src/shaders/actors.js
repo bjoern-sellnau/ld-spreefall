@@ -1100,7 +1100,17 @@ void main() {
     // full size over the first second.
     vec3 centre = iA.xyz;
     float s = iC.w * mix(0.35, 1.0, iB.x);
-    pos = centre + vec3((c.x - 0.5) * 2.0 * s, 0.0, (c.y - 0.5) * 2.0 * s);
+    if (iB.y > 0.5) {
+      // A footprint: the same ragged disc, long and narrow along the way the
+      // foot was pointing. The heading is carried ten up.
+      float yaw = iB.y - 10.0;
+      vec2 along = vec2(-sin(yaw), -cos(yaw));
+      vec2 across = vec2(along.y, -along.x);
+      vec2 o = along * (c.y - 0.5) * 2.0 * s + across * (c.x - 0.5) * 2.0 * s * 0.42;
+      pos = centre + vec3(o.x, 0.0, o.y);
+    } else {
+      pos = centre + vec3((c.x - 0.5) * 2.0 * s, 0.0, (c.y - 0.5) * 2.0 * s);
+    }
   } else {
     // Spark, flash or a drop of blood: a billboard at a point.
     vec3 centre = iA.xyz;

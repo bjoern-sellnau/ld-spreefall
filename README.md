@@ -349,6 +349,10 @@ visits.
 | Ultra gore, and then some | the same again, set where the pools run out, and bodies thrown across the street |
 | Overkill | every kill an execution: the skeleton out of the body, pieces raining down, a fountain, a word across the screen |
 | Comic carnage | overkill drawn as a comic book: bright red blood by the bucket from every hit, heads that pop, blood rain, splashes on the screen, the word in yellow |
+| Ultra comical gore | comic carnage past all sense: far more blood, a body in half as many pieces again, every piece landing with a splat and staying where it falls, and a squelch at every step through a pool |
+| Red footprints | walk through blood and you leave red footprints for fourteen steps, fading, and so does anybody else |
+| Pieces stay for good | on as it ships: with ultra comical gore the pieces lie there for good; off, they go after the time on the slider (5 to 600 s, 90 to start with) |
+| Performance limit | while the frame rate is under the limit on its slider (10 to 60, 30 to start with), half of the pieces, pools and footprints lying about are cleared every second, oldest first |
 | Slow motion on the last kill | killing the last one standing within sixty five metres drops the world to a crawl |
 | Show what a building has left | the damage on the frontage you are aiming at, and how much more it takes |
 | Extreme enemies | a camp or hunting ground that calls for help gets wave after wave of it, as many as the waves setting says (a slider and a box to type the number in, 1 to 50, 6 to start with), 20 s apart instead of 38 and two more men in each; a Slayer nest holds that many waves of demons, each past the third a little bigger |
@@ -412,6 +416,15 @@ What the seven gore switches actually are:
   street round it and a taller, longer fountain, the word is yellow with a
   red outline, a kill close to you throws splashes on the screen, and the
   walls round a kill are left with the blood running down them.
+- **Ultra comical gore** is the one past that, on purpose absurd: two more
+  bursts a kill, one up and one out, a second fountain twice as tall, a red
+  rain twelve metres wide for four and a half seconds, two dozen pools round
+  it and the walls out to fourteen metres. Every hit gushes for twice as
+  long. Every piece splats when it lands, and you hear it; they stay where
+  they fall (or go after the time you set), and walking through it
+  squelches.
+- **Red footprints**: a step in a pool puts it on your boots, and on anybody
+  else's, for fourteen steps, left and right, fainter each time.
 
 And the last kill:
 

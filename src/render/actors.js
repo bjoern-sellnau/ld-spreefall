@@ -13,7 +13,7 @@ import {
 } from '../shaders/actors.js';
 
 const MAX_DRONES = 48;
-const MAX_SPARKS = 1536;
+const MAX_SPARKS = 3072;
 const MAX_PROPS = 32;
 const MAX_SOLDIERS = 24;
 const MAX_JETS = 6;
@@ -24,7 +24,7 @@ const MAX_SIGNALS = 96;
 const MAX_COVERS = 64;
 const MAX_MECHS = 8;
 const MAX_PICKUPS = 16;
-const MAX_GIBS = 256;
+const MAX_GIBS = 1536;
 // Ultra plasma's balls in the air at once, which is its own ceiling.
 const MAX_ULTRA = 480;
 // And the void storm's balls, which VOID_STORM.maxLive holds to 48.

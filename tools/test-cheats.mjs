@@ -64,7 +64,8 @@ async function run() {
   check('every switch the brief asked for is in it',
     ['godmode', 'infiniteAmmo', 'nukeRain', 'noDrones', 'cinematic', 'slowBlast',
       'wreckBuildings', 'wreckGround', 'lastKill',
-      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore', 'everyWeapon', 'oneManArmy', 'nightmare']
+      'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore', 'ultraComic', 'footprints',
+      'piecesForever', 'goreBudget', 'everyWeapon', 'oneManArmy', 'nightmare']
       .every((id) => menu.switches.includes(id)),
     menu.switches.join(', '));
   check('and every button',
@@ -562,6 +563,179 @@ async function run() {
   await page.waitForTimeout(700);
   await page.screenshot({ path: path.join(SHOTS, 'cheat-07-comic.png') });
   await page.evaluate(() => { const s = window.spreefall; s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); });
+
+  // --- ultra comical gore, red footprints, pieces that stay, the limit ------
+  const uc = await page.evaluate(async () => {
+    const s = window.spreefall;
+    const out = {};
+    const step = (sec) => { for (let i = 0; i < Math.round(sec * 60); i++) s.fixedForTest(1 / 60); };
+    const fresh = () => { s.soldiers.reset(); s.gibs.clear(); s.effects.clear(); s.bloodRain.length = 0; s.gushes.length = 0; };
+    const kill = (dx, dz) => {
+      const v = s.spawnSoldier(dx, dz);
+      v.rise = 0;
+      s.soldiers.damage(v, 9999, { x: -1, y: 0, z: 0.2 });
+      return v;
+    };
+    const lying = () => s.gibs.active.filter((g) => g.resting && g.body).length;
+    s.soldiers.enabled = false;
+    s.teleport(81, 0);
+    // Comic carnage, for the comparison.
+    s.cheats.reset(); fresh();
+    s.setCheat('comicGore', true);
+    kill(-6, 1);
+    out.comic = { chunks: s.gibs.count, pools: s.effects.stains.pools };
+    // Ultra comical gore: the same kill.
+    s.cheats.reset(); fresh();
+    s.setCheat('ultraComic', true);
+    s.setCheat('godmode', true);
+    const splats = s.state.splats || 0, sounds = s.state.splatSounds || 0;
+    kill(-6, 1);
+    out.ultra = { chunks: s.gibs.count, pools: s.effects.stains.pools, scale: s.cheats.goreScale,
+      word: document.getElementById('overkill').textContent };
+    step(6);
+    out.ultra.splats = (s.state.splats || 0) - splats;
+    out.ultra.sounds = (s.state.splatSounds || 0) - sounds;
+    out.ultra.lying = lying();
+    // Twenty seconds after, which is past the longest any piece ever lay.
+    step(14);
+    out.ultra.stayed = lying();
+    // With a time set instead of for good, they go when it runs out.
+    fresh();
+    s.setCheat('piecesForever', false);
+    s.cheats.setValue('pieceTime', 5);
+    kill(-6, 1);
+    step(4);
+    out.timed = { before: lying() };
+    step(12);
+    out.timed.after = lying();
+    // The performance limit: under the frame rate set for it, half of what is
+    // lying about goes every second; over it, nothing does.
+    s.cheats.reset(); fresh();
+    s.setCheat('ultraComic', true); s.setCheat('godmode', true); s.setCheat('goreBudget', true);
+    // Said to be running well, because a software rasteriser does not, and the
+    // limit would be clearing the street while the pieces were still landing.
+    s.state.fpsOverride = 60;
+    kill(-6, 1); kill(-7, -3);
+    // Long enough for everything thrown to have come down and stopped.
+    step(10);
+    const t0 = s.state.goreTrims || 0;
+    const high = { pieces: lying(), stains: s.effects.stains.pools };
+    step(1.5);
+    out.limit = { high, highAfter: { pieces: lying(), stains: s.effects.stains.pools }, trimsHigh: (s.state.goreTrims || 0) - t0 };
+    s.state.fpsOverride = 12;
+    step(1.2);
+    out.limit.low = { pieces: lying(), stains: s.effects.stains.pools, trims: (s.state.goreTrims || 0) - t0 };
+    s.setCheat('goreBudget', false);
+    const off = { pieces: lying() };
+    step(1.5);
+    out.limit.off = { before: off.pieces, after: lying() };
+    s.state.fpsOverride = undefined;
+    // Red footprints: a pool under you and eight metres of walking west, and
+    // a man doing the same twenty metres north.
+    s.cheats.reset(); fresh();
+    s.setCheat('footprints', true);
+    s.teleport(81, 0);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const z0 = s.player.z;
+    s.effects.stain(s.player.x, s.world.groundHeight(s.player.x, s.player.z), s.player.z, 1.4, 60);
+    const man = s.spawnSoldier(0, 20);
+    man.rise = 0;
+    s.effects.stain(man.x, s.world.groundHeight(man.x, man.z), man.z, 1.4, 60);
+    const mz = man.z;
+    for (let i = 0; i < 60 * 6; i++) {
+      s.player.x -= 1.4 / 60;
+      man.x -= 1.4 / 60;
+      s.fixedForTest(1 / 60);
+    }
+    const prints = s.effects.list.filter((p) => p.alive && p.kind === 4 && p.by).sort((a, b) => a.born - b.born);
+    const mine = prints.filter((p) => Math.abs(p.az - z0) < 1);
+    const his = prints.filter((p) => Math.abs(p.az - mz) < 1);
+    out.prints = { mine: mine.length, his: his.length,
+      fading: mine.length > 2 && mine[0].size > mine[mine.length - 1].size,
+      alternate: mine.length > 3 && mine.slice(1).every((p, i) => Math.sign(p.az - z0) === -Math.sign(mine[i].az - z0)),
+      along: mine.length > 0 && mine.every((p) => Math.abs(Math.sin(p.by - 10 - Math.PI / 2)) < 0.2) };
+    // And past the steps a pool gives, the boots are clean.
+    for (let i = 0; i < 60 * 8; i++) { s.player.x -= 1.4 / 60; s.fixedForTest(1 / 60); }
+    out.prints.capped = s.effects.list.filter((p) => p.alive && p.kind === 4 && p.by && Math.abs(p.az - z0) < 1).length;
+    // Ultra comical gore: a squelch with every step in a pool.
+    s.cheats.reset(); fresh();
+    s.setCheat('ultraComic', true);
+    s.teleport(81, 0);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    s.effects.stain(s.player.x - 1, s.world.groundHeight(s.player.x, s.player.z), s.player.z, 2.5, 60);
+    const q0 = s.state.squelches || 0;
+    for (let i = 0; i < 60 * 3; i++) { s.player.x -= 1.4 / 60; s.fixedForTest(1 / 60); }
+    out.squelches = (s.state.squelches || 0) - q0;
+    s.cheats.reset(); fresh();
+    s.soldiers.enabled = true;
+    s.teleport(81, 0);
+    return out;
+  });
+  check('ultra comical gore throws far more pieces and blood than comic carnage, with a word of its own',
+    uc.ultra.chunks >= uc.comic.chunks * 1.5 && uc.ultra.pools > uc.comic.pools && uc.ultra.scale === 18
+      && /!/.test(uc.ultra.word), JSON.stringify({ comic: uc.comic, ultra: uc.ultra }));
+  check('the pieces splat as they land, and the splats are heard',
+    uc.ultra.splats >= 20 && uc.ultra.sounds >= 10, JSON.stringify(uc.ultra));
+  check('and they stay where they fall, twenty seconds on',
+    uc.ultra.lying >= 20 && uc.ultra.stayed >= uc.ultra.lying, JSON.stringify(uc.ultra));
+  check('with a time set instead, they go when it runs out', uc.timed.before >= 10 && uc.timed.after === 0,
+    JSON.stringify(uc.timed));
+  check('the performance limit clears half of what is lying about under the frame rate set, and nothing over it',
+    uc.limit.trimsHigh === 0 && uc.limit.highAfter.pieces >= uc.limit.high.pieces
+      && uc.limit.low.trims >= 1 && uc.limit.low.pieces <= Math.ceil(uc.limit.highAfter.pieces / 2) + 2
+      && uc.limit.low.stains < uc.limit.highAfter.stains && uc.limit.off.after >= uc.limit.off.before,
+    JSON.stringify(uc.limit));
+  check('red footprints: out of a pool you leave prints, left and right, fading, and so does he',
+    uc.prints.mine >= 8 && uc.prints.his >= 8 && uc.prints.fading && uc.prints.alternate && uc.prints.along,
+    JSON.stringify(uc.prints));
+  check('and the boots run dry after the steps a pool gives', uc.prints.capped <= 14, JSON.stringify(uc.prints));
+  check('with ultra comical gore every step in a pool squelches', uc.squelches >= 2, `${uc.squelches}`);
+
+  // The picture: a street after ultra comical gore and a walk through it.
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset(); s.setCheat('ultraComic', true); s.setCheat('footprints', true); s.setCheat('godmode', true);
+    s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
+    s.soldiers.enabled = false;
+    s.teleport(81, 0); s.look(90, -22); s.camera.update(16 / 10);
+    const fx = s.camera.forward[0], fz = s.camera.forward[2];
+    for (const [a, b] of [[7, -2], [9, 1.5]]) {
+      const v = s.spawnSoldier(fx * a - fz * b, fz * a + fx * b);
+      v.rise = 0;
+      s.soldiers.damage(v, 9999, { x: fx, y: 0.2, z: fz });
+    }
+    for (let i = 0; i < 60 * 5; i++) s.fixedForTest(1 / 60);
+    // A walk through it and back to where you stood.
+    const x0 = s.player.x, z0 = s.player.z;
+    for (let i = 0; i < 60 * 5; i++) { s.player.x += fx * 1.5 / 60; s.player.z += fz * 1.5 / 60; s.fixedForTest(1 / 60); }
+    for (let i = 0; i < 60 * 3; i++) { s.player.x -= fx * 1.5 / 60 * 1.66; s.player.z -= fz * 1.5 / 60 * 1.66; s.fixedForTest(1 / 60); }
+    s.teleport(x0 - fx * 2, z0 - fz * 2);
+    s.bloodRain.length = 0;
+    document.getElementById('splatter').innerHTML = '';
+  });
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-12-ultra-comic.png') });
+  // And a trail of footprints out of a pool, looked back along, once the
+  // fountains from that one have stopped (they stop with the blood off).
+  await page.evaluate(() => window.spreefall.cheats.reset());
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setCheat('footprints', true); s.setCheat('blood', true);
+    s.soldiers.reset(); s.gibs.clear(); s.effects.clear(); s.bloodRain.length = 0; s.gushes.length = 0;
+    s.teleport(81, 0);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    s.effects.stain(s.player.x, s.world.groundHeight(s.player.x, s.player.z), s.player.z, 1.6, 120);
+    for (let i = 0; i < 60 * 7; i++) { s.player.x -= 1.4 / 60; s.player.z += 0.3 / 60; s.fixedForTest(1 / 60); }
+    s.look(-80, -30); s.camera.update(16 / 10);
+  });
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-13-footprints.png') });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
+    s.soldiers.enabled = true;
+  });
 
   // --- what is left of somebody who burned ---------------------------------
   const bones = await page.evaluate(async () => {

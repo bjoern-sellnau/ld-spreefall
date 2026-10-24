@@ -5148,6 +5148,59 @@ So there are two cities now, and a profile picks which:
   Screenshots arsenal-05-hailstorm.png, arsenal-06-blade.png,
   arsenal-07-hammer.png, arsenal-08-flare.png.
 
+## 134. Ultra comical gore, red footprints, pieces that stay, and a limit for slow machines
+
+- The ask, four new things in the cheat menu: red footprints, through a pool
+  of blood and out the other side, for you and for them; Ultra comical
+  gore, one past comic carnage, with absurd amounts of blood, bodies in many
+  more pieces, a splat when a piece lands or you walk through it, and the
+  pieces left lying; whether they lie there for good or go after so many
+  seconds; and a performance switch that clears them when the frame rate
+  falls under a limit you set.
+- Ultra comical gore (`ultraComic`) is comic carnage and then some. The
+  gore multiplier is 18 rather than 12, which goes into the blood; the
+  pieces a burst throws stay capped where they were, because one burst past
+  that emptied the whole pool. A kill throws two more bursts, one up and
+  one out (593 pieces where comic carnage throws 385), a second fountain twice as tall, a red rain three times as
+  wide (12 m) for twice as long, two dozen pools out to 12 m, sixteen rays
+  for the walls instead of eight and out to 14 m, twice the splashes on the
+  lens from 20 m, and words of its own. Every hit gushes for twice as long
+  and sprays three times over. The pieces of a body splat when they first
+  meet the street: a little blood where they hit, now and then a small
+  pool, and a wet slap of filtered noise with a thud under it, as many as
+  can be told apart (one every 45 ms) within 70 m. Walking through a pool
+  squelches at every step.
+- The pieces stay (`piecesForever`, on by default), or with it off go after
+  `pieceTime` seconds (90 by default, 5 to 600); the pools stay as long.
+  The street holds 320 pools rather than 128 while it is on. The gib pool
+  is 1536 pieces rather than 256, enough for three such kills and what they
+  leave, and the effects pool and the blood buffer 3072 rather than 2048
+  and 1536, so a street full of it still draws.
+- Red footprints (`footprints`): a step in a pool puts fourteen steps of it
+  on your boots, or on anybody else's. One print every 0.75 m, left and
+  right of the line, each one fainter and smaller than the one before, for
+  40 s, in a thinner, redder red than a pool. A print is the pool's ragged disc drawn long and narrow along the
+  way the foot was pointing (the heading rides in the slot that was nought
+  for a pool), with its own budget of 200 so a long walk does not take the
+  massacre off the street.
+- The performance limit (`goreBudget`, with `fpsFloor`, 30 by default):
+  every second spent under the floor takes half of what is lying about off
+  the street, pieces of people and pools and prints, oldest first. The
+  checks run under a software rasteriser well below 30, so they say what
+  the frame rate is (`state.fpsOverride`) rather than leave the limit
+  clearing the street while they count it.
+- Checks (cheats suite, eight more): ultra comical gore throws at least half
+  as many pieces again as comic carnage and more pools, scale 18, its own
+  word; the pieces splat and are heard; twenty seconds on every one of them
+  is still lying there; with a time of five seconds set instead they are all
+  gone ten seconds on; the limit halves what is lying about at 12 fps and
+  leaves it alone at 60 and when switched off; out of a pool you leave
+  prints left and right, fading, pointing the way you walked, and a man
+  walking out of one does too; the boots run dry after fourteen; every step
+  in a pool squelches. Measured: 593 pieces against 385, all still there
+  twenty seconds on; 1186 pieces and 320 pools halved to 593 and 160 at
+  12 fps. Screenshots cheat-12-ultra-comic.png and cheat-13-footprints.png.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

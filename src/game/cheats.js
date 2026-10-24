@@ -14,6 +14,8 @@ import { CHASSIS, chassisById, mechKey } from './chassis.js';
 import { ULTRA, VOID_STORM, clampUltra } from './ultra.js';
 
 const KEY = 'spreefall.cheats';
+/** For good, in seconds: longer than anybody plays, and still a number. */
+export const FOREVER = 1e9;
 
 /**
  * The gore multiplier at the overkill setting. The pools it draws on were
@@ -21,11 +23,14 @@ const KEY = 'spreefall.cheats';
  * that runs into a ceiling and stops meaning anything.
  */
 export const OVERKILL_SCALE = 12;
+/** And ultra comical gore, past that: the pools were made bigger again for it. */
+export const ULTRA_COMIC_SCALE = 18;
 
 /** Every switch, in one list, so saving and clearing cannot miss one. */
 const KEYS = ['godmode', 'infiniteAmmo', 'everyWeapon', 'nukeRain', 'noDrones', 'cinematic',
   'slowBlast', 'mechKillers', 'wreckBuildings', 'wreckGround', 'lastKill', 'showDamage',
   'gib', 'ragdoll', 'blood', 'ultraGore', 'maxGore', 'overkill', 'comicGore',
+  'ultraComic', 'footprints', 'piecesForever', 'goreBudget',
   'extremeEnemies', 'crazyReality', 'oneManArmy', 'nightmare'];
 
 /** The switches, in the order the menu shows them. */
@@ -75,6 +80,15 @@ export const GORE = [
   // gushing from every hit and raining after every kill, heads that pop, a
   // splash on the screen when it happens close, and the word in yellow.
   { id: 'comicGore', label: 'Comic carnage', note: 'overkill drawn as a comic book: bright red blood by the bucket from every hit, heads that pop, blood rain, splashes on the screen and the word in yellow' },
+  // And past the comic book, for anybody who wants it absurd: more blood
+  // than makes any sense, a body in a great many more pieces, every one of
+  // them landing with a splat and staying where it lands, and a squelch
+  // underfoot when you walk through it.
+  { id: 'ultraComic', label: 'Ultra comical gore', note: 'comic carnage past all sense: far more blood, bodies in many more pieces that splat when they land and stay where they fall, and a squelch when you walk through it' },
+  { id: 'footprints', label: 'Red footprints', note: 'walk through blood and you leave red footprints for a while, and so does anybody else who walks through it' },
+  // How long the pieces lie there, and what to do about it on a slow machine.
+  { id: 'piecesForever', label: 'Pieces stay for good', note: 'with ultra comical gore, what is left of them lies there for good; off, it goes after the time set below', def: true },
+  { id: 'goreBudget', label: 'Performance limit', note: 'while the frame rate is under the limit set below, the pieces, pools and footprints lying about are cleared, oldest first' },
 ];
 
 /**
@@ -146,6 +160,16 @@ export const SETTINGS = [
     id: 'boneTime', label: 'Skeletons collapse after', unit: 's',
     note: 'a burnt body falls to pieces after this long; nought leaves them standing for good',
     min: 0, max: 120, step: 1, def: 18,
+  },
+  {
+    id: 'pieceTime', label: 'Pieces stay for', unit: 's',
+    note: 'how long what is left of a body lies there with ultra comical gore, when it does not stay for good',
+    min: 5, max: 600, step: 5, def: 90,
+  },
+  {
+    id: 'fpsFloor', label: 'Performance limit', unit: 'fps',
+    note: 'with the performance limit on, under this many frames a second what is lying about is cleared',
+    min: 10, max: 60, step: 1, def: 30,
   },
 ];
 
@@ -221,6 +245,7 @@ export class Cheats {
    * run out: past this there is nothing left to spend.
    */
   get goreScale() {
+    if (this.ultraComic) return ULTRA_COMIC_SCALE;
     if (this.overkill || this.comicGore) return OVERKILL_SCALE;
     if (this.maxGore) return 7.5;
     return this.ultraGore ? 4.2 : 1;
@@ -233,11 +258,21 @@ export class Cheats {
   // tearing switch as well and you get both, with every piece the pool has.
   // Overkill takes all three: it is the one switch where nobody is left
   // lying in the street in one piece.
-  get gibbing() { return this.gib || this.ultraGore || this.overkill || this.comicGore; }
-  get bleeding() { return this.blood || this.ultraGore || this.maxGore || this.overkill || this.comicGore; }
-  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore || this.overkill || this.comicGore; }
+  get gibbing() { return this.gib || this.ultraGore || this.overkill || this.comical; }
+  get bleeding() { return this.blood || this.ultraGore || this.maxGore || this.overkill || this.comical; }
+  get tumbling() { return this.ragdoll || this.ultraGore || this.maxGore || this.overkill || this.comical; }
   /** Every kill an execution: overkill, or the comic book version of it. */
-  get excess() { return this.overkill || this.comicGore; }
+  get excess() { return this.overkill || this.comical; }
+  /** The comic book, or the one past it. */
+  get comical() { return this.comicGore || this.ultraComic; }
+  /**
+   * How long a piece of somebody lies where it fell, in seconds: nought for
+   * as long as it always has, which is ultra comical gore off.
+   */
+  get pieceLife() {
+    if (!this.ultraComic) return 0;
+    return this.piecesForever ? FOREVER : this.value('pieceTime');
+  }
 
   set(id, on) {
     if (!(id in this) || typeof this[id] !== 'boolean') return false;
