@@ -1096,7 +1096,10 @@ async function run() {
       out[id] = Math.round(total());
     }
     s.projectiles.clear();
-    s.demolition.damage.clear();
+    // The city back as it was: every weapon has now gone at the same
+    // frontage, and in the live city that brings it down, which left the
+    // ripper's check after this with no wall within its sixty metres.
+    s.demolition.reset(); s.renderer.clearCollapses();
     s.setCheat('godmode', false);
     s.teleport(start.x, start.z);
     return { out, moves };

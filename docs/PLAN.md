@@ -5558,6 +5558,14 @@ So there are two cities now, and a profile picks which:
   same. Both keep a copy now. Here every weapon wears the frontage down
   (the launcher 388) and the suite passes 92 of 92; the live city cannot be
   fetched from this session, so the CI run is the check there.
+- That run passed the wall check (the launcher 345) and failed the ripper's
+  ricochet: no wall within sixty metres. With every weapon now going at the
+  one nearest frontage, the wall check brings it down, where before its
+  damage was spread round the square. It puts the city back when it is
+  done now (`demolition.reset()` and the collapses cleared, as the cheats
+  and city suites do). Measured here: rays at eight metres find 17 walls
+  within forty, 4 after six heavy blasts on the nearest frontage, and 17
+  again after the reset.
 
 ## CI: the EMP check clears the street in front of the launcher
 
