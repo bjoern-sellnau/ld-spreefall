@@ -5201,6 +5201,34 @@ So there are two cities now, and a profile picks which:
   twenty seconds on; 1186 pieces and 320 pools halved to 593 and 160 at
   12 fps. Screenshots cheat-13-ultra-comic.png and cheat-14-footprints.png.
 
+## 135. Every weapon against a wall
+
+- The ask: not every weapon can destroy buildings. True: a frontage came
+  down only for things that went off. A blast adds damage to the grid of
+  22 m cells and every 180 of it takes another quarter of the building, but
+  nothing else ever added to that grid. Rifles, pistols, shotguns, the
+  rotary cannon, the railgun, every blade and club, the flamethrower,
+  arrows, the shield saw and the ripper's discs could hit a wall all day.
+- Now every hit on a wall adds to the same grid, spread over 1.5 m:
+  - a round: 0.3 of its damage, or 0.8 for a round that goes through men
+    (the railgun, the hand cannon);
+  - a swing at a wall within reach: what its row says (chainsaw 70, flail
+    100, lunge blade 120);
+  - the quake hammer: a blast of its own of 320 over its whole 7 m;
+  - the flamethrower on a wall: 35 a second;
+  - an arrow 25, and the shield saw or a disc 45 each time it meets a wall.
+  The way a frontage comes down is unchanged: in quarters, with rubble,
+  dust and the collision opening.
+- Checks (arsenal suite, two more): every weapon in the loadout fired at a
+  frontage from where it would be used (a swing from 1.6 m, the rest from
+  6 m, in god mode, the ones that go off last, the wall looked for again
+  before each) leaves damage on the grid. The only exception is the banana,
+  which never goes off. Measured for one shot or swing (the flamethrower for
+  a second): M16 15, rotary 14, Hailstorm 16, shotgun 64, double barrel 154,
+  railgun 138, hand cannon 150, chainsaw 105, flail 150, blade 180, quake
+  hammer 530, flamethrower 35, bow 25, ripper 45, volt 9, EMP 69. One rail
+  shot is many times one rifle round.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

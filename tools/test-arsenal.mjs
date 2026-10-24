@@ -1007,6 +1007,78 @@ async function run() {
   check('the grenade launcher lobs a long way and goes off on the first thing it meets',
     heavy.shell && heavy.shellGone && heavy.shellFar > 30, JSON.stringify(heavy));
 
+  // --- every weapon against a wall --------------------------------------------
+  // Each one fired at the same frontage from where it would be used, a swing
+  // from arm's length and the rest from six metres, and what the city's
+  // damage grid took from it. The banana is a banana, and the EMP is a pulse
+  // for machines rather than a charge.
+  const walls = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.vehicles.reset();
+    s.soldiers.enabled = false;
+    s.teleport(81, 0);
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    const start = { x: s.player.x, z: s.player.z };
+    // A wall, looked for again from the same place before every weapon,
+    // because the ones before it may have opened the first one up.
+    const findWall = () => {
+      s.teleport(start.x, start.z);
+      for (let k = 0; k < 32; k++) {
+        const ang = (k / 32) * Math.PI * 2;
+        const h = s.world.raycast(s.player.x, s.player.y + 1.4, s.player.z, Math.cos(ang), 0, Math.sin(ang), 30);
+        if (h && h.kind === 'wall' && h.t > 7) return { h, ang };
+      }
+      return null;
+    };
+    if (!findWall()) return { skip: true };
+    const total = () => { let n = 0; for (const v of s.demolition.damage.values()) n += v; return n; };
+    const out = {};
+    // Six metres from a rocket going off is close enough to kill you, and a
+    // frontage that has taken a few of them is not there for a rifle after.
+    // So nobody dies here, and the ones that go off come last.
+    s.setCheat('godmode', true);
+    const blasts = (id) => (s.weapons[id].splash ? 1 : 0);
+    const order = [...s.loadout].sort((a, b) => blasts(a) - blasts(b));
+    for (const id of order) {
+      s.demolition.damage.clear();
+      s.projectiles.clear();
+      const spec = s.weapons[id];
+      const found = findWall();
+      if (!found) { out[id] = -1; continue; }
+      const wall = found.h, ang = found.ang;
+      const off = spec.kind === 'melee' ? 1.6 : 6;
+      s.teleport(wall.x - Math.cos(ang) * off, wall.z - Math.sin(ang) * off);
+      const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+      const to = { x: wall.x - eye.x, y: wall.y - eye.y, z: wall.z - eye.z };
+      const l = Math.hypot(to.x, to.y, to.z);
+      s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+      s.weapon.giveAll(); s.weapon.select(id); s.weapon.cooldown = 0; s.weapon.spread = 0;
+      if (spec.kind === 'stream') {
+        const dir = { x: s.camera.forward[0], y: s.camera.forward[1], z: s.camera.forward[2] };
+        for (let i = 0; i < 60; i++) s.weapon.update(1 / 60, true, eye, dir);
+        s.weapon.update(1 / 60, false, eye, dir);
+      } else {
+        s.shoot();
+      }
+      for (let i = 0; i < 60 * 4 && s.projectiles.active.some((b) => !b.stuck || b.fuse !== Infinity); i++) s.fixedForTest(1 / 60);
+      if (id === 'c4') s.projectiles.detonateAll('c4');
+      out[id] = Math.round(total());
+    }
+    s.projectiles.clear();
+    s.demolition.damage.clear();
+    s.setCheat('godmode', false);
+    s.teleport(start.x, start.z);
+    return out;
+  });
+  const none = walls.skip ? ['no wall found'] : Object.keys(walls).filter((id) => !(walls[id] > 0) && id !== 'banana' && id !== 'emp');
+  check('every weapon in the loadout wears a frontage down, rounds, swings, flame, arrows and saws as well as blasts',
+    !walls.skip && none.length === 0,
+    walls.skip ? 'no wall' : `${none.length ? `nothing from ${none.join(', ')}; ` : ''}${Object.entries(walls).map(([k, v]) => `${k}:${v}`).join(' ')}`);
+  check('and one rifle round is a dent in it, where one rail shot is many times that',
+    !walls.skip && walls.m16 > 5 && walls.m16 < 30 && walls.railgun > walls.m16 * 5,
+    walls.skip ? '' : `m16 ${walls.m16}, railgun ${walls.railgun}, minigun ${walls.minigun}`);
+
   // --- the eight out of the other shooters ---------------------------------
   // Each checked for the thing it is for: Hailstorm pours, the volt caster's
   // charge jumps and holds them, the arbalest's bolt and the cling charge

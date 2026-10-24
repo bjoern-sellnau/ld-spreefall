@@ -201,7 +201,7 @@ export const WEAPONS = {
     // back is ammunition, all over the street.
     name: 'Chainsaw', short: 'SAW', kind: KIND.MELEE, slot: null,
     magazine: 3, reserve: 0, reloadTime: 0.1, fireInterval: 0.9, auto: false,
-    reach: 2.8, damage: 1e6, fuel: true,
+    reach: 2.8, damage: 1e6, fuel: true, wall: 70,
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.004, recoilSide: 0.004, recoilRetain: 0, aimFov: 64, sound: 'saw',
   },
@@ -221,7 +221,7 @@ export const WEAPONS = {
     // a demon low enough on its feet goes down reeling.
     name: 'Flail', short: 'FLAIL', kind: KIND.MELEE, slot: null,
     magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.75, auto: true,
-    reach: 3.8, arc: 0.55, damage: 150,
+    reach: 3.8, arc: 0.55, damage: 150, wall: 100,
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.012, recoilSide: 0.004, recoilRetain: 0, aimFov: 64, sound: 'throw',
   },
@@ -474,7 +474,7 @@ export const WEAPONS = {
     // turn, and one cut does it. Nearer than reach, it is only the cut.
     name: 'Lunge blade', short: 'BLADE', kind: KIND.MELEE, slot: 6,
     magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.55, auto: false,
-    reach: 2.6, damage: 600,
+    reach: 2.6, damage: 600, wall: 120,
     lunge: { range: 9, cone: 0.94, speed: 30 },
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.004, recoilSide: 0.004, recoilRetain: 0, aimFov: 62, sound: 'saw',
@@ -486,7 +486,7 @@ export const WEAPONS = {
     name: 'Quake hammer', short: 'HAMMER', kind: KIND.MELEE, slot: 6,
     magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 1.15, auto: false,
     reach: 7, arc: -0.1, damage: 220,
-    quake: { push: 9, up: 7, hull: 0.25, edge: 0.4 },
+    quake: { push: 9, up: 7, hull: 0.25, edge: 0.4, wall: 320 },
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.03, recoilSide: 0.004, recoilRetain: 0, aimFov: 62, sound: 'rpg',
   },

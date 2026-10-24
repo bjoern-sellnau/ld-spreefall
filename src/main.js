@@ -706,6 +706,11 @@ async function main() {
       } else {
         effects.impact(shot.end.x, shot.end.y, shot.end.z,
           shot.end.nx, shot.end.ny, shot.end.nz, shot.surface);
+        // And the frontage keeps count of it, like it does a blast.
+        if (shot.surface === 'wall' && spec.kind === 'hitscan') {
+          hitWall(shot.end.x, shot.end.y, shot.end.z,
+            (spec.wall ?? spec.damage * (spec.pierce ? WALL.pierce : WALL.round)) * (weapon.damageScale || 1));
+        }
         // And if what it went into was a parked car, the car has an opinion
         // about it. Two magazines or one rocket and it goes up.
         hitCar(shot.end.x, shot.end.y, shot.end.z, spec.damage || 12);
@@ -772,6 +777,38 @@ async function main() {
       from = next; fromKind = nextKind;
     }
   }
+
+  // --- every weapon against a wall -------------------------------------------
+  // A frontage came down only for things that went off: a blast adds to the
+  // damage a cell of the city has taken and every so much brings a quarter
+  // of it down. A rifle could empty its magazines into a wall for ever, and
+  // a hammer the size of a paving stone did nothing to it. Now every hit on
+  // a wall adds its share to the same grid: a round a share of its damage
+  // (more for one that goes through men), a swing what its row says, the
+  // flamethrower so much a second, an arrow or a saw blade a little, and the
+  // quake hammer a blast of its own. round, pierce: the share of a round;
+  // radius: how far a hit spreads; stream: a second of the flamethrower;
+  // arrow, saw: one of each.
+  const WALL = { round: 0.3, pierce: 0.8, radius: 1.5, stream: 35, arrow: 25, saw: 45 };
+  function hitWall(x, y, z, amount, radius = WALL.radius) {
+    if (!(amount > 0)) return;
+    state.wallHits = (state.wallHits || 0) + 1;
+    demolition.blast(x, y, z, radius, amount, false);
+  }
+  /** The wall in front of you within a swing, if there is one, and the swing into it. */
+  function swingAtWall(spec) {
+    if (!spec.wall) return;
+    const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    const f = camera.forward;
+    const hit = world.raycast(eye.x, eye.y, eye.z, f[0], f[1], f[2], (spec.reach || 2.5) + 0.4);
+    if (!hit || hit.kind !== 'wall') return;
+    effects.impact(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 'wall');
+    hitWall(hit.x, hit.y, hit.z, spec.wall * (weapon.damageScale || 1));
+  }
+  projectiles.onWall = (b, hit) => {
+    if (hit.kind !== 'wall') return;
+    hitWall(hit.x, hit.y, hit.z, b.spec.arrow ? WALL.arrow : WALL.saw);
+  };
 
   /**
    * A blast, wherever it came from. Everything inside the radius takes damage
@@ -2625,6 +2662,8 @@ async function main() {
     // Where the stream stops: the first wall in front of you, so you cannot
     // burn somebody through the Brandenburg Gate.
     const hit = world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, reach);
+    // The flame on a wall eats into it, slowly.
+    if (hit && hit.kind === 'wall') hitWall(hit.x, hit.y, hit.z, WALL.stream * dt);
     const far = hit ? Math.max(1.5, hit.t - 0.6) : reach;
     // Flame along the cone, thicker and slower the further it has gone.
     for (let i = 0; i < 3; i++) {
@@ -8020,6 +8059,7 @@ async function main() {
   }
 
   weapon.onMelee = (spec, eye, dir) => {
+    swingAtWall(spec);
     if (spec.lunge) {
       // The blade: a cut if he is in reach, and if he is further off but in
       // front of you and within the lunge, you go to him first.
@@ -8132,6 +8172,8 @@ async function main() {
     renderer.addScar(cx, gy, cz, 3.2, 0.5);
     audio.explosion();
     effects.shake = Math.min(1.4, effects.shake + 0.6);
+    // And whatever frontage is in the half circle feels it like a rocket.
+    hitWall(cx, gy + 1, cz, Q.wall * (weapon.damageScale || 1), spec.reach);
     let down = 0, thrown = 0;
     for (const h of inReach(spec.reach, spec.arc)) {
       const t = h.t;

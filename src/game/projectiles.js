@@ -172,6 +172,7 @@ export class Projectiles {
     this.onSaw = null;       // fn(body, hit) the shield saw goes through somebody
     this.onSawBack = null;   // fn(body) and comes back to the hand
     this.onCling = null;     // fn(body, hit) a bolt or a cling charge takes hold
+    this.onWall = null;      // fn(body, hit) an arrow or a saw blade meets a wall
     // Set by the game layer: the same raycast the bullets use against drones
     // and soldiers. Without it a rocket flies through the man it was aimed at
     // and goes off on the wall behind him, which is exactly what the first
@@ -450,6 +451,7 @@ export class Projectiles {
             remaining = 0;
             break;
           }
+          if (this.onWall) this.onWall(b, hit);
           b.returning = true;
           remaining = 0;
           break;
@@ -465,6 +467,7 @@ export class Projectiles {
             break;
           }
           if (this.onArrowHead) this.onArrowHead(b, b.x + dx * 0.22, b.y + dy * 0.22, b.z + dz * 0.22);
+          if (this.onWall) this.onWall(b, hit);
           b.stuck = true;
           b.fx = b.vx; b.fy = b.vy; b.fz = b.vz;
           b.vx = b.vy = b.vz = 0;
@@ -505,6 +508,7 @@ export class Projectiles {
             remaining = 0;
             break;
           }
+          if (this.onWall) this.onWall(b, hit);
           if (hit.ny > 0.6 || b.bouncesLeft <= 0) {
             b.stuck = true;
             b.vx = b.vy = b.vz = 0;
