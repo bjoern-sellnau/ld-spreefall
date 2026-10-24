@@ -5633,6 +5633,17 @@ So there are two cities now, and a profile picks which:
   and goes to strong. On a slow frame in the live city all three presses
   fell before that step. The check now steps the game until the bow is
   back; the suite passes 38 of 38.
+- The run on that passed every suite but one check in .BACKDOOR: the two
+  cars sent at each other on green both ways, both going straight on now,
+  went through 4.9 m apart, and two cars meet when their boxes do, under
+  4.5 m. The check set them off the same distance back along straight lines
+  from where they started, but a car keeps to its lane, the live city's
+  lanes are not those lines, and half a second either way is a miss. Each
+  is now driven through on its own first and its line kept step by step;
+  where the two lines cross is where they meet, and each is put back on its
+  own line the same time short of it, going as it went there. Here the
+  lines cross within 0.2 m, two seconds out, and they crash; the suite
+  passes 48 of 48.
 
 ## CI: the EMP check clears the street in front of the launcher
 

@@ -665,20 +665,42 @@ async function run() {
     const j = window.junction;
     s.vehicles.reset();
     const a = j.legs.find((k) => k.phase === 0), b = j.legs.find((k) => k.phase === 1);
-    const A = s.spawnTraffic('car', { x: j.x + a.dx * 30, z: j.z + a.dz * 30, yaw: Math.atan2(a.dx, a.dz) });
-    const B = s.spawnTraffic('car', { x: j.x + b.dx * 30, z: j.z + b.dz * 30, yaw: Math.atan2(b.dx, b.dz) });
-    // Each the same way short of where their lanes cross, so they get there together.
-    const fa = [-Math.sin(A.yaw), -Math.cos(A.yaw)], fb = [-Math.sin(B.yaw), -Math.cos(B.yaw)];
-    const den = fa[0] * fb[1] - fa[1] * fb[0];
-    const t = ((B.x - A.x) * fb[1] - (B.z - A.z) * fb[0]) / den;
-    const P = { x: A.x + fa[0] * t, z: A.z + fa[1] * t };
-    A.x = P.x - fa[0] * 32; A.z = P.z - fa[1] * 32;
-    B.x = P.x - fb[0] * 32; B.z = P.z - fb[1] * 32;
-    A.speed = B.speed = 9;
-    // Both straight on: in the live city the map's ways end at the junction,
-    // and a driver turning off at random missed the other one by 8 m.
+    for (const k of j.group || [j]) k.hack = { kind: 'green', left: 60 };
+    // Each driven through on its own first, from 30 m out, straight on, and
+    // where it was at every step: the line it really takes and when. Set
+    // off together along straight lines from where they started, they once
+    // went through 4.9 m apart, the live city's lanes not being straight
+    // lines, and half a second either way is a miss.
+    const alone = (l) => {
+      const V = s.spawnTraffic('car', { x: j.x + l.dx * 30, z: j.z + l.dz * 30, yaw: Math.atan2(l.dx, l.dz) });
+      V.speed = 9;
+      V.traffic.through = true;
+      const path = [];
+      for (let i = 0; i < 60 * 6; i++) {
+        path.push({ x: V.x, z: V.z, yaw: V.yaw, speed: V.speed });
+        s.fixedForTest(1 / 60);
+        window.keepClear([V]);
+      }
+      s.vehicles.remove(V);
+      return path;
+    };
+    const pa = alone(a), pb = alone(b);
+    // Where the two lines cross, and each put back on its own line the same
+    // time short of it, going as it was going there.
+    let meet = { d: Infinity, ia: 0, ib: 0 };
+    for (let ia = 0; ia < pa.length; ia += 2) {
+      for (let ib = 0; ib < pb.length; ib += 2) {
+        const d = Math.hypot(pa[ia].x - pb[ib].x, pa[ia].z - pb[ib].z);
+        if (d < meet.d) meet = { d, ia, ib };
+      }
+    }
+    const lead = Math.min(120, meet.ia, meet.ib);
+    const sa = pa[meet.ia - lead], sb = pb[meet.ib - lead];
+    const A = s.spawnTraffic('car', { x: sa.x, z: sa.z, yaw: sa.yaw });
+    const B = s.spawnTraffic('car', { x: sb.x, z: sb.z, yaw: sb.yaw });
+    A.x = sa.x; A.z = sa.z; A.yaw = sa.yaw; A.speed = sa.speed;
+    B.x = sb.x; B.z = sb.z; B.yaw = sb.yaw; B.speed = sb.speed;
     A.traffic.through = B.traffic.through = true;
-    for (const k of j.group || [j]) k.hack = { kind: 'green', left: 8 };
     const crashes = s.crashes;
     let closest = Infinity;
     for (let i = 0; i < 60 * 6 && s.crashes === crashes; i++) {
@@ -688,7 +710,8 @@ async function run() {
     }
     for (const k of j.group || [j]) k.hack = null;
     return { crashed: s.crashes - crashes, a: !!A.traffic.crashed, b: !!B.traffic.crashed,
-      hurt: A.health < A.spec.health && B.health < B.spec.health, closest: +closest.toFixed(1) };
+      hurt: A.health < A.spec.health && B.health < B.spec.health, closest: +closest.toFixed(1),
+      lines: +meet.d.toFixed(1), lead: +(lead / 60).toFixed(1) };
   });
   check('green both ways with a car coming each way: nobody gives way, and they crash',
     pile.crashed > 0 && pile.a && pile.b && pile.hurt, JSON.stringify(pile));
