@@ -5577,6 +5577,14 @@ So there are two cities now, and a profile picks which:
   after the menu comes up and the box reads -24 px while its layout reads
   0, and both read 0 once frames come again. The check now reads where the
   bar is laid out, which is what it was asking.
+- The run after that failed in the machines suite instead, which had passed
+  the time before: theirs fire seven kinds of gun counted six, because
+  there had been no room to stand the Mantis where it could see you, and
+  the count only took the kind from a mech that was stood up. Placement is
+  random; here the next run had no room for the Ram. The kind belongs to
+  the chassis, so the count now reads it from the table the spawn takes it
+  from (`mechSpec`): auto, shotgun, rail, shell, swarm, thermite and laser.
+  Whether each gun can hurt you still needs one standing.
 
 ## CI: the EMP check clears the street in front of the launcher
 
