@@ -6014,6 +6014,22 @@ So there are two cities now, and a profile picks which:
   [tornado](screenshots/extreme-03-tornado.png),
   [firestorm](screenshots/extreme-04-fire.png).
 
+## CI: the flight's holes were streets drawn by the tile next door
+
+- Twice now (runs 243 and 247) the free travel check has found one frame
+  out of sixty over "nothing drawn": 442 m up over the core, a tile of
+  1160 vertices under it, loaded and fine. The test's measure of what is
+  drawn at a point looked only at the triangles of the tile the point is
+  in. But a street or a square is baked whole into one tile and runs on
+  over its edge into the next: Ebertstraße where it crosses a tile edge is
+  drawn, and seen from above, by the tile on the other side. Sampled every
+  7.3 m over the local core, 74 points of 73,628 had no ground of their own
+  tile over them, every one within a few metres of a tile edge, under a
+  street drawn as it should be. The measure now takes the topmost ground of
+  the tile and the eight round it: no point without ground in the same
+  sample. A frame of the flight landing on such a strip is chance, which is
+  why it was red one run in two.
+
 ## CI: two of the vehicle checks against the live city
 
 - The first live run to get as far as .BACKDOOR since phase 142 failed two

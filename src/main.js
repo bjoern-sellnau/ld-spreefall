@@ -11911,8 +11911,26 @@ async function main() {
       return rec ? tileMesh(rec) : null;
     },
     drawnGround(x, z) {
-      const index = world.tileIndex(x, z);
-      if (index < 0) return null;
+      // A street or a square is baked whole into one tile and runs on over
+      // the edge into the next, so what is drawn at a point near an edge may
+      // be another tile's: the tile the point is in, and the eight round it.
+      const own = world.tileIndex(x, z);
+      if (own < 0 || !world.tiles[own]) return null;
+      let best = null;
+      const seen = new Set();
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const index = world.tileIndex(x + dx * world.tileSize, z + dz * world.tileSize);
+          if (index < 0 || seen.has(index) || !world.tiles[index]) continue;
+          seen.add(index);
+          const y = this.groundInTileForTest(index, x, z);
+          if (y !== null && (best === null || y > best)) best = y;
+        }
+      }
+      return best;
+    },
+    /** The topmost ground of one tile's own triangles at a point, or null. */
+    groundInTileForTest(index, x, z) {
       const rec = world.tiles[index];
       if (!rec) return null;
       const m = tileMesh(rec);
