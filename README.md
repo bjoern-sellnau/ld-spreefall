@@ -1011,7 +1011,8 @@ change blends over half a minute.
 - A storm throws lightning: the sky flashes at once, a bolt hundreds of
   metres tall stands on the skyline where it came down and flickers as the
   strokes come down it again, and the thunder arrives three seconds a
-  kilometre later.
+  kilometre later: close to, a sharp crack and a tearing and then the roll;
+  from a few kilometres, a low roll in claps for ten seconds and more.
 
 The cheat menu's **weather** group turns it further: **Off** for a clear sky
 whatever was picked, any kind straight away, or Random; how strong it is,

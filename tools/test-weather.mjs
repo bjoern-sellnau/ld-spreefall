@@ -158,6 +158,40 @@ async function run() {
   check('the thunder is sent off three seconds a kilometre after the flash',
     storm.thunder && storm.thunder.distance === 1500 && Math.abs(storm.thunder.delay - 1500 / 343) < 1e-6,
     storm.thunder && `${storm.thunder.delay.toFixed(2)} s for ${storm.thunder.distance} m`);
+  // What it sounds like, made the way the game makes it but into a buffer
+  // instead of the speakers: a strike 300 m off and one 3.5 km off.
+  const heard = await page.evaluate(async () => {
+    const { Audio } = await import('/src/game/audio.js');
+    const out = {};
+    for (const d of [300, 3500]) {
+      const sr = 8000, secs = d / 343 + 30;
+      const ctx = new OfflineAudioContext(1, Math.ceil(sr * secs), sr);
+      const a = new Audio();
+      a.ctx = ctx; a.master = ctx.createGain(); a.master.connect(ctx.destination); a.enabled = true;
+      a._noiseBuffer = a._makeNoise(4);
+      a.thunder(d);
+      const x = (await ctx.startRendering()).getChannelData(0);
+      const win = sr / 2, env = [];
+      for (let i = 0; i + win <= x.length; i += win) {
+        let e = 0; for (let k = 0; k < win; k++) e += x[i + k] * x[i + k];
+        env.push(Math.sqrt(e / win));
+      }
+      const on = env.findIndex((v) => v > 0.005);
+      const off = env.length - 1 - [...env].reverse().findIndex((v) => v > 0.005);
+      // How bright the first fifth of a second is: zero crossings a second.
+      const at = Math.floor((d / 343) * sr);
+      let zc = 0;
+      for (let i = at + 1; i < at + sr * 0.2; i++) if ((x[i] > 0) !== (x[i - 1] > 0)) zc++;
+      out[d] = { onset: on / 2, heard: (off - on) / 2, peak: +Math.max(...env).toFixed(3), bright: Math.round(zc / 0.2),
+        crack: a.lastThunder.shape.crack };
+    }
+    return out;
+  });
+  check('thunder close to cracks and rolls, far off only rolls, quieter and longer, and both come when sound would',
+    heard[300].crack > 0.5 && heard[3500].crack === 0 && heard[300].peak > heard[3500].peak * 2
+      && heard[3500].heard > heard[300].heard && heard[300].heard >= 4 && heard[3500].heard >= 8
+      && Math.abs(heard[300].onset - 300 / 343) <= 0.6 && Math.abs(heard[3500].onset - 3500 / 343) <= 0.6
+      && heard[300].bright > heard[3500].bright, JSON.stringify(heard));
   check('the bolt flickers: each stroke of the strike comes down the same channel',
     storm.told >= 1 && after.strokes - storm.strokesBefore === storm.told - 1,
     `${storm.told} strokes, ${after.strokes - storm.strokesBefore} after the first`);
