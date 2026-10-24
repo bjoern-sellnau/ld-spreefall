@@ -1316,7 +1316,8 @@ async function run() {
     const reach = () => {
       const seen = new Set();
       s.weapon.select('doublebarrel');
-      for (let i = 0; i < 40; i++) { s.weapon.cycle(1); seen.add(s.weapon.id); }
+      // Round the whole wheel and a bit, however long the arsenal has grown.
+      for (let i = 0; i < s.loadout.length + 10; i++) { s.weapon.cycle(1); seen.add(s.weapon.id); }
       return seen;
     };
     const before = reach();
