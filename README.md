@@ -122,6 +122,8 @@ with no title and no flight in) and **Hauptmenü**. Esc again carries on.
 | Left mouse, or RT on a pad | fire |
 | Right mouse, or LT on a pad | aim down the sight; with a grenade, a banana or an incendiary in hand, the harder throw, 1.6 times as fast, nearly twice as far |
 | G | holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt |
+| Tab, or the middle mouse button, or R3 | hit with what is in your hands: the butt of a rifle, the grip of a pistol, the tube of a launcher; a knife, baton, bat or bare hands are swung |
+| ^ (left of 1), or B on a pad | a kick; in the air, a flying kick |
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | F1 F2 F3 | quality tier: low, medium, high |
@@ -227,7 +229,8 @@ What is under the hood:
   the arbalest and the disc ripper; 4 the grenade, the incendiary, the
   banana, C4 and the cling charge; 5 the suppressed pistol and a hand cannon
   whose round goes through one man into the next; 6 the chainsaw, the flail,
-  the shield saw, the lunge blade and the quake hammer; 7 the flamethrower
+  the shield saw, the lunge blade, the quake hammer, the knife, the baton,
+  the baseball bat and bare fists; 7 the flamethrower
   and the flare pistol; 8 plasma, the railgun, the splinter gun and the volt
   caster; 9 the mech killer and the EMP; 0 the void cannon.
 - Eight of those come out of Crysis, DOOM, Far Cry and Halo, each the idea of
@@ -242,6 +245,24 @@ What is under the hood:
   charge sticks to what it hits and rides on him; the lunge blade takes you
   nine metres onto a man and cuts him down; the quake hammer floors
   everybody in the half circle in front of you and throws the cars.
+- Four for arm's length, after the games that made each one. The knife
+  (Crysis, Far Cry 3's machete): quick and silent, and one from behind is
+  enough. The baton (the telescopic one Aiden Pearce carries in Watch Dogs):
+  a blow staggers a man, the third in a row puts him on the ground, and in
+  .BACKDOOR a thief or the one who started a fight is subdued by it. The
+  baseball bat (Max Payne): a slow swing that lifts him off his feet and
+  sends him eight or ten metres down the street, through whoever is standing
+  behind him. Bare fists (DOOM): jabs left and right, and every third in a
+  row a hook that floors him. Each one takes the nearest in front of you,
+  passers by included, and wears a wall down a little.
+- And two things you can do whatever is in your hands. **Tab** or the middle
+  mouse button hits with it, as F.E.A.R. lets you with any weapon: the butt
+  of a rifle staggers a man without a round going off, the grip of a pistol
+  is quicker and lighter, the tube of a launcher or the rotary cannon puts
+  him on the ground; a knife, a baton, a bat or bare hands are swung, and
+  with the weapon holstered it is a punch. **^** (the key left of 1) is a
+  kick that puts him on the ground, and in the air a flying kick that sends
+  him off down the street like the bat.
 - Down the left side of the screen is what you carry: a row a key with the key
   in a box and the weapon it would give you, the row you are on lit, a bar of
   ammunition under each name, and the group you just picked from opened out

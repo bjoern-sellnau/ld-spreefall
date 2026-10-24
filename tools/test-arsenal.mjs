@@ -1037,6 +1037,25 @@ async function run() {
     // frontage that has taken a few of them is not there for a rifle after.
     // So nobody dies here, and the ones that go off come last.
     s.setCheat('godmode', true);
+    // The two moves first, while the frontage is still whole: a kick, and
+    // the butt of the rifle.
+    const moves = {};
+    for (const move of ['kick', 'bash']) {
+      s.demolition.damage.clear();
+      const found = findWall();
+      if (!found) { moves[move] = -1; continue; }
+      const wall = found.h, ang = found.ang;
+      s.teleport(wall.x - Math.cos(ang) * 1.6, wall.z - Math.sin(ang) * 1.6);
+      const eye = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+      const to = { x: wall.x - eye.x, y: wall.y - eye.y, z: wall.z - eye.z };
+      const l = Math.hypot(to.x, to.y, to.z);
+      s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+      s.weapon.select('m16');
+      s.state.kickLeft = 0; s.state.bashLeft = 0;
+      s[move]();
+      moves[move] = Math.round(total());
+    }
     const blasts = (id) => (s.weapons[id].splash ? 1 : 0);
     const order = [...s.loadout].sort((a, b) => blasts(a) - blasts(b));
     for (const id of order) {
@@ -1069,12 +1088,17 @@ async function run() {
     s.demolition.damage.clear();
     s.setCheat('godmode', false);
     s.teleport(start.x, start.z);
-    return out;
+    return { out, moves };
   });
+  const moves = walls.moves || {};
+  if (!walls.skip) Object.assign(walls, walls.out);
+  delete walls.out; delete walls.moves;
   const none = walls.skip ? ['no wall found'] : Object.keys(walls).filter((id) => !(walls[id] > 0) && id !== 'banana' && id !== 'emp');
   check('every weapon in the loadout wears a frontage down, rounds, swings, flame, arrows and saws as well as blasts',
     !walls.skip && none.length === 0,
     walls.skip ? 'no wall' : `${none.length ? `nothing from ${none.join(', ')}; ` : ''}${Object.entries(walls).map(([k, v]) => `${k}:${v}`).join(' ')}`);
+  check('and a kick and the butt of a rifle wear it down as well',
+    !walls.skip && moves.kick > 0 && moves.bash > 0, walls.skip ? '' : `kick ${moves.kick}, bash ${moves.bash}`);
   check('and one rifle round is a dent in it, where one rail shot is many times that',
     !walls.skip && walls.m16 > 5 && walls.m16 < 30 && walls.railgun > walls.m16 * 5,
     walls.skip ? '' : `m16 ${walls.m16}, railgun ${walls.railgun}, minigun ${walls.minigun}`);
@@ -1264,6 +1288,161 @@ async function run() {
     JSON.stringify(eight.hammer));
   check('the flare sets the street alight where it lands, and the fire burns whoever stands in it',
     eight.flare.fired && eight.flare.burning >= 2 && eight.flare.hurt, JSON.stringify(eight.flare));
+
+  // --- the knife, the baton, the bat, the fists, the kick and the butt --------
+  const close = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    const fresh = () => {
+      s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.combat.reset(); s.vehicles.reset();
+      s.grab.reset();
+      // Nothing left burning from the checks before: a man stood in the
+      // flare's fire between two blows of the baton is not the baton's.
+      s.burningGround.length = 0; s.fires.reset(); s.fireWalls.reset();
+      s.soldiers.enabled = false;
+      s.state.lunge = null; s.state.holstered = false;
+      s.state.kickLeft = 0; s.state.bashLeft = 0;
+      s.teleport(81, 0); s.look(90, 0); s.camera.update(16 / 9);
+      s.player.onGround = true; s.player.vy = 0;
+    };
+    const eye = () => ({ x: s.player.x, y: s.player.y + 1.7, z: s.player.z });
+    const aim = (t) => {
+      const e = eye();
+      const to = { x: t.x - e.x, y: t.y + 1.1 - e.y, z: t.z - e.z };
+      const l = Math.hypot(to.x, to.y, to.z);
+      s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+    };
+    const step = (sec) => { for (let i = 0; i < Math.round(sec * 60); i++) s.fixedForTest(1 / 60); };
+    const ready = (id) => { s.weapon.giveAll(); s.weapon.select(id); s.weapon.cooldown = 0; s.weapon.spread = 0; };
+    const swing = () => { s.weapon.cooldown = 0; s.shoot(); };
+    const hurt = (t) => t.health < t.maxHealth;
+
+    // The knife: one from behind, and one into a man facing you.
+    fresh(); ready('knife');
+    let t = s.spawnSoldier(-1.6, 0);
+    t.yaw = Math.PI / 2;            // facing -x, away from you
+    aim(t);
+    const stabs = s.state.backstabs || 0;
+    swing();
+    out.knife = { back: t.health <= 0, stabs: (s.state.backstabs || 0) - stabs };
+    fresh(); ready('knife');
+    t = s.spawnSoldier(-1.6, 0);
+    t.yaw = -Math.PI / 2;           // facing +x, at you
+    aim(t);
+    swing();
+    out.knife.front = hurt(t) && t.health > 0;
+
+    // The baton: a blow staggers him, the third in a row puts him down.
+    fresh(); ready('baton');
+    t = s.spawnSoldier(-1.8, 0);
+    aim(t);
+    swing();
+    out.baton = { dazed: t.stunLeft > 0 && t.state !== 4, hurt: hurt(t), blows: [[Math.round(t.health), t.state, t.batonN]] };
+    step(0.5); swing();
+    out.baton.blows.push([Math.round(t.health), t.state, t.batonN]);
+    step(0.5); swing();
+    out.baton.blows.push([Math.round(t.health), t.state, t.batonN]);
+    out.baton.down = t.state === 4 && t.health > 0;
+
+    // The bat: the man in front goes off down the street into the one behind him.
+    fresh(); ready('bat');
+    // A flat, clear run of street to send him down: the checks before may
+    // have left a crater or a heap of rubble in the first one tried.
+    const g0 = s.world.groundHeight(s.player.x, s.player.z);
+    let run = null;
+    for (let k = 0; k < 24 && !run; k++) {
+      const a = Math.PI + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 12);
+      const ca = Math.cos(a), sa = Math.sin(a);
+      let flat = !s.world.raycast(s.player.x, g0 + 1.2, s.player.z, ca, 0, sa, 13);
+      for (let d = 1; d <= 12 && flat; d += 0.5) {
+        if (Math.abs(s.world.groundHeight(s.player.x + ca * d, s.player.z + sa * d) - g0) > 0.25) flat = false;
+      }
+      if (flat) run = { ca, sa };
+    }
+    run = run || { ca: -1, sa: 0 };
+    t = s.spawnSoldier(run.ca * 2.2, run.sa * 2.2);
+    const behind = s.spawnSoldier(run.ca * 7.5, run.sa * 7.5);
+    aim(t);
+    const x0 = t.x, z0 = t.z;
+    swing();
+    out.bat = { flying: !!t.held && s.grab.flying.length === 1 };
+    step(1.5);
+    out.bat.flew = +Math.hypot(t.x - x0, t.z - z0).toFixed(1);
+    out.bat.behind = hurt(behind);
+    out.bat.landed = !t.held;
+
+    // The fists: two jabs, and the third a hook that floors him.
+    fresh(); ready('fists');
+    t = s.spawnSoldier(-1.5, 0);
+    aim(t);
+    const hooks = s.state.hooks || 0;
+    swing(); step(0.3); swing();
+    out.fists = { jabs: hurt(t) && t.state !== 4 };
+    step(0.3); swing();
+    out.fists.hook = (s.state.hooks || 0) - hooks === 1 && (t.state === 4 || t.health <= 0);
+    out.fists.hands = s.state.punchHand;
+
+    // The kick, on the ground and in the air.
+    fresh(); ready('m16');
+    t = s.spawnSoldier(-1.7, 0);
+    aim(t);
+    const kicked = s.kick();
+    out.kick = { kicked, down: t.state === 4, hurt: hurt(t), again: s.kick() };
+    fresh(); ready('m16');
+    t = s.spawnSoldier(-2.0, 0);
+    aim(t);
+    s.player.onGround = false; s.player.vy = 3;
+    const fk = s.state.flyingKicks || 0;
+    s.kick();
+    out.kick.air = (s.state.flyingKicks || 0) - fk === 1 && !!t.held;
+    s.player.onGround = true; s.player.vy = 0;
+
+    // The butt of the rifle: he staggers and no round goes off; the tube of
+    // a launcher puts him down; with the knife in hand it is the knife.
+    fresh(); ready('m16');
+    t = s.spawnSoldier(-1.6, 0);
+    aim(t);
+    const ammo = s.weapon.ammo, fired = s.weapon.shotsFired;
+    s.bash();
+    out.bash = { hurt: hurt(t), dazed: t.stunLeft > 0, noRound: s.weapon.ammo === ammo && s.weapon.shotsFired === fired,
+      held: s.weapon.cooldown > 0 };
+    fresh(); ready('rpg');
+    t = s.spawnSoldier(-1.6, 0);
+    aim(t);
+    s.bash();
+    out.bash.tube = t.state === 4;
+    fresh(); ready('knife');
+    t = s.spawnSoldier(-1.6, 0);
+    t.yaw = -Math.PI / 2;
+    aim(t);
+    const f0 = s.weapon.shotsFired;
+    s.bash();
+    out.bash.knife = s.weapon.shotsFired === f0 + 1 && hurt(t);
+    // Nothing in your hands: a punch.
+    fresh(); ready('m16');
+    t = s.spawnSoldier(-1.5, 0);
+    aim(t);
+    s.state.holstered = true;
+    s.bash();
+    out.bash.bare = hurt(t);
+    s.state.holstered = false;
+    fresh();
+    return out;
+  });
+  check('the knife: one from behind is enough, one from the front only hurts',
+    close.knife.back && close.knife.stabs === 1 && close.knife.front, JSON.stringify(close.knife));
+  check('the baton: a blow staggers him, the third in a row puts him on the ground alive',
+    close.baton.dazed && close.baton.hurt && close.baton.down, JSON.stringify(close.baton));
+  check('the bat sends him flying off down the street into the man behind him',
+    close.bat.flying && close.bat.flew > 4 && close.bat.behind && close.bat.landed, JSON.stringify(close.bat));
+  check('the fists: two jabs that hurt, and the third a hook that floors him, left and right in turn',
+    close.fists.jabs && close.fists.hook && close.fists.hands === 1, JSON.stringify(close.fists));
+  check('a kick puts him on the ground, not twice at once, and a kick in the air sends him flying',
+    close.kick.kicked && close.kick.down && close.kick.hurt && !close.kick.again && close.kick.air, JSON.stringify(close.kick));
+  check('the butt of a rifle staggers him without a round going off; a launcher\'s tube floors him; a knife in hand is the knife; bare hands punch',
+    close.bash.hurt && close.bash.dazed && close.bash.noRound && close.bash.held && close.bash.tube
+      && close.bash.knife && close.bash.bare, JSON.stringify(close.bash));
   await page.evaluate(() => {
     const s = window.spreefall;
     s.projectiles.clear(); s.weapon.select('minigun');
@@ -1303,6 +1482,27 @@ async function run() {
     await page.waitForTimeout(900);
     await page.screenshot({ path: path.join(SHOTS, `arsenal-0${i}-${id}.png`) });
   }
+
+  // The close four, each frozen half way through its move, and a kick.
+  for (const [n, id, move] of [[9, 'knife', 'swing'], [10, 'baton', 'swing'], [11, 'bat', 'swing'],
+    [12, 'fists', 'swing'], [13, 'm16', 'kick']]) {
+    await page.evaluate(({ id, move }) => {
+      const s = window.spreefall;
+      s.state.paused = false;
+      s.weapon.giveAll(); s.weapon.select(id);
+      for (let k = 0; k < 40; k++) s.fixedForTest(1 / 60);
+      const dur = id === 'm16' ? s.moves.kick.seconds : s.weapons[id].swing.seconds;
+      if (move === 'kick') s.state.kickT = dur * 0.5;
+      else { s.state.swingId = id; s.state.swingDur = dur; s.state.swingT = dur * 0.5; s.state.punchHand = 1; s.state.punchHook = false; }
+      s.state.paused = true;
+    }, { id, move });
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: path.join(SHOTS, `arsenal-${String(n).padStart(2, '0')}-${id === 'm16' ? 'kick' : id}.png`) });
+  }
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.state.paused = false; s.state.kickT = 0; s.state.swingT = 0;
+  });
 
   await browser.close();
   const failed = checks.filter((c) => !c.ok);

@@ -18,7 +18,7 @@ import { decodeState, writeState } from './game/state.js';
 import { Drones, DRONE_STATE } from './game/drones.js';
 import { Weapon, LOADOUT, WEAPONS } from './game/weapon.js';
 import { ArmsPanel, armsRows } from './ui/arms.js';
-import { ARROW_HEADS, ARROW_DRAWS } from './game/arsenal.js';
+import { ARROW_HEADS, ARROW_DRAWS, MOVES, bashWeight } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
 import { Projectiles, PROJECTILE } from './game/projectiles.js';
@@ -56,6 +56,7 @@ import { Campaign, OPS, SITE } from './game/campaign.js';
 import { Tactics, TACTICS, campSpot } from './game/tactics.js';
 import { CONVOY, planRoute, follow, onRoad, headingTo, wrap } from './game/convoy.js';
 import { Grab, GRAB } from './game/grab.js';
+import { fromBehind, punchCombo, batonCount, moveCurve } from './game/melee.js';
 import { Grime, GRIME } from './ui/grime.js';
 import { Nanosuit, SUIT } from './game/nanosuit.js';
 import { BACKDOOR, Phone, profileFor, pickTarget } from './game/backdoor.js';
@@ -710,7 +711,7 @@ async function main() {
         // And the frontage keeps count of it, like it does a blast.
         if (shot.surface === 'wall' && spec.kind === 'hitscan') {
           hitWall(shot.end.x, shot.end.y, shot.end.z,
-            (spec.wall ?? spec.damage * (spec.pierce ? WALL.pierce : WALL.round)) * (weapon.damageScale || 1));
+            (spec.wallHit ?? spec.damage * (spec.pierce ? WALL.pierce : WALL.round)) * (weapon.damageScale || 1));
         }
         // And if what it went into was a parked car, the car has an opinion
         // about it. Two magazines or one rocket and it goes up.
@@ -798,13 +799,13 @@ async function main() {
   }
   /** The wall in front of you within a swing, if there is one, and the swing into it. */
   function swingAtWall(spec) {
-    if (!spec.wall) return;
+    if (!spec.wallHit) return;
     const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
     const f = camera.forward;
     const hit = world.raycast(eye.x, eye.y, eye.z, f[0], f[1], f[2], (spec.reach || 2.5) + 0.4);
     if (!hit || hit.kind !== 'wall') return;
     effects.impact(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 'wall');
-    hitWall(hit.x, hit.y, hit.z, spec.wall * (weapon.damageScale || 1));
+    hitWall(hit.x, hit.y, hit.z, spec.wallHit * (weapon.damageScale || 1));
   }
   projectiles.onWall = (b, hit) => {
     if (hit.kind !== 'wall') return;
@@ -1455,6 +1456,7 @@ async function main() {
   // The wheel, while the pointer is locked. In a mech it goes through the
   // mech's five; on foot it goes through what you are carrying, and a
   // holstered weapon stays holstered.
+  input.onButton = (name) => { if (name === 'kick') kick(); else bash(); };
   input.onWheel = (dir) => {
     if (state.inMech && state.inMech.spec.arms) { mechs.cycleArm(state.inMech, dir); return; }
     if (!state.holstered) weapon.cycle(dir);
@@ -2242,6 +2244,7 @@ async function main() {
   };
 
   soldiers.onStunSpark = (s) => {
+    if ((s.dazedUntil || 0) > state.time) return;
     effects.spark(s.x + (Math.random() - 0.5), s.y + 0.8 + Math.random() * 0.9,
       s.z + (Math.random() - 0.5), 0.5, 0.75, 1.0);
   };
@@ -7389,7 +7392,7 @@ async function main() {
       bodies: soldiers.active,
       onStrike: (f, other, speed) => {
         const k = speed * 0.06;
-        const killed = soldiers.damage(other, speed * GRAB.impact * 0.8, { x: f.vx * k, y: 0.3 + Math.abs(f.vy) * k, z: f.vz * k });
+        const killed = soldiers.damage(other, speed * GRAB.impact * 0.8 * (f.impact ?? 1), { x: f.vx * k, y: 0.3 + Math.abs(f.vy) * k, z: f.vz * k });
         effects.blood(other.x, other.y + 1.2, other.z, f.vx / (speed || 1), 0.3, f.vz / (speed || 1), cheats.goreScale);
         audio.whoomp(0);
         if (killed) creditTarget(other, false, 'soldier');
@@ -7399,7 +7402,7 @@ async function main() {
         const s = f.s;
         const k = speed * 0.05;
         const hard = what === 'wall' ? 1.3 : 1;
-        const killed = soldiers.damage(s, speed * GRAB.impact * hard, { x: f.vx * k, y: 0.2, z: f.vz * k });
+        const killed = soldiers.damage(s, speed * GRAB.impact * hard * (f.impact ?? 1), { x: f.vx * k, y: 0.2, z: f.vz * k });
         if (what !== 'time') {
           effects.blood(s.x, s.y + 1.0, s.z, -f.vx / (speed || 1), 0.4, -f.vz / (speed || 1), cheats.goreScale);
           effects.shake = Math.min(1.2, effects.shake + Math.min(0.4, speed * 0.01));
@@ -8340,6 +8343,7 @@ async function main() {
       return;
     }
     if (spec.quake) { quake(spec); return; }
+    if (spec.swing) { swingMelee(spec, weapon.id); return; }
     if (spec.fuel) {
       // The saw takes the nearest thing in front of you, if it has the fuel
       // for something that size.
@@ -8464,6 +8468,243 @@ async function main() {
     soldiers.scare(cx, cz, 40);
     state.quakes = (state.quakes || 0) + 1;
     return { down, thrown };
+  }
+
+  // --- hands, feet and the butt of a rifle ------------------------------------
+  // The knife, the baton, the bat and bare fists take the nearest in front of
+  // you and in reach, passers by as well: a thief can be stopped with the
+  // baton, and somebody who was only walking down the street can be hurt
+  // with any of them, and it counts. The kick and a blow with whatever is in
+  // your hands go through the same two functions.
+
+  /** Whom a blow meets: the nearest in front of you and in reach. */
+  function meleeTarget(reach, arc) {
+    const fx = camera.forward[0], fz = camera.forward[2];
+    const fl = Math.hypot(fx, fz) || 1;
+    const eye = { x: player.x, y: player.y + PLAYER.eye, z: player.z };
+    let best = null;
+    for (const s of soldiers.active) {
+      if (!s.alive || s.health <= 0 || s.state === 5 || s.rise > 0 || s.held) continue;
+      const dx = s.x - player.x, dz = s.z - player.z;
+      const d = Math.hypot(dx, dz) - 0.42 * (s.scale || 1);
+      if (d > reach || (best && d >= best.d)) continue;
+      if ((dx * fx + dz * fz) / (fl * (Math.hypot(dx, dz) || 1)) < arc) continue;
+      if (!world.lineOfSight(eye.x, eye.y, eye.z, s.x, s.y + 1.0, s.z)) continue;
+      best = { kind: 'soldier', t: s, d };
+    }
+    for (const g of drones.active) {
+      if (!g.alive || g.health <= 0) continue;
+      const dx = g.x - player.x, dz = g.z - player.z;
+      const d = Math.hypot(dx, g.y - eye.y, dz) - g.radius;
+      if (d > reach || (best && d >= best.d)) continue;
+      if ((dx * fx + dz * fz) / (fl * (Math.hypot(dx, dz) || 1)) < arc) continue;
+      best = { kind: 'drone', t: g, d };
+    }
+    return best;
+  }
+
+  /**
+   * What a blow does to whom it met. o.amount the damage; o.push to put him
+   * on the ground and slide him; o.stagger the seconds he stands dazed;
+   * o.launch, o.lift and o.impact to send him flying, if he can be lifted;
+   * o.quiet, o.cut and o.sound for how it is heard and how it bleeds.
+   * @returns {boolean} whether it killed him
+   */
+  function landBlow(h, o) {
+    const t = h.t;
+    const dx = t.x - player.x, dz = t.z - player.z, dl = Math.hypot(dx, dz) || 1;
+    const ux = dx / dl, uz = dz / dl;
+    let killed;
+    if (h.kind === 'drone') {
+      killed = drones.damage(t, o.amount);
+      for (let i = 0; i < 4; i++) effects.spark(t.x, t.y, t.z, 0.9, 0.8, 0.5);
+    } else {
+      // The push a body that dies of it goes with: a long way off a bat.
+      const k = o.launch ? o.launch * 0.15 : 1;
+      killed = soldiers.damage(t, o.amount, { x: ux * k, y: o.launch ? 0.5 : 0.2, z: uz * k });
+      if (!killed && t.health > 0) {
+        const liftable = (t.scale || 1) <= GRAB.maxScale && !t.machine && !(t.dspec && t.dspec.boss);
+        if (o.launch && liftable) {
+          grab.launch(t, ux * o.launch, o.launch * o.lift, uz * o.launch, o.impact);
+          state.launched = (state.launched || 0) + 1;
+        } else if (o.push) {
+          if (soldiers.knockDown(t, ux, uz, o.push)) state.floored = (state.floored || 0) + 1;
+        } else if (o.stagger) {
+          t.stunLeft = Math.max(t.stunLeft || 0, o.stagger);
+          t.dazedUntil = state.time + o.stagger;
+        }
+      }
+      const g = cheats.goreScale;
+      if (o.cut) for (let i = 0; i < 2; i++) effects.blood(t.x, t.y + 1.2, t.z, ux, 0.35, uz, g * 1.3);
+      else effects.blood(t.x, t.y + 1.4, t.z, ux, 0.25, uz, g * 0.45);
+    }
+    effects.shake = Math.min(1.2, effects.shake + (o.launch ? 0.35 : 0.14));
+    audio.strike(o.sound || 'flesh', o.launch ? 1 : 0.6);
+    audio.hitMarker(!!killed);
+    showHitmarker(killed ? 'kill' : '');
+    if (!o.quiet && tactics.enabled) soldiers.hear(player.x, player.z, 12);
+    if (killed) creditTarget(t, false, h.kind);
+    state.blows = (state.blows || 0) + 1;
+    return killed;
+  }
+
+  /** A swing of the knife, the baton, the bat or a fist. */
+  function swingMelee(spec, id) {
+    const S = spec.swing;
+    state.swingT = S.seconds;
+    state.swingDur = S.seconds;
+    state.swingId = id;
+    state.swings = (state.swings || 0) + 1;
+    audio.swing(id === 'bat' ? 1 : id === 'fists' ? 0.15 : id === 'knife' ? 0.3 : 0.55);
+    const h = meleeTarget(spec.reach, spec.arc);
+    // Left and right in turn, and only punches that land count towards the
+    // hook: one into the air starts the run again.
+    let hook = false;
+    if (S.combo) {
+      state.punchHand = state.punchHand ? 0 : 1;
+      const run = state.punchRun || (state.punchRun = {});
+      if (h) hook = punchCombo(run, state.time, S).hook;
+      else run.n = 0;
+      state.punchHook = hook;
+    }
+    if (!h) return null;
+    const t = h.t;
+    // .BACKDOOR: the baton on a thief or a brawler is the takedown by hand.
+    if (S.subdue && t.civilian && t.crime && t.crime.o === t) {
+      subdue(t);
+      audio.strike('baton', 0.8);
+      return h;
+    }
+    const o = {
+      amount: spec.damage * (weapon.damageScale || 1),
+      quiet: !!S.quiet, cut: !!S.cut,
+      sound: S.cut ? 'blade' : id === 'bat' ? 'wood' : id === 'baton' ? 'baton' : 'flesh',
+    };
+    const behind = !!S.back && h.kind === 'soldier' && fromBehind(player.x, player.z, t);
+    if (behind) { o.amount *= S.back; state.backstabs = (state.backstabs || 0) + 1; }
+    if (hook) { o.amount *= S.hook; o.push = S.push; state.hooks = (state.hooks || 0) + 1; }
+    if (S.floor && h.kind === 'soldier') {
+      if (batonCount(t, state.time, S) >= S.floor) { o.push = S.push; t.batonN = 0; }
+      else o.stagger = S.stagger;
+    }
+    if (S.launch) { o.launch = S.launch; o.lift = S.lift; o.impact = S.impact; o.push = S.push; }
+    const killed = landBlow(h, o);
+    if (behind) feed('<b>from behind</b>');
+    else if (S.launch && !killed && t.held) feed('<b>home run</b>');
+    return h;
+  }
+
+  /** Whether you are on your feet and in the street, for a kick or a blow. */
+  function onFoot() {
+    return state.mode === 'walk' && !state.inVehicle && !state.inMech && !state.death
+      && !photo.active && !state.paused && combat.health > 0;
+  }
+
+  /** The kick: whatever is in your hands, and off the ground a flying one. */
+  function kick() {
+    if (!onFoot() || (state.kickLeft || 0) > 0) return false;
+    const K = MOVES.kick;
+    const air = !player.onGround;
+    state.kickLeft = K.cooldown;
+    state.kickT = K.seconds;
+    state.kicks = (state.kicks || 0) + 1;
+    audio.swing(0.7);
+    swingAtWall(K);
+    const h = meleeTarget(K.reach + (air ? 0.4 : 0), K.arc);
+    if (!h) return true;
+    const o = { amount: K.damage * (air ? K.air.damage : 1) * (weapon.damageScale || 1), push: K.push, sound: 'boot' };
+    if (air) {
+      o.launch = K.air.launch; o.lift = K.air.lift; o.impact = K.air.impact;
+      state.flyingKicks = (state.flyingKicks || 0) + 1;
+      feed('<b>flying kick</b>');
+    }
+    landBlow(h, o);
+    return true;
+  }
+
+  /**
+   * A blow with what is in your hands: the butt, the grip, the tube. A knife,
+   * a baton, a bat or a fist is swung the way it always is, and with nothing
+   * in your hands it is a punch.
+   */
+  function bash() {
+    if (!onFoot() || (state.bashLeft || 0) > 0) return false;
+    const spec = weapon.spec;
+    if (state.holstered) {
+      state.bashLeft = WEAPONS.fists.fireInterval;
+      swingMelee(WEAPONS.fists, 'fists');
+      return true;
+    }
+    if (spec.kind === 'melee') {
+      if (weapon.cooldown > 0) return false;
+      weapon.fire({ x: player.x, y: player.y + PLAYER.eye, z: player.z },
+        { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] });
+      state.bashLeft = spec.fireInterval;
+      return true;
+    }
+    const B = MOVES.bash;
+    const w = bashWeight(weapon.id);
+    state.bashLeft = B.cooldown * (0.6 + 0.4 * w);
+    state.bashT = B.seconds;
+    state.bashes = (state.bashes || 0) + 1;
+    // No round goes off in the middle of it.
+    weapon.cooldown = Math.max(weapon.cooldown, B.seconds * 0.8);
+    audio.swing(0.35 * w);
+    swingAtWall({ reach: B.reach, wallHit: B.wallHit * w });
+    const h = meleeTarget(B.reach, B.arc);
+    if (!h) return true;
+    const heavy = w >= B.floors;
+    landBlow(h, { amount: B.damage * w * (weapon.damageScale || 1), push: heavy ? B.push : 0,
+      stagger: heavy ? 0 : B.stagger, sound: 'stock' });
+    return true;
+  }
+
+  /** The clocks of the moves, on your own time. */
+  function meleeTick(dt) {
+    for (const k of ['kickLeft', 'bashLeft', 'kickT', 'bashT', 'swingT']) {
+      if (state[k] > 0) state[k] = Math.max(0, state[k] - dt);
+    }
+  }
+
+  // How a swing, a punch, a kick or a blow with the butt moves what is in
+  // view: out and back over the move's own time, in the shape of what is
+  // being swung. side mirrors a shape for the left hand.
+  const SWING_SHAPES = {
+    knife: { x: -0.07, y: 0.03, z: -0.18, pitch: -0.25, yaw: 0.05, roll: 0 },
+    baton: { x: -0.10, y: 0.02, z: -0.10, pitch: -0.85, yaw: 0.15, roll: 0 },
+    bat: { x: -0.30, y: 0.10, z: -0.10, pitch: -1.00, yaw: 1.80, roll: -0.30 },
+    jab: { x: -0.06, y: 0.06, z: -0.20, pitch: -0.40, yaw: 0, roll: 0 },
+    hook: { x: -0.16, y: 0.06, z: -0.10, pitch: -0.30, yaw: -0.80, roll: -0.60 },
+    bash: { x: -0.10, y: 0.03, z: -0.14, pitch: 0.15, yaw: 0.50, roll: -0.60 },
+  };
+  function shaped(pose, shape, f, side = 1) {
+    pose.x += shape.x * f * side; pose.y += shape.y * f; pose.z += shape.z * f;
+    pose.pitch += shape.pitch * f; pose.yaw += shape.yaw * f * side; pose.roll += shape.roll * f * side;
+  }
+  /** The moves on top of the pose of the weapon in your hands, and the left fist and the boot. */
+  function meleePose(pose) {
+    const extras = [];
+    const swing = state.swingId === weapon.id ? moveCurve(state.swingT, state.swingDur) : 0;
+    if (weapon.id === 'fists') {
+      const left = { ...pose, weapon: 'fistL', x: -pose.x, yaw: -pose.yaw, roll: -pose.roll, muzzle: 0 };
+      const shape = state.punchHook ? SWING_SHAPES.hook : SWING_SHAPES.jab;
+      if (state.punchHand) shaped(pose, shape, swing);
+      else shaped(left, shape, swing, -1);
+      extras.push(left);
+    } else if (SWING_SHAPES[weapon.id]) {
+      shaped(pose, SWING_SHAPES[weapon.id], swing);
+    }
+    const b = moveCurve(state.bashT, MOVES.bash.seconds);
+    if (b > 0) shaped(pose, SWING_SHAPES.bash, b);
+    const k = moveCurve(state.kickT, MOVES.kick.seconds);
+    if (k > 0) {
+      // The weapon goes down and out of the way of the leg coming up.
+      pose.y -= 0.10 * k;
+      pose.x += 0.06 * k;
+      extras.push({ weapon: 'boot', x: -0.03, y: -0.50 + 0.30 * k, z: -0.25 - 0.40 * k,
+        pitch: -0.25 + 0.40 * k, yaw: 0.10, roll: 0, muzzle: 0 });
+    }
+    pose.extras = extras;
   }
 
   // A bolt or a cling charge has taken hold. The bolt does some harm going
@@ -8732,6 +8973,7 @@ async function main() {
   function beginWalk(direct = false) {
     el.title.classList.add('hidden');
     state.lunge = null;
+    state.kickLeft = 0; state.bashLeft = 0; state.kickT = 0; state.bashT = 0; state.swingT = 0;
     el.hud.classList.remove('hidden');
     // The hour picked on the title, for every game but the end of the world,
     // which keeps its own.
@@ -9221,6 +9463,10 @@ async function main() {
         toast(state.holstered ? 'weapon holstered' : 'weapon ready');
         break;
       case 'KeyF': if (!airTakedown() && !takedown() && !suitGrab() && !suitPunch()) toggleVehicle(); break;
+      // A blow with what is in your hands, and a kick: the key under Esc,
+      // left of the one (the circumflex on a German keyboard).
+      case 'Tab': bash(); break;
+      case 'Backquote': kick(); break;
       case 'F4': state.debug = !state.debug; el.debug.classList.toggle('hidden', !state.debug); break;
       case 'KeyC': toggleCheatMenu(); break;
       case 'KeyV': if (state.targeting) closeTargeting(true); else openTravel(); break;
@@ -9530,6 +9776,7 @@ async function main() {
       if (boost > 1) audio.leap();
     }
     if (!slamStep(selfDt) && !lungeStep(selfDt)) player.step(selfDt, wishX, wishZ, jumped, boost);
+    meleeTick(selfDt);
     // Held, the suit puts its strength into the jump: a moment after leaving
     // the ground, still rising, it goes most of the way up again.
     if (jumped && boost === 1) state.suitJump = { t: 0, done: false };
@@ -9567,7 +9814,10 @@ async function main() {
     weapon.setHolstered(holstered);
     // A flamethrower has nothing to aim down. Its second trigger throws a
     // wall of fire instead, once per press rather than while it is held.
-    const hasAlt = !!weapon.spec.wall;
+    // The second trigger is the flamethrower's wall of fire. Only a wall
+    // with fuel to pay for it counts: wallHit, what a swing does to a
+    // frontage, is something else.
+    const hasAlt = !!(weapon.spec.wall && weapon.spec.wall.fuel);
     weapon.aiming = input.secondary && !holstered && !hasAlt;
 
     const dir = {
@@ -10003,6 +10253,7 @@ async function main() {
         // The bow is drawn as whichever of the two is in your hands.
         weapon: weapon.id === 'bow' ? (cheats.bowFor(campaign.mode) === 'tech' ? 'bowTech' : 'bowTactic') : weapon.id,
       };
+      meleePose(renderer.viewmodel);
       renderer.actors.updateDrones(drones.active);
       renderer.actors.updateSoldiers(soldiers.active);
       renderer.actors.updateJets(jets.active);
@@ -10246,6 +10497,7 @@ async function main() {
     ultra, ultraSpec: ULTRA, ultraState: ULTRA_STATE,
     storm, stormSpec: VOID_STORM,
     takedown: () => takedown(), takedownTarget: () => takedownTarget(),
+    kick: () => kick(), bash: () => bash(), meleeTarget: (r, a) => meleeTarget(r, a), moves: MOVES, grab,
     airTakedown: () => airTakedown(), airTakedownTarget: () => airTakedownTarget(), slamSpec: SLAM, suitKill: (k) => suitKill(k),
     phone, backdoorSpec: BACKDOOR, hackKey: (slot) => hackKey(slot), hackables: () => hackables(),
     trafficSpec: TRAFFIC, spawnTraffic: (type, near) => spawnTraffic(type, near), trafficRoads: () => trafficRoads(),

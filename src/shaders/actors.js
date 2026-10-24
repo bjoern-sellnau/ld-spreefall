@@ -1358,6 +1358,37 @@ void main() {
     albedo = vec3(0.48, 0.10, 0.035);
     rough = 0.6;
     metal = 0.02;
+  } else if (vPart > 37.5 && vPart < 38.5) {
+    // Skin: the back of a hand and the knuckles, warm, with a little sheen.
+    albedo = vec3(0.50, 0.33, 0.25);
+    rough = 0.6;
+    metal = 0.0;
+  } else if (vPart > 38.5 && vPart < 39.5) {
+    // Ash, the bat's wood: pale, the grain running along it.
+    float grain = 0.035 * sin(vModel.z * 220.0 + sin(vModel.x * 90.0 + vModel.y * 70.0) * 2.0);
+    albedo = vec3(0.60, 0.46, 0.29) + grain;
+    rough = 0.45;
+    metal = 0.0;
+  } else if (vPart > 39.5 && vPart < 40.5) {
+    // A ground steel edge, brighter than any gunmetal.
+    albedo = vec3(0.55, 0.57, 0.60);
+    rough = 0.18;
+    metal = 0.95;
+  } else if (vPart > 40.5 && vPart < 41.5) {
+    // Leather and rubber: a boot, a grip, the tape on a handle, a cuff.
+    albedo = vec3(0.035, 0.030, 0.028);
+    rough = 0.8;
+    metal = 0.0;
+  } else if (vPart > 41.5 && vPart < 42.5) {
+    // Trouser cloth, dark olive.
+    albedo = vec3(0.07, 0.075, 0.055);
+    rough = 0.9;
+    metal = 0.0;
+  } else if (vPart > 42.5 && vPart < 43.5) {
+    // A boot's brown leather, worn.
+    albedo = vec3(0.17, 0.10, 0.055);
+    rough = 0.65;
+    metal = 0.0;
   } else {
     // The muzzle flash. It is geometry that exists all the time, so it takes
     // itself out of the picture between shots rather than drawing as a black

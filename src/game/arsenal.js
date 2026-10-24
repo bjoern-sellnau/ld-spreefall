@@ -201,7 +201,7 @@ export const WEAPONS = {
     // back is ammunition, all over the street.
     name: 'Chainsaw', short: 'SAW', kind: KIND.MELEE, slot: null,
     magazine: 3, reserve: 0, reloadTime: 0.1, fireInterval: 0.9, auto: false,
-    reach: 2.8, damage: 1e6, fuel: true, wall: 70,
+    reach: 2.8, damage: 1e6, fuel: true, wallHit: 70,
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.004, recoilSide: 0.004, recoilRetain: 0, aimFov: 64, sound: 'saw',
   },
@@ -221,7 +221,7 @@ export const WEAPONS = {
     // a demon low enough on its feet goes down reeling.
     name: 'Flail', short: 'FLAIL', kind: KIND.MELEE, slot: null,
     magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.75, auto: true,
-    reach: 3.8, arc: 0.55, damage: 150, wall: 100,
+    reach: 3.8, arc: 0.55, damage: 150, wallHit: 100,
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.012, recoilSide: 0.004, recoilRetain: 0, aimFov: 64, sound: 'throw',
   },
@@ -474,7 +474,7 @@ export const WEAPONS = {
     // turn, and one cut does it. Nearer than reach, it is only the cut.
     name: 'Lunge blade', short: 'BLADE', kind: KIND.MELEE, slot: 6,
     magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.55, auto: false,
-    reach: 2.6, damage: 600, wall: 120,
+    reach: 2.6, damage: 600, wallHit: 120,
     lunge: { range: 9, cone: 0.94, speed: 30 },
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.004, recoilSide: 0.004, recoilRetain: 0, aimFov: 62, sound: 'saw',
@@ -489,6 +489,55 @@ export const WEAPONS = {
     quake: { push: 9, up: 7, hull: 0.25, edge: 0.4, wall: 320 },
     spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
     recoilKick: 0.03, recoilSide: 0.004, recoilRetain: 0, aimFov: 62, sound: 'rpg',
+  },
+  // The four you fight with at arm's length. Each takes the nearest in front
+  // of you and in reach, passers by as well, and swing says what it does to
+  // him on top of the damage.
+  knife: {
+    // Short, quick and quiet. From behind one is enough, the way the knife
+    // kills in Crysis and the machete in Far Cry 3; from the front it takes a
+    // few. Nobody hears it.
+    name: 'Knife', short: 'KNIFE', kind: KIND.MELEE, slot: 6,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.36, auto: true,
+    reach: 2.0, arc: 0.6, damage: 55, wallHit: 14,
+    swing: { back: 10, quiet: true, cut: true, seconds: 0.26 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.003, recoilSide: 0.003, recoilRetain: 0, aimFov: 64, sound: 'throw',
+  },
+  baton: {
+    // The telescopic police baton Aiden Pearce carries in Watch Dogs: a blow
+    // staggers, a third within gap of the last puts him on the ground, and a
+    // thief or a brawler in .BACKDOOR is subdued by it rather than hurt.
+    name: 'Baton', short: 'BATON', kind: KIND.MELEE, slot: 6,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.5, auto: true,
+    reach: 2.3, arc: 0.5, damage: 20, wallHit: 22,
+    swing: { stagger: 0.7, floor: 3, gap: 2.5, push: 3.5, subdue: true, seconds: 0.34 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.005, recoilSide: 0.004, recoilRetain: 0, aimFov: 64, sound: 'throw',
+  },
+  bat: {
+    // A baseball bat, Max Payne's: a slow swing that lifts him off his feet
+    // and sends him down the street, through whoever is standing behind him.
+    // Anybody too big to lift is knocked flat instead. launch is the speed he
+    // leaves at, lift how much of it is upwards, impact how hard what he
+    // meets on the way hurts against a thrown man.
+    name: 'Baseball bat', short: 'BAT', kind: KIND.MELEE, slot: 6,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.85, auto: false,
+    reach: 2.7, arc: 0.45, damage: 55, wallHit: 60,
+    swing: { launch: 18, lift: 0.32, impact: 0.55, push: 9, seconds: 0.5 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.012, recoilSide: 0.006, recoilRetain: 0, aimFov: 64, sound: 'throw',
+  },
+  fists: {
+    // Bare hands, left and right, the fist DOOM started with: quick jabs,
+    // and every third in a row (none more than gap apart) a hook at hook
+    // times the damage that puts him on the ground.
+    name: 'Fists', short: 'FISTS', kind: KIND.MELEE, slot: 6,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 0.3, auto: true,
+    reach: 1.8, arc: 0.55, damage: 15, wallHit: 8,
+    swing: { combo: 3, gap: 0.9, hook: 2.0, push: 6, seconds: 0.24 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.004, recoilSide: 0.003, recoilRetain: 0, aimFov: 66, sound: 'throw',
   },
   flare: {
     // One flare: whatever it goes into is alight, and the ground round it
@@ -553,6 +602,18 @@ WEAPONS.blade.hold = { x: 0.200, y: -0.150, z: -0.220, pitch: 0.120, yaw: 0.200,
 WEAPONS.blade.aimHold = { x: 0.150, y: -0.140, z: -0.220, pitch: 0.100, yaw: 0.150, roll: 0.15 };
 WEAPONS.hammer.hold = { x: 0.270, y: -0.250, z: -0.320, pitch: 0.000, yaw: 0.220, roll: 0.30 };
 WEAPONS.hammer.aimHold = { x: 0.230, y: -0.230, z: -0.320, pitch: 0.000, yaw: 0.180, roll: 0.22 };
+// The knife point up and forward, the baton raised, the bat up over the
+// right shoulder, and the right fist up with the forearm going down out of
+// the picture: the left one is drawn as its mirror. A positive pitch lifts
+// the far end, a positive yaw turns it to the left.
+WEAPONS.knife.hold = { x: 0.190, y: -0.150, z: -0.300, pitch: 0.250, yaw: 0.200, roll: 0.25 };
+WEAPONS.knife.aimHold = { x: 0.150, y: -0.140, z: -0.300, pitch: 0.200, yaw: 0.150, roll: 0.15 };
+WEAPONS.baton.hold = { x: 0.200, y: -0.200, z: -0.300, pitch: 0.550, yaw: 0.180, roll: 0.10 };
+WEAPONS.baton.aimHold = { x: 0.170, y: -0.190, z: -0.300, pitch: 0.500, yaw: 0.140, roll: 0.08 };
+WEAPONS.bat.hold = { x: 0.220, y: -0.300, z: -0.350, pitch: 1.100, yaw: -0.600, roll: 0.00 };
+WEAPONS.bat.aimHold = { x: 0.200, y: -0.290, z: -0.350, pitch: 1.050, yaw: -0.550, roll: 0.00 };
+WEAPONS.fists.hold = { x: 0.170, y: -0.190, z: -0.430, pitch: 0.500, yaw: 0.250, roll: -0.30 };
+WEAPONS.fists.aimHold = { x: 0.140, y: -0.170, z: -0.410, pitch: 0.450, yaw: 0.200, roll: -0.25 };
 
 /**
  * The heads a bow can carry. Fire and poison do their own harm where they
@@ -592,7 +653,7 @@ export const BUCKETS = {
   3: { name: 'Launchers', ids: ['rpg', 'swarm', 'launcher', 'arbalest', 'ripper'] },
   4: { name: 'Thrown', ids: ['grenade', 'incendiary', 'banana', 'c4', 'cling'] },
   5: { name: 'Pistols', ids: ['sdpistol', 'magnum'] },
-  6: { name: 'Close', ids: ['chainsaw', 'flail', 'shieldsaw', 'blade', 'hammer'] },
+  6: { name: 'Close', ids: ['chainsaw', 'flail', 'shieldsaw', 'blade', 'hammer', 'knife', 'baton', 'bat', 'fists'] },
   7: { name: 'Fire', ids: ['flamer', 'flare'] },
   8: { name: 'Energy', ids: ['plasma', 'railgun', 'splinter', 'volt'] },
   9: { name: 'Anti armour', ids: ['mechkiller', 'emp'] },
@@ -616,6 +677,35 @@ export const KITS = {
   // The bow first: in the suit it is the one thing you can fire from the cloak.
   hunt: ['bow', 'm16', 'sdpistol', 'marksman', 'shotgun', 'grenade', 'c4', 'rpg', 'railgun', 'banana'],
 };
+
+/**
+ * What you can do whatever is in your hands. A kick, the way F.E.A.R. and
+ * Duke Nukem 3D's Mighty Foot have one, and in the air a flying kick that
+ * sends him off down the street like the bat does (air: what it multiplies
+ * and how it launches). And a blow with what you are holding, the butt of a
+ * rifle, the grip of a pistol, the tube of a launcher, as F.E.A.R. lets you
+ * with any of them: weight by the group the weapon is in, a pistol quick and
+ * light, a launcher slow and heavy, and a heavy one puts him down. seconds
+ * is how long the move takes on the screen, cooldown before the next.
+ */
+export const MOVES = {
+  kick: {
+    reach: 2.2, arc: 0.5, damage: 35, push: 8, wallHit: 30, cooldown: 0.7, seconds: 0.42,
+    air: { damage: 1.8, launch: 13, lift: 0.25, impact: 0.45 },
+  },
+  bash: {
+    reach: 2.0, arc: 0.55, damage: 40, push: 6, stagger: 0.5, wallHit: 20, cooldown: 0.55, seconds: 0.32,
+    weight: { 5: 0.7, 3: 1.4, 9: 1.5, 0: 1.5 }, heavy: ['minigun', 'hailstorm'], floors: 1.4,
+  },
+};
+
+/** How heavy a blow with this weapon is: by its group, and two that are heavy whatever group. */
+export function bashWeight(id) {
+  const w = WEAPONS[id];
+  if (!w) return 1;
+  if (MOVES.bash.heavy.includes(id)) return 1.5;
+  return MOVES.bash.weight[w.slot] ?? 1;
+}
 
 export function weaponBySlot(slot) {
   return BUCKETS[slot] ? BUCKETS[slot].ids[0] : null;

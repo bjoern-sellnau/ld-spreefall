@@ -5313,6 +5313,86 @@ So there are two cities now, and a profile picks which:
   closer; and the blockers stop a car driven into them at 44 km/h, damaged.
   Screenshot backdoor-08-power-box.png.
 
+## 138. A knife, a baton, a bat and bare fists; a kick; and the butt of a rifle
+
+- The ask: more weapons for close quarters (a knife, a baton, a baseball
+  bat with punch, a kick, a punch) and a blow with the weapon in your
+  hands. Four new rows on 6 and two moves on keys of their own, each after
+  the game that made it, under numbers of our own.
+- The knife (the stealth knife in Crysis, the machete in Far Cry 3): quick
+  (0.36 s), silent, 55 a cut, and ten times that from behind, so one from
+  behind is enough and one from the front only hurts. Behind is where he
+  faces away from you, within 70 degrees either side.
+- The baton (the telescopic police baton Aiden Pearce knocks people out
+  with in Watch Dogs): 20 a blow and a stagger of 0.7 s, and the third blow
+  within 2.5 s of the last puts him on the ground. In .BACKDOOR a thief or
+  the one who started a fight is subdued by it, the same as the takedown by
+  hand: the crime stopped, paid, and your name better for it.
+- The baseball bat (Max Payne's): a slow swing (0.85 s) that does 55 and
+  lifts him off his feet at 18 m/s, a third of it upwards, into a body in
+  flight like one the suit throws (`grab.launch`): whoever he goes through
+  on the way is hurt, and so is he when he comes down, at 0.55 of a thrown
+  man. Anybody too big to lift is knocked flat instead.
+- Bare fists (the fist DOOM starts with): 15 a jab, left and right in turn,
+  and the third that lands in a row (none more than 0.9 s apart) a hook at
+  twice that which puts him on the ground. One into the air starts the run
+  again.
+- Each of the four takes the nearest in front of you and in reach, passers
+  by included (it counts against your name in .BACKDOOR, the way a shot
+  does), and wears a frontage down by its own row like every swing.
+- Tab, the middle mouse button or R3 on a pad: a blow with what is in your
+  hands, as F.E.A.R. lets you with any firearm. Its weight is by the group:
+  a pistol 0.7, a rifle 1, a launcher, the anti armour pair, the void
+  cannon, the rotary cannon and Hailstorm 1.4 to 1.5. 40 times the weight;
+  the light ones stagger him for half a second, the heavy ones put him on
+  the ground; no round goes off in the middle of it. With a knife, a baton,
+  a bat or bare hands it is their swing, and with the weapon holstered a
+  punch.
+- ^, the key left of 1 (B on a pad): a kick, 35 and on the ground, after
+  F.E.A.R.'s kicks and Duke Nukem 3D's Mighty Foot; in the air a flying kick
+  at 1.8 times that which sends him off like the bat. 0.7 s between kicks.
+- In view: the knife, a baton run out, a bat in pale ash with a taped
+  handle and two fists with their forearms, each with a move of its own out
+  and back (a stab, a chop, a swing across the screen, a jab or a hook);
+  the rifle thrust forward and turned for a blow with the butt; a boot and
+  a trouser leg coming up from below for a kick, the weapon moving out of
+  its way. The viewmodel can now draw more than one thing (`pose.extras`).
+- A fix to phase 135: what a swing does to a frontage was a field called
+  `wall` on the weapon's row, and `wall` was already the flamethrower's
+  second trigger. With a chainsaw, a flail, the blade or the hammer in hand
+  the right button threw a wall of fire and left the magazine reading NaN.
+  The field is `wallHit` now, and only a `wall` with fuel to pay for it is
+  a second trigger; a unit check holds every other row to that.
+- Where the ideas come from:
+  [Crysis Wiki, Knife](https://crysis.fandom.com/wiki/Knife),
+  [Far Cry Wiki, Machete](https://farcry.fandom.com/wiki/Machete),
+  [Giant Bomb, Watch Dogs](https://www.giantbomb.com/games/3030-38538/)
+  (the baton that knocks out a single enemy),
+  [Max Payne Wiki, Baseball Bat](https://maxpayne.fandom.com/wiki/Baseball_Bat),
+  [Doom Wiki, Berserk](https://doom.fandom.com/wiki/Berserk) (the fist),
+  [Wikipedia, F.E.A.R.](https://en.wikipedia.org/wiki/F.E.A.R._(video_game))
+  (the butts of all firearms in close combat) and
+  [Giant Bomb, F.E.A.R.](https://www.giantbomb.com/games/3030-4800/)
+  (the slide kick and the jump kick),
+  [Ludo guide, Duke Nukem 3D's Mighty Foot](https://www.ludo.guide/guide/duke-nukem-3d/03-03-01-mighty-foot-non-gun).
+  Checked through search excerpts; this session cannot open the pages.
+- Checks: unit (5, `tools/test/melee.test.mjs`) on behind and not behind,
+  the hook on every third punch and the run starting again after a pause,
+  the baton's count per man, the curve a move draws, the four rows on 6
+  with their wall damage, the weight of a blow by weapon, and no `wall`
+  but the flamethrower's; browser (arsenal suite, seven more): one stab
+  from behind kills and one from the front does not; the baton staggers,
+  and the third blow floors him alive; the bat sends a man 8.1 m down the
+  street into the man behind him; two jabs and a hook that floors him; a
+  kick floors him, not twice at once, and a flying kick launches him; the
+  butt of a rifle staggers him with no round fired, a launcher's tube
+  floors him, with a knife in hand it is the knife and holstered a punch;
+  and a kick (45) and the butt of a rifle (30) wear a frontage down
+  like the knife (21), baton (33), bat (90) and fists (12). Backdoor suite,
+  one more: the baton on the one who started a fight is the takedown by
+  hand. Screenshots arsenal-09-knife.png to arsenal-13-kick.png, each held
+  half way through its move.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

@@ -490,6 +490,25 @@ async function run() {
   check('and his phone ringing breaks it up, nobody hurt any further',
     broken.rang && broken.over === 'brokenUp' && broken.rep > 0 && broken.oUp, JSON.stringify(broken));
 
+  // The baton on the one who started a fight: the takedown by hand, from a swing.
+  await crime('brawl', [-9, 1], [-13, 1]);
+  await steps(60 * 5);
+  const batoned = await page.evaluate(() => {
+    const s = window.spreefall;
+    const o = window.live.o;
+    s.teleport(o.x + 1.4, o.z);
+    const dx = o.x - s.player.x, dz = o.z - s.player.z;
+    s.look(Math.atan2(-dx, -dz) * 180 / Math.PI, -10);
+    s.camera.update(16 / 9);
+    s.weapon.giveAll(); s.weapon.select('baton'); s.weapon.cooldown = 0;
+    const rep = s.crimes.rep;
+    s.shoot();
+    for (let i = 0; i < 5; i++) s.fixedForTest(1 / 60);
+    return { phase: window.live.c.phase, over: window.live.c.over, rep: s.crimes.rep - rep };
+  });
+  check('the baton on the one who started it is the takedown by hand: subdued, and your name better for it',
+    batoned.over === 'subdued' && batoned.rep > 0, JSON.stringify(batoned));
+
   await crime('theft', [-6, 1], [-8, 1]);
   const got = await page.evaluate(() => {
     const s = window.spreefall;

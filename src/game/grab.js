@@ -105,6 +105,23 @@ export class Grab {
   }
 
   /**
+   * Somebody sent flying by something other than your hand: a bat, a kick
+   * in the air. A body in flight like a thrown one, hurt by what it meets the
+   * same way, impact times as hard.
+   * @returns {object|null} the body in flight
+   */
+  launch(s, vx, vy, vz, impact = 1) {
+    if (!s || s.held) return null;
+    s.held = true;
+    s.walk = 0;
+    s.vx = 0; s.vz = 0;
+    const speed = Math.hypot(vx, vy, vz);
+    const f = { s, age: 0, struck: new Set(), vx, vy, vz, spin: 6 + speed * 0.3, impact };
+    this.flying.push(f);
+    return f;
+  }
+
+  /**
    * A step of everything in the air.
    *
    * @param {number} dt

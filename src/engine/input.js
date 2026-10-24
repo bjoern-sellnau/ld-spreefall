@@ -21,6 +21,7 @@ export class Input {
     this.enabled = true;
     this.fire = false;        // primary held
     this.secondary = false;   // aim held
+    this.onButton = null;     // fn(name) for a one shot button: 'bash' the middle one or R3, 'kick' B
 
     this._touchLook = null;
     this._touchStick = null;
@@ -52,6 +53,9 @@ export class Input {
       if (!this.enabled) return;
       if (e.button === 0) this.fire = true;
       if (e.button === 2) { this.secondary = true; e.preventDefault(); }
+      // The middle button, the wheel pressed, which would otherwise start
+      // the page scrolling by itself.
+      if (e.button === 1) { e.preventDefault(); if (this.onButton) this.onButton('bash'); }
     });
     doc.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.fire = false;
@@ -172,6 +176,13 @@ export class Input {
         const aimBtn = !!(gp.buttons[6] && gp.buttons[6].value > 0.4);
         if (aimBtn) this.secondary = true; else if (this._padAim) this.secondary = false;
         this._padAim = aimBtn;
+        // R3 a blow with what is in your hands, B a kick, once a press.
+        const r3 = !!(gp.buttons[11] && gp.buttons[11].pressed);
+        const b = !!(gp.buttons[1] && gp.buttons[1].pressed);
+        if (r3 && !this._padR3 && this.onButton) this.onButton('bash');
+        if (b && !this._padB && this.onButton) this.onButton('kick');
+        this._padR3 = r3;
+        this._padB = b;
       }
     }
 

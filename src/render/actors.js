@@ -876,6 +876,68 @@ export function buildBladeMesh() {
   return m;
 }
 
+/** A fighting knife: a black grip, a small guard and a bright blade, point forward. */
+export function buildKnifeMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.008, -0.062, 0.026, 0.032, 0.110, 41);     // the grip
+  m.box(0, -0.004, -0.122, 0.034, 0.060, 0.012, 0);      // the guard
+  m.box(0, 0.000, -0.212, 0.007, 0.030, 0.170, 40);      // the blade
+  m.box(0, 0.006, -0.312, 0.007, 0.016, 0.034, 40);      // and its point
+  m.box(0, 0.016, -0.190, 0.009, 0.004, 0.120, 0);       // the spine
+  return m;
+}
+
+/** A telescopic baton run out: a foam grip and two steel sections, a tip on the end. */
+export function buildBatonMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, -0.064, 0.019, 0.019, 0.014, 10, 0, 'z');     // the end cap
+  m.cylinder(0, 0, -0.200, 0.017, 0.017, 0.136, 10, 41, 'z');    // the grip
+  m.cylinder(0, 0, -0.340, 0.012, 0.012, 0.140, 10, 1, 'z');     // the first section
+  m.cylinder(0, 0, -0.470, 0.0095, 0.0095, 0.130, 10, 1, 'z');   // the second
+  m.cylinder(0, 0, -0.492, 0.013, 0.013, 0.022, 10, 3, 'z');     // the tip
+  return m;
+}
+
+/** A baseball bat in pale ash, its handle taped, a knob at the end. */
+export function buildBatMesh() {
+  const m = new MeshBuild();
+  m.cylinder(0, 0, -0.035, 0.022, 0.022, 0.015, 12, 39, 'z');    // the knob
+  m.cylinder(0, 0, -0.170, 0.0135, 0.0135, 0.135, 12, 41, 'z');  // the taped handle
+  m.cylinder(0, 0, -0.420, 0.027, 0.0135, 0.250, 12, 39, 'z');   // the taper
+  m.cylinder(0, 0, -0.800, 0.033, 0.027, 0.380, 14, 39, 'z');    // the barrel
+  return m;
+}
+
+/**
+ * A fist, knuckles forward, with the wrist, the forearm and the cuff of a
+ * sleeve behind it. side 1 is the right hand, -1 the left.
+ */
+export function buildFistMesh(side = 1) {
+  const m = new MeshBuild();
+  const X = (x) => x * side;
+  m.box(0, 0, 0, 0.080, 0.064, 0.086, 38);                   // the back of the hand and the palm
+  for (let i = 0; i < 4; i++) {
+    const x = X(-0.029 + i * 0.0195);
+    m.box(x, 0.010, -0.050, 0.018, 0.030, 0.022, 38);        // the knuckles
+    m.box(x, -0.018, -0.042, 0.018, 0.026, 0.026, 38);       // the fingers folded under them
+  }
+  m.box(X(-0.044), -0.016, -0.026, 0.020, 0.022, 0.048, 38, side * 0.35);   // the thumb across
+  m.cylinder(0, -0.004, 0.040, 0.027, 0.031, 0.170, 10, 38, 'z');          // the wrist and forearm
+  m.cylinder(0, -0.004, 0.150, 0.037, 0.041, 0.200, 10, 41, 'z');          // the sleeve
+  return m;
+}
+
+/** A boot and the leg of a pair of trousers, for a kick: the toe forward, the leg going back from the ankle. */
+export function buildBootMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.040, -0.120, 0.105, 0.028, 0.300, 41);     // the sole
+  m.box(0, 0.020, -0.100, 0.095, 0.090, 0.240, 43);      // the upper
+  m.box(0, 0.002, -0.238, 0.090, 0.056, 0.060, 43);      // the toe cap
+  m.box(0, 0.068, -0.120, 0.070, 0.008, 0.120, 2);       // the laces
+  m.cylinder(0, 0.050, 0.010, 0.050, 0.062, 0.460, 10, 42, 'z');   // the trouser leg
+  return m;
+}
+
 /** A long haft and a head like a paving stone, its striking face hot. */
 export function buildHammerMesh() {
   const m = new MeshBuild();
@@ -1773,6 +1835,14 @@ export class Actors {
       blade: this._uploadMesh(buildBladeMesh(), 0, 0),
       hammer: this._uploadMesh(buildHammerMesh(), 0, 0),
       flare: this._uploadMesh(buildFlareMesh(), 0, 0),
+      knife: this._uploadMesh(buildKnifeMesh(), 0, 0),
+      baton: this._uploadMesh(buildBatonMesh(), 0, 0),
+      bat: this._uploadMesh(buildBatMesh(), 0, 0),
+      fists: this._uploadMesh(buildFistMesh(1), 0, 0),
+      // Not weapons of their own: the left fist beside the right, and the
+      // boot that comes up into view for a kick.
+      fistL: this._uploadMesh(buildFistMesh(-1), 0, 0),
+      boot: this._uploadMesh(buildBootMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
 
@@ -2513,8 +2583,23 @@ export class Actors {
     gl.cullFace(gl.BACK);
     gl.bindVertexArray(mesh.vao);
     gl.drawElements(gl.TRIANGLES, mesh.count, mesh.indexType, 0);
+    // Anything else in view with it: the other fist, a boot coming up for a
+    // kick. Each has its own place and turn, and no flash.
+    let draws = 1;
+    for (const e of pose.extras || []) {
+      const em = this.weapons[e.weapon];
+      if (!em) continue;
+      mat4.identity(m);
+      mat4.fromTranslation(t, e.x, e.y, e.z);
+      mat4.multiply(m, m, t);
+      rotate(m, e.pitch, e.yaw, e.roll);
+      this.progViewmodel.mat4('uViewModelMat', m).float('uMuzzle', 0);
+      gl.bindVertexArray(em.vao);
+      gl.drawElements(gl.TRIANGLES, em.count, em.indexType, 0);
+      draws++;
+    }
     gl.bindVertexArray(null);
-    return 1;
+    return draws;
   }
 
   dispose() {

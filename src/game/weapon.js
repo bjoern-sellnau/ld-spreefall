@@ -401,7 +401,7 @@ export class Weapon {
   altFire(eye, dir) {
     const spec = this.spec;
     if (this.holstered || this.state === STATE.RELOADING) return false;
-    if (!spec.wall || !this.onWall) return false;
+    if (!spec.wall || !spec.wall.fuel || !this.onWall) return false;
     if (this.cooldown > 0) return false;
     const cost = spec.wall.fuel;
     if (!this.infiniteAmmo && this.ammo < cost) {
