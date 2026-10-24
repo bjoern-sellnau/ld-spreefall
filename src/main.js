@@ -2763,7 +2763,9 @@ async function main() {
    */
   function stormBeam(eye, dir, dt, spec) {
     const B = spec.beam;
-    const wall = world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, B.reach);
+    // Copied out, since the world's answer is one object it reuses.
+    const h = world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, B.reach);
+    const wall = h && { kind: h.kind, t: h.t, x: h.x, y: h.y, z: h.z };
     let far = wall ? wall.t : B.reach;
     const a = projectiles.hitActors(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, far);
     const amount = B.damagePerSecond * dt * (weapon.damageScale || 1);
@@ -8993,12 +8995,23 @@ async function main() {
   /** Far Cry 6's Fuego Loco: a ring of fire out from where you stand. */
   function fireRing(spec) {
     const R = spec.ring;
-    // The frontages round about, so the ring scorches each one as it gets there.
+    // The frontages round about, so the ring scorches each one as it gets
+    // there: once for each cell of the city's damage grid it reaches, or
+    // a ray every few degrees into one frontage would take it down like a
+    // warhead. Close enough together to find a column of the Brandenburg
+    // Gate a few metres off.
     const walls = [];
-    for (let k = 0; k < 24; k++) {
-      const a = (k / 24) * Math.PI * 2;
+    const cells = new Set();
+    for (let k = 0; k < 64; k++) {
+      const a = (k / 64) * Math.PI * 2;
       const h = world.raycast(player.x, player.y + 1.2, player.z, Math.cos(a), 0, Math.sin(a), R.reach);
-      if (h && h.kind === 'wall') walls.push(h);
+      if (!h || h.kind !== 'wall') continue;
+      const key = `${Math.floor(h.x / 22)},${Math.floor(h.z / 22)}`;
+      if (cells.has(key)) continue;
+      cells.add(key);
+      // A copy: the world hands back the same answer object every time it
+      // is asked, so keeping it would keep only the last ray's.
+      walls.push({ x: h.x, y: h.y, z: h.z, t: h.t });
     }
     rings.push({ x: player.x, y: player.y, z: player.z, r: R.from, R, hit: new Set(), walls,
       scale: weapon.damageScale || 1 });

@@ -5499,9 +5499,10 @@ So there are two cities now, and a profile picks which:
 - The fire ring (Far Cry 6's Supremo backpacks, the Furioso's Fuego Loco): a
   ring of fire out from where you stand to 17 m at 16 m/s, burning and
   throwing back everybody it runs through (90 each), scorching every
-  frontage it reaches (60, the way the flamethrower wears one down) and
-  setting the trees at its edge alight; then the pack takes ten seconds to
-  fill. The game's goes
+  frontage it reaches (60 once in each cell of the city's damage grid, the
+  way the flamethrower wears one down, 64 rays round so a column of the
+  Gate a few metres off is not missed) and setting the trees at its edge
+  alight; then the pack takes ten seconds to fill. The game's goes
   out ahead of you; this one goes all the way round.
 - The particle rifle (F.E.A.R.'s Type-7): four shots, 400 each, and what it
   kills is left standing as a burnt skeleton, the bones the ion cannon
@@ -5541,6 +5542,14 @@ So there are two cities now, and a profile picks which:
   that was never going to dent a wall.
   Screenshots arsenal-19-twins.png to arsenal-24-particle.png, the last with
   what the rifle left.
+- The live run found the ring at 0 against a wall now and then, and once at
+  1350. The 1350 was a ray every few degrees all scorching the same
+  frontage, hence the once a cell. The 0 was the world's raycast: it hands
+  back one answer object it reuses, and the ring kept that object for
+  each wall it found, so every one of them ended up holding the last ray's
+  distance and was reached late or never. It now keeps a copy of each hit,
+  and the storm beam copies its own before it asks the bodies in the way.
+  Three runs of the wall check in a row: the ring at 276 each time.
 
 ## CI: the EMP check clears the street in front of the launcher
 
