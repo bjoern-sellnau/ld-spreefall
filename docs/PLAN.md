@@ -5199,7 +5199,7 @@ So there are two cities now, and a profile picks which:
   walking out of one does too; the boots run dry after fourteen; every step
   in a pool squelches. Measured: 593 pieces against 385, all still there
   twenty seconds on; 1186 pieces and 320 pools halved to 593 and 160 at
-  12 fps. Screenshots cheat-12-ultra-comic.png and cheat-13-footprints.png.
+  12 fps. Screenshots cheat-13-ultra-comic.png and cheat-14-footprints.png.
 
 ## CI: the EMP check clears the street in front of the launcher
 

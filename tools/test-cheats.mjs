@@ -714,7 +714,7 @@ async function run() {
     document.getElementById('splatter').innerHTML = '';
   });
   await page.waitForTimeout(1200);
-  await page.screenshot({ path: path.join(SHOTS, 'cheat-12-ultra-comic.png') });
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-13-ultra-comic.png') });
   // And a trail of footprints out of a pool, looked back along, once the
   // fountains from that one have stopped (they stop with the blood off).
   await page.evaluate(() => window.spreefall.cheats.reset());
@@ -730,7 +730,7 @@ async function run() {
     s.look(-80, -30); s.camera.update(16 / 10);
   });
   await page.waitForTimeout(1200);
-  await page.screenshot({ path: path.join(SHOTS, 'cheat-13-footprints.png') });
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-14-footprints.png') });
   await page.evaluate(() => {
     const s = window.spreefall;
     s.cheats.reset(); s.soldiers.reset(); s.gibs.clear(); s.effects.clear();
