@@ -227,13 +227,15 @@ What is under the hood:
   launcher, a swarm launcher (four rockets a shot, each after what the sight
   is on), a grenade launcher (lobbed a long way, goes off on what it meets),
   the arbalest and the disc ripper; 4 the grenade, the incendiary, the
-  banana, C4, the cling charge and the translocator; 5 the suppressed pistol and a hand cannon
-  whose round goes through one man into the next; 6 the chainsaw, the flail,
-  the shield saw, the lunge blade, the quake hammer, the knife, the baton,
-  the baseball bat and bare fists; 7 the flamethrower, the flare pistol and
-  the sludge gun; 8 plasma, the railgun, the splinter gun, the volt caster,
-  the combo rifle and the storm beam; 9 the mech killer and the EMP; 0 the
-  void cannon and the warhead.
+  banana, C4, the cling charge, the translocator, throwing knives and a
+  rubber duck; 5 the suppressed pistol, a hand cannon
+  whose round goes through one man into the next, two pistols and the dart
+  phone; 6 the chainsaw, the flail, the shield saw, the lunge blade, the
+  quake hammer, the knife, the baton, the baseball bat, bare fists and the
+  fibre wire; 7 the flamethrower, the flare pistol, the sludge gun and the
+  fire ring; 8 plasma, the railgun, the splinter gun, the volt caster, the
+  combo rifle and the storm beam; 9 the mech killer, the EMP and the particle
+  rifle; 0 the void cannon and the warhead.
 - Eight of those come out of Crysis, DOOM, Far Cry and Halo, each the idea of
   one weapon there under a name and numbers of our own. Hailstorm (Crysis 3's
   Typhoon): eight stacked barrels, three rounds a pull thirty times a second.
@@ -272,6 +274,16 @@ What is under the hood:
   while it flies and it goes where you look. And the double barrel has DOOM
   Eternal's meat hook under it now: the right button pulls you to the man in
   the sight, up to twenty eight metres off.
+- Seven out of the stealth and action games. Two pistols (Max Payne's
+  Berettas), firing left and right in turn. The dart phone (007 First
+  Light): a quiet dart that puts a man down asleep for twelve seconds.
+  Throwing knives (Far Cry 3): silent, and one is enough. The rubber duck
+  (Hitman): it sits where it lands with a light blinking on its back until
+  **T** sets it off with the C4. The fibre wire (Hitman): from behind, the
+  end of him; from the front, nothing. The fire ring (Far Cry 6's Supremo
+  backpack): a ring of fire out from where you stand to seventeen metres,
+  and then ten seconds to fill again. The particle rifle (F.E.A.R.'s
+  Type-7): one shot, and he is left standing as a burnt skeleton.
 - And two things you can do whatever is in your hands. **Tab** or the middle
   mouse button hits with it, as F.E.A.R. lets you with any weapon: the butt
   of a rifle staggers a man without a round going off, the grip of a pistol

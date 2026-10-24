@@ -625,16 +625,16 @@ async function main() {
   }
 
   /** Where the muzzle is in the world, for tracers and for the flash. */
-  function muzzlePoint(from) {
+  function muzzlePoint(from, side = 1) {
     // Hip fire holds the barrel down and right; the aim blend brings it back
     // onto the centre line, so the tracer agrees with what you can see.
     const off = 1 - weapon.aimBlend;
     return {
-      x: from.x + camera.right[0] * 0.09 * off + camera.up[0] * (-0.13 - 0.03 * off)
+      x: from.x + camera.right[0] * 0.09 * off * side + camera.up[0] * (-0.13 - 0.03 * off)
         + camera.forward[0] * 0.55,
-      y: from.y + camera.right[1] * 0.09 * off + camera.up[1] * (-0.13 - 0.03 * off)
+      y: from.y + camera.right[1] * 0.09 * off * side + camera.up[1] * (-0.13 - 0.03 * off)
         + camera.forward[1] * 0.55,
-      z: from.z + camera.right[2] * 0.09 * off + camera.up[2] * (-0.13 - 0.03 * off)
+      z: from.z + camera.right[2] * 0.09 * off * side + camera.up[2] * (-0.13 - 0.03 * off)
         + camera.forward[2] * 0.55,
     };
   }
@@ -645,6 +645,11 @@ async function main() {
     // tracer and an impact each, because that spray is the whole weapon.
     const first = !shot.pellet;
     if (first && suited()) suit.fired(weapon.id === 'bow');
+    if (first && spec.akimbo) {
+      state.akimboLeft = !state.akimboLeft;
+      state.akimboShots = (state.akimboShots || 0) + 1;
+      if (state.akimboLeft) state.akimboLefts = (state.akimboLefts || 0) + 1;
+    }
     if (first) {
       audio.gunshot(spec.sound);
       effects.shake = Math.min(1, effects.shake + (spec.kind === 'hitscan' ? 0.07 : 0.16));
@@ -659,10 +664,11 @@ async function main() {
       tactics.shotRadio(shot.from, shot.end, spec.damage || 20);
       tactics.shotBox(shot.from, shot.end, spec.damage || 20);
     }
-    const m = muzzlePoint(shot.from);
+    const m = muzzlePoint(shot.from, spec.akimbo && state.akimboLeft ? -1 : 1);
     if (shot.end) {
       if (spec.arc) zap(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z);
       else if (spec.combo) effects.lance(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, 0.55, 0.4, 1.6);
+      else if (spec.particle) effects.lance(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, 1.3, 1.5, 2.2);
       else effects.tracer(m.x, m.y, m.z, shot.end.x, shot.end.y, shot.end.z, true);
       if (spec.combo && first && shot.from) comboCheck(shot.from, shot.end, spec);
       // A round into a man sprays rather than sparks, and only when the cheat
@@ -725,6 +731,17 @@ async function main() {
       showHitmarker(shot.killed ? 'kill' : (shot.core ? 'core' : ''));
       if (shot.killed) creditTarget(shot.target, shot.core, shot.surface);
       if (spec.arc && (shot.surface === 'soldier' || shot.surface === 'drone')) voltArc(shot.target, shot.surface, spec);
+      // The particle rifle burns the flesh off what it kills and leaves it
+      // standing, black, the way F.E.A.R.'s Type-7 does.
+      if (spec.particle && shot.surface === 'soldier') {
+        const t = shot.target;
+        t.charred = shot.killed ? 1 : Math.min(1, (t.charred || 0) + 0.5);
+        for (let i = 0; i < 10; i++) {
+          effects.spark(t.x + (Math.random() - 0.5) * 0.7, t.y + Math.random() * 1.8,
+            t.z + (Math.random() - 0.5) * 0.7, 1.6, 0.6, 0.15);
+        }
+        if (shot.killed) state.boned = (state.boned || 0) + 1;
+      }
     }
   };
 
@@ -7860,6 +7877,7 @@ async function main() {
   projectiles.onArrow = (b, hit) => {
     const row = WEAPONS[b.weapon] || WEAPONS.bow;
     const t = hit.target;
+    if (row.sleep && hit.actorKind === 'soldier') { sleepDart(t, row, b); return; }
     const core = !!hit.core;
     const headRow = ARROW_HEADS[b.head];
     const drawRow = ARROW_DRAWS[b.draw];
@@ -7883,6 +7901,22 @@ async function main() {
     showHitmarker(killed ? 'kill' : (core ? 'core' : ''));
     if (killed) creditTarget(t, core, kind);
   };
+
+  /**
+   * A dart from the phone: down, asleep, and up again when it wears off. A
+   * thief or a brawler in .BACKDOOR is subdued by it.
+   */
+  function sleepDart(t, row, b) {
+    if (!t || !t.alive || t.health <= 0) return;
+    if (t.civilian && t.crime && t.crime.o === t) { subdue(t); return; }
+    const sp = Math.hypot(b.vx, b.vz) || 1;
+    soldiers.knockDown(t, b.vx / sp, b.vz / sp, 0.6);
+    t.slipLeft = Math.max(t.slipLeft || 0, row.sleep);
+    audio.hitMarker(false);
+    showHitmarker('');
+    feed('<b>asleep</b>');
+    state.sleepers = (state.sleepers || 0) + 1;
+  }
 
   /**
    * Somebody you can take down without a sound: a soldier within arm's reach,
@@ -8434,6 +8468,7 @@ async function main() {
     }
     if (spec.quake) { quake(spec); return; }
     if (spec.swing) { swingMelee(spec, weapon.id); return; }
+    if (spec.ring) { fireRing(spec); return; }
     if (spec.fuel) {
       // The saw takes the nearest thing in front of you, if it has the fuel
       // for something that size.
@@ -8714,6 +8749,11 @@ async function main() {
    */
   function arenaTick(dt) {
     while (pendingGoo.length) projectiles.launch('goo', pendingGoo.shift());
+    ringStep(dt);
+    // A rubber duck says so when it leaves your hand.
+    for (const b of projectiles.active) {
+      if (b.alive && b.kind === 'duck' && b.quacked !== b.seed) { b.quacked = b.seed; audio.quack(0); }
+    }
     const guiding = weapon.id === 'warhead' && input.secondary && !photo.active;
     const G = WEAPONS.warhead.guide;
     const near = WEAPONS.sludge.goo.near;
@@ -8851,6 +8891,13 @@ async function main() {
     }
     if (!h) return null;
     const t = h.t;
+    if (S.wire) {
+      if (h.kind !== 'soldier' || !fromBehind(player.x, player.z, t)) { toast('only from behind'); return null; }
+      landBlow(h, { amount: spec.damage, quiet: true, sound: 'flesh' });
+      feed('<b>fibre wire</b>');
+      state.garrotes = (state.garrotes || 0) + 1;
+      return h;
+    }
     // .BACKDOOR: the baton on a thief or a brawler is the takedown by hand.
     if (S.subdue && t.civilian && t.crime && t.crime.o === t) {
       subdue(t);
@@ -8941,6 +8988,72 @@ async function main() {
     return true;
   }
 
+  // --- the fire ring ---------------------------------------------------------------
+  const rings = [];
+  /** Far Cry 6's Fuego Loco: a ring of fire out from where you stand. */
+  function fireRing(spec) {
+    const R = spec.ring;
+    // The frontages round about, so the ring scorches each one as it gets there.
+    const walls = [];
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      const h = world.raycast(player.x, player.y + 1.2, player.z, Math.cos(a), 0, Math.sin(a), R.reach);
+      if (h && h.kind === 'wall') walls.push(h);
+    }
+    rings.push({ x: player.x, y: player.y, z: player.z, r: R.from, R, hit: new Set(), walls,
+      scale: weapon.damageScale || 1 });
+    audio.flameWall();
+    effects.flash(player.x, player.y + 1, player.z, 6, 1.0, 0.5, 0.15, 0.35);
+    effects.shake = Math.min(1.2, effects.shake + 0.4);
+    feed('<b>fire ring</b>');
+    state.fireRings = (state.fireRings || 0) + 1;
+  }
+  /** Each ring a step further out, burning and throwing back whoever it reaches. */
+  function ringStep(dt) {
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const g = rings[i];
+      const R = g.R;
+      const was = g.r;
+      g.r = Math.min(R.reach, g.r + R.speed * dt);
+      for (const s of [...soldiers.active]) {
+        if (!s.alive || s.health <= 0 || s.state === 5 || g.hit.has(s)) continue;
+        const dx = s.x - g.x, dz = s.z - g.z, d = Math.hypot(dx, dz);
+        if (d < was - R.width || d > g.r + R.width * 0.5 || Math.abs(s.y - g.y) > 4) continue;
+        g.hit.add(s);
+        const ux = dx / (d || 1), uz = dz / (d || 1);
+        s.charred = Math.min(1, (s.charred || 0) + R.char);
+        const killed = soldiers.damage(s, R.damage * g.scale, { x: ux, y: 0.4, z: uz });
+        if (!killed) soldiers.knockDown(s, ux, uz, R.push);
+        effects.flame(s.x, s.y + 0.8, s.z, 2.2, 0.8);
+        if (killed) creditTarget(s, false, 'soldier');
+        state.ringHits = (state.ringHits || 0) + 1;
+      }
+      for (let k = g.walls.length - 1; k >= 0; k--) {
+        const w = g.walls[k];
+        if (w.t > g.r) continue;
+        hitWall(w.x, w.y, w.z, R.wall * g.scale);
+        g.walls.splice(k, 1);
+      }
+      // The ring itself, drawn round a share of its length each step.
+      const n = Math.max(10, Math.round(g.r * 2.2));
+      for (let k = 0; k < n; k++) {
+        if (Math.random() > 0.45) continue;
+        const a = (k / n) * Math.PI * 2 + Math.random() * 0.2;
+        const x = g.x + Math.cos(a) * g.r, z = g.z + Math.sin(a) * g.r;
+        effects.flame(x, world.groundHeight(x, z) + 0.2, z, 1.6, 0.75);
+      }
+      if (g.r >= R.reach) {
+        // What is left of it catches in the trees round its edge.
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const x = g.x + Math.cos(a) * g.r, z = g.z + Math.sin(a) * g.r;
+          fires.ignite(x, world.groundHeight(x, z), z, 4, 0.7);
+        }
+        rings.splice(i, 1);
+      }
+    }
+  }
+
   /** The clocks of the moves, on your own time. */
   function meleeTick(dt) {
     for (const k of ['kickLeft', 'bashLeft', 'kickT', 'bashT', 'swingT']) {
@@ -8956,6 +9069,7 @@ async function main() {
     baton: { x: -0.10, y: 0.02, z: -0.10, pitch: -0.85, yaw: 0.15, roll: 0 },
     bat: { x: -0.30, y: 0.10, z: -0.10, pitch: -1.00, yaw: 1.80, roll: -0.30 },
     jab: { x: -0.06, y: 0.06, z: -0.20, pitch: -0.40, yaw: 0, roll: 0 },
+    wire: { x: 0, y: 0.08, z: 0.10, pitch: 0.25, yaw: 0, roll: 0 },
     hook: { x: -0.16, y: 0.06, z: -0.10, pitch: -0.30, yaw: -0.80, roll: -0.60 },
     bash: { x: -0.10, y: 0.03, z: -0.14, pitch: 0.15, yaw: 0.50, roll: -0.60 },
   };
@@ -8975,6 +9089,12 @@ async function main() {
       extras.push(left);
     } else if (SWING_SHAPES[weapon.id]) {
       shaped(pose, SWING_SHAPES[weapon.id], swing);
+    }
+    if (weapon.spec.akimbo) {
+      const flash = pose.muzzle;
+      extras.push({ ...pose, x: -pose.x, yaw: -pose.yaw, roll: -pose.roll,
+        muzzle: state.akimboLeft ? flash : 0 });
+      pose.muzzle = state.akimboLeft ? 0 : flash;
     }
     const b = moveCurve(state.bashT, MOVES.bash.seconds);
     if (b > 0) shaped(pose, SWING_SHAPES.bash, b);
@@ -10789,6 +10909,7 @@ async function main() {
     storm, stormSpec: VOID_STORM,
     takedown: () => takedown(), takedownTarget: () => takedownTarget(),
     kick: () => kick(), bash: () => bash(), meleeTarget: (r, a) => meleeTarget(r, a), moves: MOVES, grab,
+    get rings() { return rings; },
     alt: () => altAction(weapon.spec, { x: player.x, y: player.y + PLAYER.eye, z: player.z },
       { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] }),
     get poisonClouds() { return poisonClouds; },

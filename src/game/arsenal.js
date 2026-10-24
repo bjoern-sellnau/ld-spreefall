@@ -610,6 +610,78 @@ export const WEAPONS = {
     recoilKick: 0.05, recoilSide: 0.006, recoilRetain: 0.1, aimFov: 60, sound: 'rpg',
     alt: 'guide', guide: { turn: 1.8, reach: 600 },
   },
+  // Out of the stealth and action games: Max Payne, Hitman, 007 First Light,
+  // F.E.A.R. and Far Cry, each the idea of one thing there under a name and
+  // numbers of our own.
+  twins: {
+    // Max Payne's two Berettas: a pistol in each hand, firing left and right
+    // in turn, twice as fast as one and with twice the magazine.
+    name: 'Twin pistols', short: 'TWINS', kind: KIND.HITSCAN, slot: 5,
+    magazine: 36, reserve: 144, reloadTime: 2.2, fireInterval: 0.09, auto: false,
+    damage: 28, coreMultiplier: 2.2, range: 120, pellets: 1,
+    spreadHip: 0.012, spreadAim: 0.006, spreadPerShot: 0.004, spreadMax: 0.03, spreadRecover: 0.06,
+    recoilKick: 0.007, recoilSide: 0.003, recoilRetain: 0.1, aimFov: 58, sound: 'rifle',
+    akimbo: true,
+  },
+  dartphone: {
+    // 007 First Light's dart phone: a dart that puts a man down for a while
+    // rather than for good, and makes no sound doing it.
+    name: 'Dart phone', short: 'DART', kind: KIND.LAUNCH, slot: 5,
+    magazine: 6, reserve: 24, reloadTime: 1.4, fireInterval: 0.6, auto: false,
+    projectile: 'dart', muzzleSpeed: 70, range: 120, damage: 1, noise: 2,
+    sleep: 12,
+    spreadHip: 0.004, spreadAim: 0.001, spreadPerShot: 0, spreadMax: 0.004, spreadRecover: 0.3,
+    recoilKick: 0.002, recoilSide: 0.001, recoilRetain: 0, aimFov: 50, sound: 'sdpistol',
+  },
+  tknives: {
+    // Far Cry 3's throwing knives: silent, and one is enough if it lands.
+    name: 'Throwing knives', short: 'T.KNIVES', kind: KIND.THROW, slot: 4,
+    magazine: 1, reserve: 7, reloadTime: 0.3, fireInterval: 0.45, auto: false,
+    projectile: 'tknife', muzzleSpeed: 30, range: 60, damage: 150, coreMultiplier: 1.5, noise: 2,
+    spreadHip: 0.003, spreadAim: 0.001, spreadPerShot: 0, spreadMax: 0.003, spreadRecover: 0.3,
+    recoilKick: 0.002, recoilSide: 0.001, recoilRetain: 0, aimFov: 56, sound: 'throw',
+  },
+  duck: {
+    // Hitman's explosive rubber duck: thrown, it sits there being a duck
+    // with a light on it blinking, until T sets it off with the C4.
+    name: 'Rubber duck', short: 'DUCK', kind: KIND.THROW, slot: 4,
+    magazine: 1, reserve: 5, reloadTime: 0.5, fireInterval: 0.6, auto: false,
+    projectile: 'duck', muzzleSpeed: 14, range: 60,
+    splash: { radius: 6, damage: 320, force: 18 },
+    spreadHip: 0.004, spreadAim: 0.002, spreadPerShot: 0, spreadMax: 0.004, spreadRecover: 0.2,
+    recoilKick: 0.002, recoilSide: 0.001, recoilRetain: 0, aimFov: 58, sound: 'throw',
+  },
+  wire: {
+    // Hitman's fibre wire: from behind, quietly, and that is the end of him;
+    // from in front of him it does nothing at all.
+    name: 'Fibre wire', short: 'WIRE', kind: KIND.MELEE, slot: 6,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 1.0, auto: false,
+    reach: 1.8, arc: 0.6, damage: 1e6, wallHit: 0,
+    swing: { wire: true, quiet: true, seconds: 0.6 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0, recoilSide: 0, recoilRetain: 0, aimFov: 66, sound: 'throw',
+  },
+  furioso: {
+    // Far Cry 6's Supremo backpacks, the Furioso's Fuego Loco: a ring of fire
+    // out from where you stand, burning and throwing back everybody it runs
+    // through, and then the pack has to fill again.
+    name: 'Fire ring', short: 'RING', kind: KIND.MELEE, slot: 7,
+    magazine: 1, reserve: 0, reloadTime: 0.1, fireInterval: 10, auto: false,
+    reach: 0, arc: 0, damage: 0,
+    ring: { from: 2, reach: 17, speed: 16, width: 1.4, damage: 90, push: 6, char: 0.5, wall: 60 },
+    spreadHip: 0, spreadAim: 0, spreadPerShot: 0, spreadMax: 0, spreadRecover: 1,
+    recoilKick: 0.02, recoilSide: 0, recoilRetain: 0, aimFov: 66, sound: 'throw',
+  },
+  particle: {
+    // F.E.A.R.'s Type-7 particle weapon: one shot, and what it kills is left
+    // standing as a burnt skeleton.
+    name: 'Particle rifle', short: 'PARTICLE', kind: KIND.HITSCAN, slot: 9,
+    magazine: 4, reserve: 16, reloadTime: 2.8, fireInterval: 1.4, auto: false,
+    damage: 400, coreMultiplier: 1, range: 400, pellets: 1,
+    spreadHip: 0.004, spreadAim: 0.0002, spreadPerShot: 0, spreadMax: 0.004, spreadRecover: 0.5,
+    recoilKick: 0.03, recoilSide: 0.004, recoilRetain: 0.1, aimFov: 30, sound: 'railgun',
+    particle: true,
+  },
   flare: {
     // One flare: whatever it goes into is alight, and the ground round it
     // burns for a while after.
@@ -690,6 +762,16 @@ WEAPONS.storm.hold = { x: 0.210, y: -0.150, z: -0.400, pitch: -0.010, yaw: 0.125
 WEAPONS.sludge.hold = { x: 0.215, y: -0.150, z: -0.400, pitch: -0.010, yaw: 0.125, roll: 0.05 };
 WEAPONS.translocator.hold = { x: 0.190, y: -0.130, z: -0.320, pitch: 0.000, yaw: 0.140, roll: 0.05 };
 WEAPONS.warhead.hold = { x: 0.215, y: -0.140, z: -0.460, pitch: -0.012, yaw: 0.112, roll: 0.04 };
+// Two pistols do not come onto the centre line: they stay one each side.
+WEAPONS.twins.hold = { x: 0.165, y: -0.130, z: -0.310, pitch: -0.010, yaw: 0.120, roll: 0.05 };
+WEAPONS.twins.aimHold = { x: 0.120, y: -0.110, z: -0.300, pitch: -0.005, yaw: 0.060, roll: 0.02 };
+WEAPONS.dartphone.hold = { x: 0.150, y: -0.130, z: -0.280, pitch: 0.200, yaw: 0.150, roll: 0.05 };
+WEAPONS.tknives.hold = { x: 0.190, y: -0.150, z: -0.300, pitch: 0.250, yaw: 0.200, roll: 0.25 };
+WEAPONS.duck.hold = { x: 0.170, y: -0.120, z: -0.320, pitch: 0.050, yaw: 0.250, roll: 0.05 };
+WEAPONS.wire.hold = { x: 0.000, y: -0.110, z: -0.300, pitch: 0.150, yaw: 0.000, roll: 0.00 };
+WEAPONS.wire.aimHold = WEAPONS.wire.hold;
+WEAPONS.furioso.hold = { x: 0.180, y: -0.140, z: -0.260, pitch: 0.050, yaw: 0.200, roll: 0.05 };
+WEAPONS.particle.hold = { x: 0.220, y: -0.150, z: -0.480, pitch: -0.016, yaw: 0.118, roll: 0.04 };
 // DOOM Eternal's super shotgun has a meat hook under its barrels: fired into
 // a demon, it pulls you to him for the blast at arm's length, and holds a
 // small one where he is. The double barrel has one now, on the second
@@ -733,12 +815,12 @@ export const BUCKETS = {
   1: { name: 'Rifles', ids: ['m16', 'marksman', 'minigun', 'bow', 'hailstorm'] },
   2: { name: 'Shotguns', ids: ['shotgun', 'doublebarrel', 'autoshotgun', 'flak'] },
   3: { name: 'Launchers', ids: ['rpg', 'swarm', 'launcher', 'arbalest', 'ripper'] },
-  4: { name: 'Thrown', ids: ['grenade', 'incendiary', 'banana', 'c4', 'cling', 'translocator'] },
-  5: { name: 'Pistols', ids: ['sdpistol', 'magnum'] },
-  6: { name: 'Close', ids: ['chainsaw', 'flail', 'shieldsaw', 'blade', 'hammer', 'knife', 'baton', 'bat', 'fists'] },
-  7: { name: 'Fire', ids: ['flamer', 'flare', 'sludge'] },
+  4: { name: 'Thrown', ids: ['grenade', 'incendiary', 'banana', 'c4', 'cling', 'translocator', 'tknives', 'duck'] },
+  5: { name: 'Pistols', ids: ['sdpistol', 'magnum', 'twins', 'dartphone'] },
+  6: { name: 'Close', ids: ['chainsaw', 'flail', 'shieldsaw', 'blade', 'hammer', 'knife', 'baton', 'bat', 'fists', 'wire'] },
+  7: { name: 'Fire', ids: ['flamer', 'flare', 'sludge', 'furioso'] },
   8: { name: 'Energy', ids: ['plasma', 'railgun', 'splinter', 'volt', 'combo', 'storm'] },
-  9: { name: 'Anti armour', ids: ['mechkiller', 'emp'] },
+  9: { name: 'Anti armour', ids: ['mechkiller', 'emp', 'particle'] },
   0: { name: 'Void', ids: ['void', 'warhead'] },
 };
 export const BUCKET_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];

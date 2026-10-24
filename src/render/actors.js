@@ -407,6 +407,20 @@ export function buildProjectileMesh(kind) {
       const a = (i / 12) * Math.PI * 2;
       m.box(Math.cos(a) * 0.19, 0.01, Math.sin(a) * 0.19, 0.04, 0.02, 0.04, 44, a);
     }
+  } else if (kind === 'dart') {
+    // A dart: a needle and a bright tail.
+    m.cylinder(0, 0, 0.05, 0.006, 0.006, -0.12, 6, 44, 'z');
+    m.cylinder(0, 0, 0.05, 0.014, 0.006, 0.04, 6, 11, 'z');
+  } else if (kind === 'tknife') {
+    // A throwing knife: a blade and a short wrapped grip.
+    m.box(0, 0, -0.06, 0.006, 0.026, 0.13, 44);
+    m.box(0, 0, 0.05, 0.010, 0.020, 0.09, 6);
+  } else if (kind === 'duck') {
+    // A yellow rubber duck with a light on its back that blinks.
+    m.icosphere(0, 0, 0, 0.09, 8, 5, 10);
+    m.icosphere(0, 0.08, -0.06, 0.055, 8, 5, 10);
+    m.box(0, 0.075, -0.12, 0.04, 0.015, 0.04, 18);
+    m.box(0, 0.085, 0.03, 0.025, 0.012, 0.025, 9);
   } else if (kind === 'core') {
     // The combo rifle's ball, violet and the size of a head.
     m.icosphere(0, 0, 0, 0.32, 12, 6, 121);
@@ -953,6 +967,73 @@ export function buildBootMesh() {
   m.box(0, 0.002, -0.238, 0.090, 0.056, 0.060, 43);      // the toe cap
   m.box(0, 0.068, -0.120, 0.070, 0.008, 0.120, 2);       // the laces
   m.cylinder(0, 0.050, 0.010, 0.050, 0.062, 0.460, 10, 42, 'z');   // the trouser leg
+  return m;
+}
+
+/** A pistol with no suppressor, for the pair: slide, frame, grip, sights. */
+export function buildBerettaMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0.020, -0.290, 0.030, 0.034, 0.180, 0);       // slide
+  m.box(0, -0.008, -0.285, 0.028, 0.022, 0.160, 2);      // frame
+  m.box(0, -0.070, -0.225, 0.030, 0.110, 0.052, 2);      // grip
+  m.box(0, -0.030, -0.245, 0.008, 0.026, 0.040, 0);      // trigger guard
+  m.cylinder(0, 0.020, -0.380, 0.010, 0.010, -0.012, 10, 1, 'z');
+  m.box(0, 0.042, -0.372, 0.004, 0.010, 0.006, 3);
+  m.box(0, 0.042, -0.215, 0.018, 0.010, 0.008, 3);
+  muzzleFlash(m, 0, 0.020, -0.395, 0.06, 0.03);
+  return m;
+}
+
+/** The dart phone: a slab of a phone, its screen lit, the dart's barrel along its top edge. */
+export function buildDartPhoneMesh() {
+  const m = new MeshBuild();
+  m.box(0, 0, -0.240, 0.070, 0.012, 0.140, 0);
+  m.box(0, 0.0065, -0.240, 0.060, 0.002, 0.120, 32);
+  m.cylinder(0.030, 0.010, -0.180, 0.005, 0.005, -0.140, 8, 1, 'z');
+  return m;
+}
+
+/** A rubber duck in the hand, the light on its back. */
+export function buildDuckMesh() {
+  const m = new MeshBuild();
+  m.icosphere(0, 0, -0.200, 0.050, 8, 5, 6);
+  m.icosphere(0, 0.045, -0.235, 0.032, 8, 5, 6);
+  m.box(0, 0.042, -0.270, 0.028, 0.010, 0.026, 37);
+  m.box(0, 0.050, -0.185, 0.016, 0.008, 0.016, 5);
+  return m;
+}
+
+/** The fibre wire: two wooden grips, a hand on each, and the wire between them. */
+export function buildWireMesh() {
+  const m = new MeshBuild();
+  for (const s of [-1, 1]) {
+    m.box(s * 0.075, 0, 0, 0.020, 0.060, 0.020, 39);
+    m.box(s * 0.090, -0.004, 0.012, 0.050, 0.060, 0.060, 38);
+  }
+  m.box(0, 0.010, 0, 0.140, 0.003, 0.003, 40);
+  return m;
+}
+
+/** The fire ring's trigger: a grip, a red button, and a pilot flame. */
+export function buildRingMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.050, -0.220, 0.040, 0.100, 0.050, 2);
+  m.box(0, 0.010, -0.240, 0.050, 0.030, 0.090, 0);
+  m.box(0, 0.032, -0.250, 0.020, 0.010, 0.020, 37);
+  m.icosphere(0, 0.012, -0.300, 0.016, 8, 5, 35);
+  return m;
+}
+
+/** The particle rifle: a dark body, a long barrel, and a chamber lit blue. */
+export function buildParticleMesh() {
+  const m = new MeshBuild();
+  m.box(0, -0.010, -0.200, 0.050, 0.070, 0.180, 2);
+  m.box(0, 0.004, -0.400, 0.062, 0.088, 0.240, 0);
+  m.box(0, 0.004, -0.400, 0.066, 0.030, 0.120, 32);
+  m.cylinder(0, 0.008, -0.520, 0.022, 0.022, -0.260, 12, 1, 'z');
+  m.box(0, 0.064, -0.380, 0.030, 0.030, 0.180, 3);
+  m.box(0, -0.085, -0.300, 0.040, 0.100, 0.055, 2);
+  muzzleFlash(m, 0, 0.008, -0.790, 0.12, 0.05);
   return m;
 }
 
@@ -1924,6 +2005,13 @@ export class Actors {
       sludge: this._uploadMesh(buildSludgeMesh(), 0, 0),
       translocator: this._uploadMesh(buildTranslocatorMesh(), 0, 0),
       warhead: this._uploadMesh(buildWarheadMesh(), 0, 0),
+      twins: this._uploadMesh(buildBerettaMesh(), 0, 0),
+      dartphone: this._uploadMesh(buildDartPhoneMesh(), 0, 0),
+      tknives: this._uploadMesh(buildKnifeMesh(), 0, 0),
+      duck: this._uploadMesh(buildDuckMesh(), 0, 0),
+      wire: this._uploadMesh(buildWireMesh(), 0, 0),
+      furioso: this._uploadMesh(buildRingMesh(), 0, 0),
+      particle: this._uploadMesh(buildParticleMesh(), 0, 0),
     };
     this.weapon = this.weapons.m16;
 
@@ -1967,6 +2055,9 @@ export class Actors {
       glob: this._uploadMesh(buildProjectileMesh('glob'), MAX_PROPS, 2),
       beacon: this._uploadMesh(buildProjectileMesh('beacon'), 8, 2),
       warhead: this._uploadMesh(buildProjectileMesh('warhead'), 8, 2),
+      dart: this._uploadMesh(buildProjectileMesh('dart'), MAX_PROPS, 2),
+      tknife: this._uploadMesh(buildProjectileMesh('tknife'), MAX_PROPS, 2),
+      duck: this._uploadMesh(buildProjectileMesh('duck'), 16, 2),
     };
 
     // Sparks are three vec4s per instance, six vertices drawn from gl_VertexID.
@@ -2679,7 +2770,7 @@ export class Actors {
       mat4.fromTranslation(t, e.x, e.y, e.z);
       mat4.multiply(m, m, t);
       rotate(m, e.pitch, e.yaw, e.roll);
-      this.progViewmodel.mat4('uViewModelMat', m).float('uMuzzle', 0);
+      this.progViewmodel.mat4('uViewModelMat', m).float('uMuzzle', e.muzzle || 0);
       gl.bindVertexArray(em.vao);
       gl.drawElements(gl.TRIANGLES, em.count, em.indexType, 0);
       draws++;

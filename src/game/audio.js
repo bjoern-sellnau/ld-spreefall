@@ -1030,6 +1030,29 @@ export class Audio {
     }
   }
 
+  /** A rubber duck: a short squeezed honk, falling at the end. */
+  quack(distance = 0) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const near = Math.max(0.05, 1 - distance / 60);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(620, t);
+    o.frequency.linearRampToValueAtTime(700, t + 0.05);
+    o.frequency.exponentialRampToValueAtTime(380, t + 0.16);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 3;
+    f.frequency.value = 1100;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12 * near, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.connect(f).connect(g).connect(this.master);
+    o.start(t); o.stop(t + 0.2);
+  }
+
   /** A boot coming down in it: a short wet suck, low and closing. */
   squelch() {
     const ctx = this.ctx;

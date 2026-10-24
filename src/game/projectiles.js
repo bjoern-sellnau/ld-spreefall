@@ -168,6 +168,21 @@ export const PROJECTILE = {
     radius: 0.3, gravity: 0, drag: 0, bounce: 0, armTime: 0.15, maxAge: 18,
     detonateOnContact: true, trail: 'smoke', light: true, spin: 1,
   },
+  dart: {
+    // The dart phone's: flat and quick, into whoever it meets and done.
+    radius: 0.02, gravity: 1.5, drag: 0, bounce: 0, armTime: 0.0, maxAge: 6,
+    detonateOnContact: false, sticks: true, arrow: true, trail: 'none', light: false, spin: 0,
+  },
+  tknife: {
+    // A throwing knife: it turns over in the air and goes in point first.
+    radius: 0.03, gravity: 9, drag: 0.01, bounce: 0, armTime: 0.0, maxAge: 25,
+    detonateOnContact: false, sticks: true, arrow: true, trail: 'none', light: false, spin: 18,
+  },
+  duck: {
+    // Sits where it lands and waits, like the C4, for T.
+    radius: 0.1, gravity: 19.6, drag: 0.3, bounce: 0.2, armTime: 0.2,
+    detonateOnContact: false, sticks: true, trail: 'none', light: true, spin: 7,
+  },
   banana: {
     radius: 0.12, gravity: 19.6, drag: 0.2, bounce: 0.25, armTime: 0.2,
     detonateOnContact: false, sticks: true, trail: 'none', light: false, spin: 10,

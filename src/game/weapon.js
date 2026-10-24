@@ -851,6 +851,7 @@ export class Weapon {
   /** Blow every piece of C4 you have put down. */
   detonate() {
     if (!this.projectiles) return 0;
-    return this.projectiles.detonateAll('c4');
+    // The rubber duck goes off on the same trigger as the C4.
+    return this.projectiles.detonateAll('c4') + this.projectiles.detonateAll('duck');
   }
 }

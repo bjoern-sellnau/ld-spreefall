@@ -5478,6 +5478,70 @@ So there are two cities now, and a profile picks which:
   the warhead (checked on its own). Screenshots arsenal-14-combo.png to
   arsenal-18-warhead.png, the storm beam firing.
 
+## 140. Out of Max Payne, Hitman, 007 First Light, F.E.A.R. and Far Cry
+
+- The rest of the ask: seven more, each the idea of one weapon there under a
+  name and numbers of our own.
+- Twin pistols (Max Payne's two Berettas): a pistol in each hand, firing
+  left and right in turn, the flash and the tracer from whichever hand it
+  was, 36 rounds for the pair. They do not come onto the centre line when
+  you aim; they close in a little, one each side.
+- The dart phone (007 First Light): a dart, flat and quiet, that puts a man
+  down asleep for twelve seconds rather than for good. A thief or a brawler
+  in .BACKDOOR is subdued by it.
+- Throwing knives (Far Cry 3): silent, eight of them, and one is enough if
+  it lands.
+- The rubber duck (Hitman's explosive one): thrown, it sits where it lands
+  being a duck, a light blinking on its back, and quacks as it leaves your
+  hand; T sets it off with the C4, 320 over 6 m.
+- The fibre wire (Hitman): from behind, quietly the end of him; from in front
+  of him it does nothing at all, and says so.
+- The fire ring (Far Cry 6's Supremo backpacks, the Furioso's Fuego Loco): a
+  ring of fire out from where you stand to 17 m at 16 m/s, burning and
+  throwing back everybody it runs through (90 each), scorching every
+  frontage it reaches (60, the way the flamethrower wears one down) and
+  setting the trees at its edge alight; then the pack takes ten seconds to
+  fill. The game's goes
+  out ahead of you; this one goes all the way round.
+- The particle rifle (F.E.A.R.'s Type-7): four shots, 400 each, and what it
+  kills is left standing as a burnt skeleton, the bones the ion cannon
+  leaves.
+- Where the ideas come from:
+  [Max Payne Wiki, Dual wielding](https://maxpayne.fandom.com/wiki/Dual-wielding)
+  (two Berettas, twice as fast, 36 rounds),
+  [GamingBolt, 007 First Light's gadgets](https://gamingbolt.com/?p=644606)
+  and [Narcosis, 007 First Light gadgets](https://www.narcosis-the-game.com/?p=2861)
+  (darts that immobilise for a limited time),
+  [Far Cry Wiki, Throwing Knife](https://farcry.fandom.com/wiki/Throwing_Knife)
+  (silent, one hit),
+  [Twinfinite, Hitman 3 remote explosives](https://twinfinite.net/guides/hitman-3-use-remote-explosives/)
+  and [GamesRadar, the rubber duck challenge](https://gamesradar.com/hitman-rubber-duck-challenge)
+  (the duck, dropped and set off), the
+  [Steam discussion](https://steamcommunity.com/app/236870/discussions/0/392183857633731206/?ctp=2)
+  on its light giving it away,
+  [Hitman Wiki, Fiber Wire](https://hitman.fandom.com/wiki/Fiber_Wire) (from
+  behind, silent),
+  [PC Gamer, Far Cry 6's Supremo backpacks](https://www.pcgamer.com/uk/far-cry-6s-supremo-backpacks-are-so-op-they-feel-like-cheat-codes)
+  (the Furioso's ring of fire), and
+  [Giant Bomb, F.E.A.R.](https://www.giantbomb.com/games/3030-4800/) (the
+  particle weapon leaves a scorched skeleton). Checked through search
+  excerpts; this session cannot open the pages themselves.
+- Checks (arsenal suite, seven more): two pistols fire left and right in
+  turn (two of three from the left), hold 36 and put a man 14 m off down
+  in three; the dart phone puts a man down asleep for 12 s, alive, and he is
+  still down 6 s later; one throwing knife kills a man 12 m off; the duck
+  sits where it lands, waits, and T sets it off and both men by it; the
+  fibre wire kills from behind and leaves a man facing you untouched; the
+  fire ring catches all three round you within 17 m, none at 22 m, and is
+  gone, with ten seconds to fill again; one particle shot kills a man 30 m
+  off and leaves him standing as bones. The every weapon against a wall
+  check takes the new ones too: the duck is set off there like the C4, the
+  ring is given a second and a half to get to the wall, and the fibre wire
+  is left out, with the banana and the translocator's disc, as something
+  that was never going to dent a wall.
+  Screenshots arsenal-19-twins.png to arsenal-24-particle.png, the last with
+  what the rifle left.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

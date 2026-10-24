@@ -1086,7 +1086,10 @@ async function run() {
         s.shoot();
       }
       for (let i = 0; i < 60 * 4 && s.projectiles.active.some((b) => !b.stuck || b.fuse !== Infinity); i++) s.fixedForTest(1 / 60);
-      if (id === 'c4') s.projectiles.detonateAll('c4');
+      // The fire ring takes a second to reach anything, and the C4 and the
+      // rubber duck wait for T.
+      if (spec.ring) for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+      if (id === 'c4' || id === 'duck') s.projectiles.detonateAll(id);
       out[id] = Math.round(total());
     }
     s.projectiles.clear();
@@ -1098,7 +1101,7 @@ async function run() {
   const moves = walls.moves || {};
   if (!walls.skip) Object.assign(walls, walls.out);
   delete walls.out; delete walls.moves;
-  const none = walls.skip ? ['no wall found'] : Object.keys(walls).filter((id) => !(walls[id] > 0) && id !== 'banana' && id !== 'emp' && id !== 'translocator');
+  const none = walls.skip ? ['no wall found'] : Object.keys(walls).filter((id) => !(walls[id] > 0) && !['banana', 'emp', 'translocator', 'wire'].includes(id));
   check('every weapon in the loadout wears a frontage down, rounds, swings, flame, arrows and saws as well as blasts',
     !walls.skip && none.length === 0,
     walls.skip ? 'no wall' : `${none.length ? `nothing from ${none.join(', ')}; ` : ''}${Object.entries(walls).map(([k, v]) => `${k}:${v}`).join(' ')}`);
@@ -1384,6 +1387,9 @@ async function run() {
     t = s.spawnSoldier(-1.5, 0);
     aim(t);
     const hooks = s.state.hooks || 0;
+    // Which hand comes next depends on every punch thrown before, in the
+    // checks before this one too: start from the left one's turn.
+    s.state.punchHand = 0;
     swing(); step(0.3); swing();
     out.fists = { jabs: hurt(t) && t.state !== 4 };
     step(0.3); swing();
@@ -1615,6 +1621,136 @@ async function run() {
     JSON.stringify(arena.warhead));
   check('the meat hook pulls you to the man in the sight, and takes nobody when there is nobody',
     arena.hook.hooked && arena.hook.near < 3.2 && arena.hook.nothing, JSON.stringify(arena.hook));
+
+  // --- out of Max Payne, Hitman, 007, F.E.A.R. and Far Cry -----------------------
+  const quiet = await page.evaluate(() => {
+    const s = window.spreefall;
+    const out = {};
+    const fresh = () => {
+      s.drones.reset(); s.soldiers.reset(); s.projectiles.clear(); s.combat.reset(); s.vehicles.reset();
+      s.grab.reset();
+      s.burningGround.length = 0; s.fires.reset(); s.fireWalls.reset(); s.poisonClouds.length = 0; s.rings.length = 0;
+      s.soldiers.enabled = false;
+      s.state.lunge = null; s.state.hook = null; s.state.holstered = false;
+      s.setAim(false);
+      s.teleport(81, 0); s.look(90, 0); s.camera.update(16 / 9);
+    };
+    const eye = () => ({ x: s.player.x, y: s.player.y + 1.7, z: s.player.z });
+    const aimAt = (x, y, z) => {
+      const e = eye();
+      const to = { x: x - e.x, y: y - e.y, z: z - e.z };
+      const l = Math.hypot(to.x, to.y, to.z);
+      s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+      s.camera.update(16 / 9);
+    };
+    const step = (sec) => { for (let i = 0; i < Math.round(sec * 60); i++) s.fixedForTest(1 / 60); };
+    const ready = (id) => { s.weapon.giveAll(); s.weapon.select(id); s.weapon.cooldown = 0; s.weapon.spread = 0; };
+    const hurt = (t) => t.health < t.maxHealth;
+    const find = (kind) => s.projectiles.active.find((b) => b.alive && b.kind === kind);
+    s.setCheat('godmode', true);
+
+    // Two pistols: left and right in turn, and a man fourteen metres off down.
+    fresh(); ready('twins');
+    let t = s.spawnSoldier(-14, 0);
+    aimAt(t.x, t.y + 1.2, t.z);
+    const lefts0 = s.state.akimboLefts || 0, shots0 = s.state.akimboShots || 0;
+    let n = 0;
+    for (; n < 10 && t.health > 0; n++) { s.weapon.cooldown = 0; s.weapon.spread = 0; s.shoot(); }
+    out.twins = { shots: (s.state.akimboShots || 0) - shots0, lefts: (s.state.akimboLefts || 0) - lefts0,
+      dead: t.health <= 0, mag: s.weapons.twins.magazine, one: s.weapons.sdpistol.magazine };
+
+    // The dart phone: down and asleep, alive, and still down long after a
+    // knock down would have let him up.
+    fresh(); ready('dartphone');
+    t = s.spawnSoldier(-10, 0);
+    aimAt(t.x, t.y + 1.2, t.z);
+    s.shoot();
+    for (let i = 0; i < 60 && find('dart'); i++) s.fixedForTest(1 / 60);
+    out.dart = { down: t.state === 4, alive: t.health > 0, sleep: +t.slipLeft.toFixed(1) };
+    s.soldiers.enabled = true;
+    step(6);
+    out.dart.still = t.state === 4 && t.health > 0;
+    s.soldiers.enabled = false;
+
+    // A throwing knife: one, into a man twelve metres off.
+    fresh(); ready('tknives');
+    t = s.spawnSoldier(-12, 0);
+    aimAt(t.x, t.y + 0.8, t.z);
+    s.shoot();
+    for (let i = 0; i < 90 && t.health > 0; i++) s.fixedForTest(1 / 60);
+    out.knives = { dead: t.health <= 0 };
+
+    // The rubber duck: into the street, two men by it, and T.
+    fresh(); ready('duck');
+    const gx = s.player.x - 7, gz = s.player.z;
+    aimAt(gx, s.world.groundHeight(gx, gz), gz);
+    s.shoot();
+    for (let i = 0; i < 120 && !(find('duck') && find('duck').stuck); i++) s.fixedForTest(1 / 60);
+    const duck = find('duck');
+    out.duck = { sits: !!(duck && duck.stuck) };
+    if (duck) {
+      step(1);
+      out.duck.waits = duck.alive;
+      const men = [s.spawnSoldier(duck.x - s.player.x + 1.5, duck.z - s.player.z),
+        s.spawnSoldier(duck.x - s.player.x, duck.z - s.player.z + 2)];
+      out.duck.blown = s.weapon.detonate();
+      out.duck.dead = men.filter((m) => m.health <= 0).length;
+      out.duck.gone = !find('duck');
+    }
+
+    // The fibre wire: from behind, quietly the end of him; from the front, nothing.
+    fresh(); ready('wire');
+    t = s.spawnSoldier(-1.4, 0);
+    t.yaw = Math.PI / 2;
+    aimAt(t.x, t.y + 1.2, t.z);
+    const g0 = s.state.garrotes || 0;
+    s.weapon.cooldown = 0; s.shoot();
+    out.wire = { behind: t.health <= 0 && (s.state.garrotes || 0) - g0 === 1 };
+    fresh(); ready('wire');
+    t = s.spawnSoldier(-1.4, 0);
+    t.yaw = -Math.PI / 2;
+    aimAt(t.x, t.y + 1.2, t.z);
+    s.weapon.cooldown = 0; s.shoot();
+    out.wire.front = t.health === t.maxHealth;
+
+    // The fire ring: everybody within its reach, whichever side, and nobody past it.
+    fresh(); ready('furioso');
+    const ring = [s.spawnSoldier(-5, 0), s.spawnSoldier(6, 1), s.spawnSoldier(0, -10)];
+    const past = s.spawnSoldier(-22, 0);
+    s.weapon.cooldown = 0; s.shoot();
+    out.ring = { recharge: +s.weapon.cooldown.toFixed(1) };
+    step(1.5);
+    out.ring.caught = ring.filter((m) => hurt(m)).length;
+    out.ring.past = past.health === past.maxHealth;
+    out.ring.done = s.rings.length === 0;
+
+    // The particle rifle: one shot, and he is left standing as bones.
+    fresh(); ready('particle');
+    t = s.spawnSoldier(-30, 0);
+    aimAt(t.x, t.y + 1.2, t.z);
+    s.weapon.cooldown = 0; s.shoot();
+    out.particle = { dead: t.health <= 0, bones: s.soldiers.isBones(t) };
+    s.setCheat('godmode', false);
+    fresh();
+    // Nothing of it left for the pictures after.
+    s.effects.clear(); s.renderer.clearScars(); s.fires.reset(); s.state.flash = 0;
+    return out;
+  });
+  check('two pistols fire left and right in turn, three times the magazine of one, and put a man down',
+    quiet.twins.shots >= 2 && quiet.twins.lefts >= 1 && quiet.twins.lefts < quiet.twins.shots && quiet.twins.dead
+      && quiet.twins.mag === 36, JSON.stringify(quiet.twins));
+  check('the dart phone puts a man down asleep, alive, and he is still down six seconds later',
+    quiet.dart.down && quiet.dart.alive && quiet.dart.sleep > 10 && quiet.dart.still, JSON.stringify(quiet.dart));
+  check('one throwing knife is enough', quiet.knives.dead, JSON.stringify(quiet.knives));
+  check('the rubber duck sits where it lands and waits, and T sets it off and the two men by it with it',
+    quiet.duck.sits && quiet.duck.waits && quiet.duck.blown >= 1 && quiet.duck.dead === 2 && quiet.duck.gone,
+    JSON.stringify(quiet.duck));
+  check('the fibre wire kills from behind and does nothing from the front',
+    quiet.wire.behind && quiet.wire.front, JSON.stringify(quiet.wire));
+  check('the fire ring catches everybody round you within its reach, nobody past it, and then has to fill again',
+    quiet.ring.caught === 3 && quiet.ring.past && quiet.ring.done && quiet.ring.recharge >= 9, JSON.stringify(quiet.ring));
+  check('the particle rifle kills with one shot and leaves him standing as bones',
+    quiet.particle.dead && quiet.particle.bones, JSON.stringify(quiet.particle));
   await page.evaluate(() => {
     const s = window.spreefall;
     s.projectiles.clear(); s.weapon.select('minigun');
@@ -1690,6 +1826,30 @@ async function run() {
     await page.waitForTimeout(900);
     await page.screenshot({ path: path.join(SHOTS, `arsenal-${n}-${id}.png`) });
     await page.evaluate(() => { window.spreefall.input.fire = false; });
+  }
+
+  // Out of the stealth and action games, in the hand: two pistols, the dart
+  // phone, a rubber duck, the fibre wire, the fire ring's trigger, and the
+  // particle rifle with what it leaves.
+  for (const [n, id] of [[19, 'twins'], [20, 'dartphone'], [21, 'duck'], [22, 'wire'], [23, 'furioso'], [24, 'particle']]) {
+    await page.evaluate((w) => {
+      const s = window.spreefall;
+      s.state.paused = false;
+      s.weapon.giveAll(); s.weapon.select(w);
+      if (w === 'particle') {
+        s.soldiers.reset(); s.soldiers.enabled = false;
+        const t = s.spawnSoldier(s.camera.forward[0] * 9, s.camera.forward[2] * 9);
+        const e = { x: s.player.x, y: s.player.y + 1.7, z: s.player.z };
+        const to = { x: t.x - e.x, y: t.y + 1.2 - e.y, z: t.z - e.z };
+        const l = Math.hypot(to.x, to.y, to.z);
+        s.look(Math.atan2(-to.x, -to.z) * 180 / Math.PI, Math.asin(to.y / l) * 180 / Math.PI);
+        s.camera.update(16 / 9);
+        s.weapon.cooldown = 0; s.shoot();
+      }
+      for (let k = 0; k < 40; k++) s.fixedForTest(1 / 60);
+    }, id);
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: path.join(SHOTS, `arsenal-${n}-${id}.png`) });
   }
 
   await browser.close();
