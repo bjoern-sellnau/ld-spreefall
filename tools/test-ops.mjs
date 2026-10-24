@@ -1437,12 +1437,26 @@ async function run() {
       both: a.health < a.maxHealth && b.health < b.maxHealth, back: s.weapon.carried.shieldsaw.ammo === 1 };
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     out.inHand = !!s.renderer.viewmodel;
+    // Where the disc is on the screen: its middle and its edge nearest the
+    // middle, from the pose and the viewmodel's own 55 degree lens, as
+    // fractions of half the width (-1 the left edge, 0 the crosshair).
+    const onScreen = () => {
+      const p = s.renderer.viewmodel;
+      const r = 0.235;
+      const cx = p.x - 0.33 * Math.sin(p.yaw) * Math.cos(p.pitch);
+      const cz = p.z - 0.33 * Math.cos(p.yaw) * Math.cos(p.pitch);
+      const half = -cz * Math.tan(27.5 * Math.PI / 180) * (innerWidth / innerHeight);
+      return { mid: +(cx / half).toFixed(2), edge: +((cx + r) / half).toFixed(2) };
+    };
+    out.hip = onScreen();
     s.soldiers.reset();
     // Held up: fire from in front does nothing to you.
     s.combat.reset();
     const before = s.combat.health + s.combat.shield;
     s.setAim(true);
     for (let i = 0; i < 40; i++) s.fixedForTest(1 / 60);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    out.up = onScreen();
     const eye = { x: s.player.x, y: s.player.y + 1.2, z: s.player.z };
     s.projectiles.launch('fireball', { x: eye.x + f.x * 12, y: eye.y, z: eye.z + f.z * 12,
       vx: -f.x * 30, vy: 0, vz: -f.z * 30, splash: { radius: 2, damage: 30 }, weapon: 'demon' });
@@ -1471,6 +1485,9 @@ async function run() {
     shield.empty && shield.slowed && shield.inHand && shield.after > 0.9, JSON.stringify(shield));
   check('held up it stops fire from in front, and raised just in time it sends it back',
     shield.blocked && shield.parried);
+  check('the shield is on the left arm: at the hip and held up it stays on the left and leaves the middle clear',
+    shield.hip.mid < -0.6 && shield.up.mid < -0.4 && shield.hip.edge < -0.1 && shield.up.edge < -0.1,
+    `hip ${JSON.stringify(shield.hip)}, up ${JSON.stringify(shield.up)}`);
 
   await page.evaluate(() => {
     const s = window.spreefall;

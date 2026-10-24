@@ -1015,6 +1015,26 @@ async function run() {
   await page.waitForTimeout(900);
   await page.screenshot({ path: path.join(SHOTS, 'arsenal-02-rotary.png') });
 
+  // The shield saw on the left arm, at the hip and held up: the street in the
+  // middle stays in view either way.
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setAim(false);
+    s.weapon.giveAll(); s.weapon.select('shieldsaw');
+    s.teleport(319, -22); s.look(90, 0);
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+  });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: path.join(SHOTS, 'arsenal-03-shield-hip.png') });
+  await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setAim(true);
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+  });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: path.join(SHOTS, 'arsenal-04-shield-up.png') });
+  await page.evaluate(() => window.spreefall.setAim(false));
+
   await browser.close();
   const failed = checks.filter((c) => !c.ok);
   if (errors.length) {

@@ -427,7 +427,13 @@ WEAPONS.sdpistol.hold = { x: 0.180, y: -0.125, z: -0.300, pitch: -0.010, yaw: 0.
 WEAPONS.marksman.hold = { x: 0.220, y: -0.150, z: -0.480, pitch: -0.016, yaw: 0.120, roll: 0.04 };
 WEAPONS.doublebarrel.hold = { x: 0.205, y: -0.150, z: -0.420, pitch: -0.012, yaw: 0.120, roll: 0.04 };
 WEAPONS.chainsaw.hold = { x: 0.200, y: -0.170, z: -0.360, pitch: 0.020, yaw: 0.140, roll: 0.06 };
-WEAPONS.shieldsaw.hold = { x: -0.130, y: -0.120, z: -0.330, pitch: 0.000, yaw: -0.200, roll: -0.10 };
+// The shield is on the left arm and stays there, as in the Doom it comes from:
+// at the hip a quarter of it in the corner, held up the left third of the
+// screen with its face turned in, and the middle clear either way. Its own
+// aim pose, because the shared one puts the sight on the centre line and a
+// shield there is a wall in front of your eyes.
+WEAPONS.shieldsaw.hold = { x: -0.640, y: -0.270, z: -0.250, pitch: 0.040, yaw: -0.450, roll: -0.180 };
+WEAPONS.shieldsaw.aimHold = { x: -0.440, y: -0.100, z: -0.190, pitch: 0.020, yaw: -0.350, roll: -0.120 };
 WEAPONS.magnum.hold = { x: 0.175, y: -0.122, z: -0.310, pitch: -0.012, yaw: 0.150, roll: 0.05 };
 WEAPONS.autoshotgun.hold = { x: 0.210, y: -0.150, z: -0.420, pitch: -0.012, yaw: 0.122, roll: 0.04 };
 WEAPONS.minigun.hold = { x: 0.215, y: -0.175, z: -0.440, pitch: -0.010, yaw: 0.105, roll: 0.03 };

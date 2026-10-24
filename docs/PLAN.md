@@ -5059,6 +5059,28 @@ So there are two cities now, and a profile picks which:
   The URL check now closes the pause it opens by letting the mouse go.
   Screenshot ui-09-pause.png.
 
+## 132. The shield on the left arm, out of the line of sight
+
+- The ask: the shield should not sit in the middle of the screen, where it
+  hides everything, but to the left the way Doom has it. (The shield saw is
+  from DOOM: The Dark Ages, where it is held on the left trigger; its
+  players make the same complaint about a raised shield.)
+- At the hip it sat a little left of the middle at two thirds of a metre,
+  which at the viewmodel's 55 degree lens is a disc over most of the frame;
+  held up it took the shared aim pose, which puts a sight on the centre
+  line, and so put the shield dead in front of your eyes.
+- Now a pose of its own for both. At the hip a quarter of it shows in the
+  bottom left corner. Held up it covers the left third of the screen with
+  its face turned in, the crosshair and the street clear to the right of
+  it. The block itself is unchanged: it still stops fire from in front and
+  a raise just in time still sends it back.
+- Checks: ops suite, one more: where the disc falls on the screen worked
+  out from the pose and the lens, at the hip and held up, its middle left
+  of two fifths of the way out and its nearest edge left of the crosshair
+  by a tenth of the half width (measured: middle -1.09 and -0.78, edge
+  -0.57 and -0.22). The arsenal suite screenshots it:
+  arsenal-03-shield-hip.png and arsenal-04-shield-up.png.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m
