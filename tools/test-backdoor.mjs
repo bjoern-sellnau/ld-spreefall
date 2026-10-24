@@ -1113,17 +1113,31 @@ async function run() {
     while (s.phone.job && performance.now() - t0 < 30000) await new Promise((r) => requestAnimationFrame(r));
     const got = s.phone.money - money;
     const empty = a.empty > 0;
-    // And the next one: spray it, with people about.
+    // And the next one: spray it, with people about: out in front of it, on
+    // its side of the wall where they can see it, and with the traffic kept
+    // off the street. Anywhere in a ring round it put some behind the
+    // frontage it is in, and a crash in the traffic sends people running
+    // the other way, cash or no cash; once none of four came.
     a.empty = 0;
+    window.keepClear([]);
+    const fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw);
+    const ga = s.world.groundHeight(a.x, a.z);
     const people = [];
-    for (let i = 0; i < 4; i++) {
-      const c = s.soldiers.spawnCivilianNear(a.x, a.z, 10, 16);
-      if (c) { c.rise = 0; people.push(c); }
+    for (const [out, along] of [[6, -6], [7, 6], [9, -9], [10, 9], [5, -3], [8, 3], [12, 0], [4, 7]]) {
+      if (people.length >= 4) break;
+      const x = a.x + fx * out - fz * along, z = a.z + fz * out + fx * along;
+      const g = s.world.groundHeight(x, z);
+      if (!s.world.lineOfSight(x, g + 1, z, a.x + fx * 0.5, ga + 1, a.z + fz * 0.5)) continue;
+      const c = s.soldiers.spawnCivilianNear(a.x, a.z, 2, 8);
+      if (!c) break;
+      c.x = x; c.z = z; c.y = g; c.targetX = x; c.targetZ = z;
+      c.rise = 0; c.panicLeft = 0;
+      people.push(c);
     }
     const before = people.map((c) => Math.hypot(c.x - a.x, c.z - a.z));
     s.phone.battery = s.backdoorSpec.battery.most;
     const ok2 = s.hackKey(1);
-    for (let i = 0; i < 60 * 3; i++) s.fixedForTest(1 / 60);
+    for (let i = 0; i < 60 * 3; i++) { s.fixedForTest(1 / 60); window.keepClear([]); }
     const closer = people.filter((c, i) => Math.hypot(c.x - a.x, c.z - a.z) < before[i] - 3).length;
     const out = { found: true, card, acts, ok, got, empty, ok2, spraying: a.spray > 0, people: people.length, closer };
     s.soldiers.reset();

@@ -5644,6 +5644,17 @@ So there are two cities now, and a profile picks which:
   own line the same time short of it, going as it went there. Here the
   lines cross within 0.2 m, two seconds out, and they crash; the suite
   passes 48 of 48.
+- The run on that passed every suite to The Hunt and every traffic check in
+  .BACKDOOR (the two cars crashed, 4.1 m, their lines 0.1 m apart), and
+  failed one: the ATM threw its cash into the street and none of the four
+  people put by it came. They were put anywhere in a ring 10 to 16 m out,
+  which in the middle of the city is as likely behind the frontage the
+  machine is in, or a block away, as in front of it, and the traffic was
+  left running on Unter den Linden: somebody in a panic runs from what
+  frightened him, cash or no cash, and a crash nearby is enough. They are
+  now put out in front of it, where they can see it, and the street is kept
+  clear of traffic while it sprays. Here all four come; the suite passes
+  48 of 48.
 
 ## CI: the EMP check clears the street in front of the launcher
 
