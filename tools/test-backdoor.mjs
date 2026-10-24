@@ -634,16 +634,28 @@ async function run() {
     s.phone.battery = s.backdoorSpec.battery.most;
     const ok2 = s.hackKey(1);
     const green = [s.lightAt(j, 0), s.lightAt(j, 1)];
-    for (let i = 0; i < 60 * 5; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
+    // Through, whichever way out it takes: at the end of a stretch of road
+    // a driver picks one of the ways on at random, and in the live city the
+    // map's ways end at most junctions, so straight on is one choice of
+    // several. Into the junction and the length of its approach and more.
+    let moved = 0, closest = Infinity;
+    for (let i = 0; i < 60 * 5; i++) {
+      const x0 = v.x, z0 = v.z;
+      s.fixedForTest(1 / 60); window.keepClear([v]);
+      moved += Math.hypot(v.x - x0, v.z - z0);
+      closest = Math.min(closest, Math.hypot(v.x - j.x, v.z - j.z));
+    }
     const past = (v.x - j.x) * l.dx + (v.z - j.z) * l.dz;
     for (const k of j.group || [j]) k.hack = null;
-    return { ok, both, held, r: j.r, ok2, green, past: +past.toFixed(1) };
+    return { ok, both, held, r: j.r, ok2, green, past: +past.toFixed(1), moved: +moved.toFixed(1),
+      closest: +closest.toFixed(1) };
   });
   check('Q turns it red both ways, and a car coming up to it waits short of it',
     red.ok && red.both.every((b) => b === 'red') && red.held.speed < 0.5 && red.held.short > red.r && red.held.short < red.r + 12,
     JSON.stringify(red));
-  check('E turns it green both ways, and the car goes on through', red.ok2 && red.green.every((b) => b === 'green') && red.past < -red.r,
-    JSON.stringify({ green: red.green, past: red.past }));
+  check('E turns it green both ways, and the car goes on through',
+    red.ok2 && red.green.every((b) => b === 'green') && red.closest < red.r && red.moved > red.held.short + red.r,
+    JSON.stringify({ green: red.green, closest: red.closest, moved: red.moved, past: red.past }));
 
   // Green both ways with somebody coming each way: nobody gives way.
   const pile = await page.evaluate(async () => {
@@ -742,16 +754,24 @@ async function run() {
     }
     const gap = Math.hypot(v.x - p.x, v.z - p.z);
     const out = { ok, venting: p.vent > 0, steam, speed: +v.speed.toFixed(2), gap: +gap.toFixed(1) };
-    // And once it stops, on it goes.
+    // And once it stops, on it goes: on down the road, whichever way the
+    // road takes it, since at the end of a stretch the driver picks the way
+    // on at random, and in the live city that is sometimes back round.
     p.vent = 0;
-    for (let i = 0; i < 60 * 5; i++) { s.fixedForTest(1 / 60); window.keepClear([v]); }
+    let moved = 0;
+    for (let i = 0; i < 60 * 5; i++) {
+      const x0 = v.x, z0 = v.z;
+      s.fixedForTest(1 / 60); window.keepClear([v]);
+      moved += Math.hypot(v.x - x0, v.z - z0);
+    }
+    out.moved = +moved.toFixed(1);
     out.past = +(((v.x - p.x) * fx + (v.z - p.z) * fz)).toFixed(1);
     s.vehicles.remove(v);
     for (const j of held) j.hack = null;
     return out;
   });
   check('Q vents steam across the road, and a car stops short of it until it stops',
-    vent.ok && vent.venting && vent.steam > 5 && vent.speed < 0.5 && vent.gap > 2.5 && vent.past > 3, JSON.stringify(vent));
+    vent.ok && vent.venting && vent.steam > 5 && vent.speed < 0.5 && vent.gap > 2.5 && vent.moved > vent.gap + 3, JSON.stringify(vent));
 
   const blow = await page.evaluate(async () => {
     const s = window.spreefall;

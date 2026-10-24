@@ -5585,6 +5585,19 @@ So there are two cities now, and a profile picks which:
   the chassis, so the count now reads it from the table the spawn takes it
   from (`mechSpec`): auto, shotgun, rail, shell, swarm, thermite and laser.
   Whether each gun can hurt you still needs one standing.
+- The next run passed the interface, Tactics and Slayer and The Hunt, and
+  failed two checks in .BACKDOOR, both a car let go that was measured as
+  if it had to go straight on: after the lights went green both ways it was
+  1.3 m past the middle of the junction along the way it came in, and after
+  the steam stopped it was 27 m back from where it had waited. At the end
+  of a stretch of road a driver takes one of the ways on at random, and
+  turns back where there is none (`nextLeg`); the live city's ways end at
+  most junctions and now and then in between, so a car turned, or came
+  back round. Both checks now ask what they are about, whether it drives
+  on: through the junction (within its radius of the middle, and further
+  than its approach and the radius together in five seconds, which a car
+  stopped in the junction is not) and away from the steam. Here 55.6 m and
+  2.4 m from the middle, and 55.8 m; the suite passes 48 of 48.
 
 ## CI: the EMP check clears the street in front of the launcher
 
