@@ -1117,6 +1117,36 @@ void main() {
     s.emissive *= 1.0 - gore;
   }
 
+  // --- the weather on it ----------------------------------------------------
+  // Rain darkens what it wets and makes it glossy enough to show the sky, most
+  // of all what faces up, and on the street it stands in puddles in the dips
+  // of a broad noise; a wall only darkens a little, the rain running off it.
+  // Snow settles on whatever faces up, patchy at first and then all over,
+  // and not on the water.
+  if (m != ${MAT.WATER}u) {
+    float faceUp = clamp(n.y, 0.0, 1.0);
+    if (uWeather.y > 0.001) {
+      bool soft = m == ${MAT.GRASS}u;
+      float wet = uWeather.y * mix(0.35, 1.0, smoothstep(0.5, 0.9, faceUp));
+      s.albedo *= mix(1.0, soft ? 0.78 : 0.62, wet);
+      s.roughness = mix(s.roughness, soft ? 0.6 : 0.18, wet * 0.85);
+      if ((vFlags & FLAG_IS_GROUND) != 0u && !soft && faceUp > 0.8) {
+        float pool = smoothstep(0.6, 0.7, vnoise(vWorld.xz * 0.11) * 0.7 + vnoise(vWorld.xz * 0.45) * 0.3);
+        pool *= smoothstep(0.35, 0.95, uWeather.y);
+        s.albedo = mix(s.albedo, s.albedo * 0.35, pool);
+        s.roughness = mix(s.roughness, 0.02, pool);
+      }
+    }
+    if (uWeather.w > 0.001) {
+      float lie = smoothstep(0.55, 0.92, faceUp);
+      float patchy = vnoise(vWorld.xz * 0.6) * 0.6 + vnoise(vWorld.xz * 3.1) * 0.4;
+      float snow = lie * smoothstep(1.0 - uWeather.w, 1.25 - uWeather.w, patchy + uWeather.w * 0.35);
+      s.albedo = mix(s.albedo, vec3(0.80, 0.82, 0.86), snow);
+      s.roughness = mix(s.roughness, 0.75, snow);
+      s.metallic = mix(s.metallic, 0.0, snow);
+    }
+  }
+
   vec3 diffuse = s.albedo * (direct + ambient);
 
   // A single Blinn Phong lobe stands in for the specular. Cheap, and enough.

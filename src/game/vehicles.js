@@ -12,6 +12,8 @@
 // front of the bumper, from the same raycast the bullets use. Nothing here
 // has a physics library behind it and nothing here needs one.
 
+import { HULLS, freshDamage, toLocal, boxHit, hitAt, blastFrom, crash } from './dents.js';
+
 // How many burnt out shells may stand about at once before the oldest goes.
 const KEEP_WRECKS = 12;
 
@@ -226,8 +228,51 @@ export class Vehicles {
     v.airborne = false;
     v.lift = 0;
     v.tumble = 0;
+    // Nothing dented and nothing broken, whatever the slot had before.
+    freshDamage(v);
     this.active.push(v);
     return v;
+  }
+
+  /** The box a vehicle stands in, for the ones that have one. */
+  hull(v) { return v.spec.kind === KIND.GROUND ? HULLS[v.type] || null : null; }
+
+  /**
+   * A hit at a point on it, for this much: the side it lands on is pushed in
+   * and the glass there goes if it was above the waistline. A bullet is
+   * taken down by what the hull is made of. Returns whether it went up.
+   */
+  hit(v, amount, x, y, z, bullet = false) {
+    if (!v.alive || v.health <= 0) return false;
+    const H = this.hull(v);
+    if (!H) return this.damage(v, amount);
+    const take = amount * (bullet ? H.bullets : 1);
+    // Nowhere in particular: the middle of it, at the height of its doors.
+    if (!Number.isFinite(x + y + z)) { x = v.x; y = v.y + H.glass * 0.6; z = v.z; }
+    const l = toLocal(v, x, y, z);
+    const lx = clamp(l.x, -H.W / 2, H.W / 2), lz = clamp(l.z, -H.L / 2, H.L / 2);
+    const r = hitAt(v, H, lx, clamp(l.y, 0, H.H), lz, take, bullet);
+    if (r.broke && this.onBreak) this.onBreak(v, r.broke, r.zone);
+    return this.damage(v, take);
+  }
+
+  /** A blast from a point: the sides facing it pushed in, their glass gone. */
+  blast(v, amount, bx, bz) {
+    if (!v.alive || v.health <= 0) return false;
+    const H = this.hull(v);
+    if (H) {
+      const broke = blastFrom(v, H, bx, bz, amount);
+      if (broke && this.onBreak) this.onBreak(v, broke, -1);
+    }
+    return this.damage(v, amount);
+  }
+
+  /** Into something at so many metres a second, nose or tail first. */
+  crash(v, speed, nose = true) {
+    if (!v.alive || v.health <= 0 || !this.hull(v)) return 0;
+    const broke = crash(v, speed, nose);
+    if (broke && this.onBreak) this.onBreak(v, broke, nose ? 0 : 1);
+    return broke;
   }
 
   /** The nearest one you could get into, or null. */
@@ -274,10 +319,11 @@ export class Vehicles {
     v.tumble = tumble;
   }
 
-  damage(v, amount) {
+  damage(v, amount, flash = true) {
     if (!v.alive || v.health <= 0) return false;
     v.health -= amount;
-    v.hitFlash = 1;
+    // A hit shows white for a moment; a fire eating it from inside does not.
+    if (flash) v.hitFlash = 1;
     if (v.health > 0) return false;
     v.health = 0;
     v.dying = 0.01;
@@ -347,7 +393,7 @@ export class Vehicles {
     // Nobody at the wheel: the handbrake. With the drag as low as it is since
     // the jeep got its speed, one left at full throttle used to roll on for a
     // hundred metres after you got out, and took a rigged bomb with it.
-    if (!c && v.speed !== 0) {
+    if (!c && v.speed !== 0 && !v.airborne) {
       const slow = s.brake * 1.5 * dt;
       v.speed = Math.abs(v.speed) <= slow ? 0 : v.speed - Math.sign(v.speed) * slow;
     }
@@ -378,11 +424,14 @@ export class Vehicles {
       const through = hit && hit.kind === 'wall' && this.onSmash
         && this.onSmash(v, Math.abs(v.speed), hit);
       if (through) {
+        this.crash(v, Math.abs(v.speed) * 0.5, dir > 0);
         v.speed *= s.mass > 2 ? 0.85 : 0.6;
         v.x += dx * v.speed * dt;
         v.z += dz * v.speed * dt;
       } else if (hit && hit.kind === 'wall') {
         if (this.onBump) this.onBump(v, Math.abs(v.speed));
+        // Hard enough, and the end that hit shows it.
+        if (Math.abs(v.speed) > 5) this.crash(v, Math.abs(v.speed), dir > 0);
         v.speed *= -0.15;
       } else {
         v.x += dx * step;
@@ -632,12 +681,32 @@ export class Vehicles {
     };
   }
 
-  /** A sphere around the hull, for the bullets and the blasts. */
+  /**
+   * What a ray runs into, for the bullets and the rockets: the box a thing
+   * on wheels or tracks stands in, turned with it, so a round goes over the
+   * roof of a car and into the far end of a bus; a sphere round anything
+   * that flies. Where it went in comes back with it.
+   */
   raycast(ox, oy, oz, dx, dy, dz, maxDist) {
     let best = maxDist;
     let hit = null;
     for (const v of this.active) {
       if (!v.alive || v.health <= 0) continue;
+      const H = this.hull(v);
+      if (H) {
+        // Nowhere near it first, which is nearly always.
+        const reach = Math.hypot(H.L, H.W, H.H) / 2;
+        const ex = v.x - ox, ey = v.y + H.H / 2 - oy, ez = v.z - oz;
+        const tc = ex * dx + ey * dy + ez * dz;
+        if (tc < -reach || tc - reach > best) continue;
+        if (Math.hypot(ex - dx * tc, ey - dy * tc, ez - dz * tc) > reach) continue;
+        const b = boxHit(v, H, ox, oy, oz, dx, dy, dz, best);
+        if (!b) continue;
+        best = b.t;
+        hit = { t: b.t, target: v, kind: 'vehicle', core: false,
+          x: ox + dx * b.t, y: oy + dy * b.t, z: oz + dz * b.t };
+        continue;
+      }
       const r = v.spec.radius;
       const cy = v.y + (v.spec.hitUp ?? r * 0.7);
       const ex = v.x - ox, ey = cy - oy, ez = v.z - oz;
@@ -646,7 +715,7 @@ export class Vehicles {
       const d = Math.hypot(ex - dx * t, ey - dy * t, ez - dz * t);
       if (d > r) continue;
       best = t;
-      hit = { t, target: v, kind: 'vehicle', core: false };
+      hit = { t, target: v, kind: 'vehicle', core: false, x: ox + dx * t, y: oy + dy * t, z: oz + dz * t };
     }
     return hit;
   }

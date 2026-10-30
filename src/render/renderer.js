@@ -13,15 +13,16 @@ import { FULLSCREEN_VS, BRIGHT_FS, BLUR_FS, COMPOSITE_FS } from '../shaders/post
 import { sunDirection, sunColour, berlinDate } from './sun.js';
 import { Actors } from './actors.js';
 import { ForceField } from './field.js';
+import { Precip } from './precip.js';
 import { buildSurfaceMaps } from '../engine/surfaces.js';
 
 // std140 layout, see src/shaders/common.js
-const CAM_FLOATS = 112;
+const CAM_FLOATS = 116;
 const OFF = {
   viewProj: 0, view: 16, invViewProj: 32,
   camPos: 48, sunDir: 52, sunColour: 56,
   skyZenith: 60, skyHorizon: 64, fog: 68,
-  shadowMat0: 72, shadowMat1: 88, shadowSplit: 104, misc: 108,
+  shadowMat0: 72, shadowMat1: 88, shadowSplit: 104, misc: 108, weather: 112,
 };
 
 export const QUALITY = {
@@ -92,6 +93,7 @@ export class Renderer {
     this.actors = new Actors(gl, caps);
     // The dome over the memorial, see src/render/field.js.
     this.field = new ForceField(gl);
+    this.precip = new Precip(gl);
     this.drawActors = true;
     this.viewmodel = null;      // set by the game layer each frame, or null
     this.reflex = 0;            // 0 to 1, how far into slowed time we are
@@ -162,6 +164,10 @@ export class Renderer {
     this.armageddon = 0;
     // How much of the light in the windows and the lamps is out, 0 to 1 (.BACKDOOR).
     this.blackout = 0;
+    // The weather's amounts now (game/weather.js), or none for a clear day.
+    this.weather = null;
+    // Which way the wind drives the rain and the snow, radians.
+    this.windYaw = 0.9;
     this.shadowsEnabled = true;
 
     this.setQuality('high');
@@ -454,6 +460,42 @@ export class Renderer {
       this.sunCol[2] = this.sunCol[2] * (1 - k) + 0.20 * k;
     }
 
+    // The weather over it. Cloud takes the blue out of the sky and most of
+    // the sun out of the light, so an overcast day is grey and has no
+    // shadows to speak of; rain and snow make it darker again; a lightning
+    // flash lights the whole sky, and with it everything the sky lights.
+    const W = this.weather;
+    let fogDensity = this.fogDensity;
+    let shadowShare = 1;
+    if (W) {
+      const grey = Math.min(1, W.cloud);
+      const dim = 1 - Math.min(1, W.dark) * 0.5;
+      const lz = zen[0] * 0.2126 + zen[1] * 0.7152 + zen[2] * 0.0722;
+      const lh = hor[0] * 0.2126 + hor[1] * 0.7152 + hor[2] * 0.0722;
+      const tint = [0.94, 0.98, 1.06];
+      for (let i = 0; i < 3; i++) {
+        zen[i] = (zen[i] * (1 - grey * 0.9) + (lz * 1.6 + lh * 0.4) * 0.5 * tint[i] * grey * 0.9) * dim;
+        hor[i] = (hor[i] * (1 - grey * 0.85) + lh * 0.9 * tint[i] * grey * 0.85) * dim;
+        // An extreme weather's colour over the whole sky: green yellow under
+        // acid, violet in an ion storm, orange over a firestorm.
+        if (W.tint && W.tint[3] > 0) {
+          const lum = (lz + lh) * 0.5 + 0.02;
+          zen[i] += (W.tint[i] * lum * 1.6 - zen[i]) * W.tint[3];
+          hor[i] += (W.tint[i] * lum * 2.0 - hor[i]) * W.tint[3];
+        }
+        // Lit, not washed out: the channel itself has to stay the brightest
+        // thing in the sky.
+        const fc = W.flashTint || [0.22, 0.24, 0.32];
+        zen[i] += W.flash * fc[i];
+        hor[i] += W.flash * fc[i] * 1.2;
+        this.sunCol[i] *= 1 - grey * 0.78;
+      }
+      shadowShare = 1 - grey * 0.85;
+      // Haze is drawn with the extinction the weather's visibility asks for,
+      // never less than the city's own.
+      fogDensity = Math.max(this.fogDensity, W.extinction || 0);
+    }
+
     const c = this.cam;
     c.set(camera.viewProj, OFF.viewProj);
     c.set(camera.view, OFF.view);
@@ -469,14 +511,15 @@ export class Renderer {
     c[OFF.sunColour] = this.sunCol[0];
     c[OFF.sunColour + 1] = this.sunCol[1];
     c[OFF.sunColour + 2] = this.sunCol[2];
-    c[OFF.sunColour + 3] = this.shadowsEnabled && this.q.shadows ? clamp(altitude * 6, 0, 1) : 0;
+    c[OFF.sunColour + 3] = this.shadowsEnabled && this.q.shadows ? clamp(altitude * 6, 0, 1) * shadowShare : 0;
     c[OFF.skyZenith] = zen[0]; c[OFF.skyZenith + 1] = zen[1]; c[OFF.skyZenith + 2] = zen[2];
     c[OFF.skyZenith + 3] = night;
     c[OFF.skyHorizon] = hor[0]; c[OFF.skyHorizon + 1] = hor[1]; c[OFF.skyHorizon + 2] = hor[2];
     c[OFF.skyHorizon + 3] = dusk;
     // Fog tuned so the Fernsehturm is a silhouette from the Gate, 3.3 km away,
     // rather than either invisible or perfectly crisp.
-    c[OFF.fog] = this.fogDensity;
+    c[OFF.fog] = fogDensity;
+    this.fogNow = fogDensity;
     c[OFF.fog + 1] = 0.030;
     c[OFF.fog + 2] = 26.0;
     c[OFF.fog + 3] = camera.far;
@@ -485,6 +528,10 @@ export class Renderer {
     c[OFF.misc + 1] = clamp(night * 1.1 + dusk * 0.35, 0, 1) * (1 - clamp(this.blackout || 0, 0, 1));
     c[OFF.misc + 2] = this.quality === 'low' ? 0 : this.quality === 'medium' ? 1 : 2;
     c[OFF.misc + 3] = 1.0;
+    c[OFF.weather] = W ? Math.min(1, W.cloud) : 0;
+    c[OFF.weather + 1] = W ? W.wet : 0;
+    c[OFF.weather + 2] = W ? W.flash : 0;
+    c[OFF.weather + 3] = W ? W.cover : 0;
     this.night = night;
     this.sunAltitude = altitude;
   }
@@ -773,6 +820,9 @@ export class Renderer {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       draws++;
     }
+
+    // Rain or snow, after the sky so it falls in front of it.
+    if (this.drawSky && this.weather) draws += this.precip.draw(this.weather, this.windYaw);
 
     // The force field before the sparks, so a blast going off on it is drawn
     // over it rather than under.

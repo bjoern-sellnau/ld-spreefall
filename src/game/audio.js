@@ -5,6 +5,7 @@
 // rumble near a station entrance. Footsteps are noise bursts filtered per
 // surface, so cobblestone, asphalt and grass all sound different.
 
+import { thunderShape, rumbleCurve } from './thunder.js';
 import { SURFACE } from '../shared/constants.js';
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -139,6 +140,272 @@ export class Audio {
   _cityBed() {
     const a = this._bedSource('bandpass', 1200, 0.4, 0.05);
     return { parts: [a], level: 0 };
+  }
+
+  /** Rain on the city: a hiss high up and a softer patter under it. */
+  _rainBed() {
+    const a = this._bedSource('highpass', 2600, 0.5, 0.16);
+    const b = this._bedSource('bandpass', 900, 0.6, 0.12);
+    return { parts: [a, b], level: 0 };
+  }
+
+  /** Wind: low, and swelling in gusts. */
+  _windBed() {
+    const a = this._bedSource('lowpass', 380, 0.9, 0.34);
+    const lfo = this.ctx.createOscillator();
+    lfo.frequency.value = 0.13;
+    const lg = this.ctx.createGain();
+    lg.gain.value = 160;
+    lfo.connect(lg).connect(a.filter.frequency);
+    lfo.start();
+    return { parts: [a], level: 0 };
+  }
+
+  /** How hard it is raining and blowing, for the two beds. */
+  setWeather(rain, wind) {
+    if (!this.ctx || !this.enabled) return;
+    if (!this.beds.rain) this.beds.rain = this._rainBed();
+    if (!this.beds.wind) this.beds.wind = this._windBed();
+    this._setBed(this.beds.rain, Math.min(1.2, rain));
+    this._setBed(this.beds.wind, Math.min(1.2, wind * wind));
+  }
+
+  /**
+   * The siren for the extreme weather, the way the warning sirens in
+   * Germany do it: a howl rising and falling for a warning, a steady tone
+   * for the all clear, and between, short beeps as the count runs down.
+   * Shortened from the real minute, since a game has to get on. Not
+   * `siren`: that is the camp's, further down, and a second method of the
+   * same name would put this one out of reach.
+   */
+  warnSiren(what) {
+    this.lastWarn = what;
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1800;
+    const g = ctx.createGain();
+    if (what === 'count') {
+      o.type = 'square';
+      o.frequency.setValueAtTime(880, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.connect(lp).connect(g).connect(this.master);
+      o.start(t); o.stop(t + 0.2);
+      return;
+    }
+    const len = what === 'clear' ? 3.5 : 4.5;
+    if (what === 'clear') {
+      o.frequency.setValueAtTime(420, t);
+    } else {
+      // Up and down, twice over the length of it.
+      o.frequency.setValueAtTime(300, t);
+      for (let k = 0; k < 4; k++) {
+        o.frequency.linearRampToValueAtTime(k % 2 ? 300 : 520, t + (k + 1) * len / 4);
+      }
+    }
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.5);
+    g.gain.setValueAtTime(0.16, t + len - 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(lp).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + len + 0.05);
+  }
+
+  /**
+   * The beds under the extreme weather, each nought to one at where you
+   * are: acid hissing on everything, a firestorm's roar, a tornado's, louder
+   * the nearer the funnel, and the hum of an ion storm.
+   */
+  setExtreme(acid = 0, fire = 0, tornado = 0, ion = 0) {
+    if (!this.ctx || !this.enabled) return;
+    const want = acid + fire + tornado + ion > 0.001;
+    if (!want && !this.beds.acid) return;
+    if (!this.beds.acid) {
+      this.beds.acid = { parts: [this._bedSource('highpass', 4200, 0.8, 0.22), this._bedSource('bandpass', 2200, 2.5, 0.1)], level: 0 };
+      this.beds.firestorm = { parts: [this._bedSource('lowpass', 520, 0.7, 0.5), this._bedSource('bandpass', 1400, 1.2, 0.12)], level: 0 };
+      const roar = this._bedSource('bandpass', 140, 0.8, 0.9);
+      const whistle = this._bedSource('bandpass', 760, 6, 0.08);
+      const lfo = this.ctx.createOscillator();
+      lfo.frequency.value = 0.31;
+      const lg = this.ctx.createGain();
+      lg.gain.value = 60;
+      lfo.connect(lg).connect(roar.filter.frequency);
+      lfo.start();
+      this.beds.tornado = { parts: [roar, whistle], level: 0 };
+      this.beds.ion = { parts: [this._bedSource('bandpass', 100, 8, 0.25), this._bedSource('highpass', 6000, 0.7, 0.05)], level: 0 };
+    }
+    this._setBed(this.beds.acid, Math.min(1, acid));
+    this._setBed(this.beds.firestorm, Math.min(1, fire));
+    this._setBed(this.beds.tornado, Math.min(1.3, tornado));
+    this._setBed(this.beds.ion, Math.min(1, ion));
+  }
+
+  /** An ion bolt landing this far off: a hard electric crack and a buzz. */
+  ionZap(distance = 50) {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const t = ctx.currentTime + distance / 343;
+    const near = Math.max(0.05, Math.min(1, 60 / Math.max(10, distance)));
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(5200, t);
+    bp.frequency.exponentialRampToValueAtTime(600, t + 0.5);
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.7 * near, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 3);
+    src.stop(t + 0.65);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.4);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.25 * near, t + 0.01);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    o.connect(og).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.5);
+  }
+
+  /**
+   * Thunder from a strike this far off, as long after the flash as sound
+   * takes to cover the distance, about three seconds a kilometre. Close to,
+   * a sharp crack and a tearing over the first third of a second, and a
+   * thump; then, near or far, the roll: low noise under fifty cycles or so,
+   * coming and going in claps as the sound of the rest of the channel
+   * arrives, for ten seconds or more. The further, the less of the top end
+   * the air has left in it. The shape is game/thunder.js.
+   */
+  thunder(distance = 1000, speed = 343) {
+    this.lastThunder = { distance, delay: distance / speed };
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled) return;
+    const shape = thunderShape(distance);
+    this.lastThunder.shape = shape;
+    const t0 = ctx.currentTime + distance / speed;
+    if (!this._brownBuffer) this._brownBuffer = this._makeBrown(9);
+    // Everything goes through the air on the way to you.
+    const air = ctx.createBiquadFilter();
+    air.type = 'lowpass';
+    air.frequency.value = shape.air;
+    air.Q.value = 0.5;
+    air.connect(this.master);
+
+    if (shape.crack > 0) {
+      // The tearing: a run of short bright cracks, bunched at the start.
+      const tears = Math.round(6 + shape.crack * 12);
+      for (let k = 0; k < tears; k++) {
+        const at = t0 + 0.36 * Math.pow(Math.random(), 1.6);
+        const src = ctx.createBufferSource();
+        src.buffer = this._noiseBuffer;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 900 + Math.random() * 3200;
+        bp.Q.value = 0.9;
+        const g = ctx.createGain();
+        const peak = shape.loud * shape.crack * (0.35 + Math.random() * 0.65) * 1.1;
+        const len = 0.02 + Math.random() * 0.07;
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(peak, at + 0.002);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+        src.connect(bp).connect(g).connect(air);
+        src.start(at, Math.random() * 3);
+        src.stop(at + len + 0.02);
+      }
+      // The crack itself: everything at once, and a thump under it.
+      const src = ctx.createBufferSource();
+      src.buffer = this._noiseBuffer;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 180;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(shape.loud * shape.crack * 1.2, t0 + 0.004);
+      g.gain.exponentialRampToValueAtTime(shape.loud * shape.crack * 0.25, t0 + 0.12);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.7);
+      src.connect(hp).connect(g).connect(air);
+      src.start(t0, Math.random() * 3);
+      src.stop(t0 + 0.75);
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(70, t0);
+      o.frequency.exponentialRampToValueAtTime(28, t0 + 0.9);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0.0001, t0);
+      og.gain.exponentialRampToValueAtTime(shape.loud * shape.crack * 0.7, t0 + 0.02);
+      og.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.1);
+      o.connect(og).connect(this.master);
+      o.start(t0);
+      o.stop(t0 + 1.2);
+    }
+
+    // The roll: deep noise, low passed to the rumble and swelling with each
+    // clap, with a second, brighter layer for the first of it.
+    const roll = ctx.createBufferSource();
+    roll.buffer = this._brownBuffer;
+    roll.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = shape.rumble;
+    lp.Q.value = 0.7;
+    const body = ctx.createBiquadFilter();
+    body.type = 'peaking';
+    body.frequency.value = 55;
+    body.Q.value = 0.9;
+    body.gain.value = 6;
+    const g = ctx.createGain();
+    // The curve is the only thing on this gain: a value set at the same time
+    // as a curve starts is one the browser refuses.
+    g.gain.value = 0.0001;
+    const start = t0 + (shape.crack > 0 ? 0.08 : 0);
+    g.gain.setValueCurveAtTime(rumbleCurve(shape), start, shape.roll);
+    roll.connect(lp).connect(body).connect(g).connect(air);
+    roll.start(start, Math.random() * 6);
+    roll.stop(start + shape.roll + 0.1);
+    const hi = ctx.createBufferSource();
+    hi.buffer = this._brownBuffer;
+    hi.loop = true;
+    const hlp = ctx.createBiquadFilter();
+    hlp.type = 'lowpass';
+    hlp.frequency.value = Math.min(shape.air, 900);
+    const hg = ctx.createGain();
+    const first = Math.min(3, shape.roll * 0.3);
+    hg.gain.setValueAtTime(0.0001, start);
+    hg.gain.exponentialRampToValueAtTime(shape.loud * 0.35, start + 0.15);
+    hg.gain.exponentialRampToValueAtTime(0.0001, start + first);
+    hi.connect(hlp).connect(hg).connect(air);
+    hi.start(start, Math.random() * 6);
+    hi.stop(start + first + 0.1);
+  }
+
+  /** Brown noise: white noise added up, so it is all low end, the stuff of a roll. */
+  _makeBrown(seconds) {
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      d[i] = last * 3.5;
+    }
+    // Faded at the ends, so it loops without a click.
+    const fade = Math.floor(ctx.sampleRate * 0.05);
+    for (let i = 0; i < fade; i++) { d[i] *= i / fade; d[len - 1 - i] *= i / fade; }
+    return buf;
   }
 
   _setBed(bed, level) {

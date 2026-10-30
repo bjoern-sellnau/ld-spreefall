@@ -83,6 +83,24 @@ export class Effects {
     s.gravity = 0;
   }
 
+  /**
+   * A stroke of lightning, or one leg of it: a ribbon as wide as it has to be
+   * to be seen kilometres off, there for a moment.
+   */
+  bolt(ax, ay, az, bx, by, bz, width, life = 0.12, r = 6.0, g = 6.4, b = 8.0) {
+    const s = this._get();
+    s.alive = true;
+    s.kind = 0;
+    s.ax = ax; s.ay = ay; s.az = az;
+    s.bx = bx; s.by = by; s.bz = bz;
+    s.maxLife = life;
+    s.life = life;
+    s.r = r; s.g = g; s.b = b;
+    s.size = width;
+    s.vx = 0; s.vy = 0; s.vz = 0;
+    s.gravity = 0;
+  }
+
   /** One small bright point, for something electrical going wrong. */
   spark(x, y, z, r, g, b) {
     const s = this._get();
@@ -668,6 +686,32 @@ export class Effects {
   }
 
   /**
+   * Smoke off something that is not right: a puff that rises, spreads and
+   * thins, grey or near black, drawn over what is behind it rather than
+   * added to it, because smoke is darker than the sky it goes up against.
+   */
+  smoke(x, y, z, dark = 0, strength = 1) {
+    const s = this._get();
+    s.alive = true;
+    s.kind = 6;
+    s.ax = x + (Math.random() - 0.5) * 0.4;
+    s.ay = y + Math.random() * 0.2;
+    s.az = z + (Math.random() - 0.5) * 0.4;
+    s.vx = (Math.random() - 0.5) * 0.8 + 0.4;
+    s.vy = 1.2 + Math.random() * 1.4;
+    s.vz = (Math.random() - 0.5) * 0.8;
+    s.gravity = -0.3;
+    s.maxLife = 2.2 + Math.random() * 1.8;
+    s.life = s.maxLife;
+    const g = 0.42 - dark * 0.36 + Math.random() * 0.05;
+    s.r = g; s.g = g * 0.98; s.b = g * 0.95;
+    s.size = (0.35 + Math.random() * 0.3) * strength;
+    // Its grain, so no two puffs look alike.
+    s.bx = 0; s.by = 0; s.bz = Math.random() * 10;
+    return s;
+  }
+
+  /**
    * A cloud of poison: low, slow, sickly green, hanging where it was let out.
    */
   gas(x, y, z, radius, strength = 1) {
@@ -954,7 +998,7 @@ export class Effects {
       if (!s.alive) continue;
       s.life -= dt;
       if (s.life <= 0) { s.alive = false; continue; }
-      if (s.kind === 1 || s.kind === 3) {
+      if (s.kind === 1 || s.kind === 3 || s.kind === 6) {
         s.vy -= s.gravity * dt;
         s.ax += s.vx * dt;
         s.ay += s.vy * dt;

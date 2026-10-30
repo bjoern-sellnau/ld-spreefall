@@ -74,6 +74,27 @@ test('the middle passage of the Gate is open, and so is the next one', opts, () 
   assert.ok(!up || up.t > 12, 'nothing low over the carriageway');
 });
 
+test('under each of the Gate\'s five passages there is a roof, and beside it the open sky', opts, () => {
+  const w = loadWorld();
+  // A ray straight up does not see it: the collision is walls, met sideways.
+  // The attic is there as an outline fifteen metres up, and a point under it
+  // is inside that outline.
+  for (const z of [3.3, 15.2, -8.6, 27.1, -20.5]) {
+    const g = w.groundHeight(0, z);
+    const r = w.roofOver(0, g + 1.7, z);
+    assert.ok(r !== null, `a roof over the passage at z ${z}`);
+    assert.ok(Math.abs(r - g - 15) < 1.5, `fifteen metres up, not ${(r - g).toFixed(1)}`);
+  }
+  // Under the portico, in front of the columns, still under it.
+  assert.ok(w.roofOver(4.5, w.groundHeight(4.5, 3.3) + 1.7, 3.3) !== null, 'under the portico');
+  // Out in front, behind, past its end and on Pariser Platz: nothing.
+  for (const [x, z] of [[8, 3.3], [-8, 3.3], [0, 40], [81, 0]]) {
+    assert.equal(w.roofOver(x, w.groundHeight(x, z) + 1.7, z), null, `open sky at ${x}, ${z}`);
+  }
+  // And standing on top of it, nothing is over you.
+  assert.equal(w.roofOver(0, 26, 3.3), null, 'on the attic');
+});
+
 test('the Fernsehturm shaft is hit from two hundred metres', opts, () => {
   const w = loadWorld();
   const h = w.raycast(2148 - 200, 60, -500, 1, 0, 0, 400);

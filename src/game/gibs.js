@@ -123,7 +123,7 @@ export class Gibs {
    * @param {number} force 0 to 1, how hard it was hit
    * @returns {number} how many chunks it made
    */
-  spall(x, y, z, nx, ny, nz, count = 4, force = 1) {
+  spall(x, y, z, nx, ny, nz, count = 4, force = 1, part = null, size = 1) {
     const n = Math.min(MAX, count);
     // A frame to spread them in: two directions across the face, so the
     // pieces leave in a cone off the wall rather than along one line.
@@ -155,8 +155,10 @@ export class Gibs {
       g.spinY = (Math.random() - 0.5) * 16;
       g.spinX = (Math.random() - 0.5) * 16;
       g.spinZ = (Math.random() - 0.5) * 16;
-      g.scale = 0.5 + Math.random() * 1.2;
-      g.part = Math.random() < 0.72 ? 21 : 22;
+      g.scale = (0.5 + Math.random() * 1.2) * size;
+      // Facing and render, unless it is something else coming off: a bumper
+      // is dark metal.
+      g.part = part ?? (Math.random() < 0.72 ? 21 : 22);
       g.maxLife = 9 + Math.random() * 8;
       g.life = g.maxLife;
       g.resting = false;

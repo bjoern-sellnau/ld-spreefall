@@ -18,6 +18,7 @@ layout(std140) uniform Camera {
   mat4 uShadowMat1;
   vec4 uShadowSplit;     // x split0, y split1, z texel0, w texel1
   vec4 uMisc;            // x exposure, y night window mix, z quality, w wind
+  vec4 uWeather;         // x cloud cover, y wet street, z lightning flash, w snow lying
 };
 `;
 
@@ -92,7 +93,7 @@ vec3 linearToSrgb(vec3 c) {
 
 // An analytic sky: a Rayleigh tinted gradient with a Mie lobe around the sun.
 export const SKY = `
-vec3 skyColour(vec3 dir, vec3 sunDir, vec3 zenith, vec3 horizon, float night) {
+vec3 skyColour(vec3 dir, vec3 sunDir, vec3 zenith, vec3 horizon, float night, float overcast) {
   float up = clamp(dir.y, -0.2, 1.0);
   float t = pow(1.0 - max(up, 0.0), 5.0);
   vec3 base = mix(zenith, horizon, clamp(t, 0.0, 1.0));
@@ -101,10 +102,12 @@ vec3 skyColour(vec3 dir, vec3 sunDir, vec3 zenith, vec3 horizon, float night) {
   float g = 0.76;
   float mie = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosT, 1.5);
   vec3 sunTint = mix(vec3(1.0, 0.62, 0.30), vec3(1.0, 0.94, 0.86), clamp(sunDir.y * 2.2, 0.0, 1.0));
-  base += sunTint * mie * 0.030 * (1.0 - night) * smoothstep(-0.12, 0.06, sunDir.y);
+  // Cloud takes the glow down with it, and a closed deck the sun itself.
+  float through = 1.0 - overcast;
+  base += sunTint * mie * 0.030 * (1.0 - night) * smoothstep(-0.12, 0.06, sunDir.y) * (0.2 + 0.8 * through);
   // The sun disc, half a degree across.
   float disc = smoothstep(0.99976, 0.99992, cosT);
-  base += sunTint * disc * 42.0 * smoothstep(-0.04, 0.03, sunDir.y);
+  base += sunTint * disc * 42.0 * smoothstep(-0.04, 0.03, sunDir.y) * through * through * through;
   // Ground haze below the horizon.
   base = mix(base, mix(horizon, vec3(0.10, 0.10, 0.11), 0.55), smoothstep(0.0, -0.09, dir.y));
   return base;

@@ -1026,25 +1026,38 @@ html, body {
 .timepick input { width: 100%; accent-color: var(--accent); margin-top: 6px; }
 .timepick.hidden { display: none; }
 
+/* The weather, picked on the same page, a button a kind. */
+.weatherpick {
+  display: block;
+  width: min(420px, 80vw);
+  margin: 0 auto 10px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.weatherpick b { color: var(--accent); }
+.weatherpick .wxrow { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 6px; }
+.weatherpick .opsbtn { padding: 6px 7px; }
+
 /* In Rise of the Machines the interface runs cold and red. */
 #hud.machines { --accent: #ff4a3d; }
 #hud.machines #district { color: #ff6a5a; }
 
 /* The cheat menu's sliders: a label, the number it is on, and the slider. */
-#cheatvalues .val {
+#cheatvalues .val, #cheatweathervalues .val, #cheatextremevalues .val {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 2px 10px;
   padding: 7px 2px 9px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-#cheatvalues .val b { font-weight: 600; font-size: 12px; letter-spacing: 0.04em; }
-#cheatvalues .val .num { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; }
-#cheatvalues .val i {
+#cheatvalues .val b, #cheatweathervalues .val b, #cheatextremevalues .val b { font-weight: 600; font-size: 12px; letter-spacing: 0.04em; }
+#cheatvalues .val .num, #cheatweathervalues .val .num, #cheatextremevalues .val .num { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; }
+#cheatvalues .val i, #cheatweathervalues .val i, #cheatextremevalues .val i {
   grid-column: 1 / -1;
   font-style: normal; color: var(--dim); font-size: 11px; margin: -2px 0 4px;
 }
-#cheatvalues .val input {
+#cheatvalues .val input, #cheatweathervalues .val input, #cheatextremevalues .val input {
   grid-column: 1 / -1;
   width: 100%;
   accent-color: var(--accent);
@@ -1423,6 +1436,58 @@ html, body {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--edge);
 }
+/* What a group is for, under its settings, and what the one under the
+   pointer does while it is there. Under them rather than over them, so that
+   the line growing never moves the setting you are pointing at. */
+#cheats .cheatintro { margin: -4px 0 6px; font-size: 11.5px; }
+#cheats .groupinfo {
+  margin: 7px 0 0;
+  padding: 5px 9px;
+  min-height: 1.45em;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.025);
+  border-left: 2px solid var(--edge);
+}
+#cheats .groupinfo.item { color: #e6e1d6; border-left-color: var(--accent); }
+#cheats .groupinfo b { color: var(--accent); font-weight: 600; margin-right: 6px; }
+/* The guide: every setting, written out, in the menu's order. */
+#cheatguide .guidelead { margin: 0 0 10px; }
+#cheatguide nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+#cheatguide nav .chip {
+  margin: 0;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #cfcabf;
+  font: 600 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  cursor: pointer;
+}
+#cheatguide section { margin-top: 16px; scroll-margin-top: 8px; }
+#cheatguide h3 {
+  margin: 0 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+#cheatguide .about { margin: 0 0 6px; font-size: 12px; }
+#cheatguide dl { margin: 0; }
+#cheatguide dt { margin-top: 7px; font-size: 12.5px; font-weight: 600; color: #e6e1d6; }
+#cheatguide dt .tags {
+  margin-left: 8px;
+  font-weight: 400;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  opacity: 0.85;
+}
+#cheatguide dd { margin: 2px 0 0 0; font-size: 12px; line-height: 1.5; color: var(--dim); }
 
 /* The mark on a run. Sits with the threat readout, in red, and does not go
    away when the cheats are switched off again. */
@@ -2070,3 +2135,57 @@ canvas.nano { filter: grayscale(1) brightness(0.62) contrast(1.4) sepia(1) hue-r
 #suit .modes { flex-wrap: wrap; gap: 6px 10px; }
 #suit #suitvisor.on { color: #9ee8ff; }
 #suit #suitnano.on { color: #ffb15a; }
+
+/* The warning when extreme weather is coming: a band across the top in
+   the colours a warning comes in, with what it is and how long there is. */
+#wxalert {
+  position: fixed;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, 86vw);
+  padding: 10px 16px 12px;
+  background: rgba(150, 18, 10, 0.92);
+  border: 2px solid #ffcf3a;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.35;
+  text-align: center;
+  z-index: 30;
+  pointer-events: none;
+  box-shadow: 0 0 24px rgba(255, 60, 20, 0.55);
+  animation: wxpulse 1.1s ease-in-out infinite;
+}
+#wxalert.hidden { display: none; }
+#wxalert.clear { background: rgba(20, 90, 40, 0.92); border-color: #b8f5c0; box-shadow: none; animation: none; }
+#wxalert b { display: block; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: #ffcf3a; margin-bottom: 2px; }
+#wxalert.clear b { color: #c8ffd0; }
+@keyframes wxpulse { 50% { box-shadow: 0 0 6px rgba(255, 60, 20, 0.2); } }
+/* While it is on you: whether where you stand keeps it off. */
+#wxcover {
+  position: fixed;
+  top: 132px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: rgba(150, 18, 10, 0.85);
+  z-index: 30;
+  pointer-events: none;
+}
+#wxcover.safe { background: rgba(20, 90, 40, 0.88); }
+#wxcover.hidden { display: none; }
+
+/* What the weather does to the picture while you are out in it. */
+#wxtint {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 0.4s;
+}

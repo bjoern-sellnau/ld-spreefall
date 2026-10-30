@@ -77,9 +77,10 @@ number and the time of the Pages build, or `dev` and the last commit on a
 local server). Neues Spiel lists the seven games (Berlin Phototour, Rise of
 the Machines, Just a Walk, Tactics, Slayer, The Hunt, .BACKDOOR); picking one
 opens its page with what it is, what can be set for it (the time of day it
-starts at for every game, the difficulty where anybody is shooting, an
-operation's settings), **Spielen** and **Zurück**. Zurück is always one page
-back. The time of day can be set in the cheat menu as well, at any time.
+starts at and the weather for every game, the difficulty where anybody is
+shooting, an operation's settings), **Spielen** and **Zurück**. Zurück is
+always one page back. The time of day and the weather can be set in the
+cheat menu as well, at any time.
 
 **Esc** in the street pauses: the world stops and a bar runs down the left
 edge with **Weiter**, all seven games (one click starts it where you stand,
@@ -374,6 +375,16 @@ What is under the hood:
 Press **C**. Everything here is off by default except the two destruction
 switches, which are the game as it ships, and all of it is remembered between
 visits.
+
+The menu says what each setting does. Under every group a line says what the
+group is for and whether it marks the run; point at a setting, or tab to it,
+and the line says what that one does. The **guide** button at the bottom
+replaces the menu with every setting written out, group by group: what it
+does, the range a number goes over, where it starts and where it is now, with
+a row of links to jump to a group and a way back to the menu.
+
+![Pointing at acid rain in the cheat menu](docs/screenshots/cheat-15-info.png)
+![The guide behind the button at the bottom](docs/screenshots/cheat-16-guide.png)
 
 | | |
 |---|---|
@@ -942,6 +953,37 @@ height field under the wheels and the collision segments in front of the
 bumper, from the same raycast the bullets use. They can be shot at, they
 catch fire and they go up.
 
+### What they show of it
+
+Everything with wheels or tracks keeps a damage model, and shows it.
+
+- A round stops in the box the vehicle stands in, so a car is cover and a
+  shot over its roof misses. It leaves a hole with a ring of bare metal
+  round it in the side it went into, up to fifteen a side, and pushes the
+  panel in only a little. Above the waistline it takes the glass with it.
+- The windscreen is laminated, two sheets on a plastic film: hit, it
+  crazes white and stays in its frame. The side and rear windows are
+  toughened and go all at once into small pieces, leaving the frame empty.
+- A blast pushes in every side facing it and blows their glass in. A crash
+  pushes in the end that hit, 4.5 % of it for every metre a second, and
+  cracks the windscreen from eight metres a second up. A nose pushed in
+  past 30 % loses its headlights and past 60 % its bumper, which falls into
+  the road, and the same for the tail.
+- Under 55 % of its hull the engine smokes grey, under 30 % black, and
+  under 15 % it is on fire and burns down by itself until it goes up.
+- It takes most of a magazine from the rifle to set a car or a jeep
+  alight, about three for a bus, and a tank does not notice.
+- A parked car is part of the street, so it shows a hit as glass coming off
+  and smoke as it runs down, and goes up as it always has.
+
+In .BACKDOOR the road blockers take part: a car driven into them is stopped
+dead and its nose pushed in, and blockers coming up under a car standing
+over them go into its floor and throw it, nose up, back off the row. The
+posts stand no more than 1.2 m apart, so there is always one under a car.
+
+![A car shot through the side](docs/screenshots/backdoor-09-shot-car.png)
+![Thrown by the blockers](docs/screenshots/backdoor-11-thrown-car.png)
+
 ## Free travel
 
 Press **V**, or the travel button. The same map comes up, you pick a place,
@@ -955,6 +997,81 @@ which is a city laid out the way the real one is. Flying it means you arrive
 knowing roughly where you are, which is what a map on its own never tells you.
 Nothing is off limits: walking into the memorial has always been allowed, it
 is firing there that is not.
+
+## The weather
+
+Each game's page has the weather under the time of day: **Clear**,
+**Cloudy**, **Rain**, **Storm**, **Fog**, **Snow** or **Random**, and it is
+remembered between visits. Random holds what it has for four minutes or so
+and then turns, mostly to the kind next to it (a clear sky clouds over before
+it rains, a storm eases to rain before it clears), and snows only from
+November to the middle of March, where it takes the place of rain. Every
+change blends over half a minute.
+
+- Cloud greys the sky, takes the sun and its shadows out of the light, and
+  closes over the stars.
+- Rain falls round you as streaks at six and a half to nine metres a second;
+  the street darkens, goes glossy and stands in puddles as it gets wet, and
+  dries over five minutes after.
+- Snow falls as flakes that sway, at under half a metre to a little over one,
+  and settles white on everything that faces up; rain washes it away.
+- Fog closes the view to 180 m, and a soldier sees you no further than the
+  weather lets him: a little over a hundred metres in fog, and the whole of
+  his sight on a clear day.
+- A storm throws lightning: the sky flashes at once, a bolt hundreds of
+  metres tall stands on the skyline where it came down and flickers as the
+  strokes come down it again, and the thunder arrives three seconds a
+  kilometre later: close to, a sharp crack and a tearing and then the roll;
+  from a few kilometres, a low roll in claps for ten seconds and more.
+
+The cheat menu's **weather** group turns it further: **Off** for a clear sky
+whatever was picked, any kind straight away, or Random; how strong it is,
+from a quarter to twice as much; how often Random turns, from half a minute
+to twenty; and whether a storm throws lightning. None of it counts as a
+cheat.
+
+![Rain at the Brandenburg Gate](docs/screenshots/weather-01-rain.png)
+![A storm, and the bolt standing behind the Gate](docs/screenshots/weather-04-storm.png)
+
+### Extreme weather
+
+Under the weather on each game's page, and in the cheat menu's **extreme
+weather** group, four kinds of weather past anything real can be switched
+on, each on its own or **All**. Then they come at random, on average every
+five minutes (one to twenty in the cheat menu), more than one at once if the
+dice say so, and the cheat menu can bring each one now. Each is announced
+twenty seconds ahead with a red band and the siren, rising and falling the
+way the warning sirens in Germany do: "Achtung: Säureregen wird erwartet in
+20 Sekunden. Suchen Sie sich Schutz!", counted down, and given the all clear
+with a steady tone when it is over. It covers a stretch some hundreds of
+metres across round where it was announced.
+
+- **Säureregen**, acid rain: green rain under a green sky; whoever is out in
+  it is eaten down to the bones in a green pool, trees melt, cars corrode.
+- **Ionensturm**, an ion storm: bolts every second or so, on people, cars,
+  shelters, the walls round you; whoever is within a few metres is burnt to a
+  black skeleton where they stood, and what it lands on is wrecked, the
+  building included.
+- **Wirbelsturm**, a tornado: a funnel that comes from a quarter of a
+  kilometre off and passes close; whoever it takes is thrown into the air
+  and bursts on landing, trees are whirled apart, cars thrown, and near it
+  you lose health.
+- **Feuersturm**, a firestorm: an orange sky raining embers; whoever is out
+  in it catches and burns, trees catch, cars burn.
+
+Shelter is a roof: a bus shelter (glass, a bench and the stop's green H on
+yellow) or a kiosk's awning, one every hundred and thirty metres or so of
+street, the passages of the Brandenburg Gate, any other roof over the way
+(a canopy, an arcade), or the inside of a vehicle or a mech. Under it you are
+out of all four, except the very core of a tornado; the rain stops round you
+there, and a line under the warning says whether where you stand keeps it
+off. The people who live here run for the nearest shelter when the warning
+comes, the Gate included. A bolt, a tornado or a blast brings a bus shelter
+or a kiosk down, and then it shelters nobody.
+
+![Acid rain at a bus shelter](docs/screenshots/extreme-01-acid.png)
+![Dry in the Brandenburg Gate's carriageway](docs/screenshots/extreme-05-gate.png)
+![A tornado coming down the street](docs/screenshots/extreme-03-tornado.png)
 
 ## Destruction
 

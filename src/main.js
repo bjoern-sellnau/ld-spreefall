@@ -21,6 +21,9 @@ import { ArmsPanel, armsRows } from './ui/arms.js';
 import { ARROW_HEADS, ARROW_DRAWS, MOVES, bashWeight } from './game/arsenal.js';
 import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
+import { Weather, WEATHER, KINDS as WEATHER_KINDS, RANDOM as WEATHER_RANDOM } from './game/weather.js';
+import { Extreme, EXTREME, EXTREME_KINDS, warningText, strength as extremeStrength } from './game/extreme.js';
+import { SHELTERS, sheltersOf, covers, nearestShelter, standIn, hurtShelter } from './game/shelters.js';
 import { Projectiles, PROJECTILE } from './game/projectiles.js';
 import { throwArc, THROW as THROW_SPEC } from './game/throwarc.js';
 import { ArcView } from './ui/arcview.js';
@@ -29,11 +32,12 @@ import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS, BOW_HOLDS } from './game/cheats.js';
+import { GUIDE_GROUPS, CONTROL_HELP, buildGuide } from './game/guide.js';
 import { CHASSIS, mechKey } from './game/chassis.js';
 import { Onslaught, ONSLAUGHT, pickStrike } from './game/onslaught.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
 import { Gibs } from './game/gibs.js';
-import { Cars } from './game/cars.js';
+import { Cars, CAR_HEALTH } from './game/cars.js';
 import { Trains, TRAIN } from './game/trains.js';
 import { bakeCrush } from './game/bake.js';
 import { fineGround, fineWalls, fineWallsByTile, holeInWall } from './game/remesh.js';
@@ -45,6 +49,7 @@ import { FireWalls } from './game/firewall.js';
 import { Machines, MACHINES, makeMachine, empBurst } from './game/machines.js';
 import { Ion, ION, ION_STATE } from './game/ion.js';
 import { Vehicles, VEHICLE } from './game/vehicles.js';
+import { BROKE, DENTS, engineState } from './game/dents.js';
 import { Mechs, MECH, ARMS, MECH_PITCH, TITANFALL } from './game/mechs.js';
 import { MACHINE_MUZZLE } from './render/actors.js';
 import { HealthBars } from './ui/healthbars.js';
@@ -65,7 +70,7 @@ import {
   junctionsOf, mastsOf, lightAt,
 } from './game/traffic.js';
 import { CITY, pipesOf, pipeStep, pipeState, pipeReady, blastOn, Blackout, furnitureOf, boxState, boxReady,
-  boxStep, zapOn, atmCash, atmState, atmReady, atmStep, bollardsOf, postsOf, bollardStep, intoBollards } from './game/city.js';
+  boxStep, zapOn, atmCash, atmState, atmReady, atmStep, bollardsOf, postsOf, bollardStep, intoBollards, postsUnder } from './game/city.js';
 import { CRIME, newCrime, crimeStep, crimeRecord, repFor, stopped as crimeStopped } from './game/crime.js';
 import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
@@ -116,6 +121,12 @@ const el = {
   newGame: $('newgame'), buildLine: $('buildline'), modeName: $('modename'), diffBlock: $('diffblock'),
   pause: $('pause'), pauseResume: $('pauseresume'), pauseMenu: $('pausemenu'),
   cheatTod: $('cheattod'), cheatTodLabel: $('cheattodlabel'),
+  weatherChips: $('weatherchips'), weatherLabel: $('weatherlabel'),
+  extremeChips: $('extremechips'), extremeLabel: $('extremelabel'),
+  cheatExtreme: $('cheatextreme'), cheatExtremeValues: $('cheatextremevalues'),
+  wxAlert: $('wxalert'), wxAlertTitle: $('wxalerttitle'), wxAlertText: $('wxalerttext'), wxTint: $('wxtint'),
+  wxCover: $('wxcover'),
+  cheatWeather: $('cheatweather'), cheatWeatherValues: $('cheatweathervalues'),
   opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
   opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
   opsProgress: $('opsprogress'), opsWipe: $('opswipe'),
@@ -144,6 +155,8 @@ const el = {
   mechAmmo: $('mechammo'), mechPod: $('mechpod'), mechDash: $('mechdash'),
   mechWarn: $('mechwarn'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
+  cheatMenuBody: $('cheatmenu'), cheatGuide: $('cheatguide'), guideToc: $('guidetoc'), guideBody: $('guidebody'),
+  cheatsGuide: $('cheatsguide'), guideBack: $('guideback'), guideClose: $('guideclose'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
   targetHint: $('targethint'), cinemaHint: $('cinemahint'),
   targetIn: $('targetin'), targetOut: $('targetout'),
@@ -295,6 +308,9 @@ async function main() {
   const projectiles = new Projectiles(world, (x, y, z, splash, body) => explode(x, y, z, splash, body));
   const weapon = new Weapon(world, drones, { projectiles });
   const effects = new Effects();
+  // The weather, picked on each game's page and turned further in the cheat menu.
+  const weather = new Weather();
+  const extreme = new Extreme();
   const reflex = new Reflex();
   reflex.drainScale = combat.rules.reflexDrain;
   soldiers = new Soldiers(world);
@@ -393,6 +409,7 @@ async function main() {
   const vehicles = new Vehicles(world);
   const mechs = new Mechs(world);
   weapon.mechs = mechs;
+  weapon.vehicles = vehicles;
   soldiers.hazards = () => projectiles.hazards();
   soldiers.accuracyScale = combat.rules.enemyAccuracy;
   // A rocket goes off on whoever it hits, not on the wall behind them.
@@ -729,7 +746,8 @@ async function main() {
     if (shot.target) {
       audio.hitMarker(shot.core);
       showHitmarker(shot.killed ? 'kill' : (shot.core ? 'core' : ''));
-      if (shot.killed) creditTarget(shot.target, shot.core, shot.surface);
+      // A vehicle that goes up says so itself, through its own explosion.
+      if (shot.killed && shot.surface !== 'vehicle') creditTarget(shot.target, shot.core, shot.surface);
       if (spec.arc && (shot.surface === 'soldier' || shot.surface === 'drone')) voltArc(shot.target, shot.surface, spec);
       // The particle rifle burns the flesh off what it kills and leaves it
       // standing, black, the way F.E.A.R.'s Type-7 does.
@@ -1160,7 +1178,7 @@ async function main() {
       const r = Math.hypot(v.x - x, v.y + 1.0 - by, v.z - z);
       if (r > splash.radius) continue;
       if (!reach(v.x, v.y + 1.0, v.z)) continue;
-      vehicles.damage(v, splash.damage * (1 - r / splash.radius));
+      vehicles.blast(v, splash.damage * (1 - r / splash.radius), x, z);
     }
     // A charge that landed looking for a car. It takes the nearest one within
     // reach and that car is the bomb: the shaped charge is small, what goes
@@ -1971,7 +1989,7 @@ async function main() {
     }
     for (const v of [...vehicles.active]) {
       const away = Math.hypot(v.x - m.x, v.z - m.z);
-      if (away < stomp.radius) vehicles.damage(v, stomp.damage * (1 - away / stomp.radius));
+      if (away < stomp.radius) vehicles.blast(v, stomp.damage * (1 - away / stomp.radius), m.x, m.z);
     }
     for (const other of [...mechs.active]) {
       if (other === m) continue;
@@ -2096,11 +2114,23 @@ async function main() {
    *
    * @returns {boolean} whether that was the one that set it off
    */
+  // The parked cars that have been hit and are still standing, for their
+  // smoke. A parked car is part of the street it is baked into, so what
+  // shows of a hit on it is the glass that comes off and the smoke after.
+  const hurtCars = new Set();
   function hitCar(x, y, z, damage) {
     const car = cars.at(x, z, 2.4);
     if (!car) return false;
-    if (y > world.groundHeight(x, z) + 2.2) return false;
-    return cars.hurt(car, damage);
+    const g = world.groundHeight(x, z);
+    if (y > g + 2.2) return false;
+    if (y > g + 0.9 && !car.dead) {
+      for (let k = 0; k < 8; k++) {
+        effects.spark(x + (Math.random() - 0.5) * 0.5, y + (Math.random() - 0.5) * 0.3, z + (Math.random() - 0.5) * 0.5, 0.75, 0.85, 0.95);
+      }
+    }
+    const gone = cars.hurt(car, damage);
+    if (!car.dead) hurtCars.add(car);
+    return gone;
   }
 
   mechs.onEject = () => { if (state.inMech) leaveMech(false); };
@@ -2964,6 +2994,89 @@ async function main() {
       feed(`<i>${v.spec.name.toLowerCase()} went up</i>`);
     }
     state.wrecksBlown = (state.wrecksBlown || 0) + 1;
+  }
+  // What breaks off a vehicle, as it breaks: the windscreen crazes with a
+  // crack and a glitter, a side or rear window goes into the road in small
+  // pieces, a light goes out with a pop, and a bumper falls off.
+  vehicles.onBreak = (v, broke) => {
+    const H = vehicles.hull(v);
+    if (!H) return;
+    const c = Math.cos(v.yaw), sn = Math.sin(v.yaw);
+    const at = (lx, ly, lz) => ({ x: v.x + c * lx + sn * lz, y: v.y + ly, z: v.z - sn * lx + c * lz });
+    const out = (lx, lz) => ({ x: c * lx + sn * lz, z: -sn * lx + c * lz });
+    const glassY = (H.glass + H.H) / 2;
+    const panes = [[BROKE.screen, 0, -H.L * 0.2], [BROKE.rearScreen, 0, H.L * 0.36],
+      [BROKE.left, -H.W / 2, 0], [BROKE.right, H.W / 2, 0]];
+    for (const [bit, lx, lz] of panes) {
+      if (!(broke & bit)) continue;
+      const p = at(lx, glassY, lz);
+      const n = out(Math.sign(lx), lz === 0 ? 0 : Math.sign(lz));
+      // Laminated, the windscreen holds together and only glints; toughened
+      // glass goes into a shower of little cubes.
+      const shards = bit === BROKE.screen ? 6 : 22;
+      for (let k = 0; k < shards; k++) {
+        effects.spark(p.x + (Math.random() - 0.5) * 0.9 + n.x * 0.2, p.y + (Math.random() - 0.5) * 0.4,
+          p.z + (Math.random() - 0.5) * 0.9 + n.z * 0.2, 0.75, 0.85, 0.95);
+      }
+      state.panesBroken = (state.panesBroken || 0) + 1;
+    }
+    for (const [bit, lz] of [[BROKE.headlights, -H.L / 2], [BROKE.taillights, H.L / 2]]) {
+      if (!(broke & bit)) continue;
+      for (const side of [-1, 1]) {
+        const p = at(side * H.W * 0.33, 0.68, lz);
+        effects.flash(p.x, p.y, p.z, 0.25, 1.0, 0.9, 0.7, 0.06);
+      }
+    }
+    for (const [bit, lz] of [[BROKE.frontBumper, -H.L / 2], [BROKE.rearBumper, H.L / 2]]) {
+      if (!(broke & bit)) continue;
+      const p = at(0, 0.45, lz);
+      const n = out(0, Math.sign(lz));
+      gibs.spall(p.x, p.y, p.z, n.x, 0.2, n.z, 3, 0.5, 2, 1.8);
+      for (let k = 0; k < 10; k++) effects.spark(p.x + (Math.random() - 0.5) * 1.6, p.y, p.z + (Math.random() - 0.5) * 1.6, 1.0, 0.8, 0.45);
+      state.bumpersLost = (state.bumpersLost || 0) + 1;
+    }
+  };
+  /**
+   * A vehicle that has taken enough smokes from under its bonnet, grey and
+   * then black, and below that it is on fire and burning down to the point
+   * where it goes up. Only the ones near enough to see.
+   */
+  function damageStep(dt) {
+    for (const car of hurtCars) {
+      if (car.dead) { hurtCars.delete(car); continue; }
+      const share = car.health / CAR_HEALTH;
+      if (share >= DENTS.smoke) continue;
+      if (Math.abs(car.x - player.x) > 260 || Math.abs(car.z - player.z) > 260) continue;
+      car.smokeAt = (car.smokeAt || 0) - dt;
+      if (car.smokeAt > 0) continue;
+      const y = world.groundHeight(car.x, car.z) + 1.1;
+      effects.smoke(car.x, y, car.z, share < DENTS.black ? 0.9 : 0.1, 1);
+      car.smokeAt = share < DENTS.black ? 0.08 : 0.14;
+    }
+    for (const v of vehicles.active) {
+      const stage = engineState(v);
+      if (!stage) continue;
+      if (Math.abs(v.x - player.x) > 260 || Math.abs(v.z - player.z) > 260) continue;
+      const H = vehicles.hull(v);
+      const e = H ? H.engine : [0, 1, 0];
+      const c = Math.cos(v.yaw), sn = Math.sin(v.yaw);
+      const x = v.x + c * e[0] + sn * e[2], y = v.y + (H ? Math.min(H.H, e[1] + 0.4) : e[1]), z = v.z - sn * e[0] + c * e[2];
+      v.smokeAt = (v.smokeAt || 0) - dt;
+      if (v.smokeAt > 0) continue;
+      const big = v.spec.mass > 2 ? 1.8 : 1;
+      if (stage === 'smoke') {
+        effects.smoke(x, y, z, 0.1, big);
+        v.smokeAt = 0.14;
+      } else {
+        effects.smoke(x, y, z, 0.9, big * 1.2);
+        v.smokeAt = 0.08;
+        if (stage === 'fire') {
+          effects.flame(x, y - 0.2, z, 1.1 * big, 0.6);
+          // And the fire eats into what is left, so it goes up in the end.
+          vehicles.damage(v, v.maxHealth * DENTS.burn * 0.08, false);
+        }
+      }
+    }
   }
   function wreckStep(dt) {
     for (let i = wrecks.length - 1; i >= 0; i--) {
@@ -4585,6 +4698,16 @@ async function main() {
   // started without rebuilding the whole thing.
   const settingShown = [];
 
+  // What a mech carries, said the way the menu talks: yours by its arms,
+  // theirs by its gun.
+  const FOE_GUN = { auto: 'a chaingun in bursts', shotgun: 'a shotgun', rail: 'a railgun',
+    shell: 'a cannon', swarm: 'a swarm of small rockets', thermite: 'thermite', laser: 'a beam' };
+  const armsLine = (row, which) => (which === 'mine'
+    ? `Carries ${row.loadout.map((id) => (ARMS.find((a) => a.id === id) || { name: id }).name).join(', ')}.`
+    : `Fires ${FOE_GUN[(row.gun && row.gun.kind) || 'auto']} and rockets.`);
+  const mechHelp = (row, which) => `${row.role.charAt(0).toUpperCase()}${row.role.slice(1)}. ${armsLine(row, which)}`;
+  const RANDOM_MECH = 'A different chassis every time they come.';
+
   function buildCheatMenu() {
     for (const a of ACTIONS) {
       const b = document.createElement('button');
@@ -4615,13 +4738,6 @@ async function main() {
       const say = document.createElement('div');
       say.className = 'mechsay';
       const chips = [];
-      // What it carries, said the way the menu talks: yours by its arms,
-      // theirs by its gun.
-      const FOE_GUN = { auto: 'a chaingun in bursts', shotgun: 'a shotgun', rail: 'a railgun',
-        shell: 'a cannon', swarm: 'a swarm of small rockets', thermite: 'thermite', laser: 'a beam' };
-      const armsLine = (row, which) => (which === 'mine'
-        ? `Carries ${row.loadout.map((id) => (ARMS.find((a) => a.id === id) || { name: id }).name).join(', ')}.`
-        : `Fires ${FOE_GUN[(row.gun && row.gun.kind) || 'auto']} and rockets.`);
       const show = () => {
         const id = cheats.mechs[side];
         for (const c of chips) c.el.classList.toggle('on', c.id === id);
@@ -4787,6 +4903,744 @@ async function main() {
     }
   }
   buildCheatMenu();
+
+  // --- the weather ---------------------------------------------------------
+  //
+  // Picked on each game's page, under the time of day, and turned further in
+  // the cheat menu. It goes on in real time, behind the title as much as in a
+  // game, and holds still with the pause.
+  const WEATHER_ALL = [...WEATHER_KINDS, WEATHER_RANDOM];
+  const weatherName = (id) => (WEATHER_ALL.find((k) => k.id === id) || { label: id }).label;
+  weather.onChange = (kind) => toast(`the weather turns: ${weatherName(kind).toLowerCase()}`);
+  // A strike: the flash at once, a fork of light standing on the skyline
+  // where it came down, and the thunder as long after as the distance says.
+  // The channel is kept so the strokes after the first come down it again.
+  let channel = [];
+  const stroke = (life) => {
+    for (const c of channel) effects.bolt(c[0], c[1], c[2], c[3], c[4], c[5], c[6], life);
+  };
+  weather.onStrike = ({ distance, bearing, delay }) => {
+    channel = [];
+    const x = player.x + Math.sin(bearing) * distance, z = player.z + Math.cos(bearing) * distance;
+    const g = world.groundHeight(x, z);
+    const top = g + 650 + Math.random() * 300;
+    const width = 1.2 + distance * 0.004;
+    let px = x + (Math.random() - 0.5) * 200, py = top, pz = z + (Math.random() - 0.5) * 200;
+    const legs = 9;
+    for (let i = 1; i <= legs; i++) {
+      const f = i / legs;
+      const nx = x + (px - x) * 0.45 + (Math.random() - 0.5) * 90 * (1 - f);
+      const ny = top + (g - top) * f;
+      const nz = z + (pz - z) * 0.45 + (Math.random() - 0.5) * 90 * (1 - f);
+      channel.push([px, py, pz, i === legs ? x : nx, i === legs ? g : ny, i === legs ? z : nz, width]);
+      // A fork off the main stroke, now and then, that dies out in the air.
+      if (i > 2 && i < legs - 1 && Math.random() < 0.3) {
+        channel.push([nx, ny, nz, nx + (Math.random() - 0.5) * 160, ny - 80 - Math.random() * 90,
+          nz + (Math.random() - 0.5) * 160, width * 0.6]);
+      }
+      px = nx; py = ny; pz = nz;
+    }
+    stroke(0.12);
+    audio.thunder(distance, WEATHER.sound);
+    state.strikes = (state.strikes || 0) + 1;
+    state.lastStrike = { distance, delay };
+  };
+  weather.onRestroke = () => {
+    stroke(0.08);
+    state.strokes = (state.strokes || 0) + 1;
+  };
+  function stepWeather(wall) {
+    const dt = Math.min(0.25, Math.max(0, wall - (state.weatherAt || wall)));
+    state.weatherAt = wall;
+    if (!state.paused) weather.update(dt, Math.random, renderer.dayOfYear);
+    const now = extremeLook(weather.now());
+    // Under a roof the rain stops round you, as far as the roof reaches.
+    now.dry = now.rain > 0.02 || now.snow > 0.02 || (now.embers || 0) > 0.02 ? dryRound() : null;
+    renderer.weather = now;
+    // How far they can see you: the weather's visibility, past which nobody
+    // sees anybody, a little short of it to be fair to you, and never more
+    // than a clear day allows.
+    soldiers.sightScale = Math.min(1, Math.max(0.3, now.visibility * 0.6 / 165));
+    audio.setWeather(now.rain + now.snow * 0.15, now.wind);
+    const here = extremeHere();
+    audio.setExtreme(here.acid, here.fire, here.tornado, here.ion);
+  }
+  /** The title's chips and the cheat menu's, from what the weather is set to. */
+  function showWeather() {
+    for (const b of el.weatherChips.querySelectorAll('button')) b.classList.toggle('on', b.dataset.weather === weather.choice);
+    el.weatherLabel.textContent = weatherName(weather.choice);
+    for (const b of el.cheatWeather.querySelectorAll('button')) {
+      const id = b.dataset.wx;
+      b.classList.toggle('on', id === 'off' ? weather.off : (!weather.off && id === weather.choice));
+    }
+  }
+  for (const k of WEATHER_ALL) {
+    const b = document.createElement('button');
+    b.className = 'opsbtn';
+    b.dataset.weather = k.id;
+    b.textContent = k.label;
+    b.title = k.note;
+    b.addEventListener('click', () => {
+      weather.choose(k.id, Math.random, renderer.dayOfYear);
+      // Behind the title it can go straight there: nobody is out in it yet.
+      if (state.mode === 'title') weather.start(Math.random, renderer.dayOfYear);
+      showWeather();
+    });
+    el.weatherChips.appendChild(b);
+  }
+  // In the cheat menu: off, any of them now, or random; how strong; how often
+  // random turns; and whether a storm throws lightning.
+  {
+    const say = document.createElement('div');
+    say.className = 'mechsay';
+    for (const k of [{ id: 'off', label: 'Off', note: 'no weather at all: a clear sky whatever was picked' }, ...WEATHER_ALL]) {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.dataset.wx = k.id;
+      b.textContent = k.label;
+      b.title = k.note;
+      b.addEventListener('click', () => {
+        if (k.id === 'off') weather.setOff(!weather.off);
+        else {
+          if (weather.off) weather.setOff(false);
+          weather.choose(k.id, Math.random, renderer.dayOfYear);
+        }
+        say.textContent = k.id === 'off' && !weather.off ? 'the weather is back on' : k.note;
+        showWeather();
+        toast(k.id === 'off' ? `weather ${weather.off ? 'off' : 'on'}` : `weather: ${k.label.toLowerCase()}`);
+      });
+      el.cheatWeather.appendChild(b);
+    }
+    el.cheatWeather.appendChild(say);
+    const slider = (label, note, min, max, step, get, set, fmt) => {
+      const row = document.createElement('label');
+      row.className = 'val';
+      const name = document.createElement('b');
+      name.textContent = label;
+      const num = document.createElement('span');
+      num.className = 'num';
+      const i = document.createElement('i');
+      i.textContent = note;
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = String(min); input.max = String(max); input.step = String(step);
+      input.value = String(get());
+      const show = () => { num.textContent = fmt(get()); };
+      input.addEventListener('input', () => { set(parseFloat(input.value)); show(); });
+      row.append(name, num, i, input);
+      el.cheatWeatherValues.appendChild(row);
+      show();
+      return input;
+    };
+    slider('Weather strength', 'how hard it rains, snows and blows, and how thick the fog is', WEATHER.intensityMin * 100,
+      WEATHER.intensityMax * 100, 5, () => Math.round(weather.intensity * 100), (v) => weather.setIntensity(v / 100), (v) => `${v} %`)
+      .dataset.wx = 'intensity';
+    slider('Random weather turns every', 'on average, with random picked', WEATHER.minutesMin, WEATHER.minutesMax, 0.5,
+      () => weather.minutes, (v) => weather.setMinutes(v), (v) => `${v} min`).dataset.wx = 'minutes';
+    const sw = document.createElement('button');
+    sw.className = 'sw';
+    sw.dataset.wx = 'lightning';
+    sw.innerHTML = '<span class="box"></span><span>Lightning<i>strikes and thunder in a storm</i></span>';
+    const showSw = () => sw.classList.toggle('on', weather.lightning);
+    sw.addEventListener('click', () => { weather.setLightning(!weather.lightning); showSw(); toast(`lightning ${weather.lightning ? 'on' : 'off'}`); });
+    el.cheatWeatherValues.appendChild(sw);
+    showSw();
+  }
+  showWeather();
+  weather.start(Math.random, renderer.dayOfYear);
+
+  // --- the extreme weather -------------------------------------------------
+  //
+  // Acid rain, an ion storm, a tornado and a firestorm, each switched on in
+  // the cheat menu and then coming at random, warned of twenty seconds
+  // ahead. Under the roof of a bus shelter or a kiosk's awning you are out of
+  // it, for as long as the roof stands; so are the people who live here, who
+  // run for one when the warning comes. What the weather does to them is the
+  // weather's: nobody is put down to you, and nobody costs you your name.
+  const EXTREME_LOOK = {
+    acid: { tint: [0.62, 0.78, 0.18], rain: 0.85, cloud: 0.88, dark: 0.35, haze: 0.004 },
+    ion: { tint: [0.46, 0.3, 0.86], rain: 0, cloud: 0.96, dark: 0.6, haze: 0.002 },
+    tornado: { tint: [0.42, 0.5, 0.4], rain: 0.45, cloud: 0.95, dark: 0.55, haze: 0.003, wind: 1 },
+    fire: { tint: [1.0, 0.42, 0.1], rain: 0, cloud: 0.7, dark: 0.2, haze: 0.006, embers: 1 },
+  };
+  /** The weather as it is, with whatever extreme weather there is laid over it. */
+  function extremeLook(W) {
+    const X = extreme.now();
+    let tint = [0, 0, 0], sum = 0;
+    for (const k of EXTREME_KINDS) {
+      const a = X[k];
+      if (!(a > 0)) continue;
+      const L = EXTREME_LOOK[k];
+      W.cloud = Math.max(W.cloud, L.cloud * a);
+      W.rain = Math.max(W.rain, L.rain * a);
+      W.dark = Math.max(W.dark, L.dark * a);
+      if (L.wind) W.wind = Math.max(W.wind, L.wind * a);
+      if (L.embers) W.embers = Math.max(W.embers || 0, L.embers * a);
+      W.extinction = (W.extinction || 0) + L.haze * a;
+      for (let i = 0; i < 3; i++) tint[i] += L.tint[i] * a;
+      sum += a;
+    }
+    if (sum > 0) {
+      W.tint = [tint[0] / sum, tint[1] / sum, tint[2] / sum, Math.min(0.75, sum * 0.6)];
+      if (X.acid > 0) W.precipTint = [0.55, 0.85, 0.12, Math.min(1, X.acid)];
+      if (X.ion > 0) W.flashTint = [0.3, 0.18, 0.55];
+      W.flash = Math.max(W.flash, state.ionFlash || 0);
+      W.visibility = 3.912 / Math.max(1e-6, W.extinction);
+    }
+    return W;
+  }
+  /** How much of each there is where you are, for the sound and the screen. */
+  function extremeHere() {
+    const out = {};
+    for (const k of EXTREME_KINDS) out[k] = extreme.at(k, player.x, player.z);
+    return out;
+  }
+
+  // The shelters, worked out from the same road lines as everything else on
+  // the pavements, and what has happened to each kept across a rebuild.
+  let shelterList = [], shelterIdx = null;
+  function cityShelters() {
+    const idx = trafficRoads();
+    if (shelterIdx !== idx) {
+      const was = shelterList;
+      shelterList = sheltersOf(idx, trafficJunctions(), (cx, cz, x, z, bx, bz) => {
+        if (world.isLoaded && !world.isLoaded(x, z)) return false;
+        const gc = world.groundHeight(cx, cz), g = world.groundHeight(x, z);
+        return world.lineOfSight(cx, gc + 1, cz, x, g + 1, z) && Math.abs(g - gc) < 1.2
+          && world.lineOfSight(x, g + 1.2, z, bx, world.groundHeight(bx, bz) + 1.2, bz);
+      });
+      carryOver(was, shelterList, ['health', 'broken']);
+      shelterIdx = idx;
+    }
+    return shelterList;
+  }
+  function sheltersNear(r = 160) {
+    const out = [];
+    for (const sh of cityShelters()) {
+      if (Math.abs(sh.x - player.x) > r || Math.abs(sh.z - player.z) > r) continue;
+      out.push({ x: sh.x, y: world.groundHeight(sh.x, sh.z), z: sh.z, yaw: sh.yaw, light: sh.broken ? 1 : 0, kind: sh.kind });
+    }
+    return out;
+  }
+  // Any other roof keeps it off as well: the attic over the Gate's passages,
+  // a canopy, an arcade, a bridge between two buildings. None of them is
+  // glass on a frame for a bolt to bring down; a roof like that goes when
+  // the building it belongs to does.
+  const ROOF = { kind: 'roof', x: 0, z: 0, broken: false };
+  /** Under a standing roof, at this point and height. */
+  function sheltered(x, y, z) {
+    for (const sh of cityShelters()) {
+      if (Math.abs(sh.x - x) > 6 || Math.abs(sh.z - z) > 6) continue;
+      if (covers(sh, x, y, z, world.groundHeight(sh.x, sh.z))) return sh;
+    }
+    return world.roofOver(x, y, z) !== null ? ROOF : null;
+  }
+  // And the roofs people know to run for when the warning comes: the Gate's
+  // five passages. Where to stand is worked out from the collision itself,
+  // a spot every metre and a half well under the attic and not in
+  // a column or a cross wall, which is any spot with a clear line out of it
+  // nine metres one way or another: from inside a wall eight metres long
+  // every line that long comes out through it.
+  const ROOF_PLACES = ['brandenburg_gate'];
+  let roofList = [], roofKey = '';
+  function roofShelters() {
+    const marks = (world.manifest.landmarks || []).filter((l) => ROOF_PLACES.includes(l.key));
+    const key = marks.map((l) => `${l.key}@${l.district}`).join();
+    if (key === roofKey) return roofList;
+    roofKey = key;
+    roofList = [];
+    for (const l of marks) {
+      const spots = [];
+      for (let dx = -40; dx <= 40; dx += 1.5) {
+        for (let dz = -40; dz <= 40; dz += 1.5) {
+          const x = l.x + dx, z = l.z + dz, g = world.groundHeight(x, z);
+          // A metre of roof round it every way, so whoever stands there a
+          // little off the spot is still under it and not at its edge.
+          if ([[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([ax, az]) =>
+            world.roofOver(x + ax, g + 1.2, z + az) === null)) continue;
+          const out = [[9, 0], [-9, 0], [0, 9], [0, -9]].some(([ax, az]) =>
+            world.lineOfSight(x, g + 1, z, x + ax, world.groundHeight(x + ax, z + az) + 1, z + az));
+          if (out) spots.push({ x, z });
+        }
+      }
+      if (spots.length) roofList.push({ kind: 'roof', name: l.name, x: l.x, z: l.z, spots, broken: false });
+    }
+    return roofList;
+  }
+  /**
+   * Where the k-th one to arrive stands. Under a roof with room for many,
+   * the nearest spot nobody has taken that can be walked to in a straight
+   * line from where they are: a spot in the next passage over is the other
+   * side of a cross wall, and they would stand against it in the rain.
+   */
+  function placeIn(sh, k, sd, taken) {
+    if (!sh.spots) return standIn(sh, k);
+    const g = world.groundHeight(sd.x, sd.z);
+    const free = sh.spots.filter((p) => !taken.has(p))
+      .map((p) => ({ p, d: Math.hypot(p.x - sd.x, p.z - sd.z) })).sort((a, b) => a.d - b.d);
+    const seen = free.slice(0, 40).find(({ p }) =>
+      world.lineOfSight(sd.x, g + 1, sd.z, p.x, world.groundHeight(p.x, p.z) + 1, p.z));
+    const p = (seen || free[0] || { p: sh.spots[0] }).p;
+    taken.add(p);
+    return p;
+  }
+  const roomIn = (sh) => (sh.spots ? Math.min(60, sh.spots.length) : 3);
+  /** You: under a roof, or in something with one. */
+  function youSheltered() {
+    if (state.inVehicle || state.inMech) return true;
+    return !!sheltered(player.x, player.y + 0.5, player.z);
+  }
+  /**
+   * Under a roof on foot, the round about you where nothing falls: how far
+   * the roof reaches the shortest way out from where you stand, and how
+   * high its underside is, or null in the open.
+   */
+  function dryRound() {
+    if (state.mode !== 'walk' || state.inVehicle || state.inMech) return null;
+    const y = player.y + 0.5;
+    const sh = sheltered(player.x, y, player.z);
+    if (!sh) return null;
+    let r = 8;
+    for (let k = 0; k < 8 && r > 0.6; k++) {
+      const c = Math.cos(k * Math.PI / 4), sn = Math.sin(k * Math.PI / 4);
+      for (let d = 0.5; d < r; d += 0.5) {
+        if (!sheltered(player.x + c * d, y, player.z + sn * d)) { r = d; break; }
+      }
+    }
+    const top = sh === ROOF ? world.roofOver(player.x, y, player.z)
+      : world.groundHeight(sh.x, sh.z) + SHELTERS.kinds[sh.kind].h;
+    return [player.x, player.z, r, top];
+  }
+  /** A shelter comes down: the glass in the road, a crash, and nobody under it. */
+  function bringDown(sh) {
+    if (!SHELTERS.kinds[sh.kind] || !hurtShelter(sh, 1e6)) return false;
+    const g = world.groundHeight(sh.x, sh.z);
+    for (let k = 0; k < 26; k++) {
+      effects.spark(sh.x + (Math.random() - 0.5) * 4, g + 0.5 + Math.random() * 2, sh.z + (Math.random() - 0.5) * 2, 0.75, 0.85, 0.95);
+    }
+    effects.dust(sh.x, g + 0.4, sh.z, 2.2);
+    audio.collapse && audio.collapse(Math.hypot(sh.x - player.x, sh.z - player.z) + 10, 1.5);
+    state.sheltersDown = (state.sheltersDown || 0) + 1;
+    return true;
+  }
+
+  // The announcements: the band across the top, the siren, and the feed.
+  let alertHide = 0;
+  extreme.onSay = (text, kind, what) => {
+    el.wxAlert.classList.remove('hidden');
+    el.wxAlert.classList.toggle('clear', what === 'clear');
+    el.wxAlertTitle.textContent = what === 'clear' ? 'Entwarnung' : 'Unwetterwarnung';
+    el.wxAlertText.textContent = text;
+    clearTimeout(alertHide);
+    if (what === 'clear' || what === 'arrive') {
+      alertHide = setTimeout(() => {
+        // Another still coming keeps the band up with its own count.
+        const coming = extreme.events.find((e) => e.warnLeft > 0);
+        if (coming) {
+          el.wxAlert.classList.remove('clear');
+          el.wxAlertTitle.textContent = 'Unwetterwarnung';
+          el.wxAlertText.textContent = warningText(coming.kind, coming.warnLeft);
+        } else el.wxAlert.classList.add('hidden');
+      }, what === 'clear' ? 5000 : 6000);
+    }
+    audio.warnSiren(what);
+    if (what !== 'count') feed(`<b>${what === 'clear' ? 'all clear' : EXTREME.kinds[kind].en}</b> ${what === 'warn' ? 'in 20 s' : ''}`);
+    state.extremeSaid = (state.extremeSaid || []).slice(-30);
+    state.extremeSaid.push({ kind, what, text });
+    // Warned, they run; told it is here with no warning, they run then.
+    if (what === 'warn' || (what === 'arrive' && !state.shelterCall)) shelterCivilians(true);
+  };
+
+  /**
+   * Everybody who lives here and has a shelter near enough runs for it,
+   * three to a bus shelter or a kiosk and as many as fit under the Gate;
+   * the rest run away from where they are. When it is all over they go back
+   * to what they were doing.
+   */
+  function shelterCivilians(go) {
+    const room = new Map();
+    const taken = new Set();
+    const places = go ? [...cityShelters(), ...roofShelters()] : [];
+    for (const sd of soldiers.active) {
+      if (!sd.civilian || sd.health <= 0 || !sd.alive) continue;
+      if (!go) {
+        if (sd.directed && sd.directed.shelter) sd.directed = null;
+        continue;
+      }
+      if (Math.hypot(sd.x - player.x, sd.z - player.z) > 160) continue;
+      if (sd.directed && !sd.directed.shelter) continue;
+      const sh = nearestShelter(places, sd.x, sd.z, 90);
+      if (!sh || (room.get(sh) || 0) >= roomIn(sh)) continue;
+      const k = room.get(sh) || 0;
+      room.set(sh, k + 1);
+      const p = placeIn(sh, k, sd, taken);
+      sd.directed = { x: p.x, z: p.z, speed: 3.6, bold: true, shelter: sh };
+    }
+  }
+
+  /** Somebody the weather has done for: no credit to you, no blame either. */
+  function weatherKill(sd, dir) {
+    if (!sd.alive || sd.health <= 0) return false;
+    sd.directed = null;
+    const killed = soldiers.damage(sd, 1e6, dir || { x: 0, y: 0, z: 0 });
+    state.weatherKills = (state.weatherKills || 0) + 1;
+    return killed;
+  }
+  /** Eaten down to the bones by the acid, where he stood, in a green pool. */
+  function meltBody(sd) {
+    const x = sd.x, y = sd.y, z = sd.z;
+    sd.charred = 0;
+    weatherKill(sd);
+    if (soldiers.active.includes(sd)) soldiers._retire(sd);
+    gibs.bones(x, y + 0.4, z, { x: 0, y: 0.3, z: 0 }, 0.6);
+    const pool = effects.stain(x, world.groundHeight(x, z), z, 0.9, 40);
+    pool.r = 0.06; pool.g = 0.16; pool.b = 0.02;
+    for (let k = 0; k < 8; k++) effects.smoke(x + (Math.random() - 0.5), y + 0.4 + Math.random() * 1.2, z + (Math.random() - 0.5), 0.05, 0.9);
+    state.melted = (state.melted || 0) + 1;
+  }
+  /** Burnt to nothing where he stood by an ion bolt: a black skeleton, still standing. */
+  function vaporise(sd) {
+    sd.charred = 1;
+    weatherKill(sd);
+    effects.flash(sd.x, sd.y + 1, sd.z, 2.4, 0.7, 0.5, 1.6, 0.25);
+    state.vaporised = (state.vaporised || 0) + 1;
+  }
+
+  // Bodies the tornado has, which come apart where they come down.
+  const whirled = new Set();
+
+  /** A tree in reach of a point killed by the weather, with what that looks like. */
+  function treeNear(x, z, r, how) {
+    const w = world;
+    const tx0 = Math.max(0, Math.floor((x - r - w.minX) / w.tileSize));
+    const tx1 = Math.min(w.nx - 1, Math.floor((x + r - w.minX) / w.tileSize));
+    const tz0 = Math.max(0, Math.floor((z - r - w.minZ) / w.tileSize));
+    const tz1 = Math.min(w.nz - 1, Math.floor((z + r - w.minZ) / w.tileSize));
+    for (let tz = tz0; tz <= tz1; tz++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const data = w.trees(tz * w.nx + tx);
+        if (!data) continue;
+        for (let i = 0; i < data.length; i += 5) {
+          const px = data[i], py = data[i + 1], pz = data[i + 2], h = data[i + 3];
+          if (Math.hypot(px - x, pz - z) > r) continue;
+          if (how === 'fire') {
+            if (fires.ignite(px, py, pz, 4, 0.9)) { state.treesLit = (state.treesLit || 0) + 1; return true; }
+            continue;
+          }
+          if (!w.killTree(px, pz)) continue;
+          if (how === 'acid') {
+            for (let k = 0; k < 6; k++) effects.smoke(px + (Math.random() - 0.5) * 2, py + h * (0.3 + Math.random() * 0.6), pz + (Math.random() - 0.5) * 2, 0.05, 1.4);
+            for (let k = 0; k < 10; k++) effects.spark(px + (Math.random() - 0.5) * 3, py + h * Math.random(), pz + (Math.random() - 0.5) * 3, 0.25, 0.55, 0.08);
+            state.treesMelted = (state.treesMelted || 0) + 1;
+          } else {
+            effects.treeBurst(px, py, pz, h);
+            // Thrown about: the pieces go round with the wind and out.
+            gibs.spall(px, py + h * 0.5, pz, (Math.random() - 0.5) * 2, 1, (Math.random() - 0.5) * 2, 6, 1.6, 2, 1.6);
+            state.treesWhirled = (state.treesWhirled || 0) + 1;
+          }
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** An ion bolt down at a point: whoever is there burnt to nothing, and what it lands on broken. */
+  function ionStrike(x, z) {
+    const K = EXTREME.kinds.ion;
+    const g = world.groundHeight(x, z);
+    const top = g + 260 + Math.random() * 160;
+    let px = x + (Math.random() - 0.5) * 60, py = top, pz = z + (Math.random() - 0.5) * 60;
+    for (let i = 1; i <= 7; i++) {
+      const f = i / 7;
+      const nx = i === 7 ? x : x + (px - x) * 0.5 + (Math.random() - 0.5) * 22 * (1 - f);
+      const ny = i === 7 ? g : top + (g - top) * f;
+      const nz = i === 7 ? z : z + (pz - z) * 0.5 + (Math.random() - 0.5) * 22 * (1 - f);
+      // Violet, and wider than a lightning stroke seen from kilometres off:
+      // a white hot core in a glow, so it reads close to as well as far.
+      effects.bolt(px, py, pz, nx, ny, nz, 4.5, 0.4, 1.1, 0.5, 2.8);
+      effects.bolt(px, py, pz, nx, ny, nz, 1.3, 0.35, 5.5, 4.2, 9.5);
+      px = nx; py = ny; pz = nz;
+    }
+    effects.flash(x, g + 1, z, 6, 0.6, 0.4, 1.4, 0.3);
+    for (let k = 0; k < 18; k++) effects.spark(x + (Math.random() - 0.5) * 2, g + 0.3, z + (Math.random() - 0.5) * 2, 0.8, 0.6, 1.8);
+    renderer.addScar(x, g, z, 3.2, 0.8);
+    state.ionFlash = 0.8;
+    const dist = Math.hypot(x - player.x, z - player.z);
+    audio.ionZap(dist);
+    audio.thunder(Math.max(120, dist));
+    effects.shake = Math.min(1.2, effects.shake + Math.max(0, 0.6 - dist / 60));
+    // Who is under a roof when it lands: the roof takes it and comes down,
+    // and they live, this once.
+    const under = new Set();
+    for (const sd of soldiers.active) {
+      if (Math.hypot(sd.x - x, sd.z - z) <= K.reach && sheltered(sd.x, sd.y + 0.5, sd.z)) under.add(sd);
+    }
+    const youUnder = youSheltered();
+    for (const sh of cityShelters()) {
+      if (sh.broken || Math.hypot(sh.x - x, sh.z - z) > K.reach + 2) continue;
+      bringDown(sh);
+    }
+    for (const sd of [...soldiers.active]) {
+      if (!sd.alive || sd.health <= 0 || sd.state === 5 || under.has(sd)) continue;
+      if (Math.hypot(sd.x - x, sd.z - z) > K.reach) continue;
+      vaporise(sd);
+    }
+    for (const v of [...vehicles.active]) {
+      if (!v.alive || v.health <= 0) continue;
+      const r = Math.hypot(v.x - x, v.z - z);
+      if (r < K.blast) vehicles.blast(v, v.maxHealth * 0.7 * (1 - r / K.blast), x, z);
+    }
+    if (demolition.buildings) demolition.blast(x, g + 3, z, K.blast, 260, false);
+    flattenTrees(x, z, 3);
+    fires.ignite(x, g, z, 5, 0.8);
+    if (dist < K.reach + 1 && !youUnder) combat.hurt(K.you, x, z, player.x, player.z);
+    state.ionStrikes = (state.ionStrikes || 0) + 1;
+  }
+
+  /** Where the next bolt goes: somebody, a car, a wall, near you, or the ground. */
+  function ionTarget(e) {
+    const K = EXTREME.kinds.ion;
+    const r = Math.random();
+    const inside = (x, z) => Math.hypot(x - e.x, z - e.z) < K.radius;
+    if (r < 0.35) {
+      const people = soldiers.active.filter((sd) => sd.alive && sd.health > 0 && sd.state !== 5 && inside(sd.x, sd.z));
+      if (people.length) { const sd = people[Math.floor(Math.random() * people.length)]; return { x: sd.x, z: sd.z }; }
+    } else if (r < 0.5) {
+      const cars = vehicles.active.filter((v) => v.alive && v.health > 0 && inside(v.x, v.z));
+      if (cars.length) { const v = cars[Math.floor(Math.random() * cars.length)]; return { x: v.x, z: v.z }; }
+    } else if (r < 0.55) {
+      const sh = cityShelters().filter((o) => !o.broken && inside(o.x, o.z));
+      if (sh.length) { const o = sh[Math.floor(Math.random() * sh.length)]; return { x: o.x, z: o.z }; }
+    } else if (r < 0.7 && inside(player.x, player.z)) {
+      // A frontage near you, while you are in it.
+      const a = Math.random() * Math.PI * 2;
+      const g = world.groundHeight(player.x, player.z);
+      const hit = world.raycast(player.x, g + 3, player.z, Math.cos(a), 0, Math.sin(a), 70);
+      if (hit && hit.kind === 'wall') return { x: hit.x - Math.cos(a) * 0.6, z: hit.z - Math.sin(a) * 0.6 };
+    } else if (r < 0.8 && inside(player.x, player.z)) {
+      const a = Math.random() * Math.PI * 2, d = 7 + Math.random() * 14;
+      return { x: player.x + Math.cos(a) * d, z: player.z + Math.sin(a) * d };
+    }
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * K.radius * 0.8;
+    return { x: e.x + Math.cos(a) * d, z: e.z + Math.sin(a) * d };
+  }
+
+  /** A step of the extreme weather, and of what it does. */
+  function extremeStep(dt) {
+    state.ionFlash = Math.max(0, (state.ionFlash || 0) - dt * 2.5);
+    // Only out in the street: not behind the title, not in the air.
+    if (state.mode !== 'walk') return;
+    extreme.update(dt, player);
+    if (!extreme.events.length) {
+      if (state.shelterCall) { shelterCivilians(false); state.shelterCall = false; }
+      el.wxTint.style.opacity = '0';
+      el.wxCover.classList.add('hidden');
+      state.coverShown = null;
+      return;
+    }
+    state.shelterCall = true;
+    const youIn = youSheltered();
+    let tint = null, tintA = 0;
+    for (const e of extreme.events) {
+      const K = EXTREME.kinds[e.kind];
+      if (e.warnLeft > 0) continue;
+      // How far on it is: coming on, at it, or going. Not measured at the
+      // point it was announced for, which a tornado leaves behind.
+      const S = extremeStrength(e);
+      if (e.kind === 'acid' || e.kind === 'fire') {
+        for (const sd of [...soldiers.active]) {
+          if (!sd.alive || sd.health <= 0 || sd.state === 5 || sd.held) continue;
+          const a = extreme.at(e.kind, sd.x, sd.z);
+          if (a <= 0 || sheltered(sd.x, sd.y + 0.5, sd.z)) continue;
+          if (e.kind === 'fire') {
+            sd.charred = Math.min(1, (sd.charred || 0) + dt * 0.35 * a);
+            if (Math.random() < dt * 5 * a) effects.flame(sd.x, sd.y + 0.8, sd.z, 1.6, 0.5);
+          } else if (Math.random() < dt * 3 * a) {
+            effects.smoke(sd.x, sd.y + 1.2, sd.z, 0.05, 0.6);
+          }
+          sd.acidHurt = (sd.acidHurt || 0) + (sd.maxHealth || 100) * K.harm * a * dt;
+          if (sd.acidHurt >= (sd.health || 0)) {
+            if (e.kind === 'acid') meltBody(sd);
+            else { sd.charred = 1; weatherKill(sd); state.burnt = (state.burnt || 0) + 1; }
+          }
+        }
+        // How much of it there is where you are: the trees, the embers and
+        // what it does to you are round you, and only inside its stretch.
+        const here = extreme.at(e.kind, player.x, player.z);
+        // The trees: some melt, some catch. A few tries for one, since a
+        // point picked at random in a city is as often a roof as a park.
+        if (Math.random() < dt * K.trees * here) {
+          for (let k = 0; k < 4; k++) {
+            const a = Math.random() * Math.PI * 2, d = 15 + Math.random() * 90;
+            if (treeNear(player.x + Math.cos(a) * d, player.z + Math.sin(a) * d, 30, e.kind)) break;
+          }
+        }
+        // Cars left out in it suffer too, slowly.
+        for (const v of vehicles.active) {
+          const a = extreme.at(e.kind, v.x, v.z);
+          if (a > 0 && v.health > 0) vehicles.damage(v, v.maxHealth * (e.kind === 'fire' ? 0.03 : 0.012) * a * dt, false);
+        }
+        // Embers on the street round you, now and then.
+        if (e.kind === 'fire' && Math.random() < dt * 4 * here) {
+          const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 40;
+          const fx = player.x + Math.cos(a) * d, fz = player.z + Math.sin(a) * d;
+          effects.flame(fx, world.groundHeight(fx, fz) + 0.2, fz, 1.2 + Math.random(), 0.7);
+        }
+        if (here > 0 && !youIn) {
+          combat.hurt(K.you * here * dt, player.x, player.z + 1, player.x, player.z);
+          tint = e.kind === 'acid' ? 'rgba(120, 200, 20, 0.5)' : 'rgba(255, 110, 20, 0.5)';
+          tintA = Math.max(tintA, here * 0.55);
+        }
+      } else if (e.kind === 'ion') {
+        e.strikeIn = (e.strikeIn ?? 0) - dt * S;
+        if (e.strikeIn <= 0) {
+          e.strikeIn = K.every * (0.5 + Math.random());
+          const t = ionTarget(e);
+          ionStrike(t.x, t.z);
+        }
+      } else if (e.kind === 'tornado') {
+        tornadoStep(e, dt, S);
+        const here = extreme.at('tornado', player.x, player.z);
+        if (here > 0) {
+          effects.shake = Math.min(1.5, effects.shake + here * dt * 3);
+          if (!youIn || here > 0.7) combat.hurt(K.you * here * dt, e.fx, e.fz, player.x, player.z);
+          tint = 'rgba(70, 80, 60, 0.6)';
+          tintA = Math.max(tintA, here * 0.4);
+        }
+      }
+    }
+    el.wxTint.style.background = tint || 'transparent';
+    el.wxTint.style.opacity = tint ? String(Math.min(0.6, tintA)) : '0';
+    // And while it is on you, whether where you stand keeps it off: a roof
+    // does, except in the core of a tornado.
+    const on = Math.max(...EXTREME_KINDS.map((k) => extreme.at(k, player.x, player.z)));
+    const core = extreme.at('tornado', player.x, player.z) > 0.7;
+    const safe = youIn && !core;
+    el.wxCover.classList.toggle('hidden', !(on > 0));
+    el.wxCover.classList.toggle('safe', safe);
+    el.wxCover.textContent = !safe ? 'Ungeschützt: Suchen Sie Schutz'
+      : (state.inVehicle || state.inMech ? 'Geschützt im Fahrzeug' : 'Geschützt unter Dach');
+    state.coverShown = on > 0 ? (safe ? 'safe' : 'open') : null;
+  }
+
+  /** The funnel: drawn, and taking what is in it. */
+  function tornadoStep(e, dt, S) {
+    const K = EXTREME.kinds.tornado;
+    if (S <= 0) return;
+    const g = world.groundHeight(e.fx, e.fz);
+    e.spin = (e.spin || 0) + dt * 2.6;
+    // The funnel: dark puffs going round, narrow at the street and wide up
+    // in the cloud, and dust and grit at its foot. Each lives under a second
+    // and goes with the funnel and round it, so the funnel holds together
+    // as it moves instead of leaving a trail; the puffs are as big as the
+    // funnel is wide there, so they close up into a body.
+    const n = Math.round(22 * S);
+    for (let k = 0; k < n; k++) {
+      const h = Math.pow(Math.random(), 1.3) * 130;
+      const r = K.core * (0.25 + h / 50) * (0.55 + Math.random() * 0.45);
+      const a = e.spin * 3 + Math.random() * Math.PI * 2;
+      const p = effects.smoke(e.fx + Math.cos(a) * r, g + h, e.fz + Math.sin(a) * r, 0.7 + Math.random() * 0.2, 1);
+      const turn = 14 + h * 0.1;
+      p.vx = e.path.dx * K.speed - Math.sin(a) * turn;
+      p.vz = e.path.dz * K.speed + Math.cos(a) * turn;
+      p.vy = 2 + Math.random() * 4;
+      p.maxLife = p.life = 0.5 + Math.random() * 0.6;
+      p.size = 1.6 + r * 0.55;
+    }
+    if (Math.random() < dt * 6) effects.dust(e.fx, g + 0.5, e.fz, K.core * 0.7);
+    for (const sd of [...soldiers.active]) {
+      if (!sd.alive || sd.health <= 0 || sd.state === 5 || sd.held) continue;
+      const a = extreme.at('tornado', sd.x, sd.z);
+      if (a < 0.55) continue;
+      // Under a roof that is not in the core, he holds on.
+      const sh = sheltered(sd.x, sd.y + 0.5, sd.z);
+      if (sh && a < 0.95) continue;
+      if (sh) bringDown(sh);
+      const dx = sd.x - e.fx, dz = sd.z - e.fz, l = Math.hypot(dx, dz) || 1;
+      // Round and up and out.
+      // Round with the wind, and out from the middle.
+      const f = grab.launch(sd, (-dz / l) * 12 + (dx / l) * 4, K.lift * (0.7 + Math.random() * 0.6), (dx / l) * 12 + (dz / l) * 4, 2);
+      if (f) { whirled.add(sd); sd.directed = null; state.whirled = (state.whirled || 0) + 1; }
+    }
+    for (const sh of cityShelters()) {
+      if (!sh.broken && Math.hypot(sh.x - e.fx, sh.z - e.fz) < K.core) bringDown(sh);
+    }
+    for (const v of vehicles.active) {
+      if (!v.alive || v.health <= 0 || v.airborne || v.spec.kind !== 'ground') continue;
+      if (Math.hypot(v.x - e.fx, v.z - e.fz) > K.core) continue;
+      vehicles.launch(v, 6 * (v.spec.mass > 2 ? 0.4 : 1), (Math.random() - 0.5) * 4);
+      vehicles.blast(v, v.maxHealth * 0.35, e.fx, e.fz);
+      if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
+    }
+    if (Math.random() < dt * 3 * S) treeNear(e.fx, e.fz, K.core, 'whirl');
+  }
+
+  // The same switches on each game's page, under the weather, and in the
+  // cheat menu's group, which also has how often and one now for whoever
+  // wants to see it.
+  function showExtreme() {
+    for (const box of [el.extremeChips, el.cheatExtreme]) {
+      for (const b of box.querySelectorAll('button[data-xw]')) {
+        const id = b.dataset.xw;
+        b.classList.toggle('on', id === 'all' ? EXTREME_KINDS.every((k) => extreme.enabled[k]) : !!extreme.enabled[id]);
+      }
+    }
+    const on = EXTREME_KINDS.filter((k) => extreme.enabled[k]);
+    el.extremeLabel.textContent = !on.length ? 'Off'
+      : (on.length === EXTREME_KINDS.length ? 'All, at random' : on.map((k) => EXTREME.kinds[k].name).join(', '));
+  }
+  {
+    for (const [box, cls] of [[el.extremeChips, 'opsbtn'], [el.cheatExtreme, 'chip']]) {
+      for (const k of [...EXTREME_KINDS, 'all']) {
+        const b = document.createElement('button');
+        b.className = cls;
+        b.dataset.xw = k;
+        b.textContent = k === 'all' ? 'All' : EXTREME.kinds[k].name;
+        b.title = k === 'all' ? 'all four, each at random' : `${EXTREME.kinds[k].en}, at random`;
+        b.addEventListener('click', () => {
+          const on = k === 'all' ? !EXTREME_KINDS.every((x) => extreme.enabled[x]) : !extreme.enabled[k];
+          extreme.setEnabled(k, on);
+          showExtreme();
+          if (box === el.cheatExtreme) toast(`${k === 'all' ? 'extreme weather' : EXTREME.kinds[k].en} ${on ? 'on' : 'off'}`);
+        });
+        box.appendChild(b);
+      }
+    }
+    const row = document.createElement('label');
+    row.className = 'val';
+    const name = document.createElement('b');
+    name.textContent = 'Extreme weather every';
+    const num = document.createElement('span');
+    num.className = 'num';
+    const i = document.createElement('i');
+    i.textContent = 'on average, of those switched on';
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(EXTREME.minutesMin); input.max = String(EXTREME.minutesMax); input.step = '0.5';
+    input.value = String(extreme.minutes);
+    input.dataset.xw = 'minutes';
+    const show = () => { num.textContent = `${extreme.minutes} min`; };
+    input.addEventListener('input', () => { extreme.setMinutes(parseFloat(input.value)); show(); });
+    row.append(name, num, i, input);
+    el.cheatExtremeValues.appendChild(row);
+    show();
+    const now = document.createElement('div');
+    now.className = 'row chips';
+    for (const k of EXTREME_KINDS) {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.dataset.xwNow = k;
+      b.textContent = `${EXTREME.kinds[k].name} jetzt`;
+      b.title = 'warned of now, here in twenty seconds';
+      b.addEventListener('click', () => {
+        if (!extreme.announce(k, player.x, player.z)) toast(`${EXTREME.kinds[k].en} is already coming`);
+      });
+      now.appendChild(b);
+    }
+    el.cheatExtremeValues.appendChild(now);
+    showExtreme();
+  }
 
   /**
    * More of them, now. Each goes in through the same spawn the game uses, so
@@ -5036,6 +5890,8 @@ async function main() {
     const on = show === undefined ? el.cheats.classList.contains('hidden') : show;
     el.cheats.classList.toggle('hidden', !on);
     if (on) {
+      // It opens on the menu, whatever it was showing when it was closed.
+      showGuide(false);
       // Remember whether the mouse was actually captured, so that closing the
       // menu gives it back only to somebody who had it. Asking for a lock
       // nobody asked for is both rude and, if one is already pending, an
@@ -5057,6 +5913,149 @@ async function main() {
     state.lockWanted = false;
     input.requestLock();
   }
+  // --- what the cheat menu does, said in it ---------------------------------
+  //
+  // Every setting in the menu carries a word about what it does: under each
+  // group a line says what the group is for, and while the pointer is on one
+  // of its settings, or the keyboard is, what that one does. The guide
+  // button at the bottom has all of it, setting by setting, with where each
+  // starts and where it is now, out of guide.js and the same lists the menu
+  // is built from.
+  const WEATHER_OFF = { id: 'off', label: 'Off', help: CONTROL_HELP.weatherOff };
+  function annotateCheatMenu() {
+    const mark = (node, label, help) => {
+      if (!node || !help) return;
+      node.dataset.hlabel = label;
+      node.dataset.help = help;
+      node.title = help;
+    };
+    const byId = (list, id) => list.find((x) => x.id === id) || {};
+    const each = (sel, fn) => { for (const n of el.cheats.querySelectorAll(sel)) fn(n); };
+    each('#cheatactions [data-action]', (n) => { const a = byId(ACTIONS, n.dataset.action); mark(n, a.label, a.help); });
+    each('#cheatspawns [data-spawn]', (n) => { const a = byId(SPAWNS, n.dataset.spawn); mark(n, a.label, a.help); });
+    each('#cheatrides [data-ride]', (n) => { const a = byId(RIDES, n.dataset.ride); mark(n, a.label, a.help); });
+    each('#cheatmine [data-mech], #cheatfoe [data-mech]', (n) => {
+      const [side, id] = n.dataset.mech.split(':');
+      const row = CHASSIS.find((c) => c.id === id);
+      mark(n, row ? row.name : 'Random', row ? mechHelp(row, side) : RANDOM_MECH);
+    });
+    each('#cheatbow [data-bow]', (n) => { const a = byId(BOWS, n.dataset.bow); mark(n, a.label, a.help); });
+    each('#cheatbowhold [data-bowhold]', (n) => { const a = byId(BOW_HOLDS, n.dataset.bowhold); mark(n, a.label, a.help); });
+    each('#cheatvalues [data-setting]', (n) => { const a = byId(SETTINGS, n.dataset.setting); mark(n, a.label, a.help); });
+    each('#cheatswitches [data-cheat]', (n) => { const a = byId(SWITCHES, n.dataset.cheat); mark(n, a.label, a.help); });
+    each('#cheatgore [data-cheat]', (n) => { const a = byId(GORE, n.dataset.cheat); mark(n, a.label, a.help); });
+    each('#cheatweather [data-wx]', (n) => { const a = byId([WEATHER_OFF, ...WEATHER_ALL], n.dataset.wx); mark(n, a.label, a.help); });
+    each('#cheatweathervalues input[data-wx=intensity]', (n) => mark(n.closest('label'), 'Weather strength', CONTROL_HELP.intensity));
+    each('#cheatweathervalues input[data-wx=minutes]', (n) => mark(n.closest('label'), 'Random weather turns every', CONTROL_HELP.minutes));
+    each('#cheatweathervalues [data-wx=lightning]', (n) => mark(n, 'Lightning', CONTROL_HELP.lightning));
+    each('#cheatextreme [data-xw]', (n) => {
+      const k = EXTREME.kinds[n.dataset.xw];
+      mark(n, k ? k.name : 'All', k ? k.help : CONTROL_HELP.extremeAll);
+    });
+    each('#cheatextremevalues input[data-xw=minutes]', (n) => mark(n.closest('label'), 'Extreme weather every', CONTROL_HELP.extremeMinutes));
+    each('#cheatextremevalues [data-xw-now]', (n) => mark(n, `${EXTREME.kinds[n.dataset.xwNow].name} now`,
+      `${CONTROL_HELP.extremeNow} ${EXTREME.kinds[n.dataset.xwNow].help}`));
+    each('.todrow', (n) => mark(n, 'Time of day', CONTROL_HELP.tod));
+    el.cheatsClose.title = CONTROL_HELP.close;
+    el.cheatsReset.title = CONTROL_HELP.reset;
+    el.cheatsGuide.title = CONTROL_HELP.guide;
+    // The same words on the game page's extreme weather switches.
+    for (const n of el.extremeChips.querySelectorAll('[data-xw]')) {
+      const k = EXTREME.kinds[n.dataset.xw];
+      n.title = k ? k.help : CONTROL_HELP.extremeAll;
+    }
+    for (const g of el.cheats.querySelectorAll('.group[data-guide]')) groupInfo(g, null);
+  }
+  /** A group's line: what the group is for, or what the setting at hand does. */
+  function groupInfo(g, item) {
+    const line = g.querySelector('.groupinfo');
+    if (!line) return;
+    const about = (GUIDE_GROUPS.find((x) => x.id === g.dataset.guide) || {}).about || '';
+    line.classList.toggle('item', !!item);
+    if (!item) { line.textContent = about; return; }
+    const b = document.createElement('b');
+    b.textContent = item.dataset.hlabel;
+    line.replaceChildren(b, document.createTextNode(item.dataset.help));
+  }
+  const pointAt = (t) => {
+    const g = t && t.closest && t.closest('.group[data-guide]');
+    if (!g) return;
+    const item = t.closest('[data-help]');
+    groupInfo(g, item && g.contains(item) ? item : null);
+  };
+  el.cheatMenuBody.addEventListener('mouseover', (e) => pointAt(e.target));
+  el.cheatMenuBody.addEventListener('focusin', (e) => pointAt(e.target));
+  el.cheatMenuBody.addEventListener('mouseout', (e) => {
+    const g = e.target.closest && e.target.closest('.group[data-guide]');
+    if (g && !g.contains(e.relatedTarget)) groupInfo(g, null);
+  });
+
+  /** The guide, as it stands now: every setting and where it is. */
+  function guideNow() {
+    const chassis = (side) => CHASSIS.map((c) => ({ id: c.id, label: c.name, help: mechHelp(c, side) }));
+    return buildGuide({
+      actions: ACTIONS, spawns: SPAWNS, rides: RIDES, settings: SETTINGS, switches: SWITCHES, gore: GORE,
+      bows: BOWS, bowHolds: BOW_HOLDS,
+      chassis: { mine: chassis('mine'), foe: [...chassis('foe'), { id: 'random', label: 'Random', help: RANDOM_MECH }] },
+      weatherKinds: WEATHER_ALL, weatherLimits: WEATHER,
+      extremeKinds: EXTREME.kinds, extremeLimits: EXTREME,
+      now: {
+        value: (id) => cheats.value(id), on: (id) => !!cheats[id],
+        mine: cheats.mechs.mine, foe: cheats.mechs.foe, bow: cheats.bow, bowHold: cheats.bowHold,
+        weather: weather.choice, weatherOff: weather.off, intensity: weather.intensity,
+        minutes: weather.minutes, lightning: weather.lightning,
+        extreme: extreme.enabled, extremeMinutes: extreme.minutes, tod: timeLabel(renderer.timeOfDay),
+      },
+    });
+  }
+  function renderGuide() {
+    const sections = guideNow();
+    el.guideToc.replaceChildren(...sections.map((s) => {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.textContent = s.title;
+      b.addEventListener('click', () => document.getElementById(`guide-${s.id}`).scrollIntoView({ block: 'start' }));
+      return b;
+    }));
+    el.guideBody.replaceChildren(...sections.map((s) => {
+      const sec = document.createElement('section');
+      sec.id = `guide-${s.id}`;
+      const h = document.createElement('h3');
+      h.textContent = s.title;
+      const p = document.createElement('p');
+      p.className = 'about';
+      p.textContent = s.about;
+      const dl = document.createElement('dl');
+      for (const it of s.items) {
+        const dt = document.createElement('dt');
+        dt.textContent = it.label;
+        const tags = [it.range && `${it.range}`, it.start && `starts ${it.start}`, it.now && `now ${it.now}`].filter(Boolean);
+        if (tags.length) {
+          const t = document.createElement('span');
+          t.className = 'tags';
+          t.textContent = tags.join(' · ');
+          dt.appendChild(t);
+        }
+        const dd = document.createElement('dd');
+        dd.textContent = it.help;
+        dl.append(dt, dd);
+      }
+      sec.append(h, p, dl);
+      return sec;
+    }));
+  }
+  /** The guide in place of the menu, or the menu back. */
+  function showGuide(on) {
+    if (on) renderGuide();
+    el.cheatMenuBody.classList.toggle('hidden', !!on);
+    el.cheatGuide.classList.toggle('hidden', !on);
+    el.cheats.scrollTop = 0;
+  }
+  annotateCheatMenu();
+  el.cheatsGuide.addEventListener('click', () => showGuide(true));
+  el.guideBack.addEventListener('click', () => showGuide(false));
+  el.guideClose.addEventListener('click', () => toggleCheatMenu(false));
+
   el.cheatsClose.addEventListener('click', () => toggleCheatMenu(false));
   el.cheatsReset.addEventListener('click', () => {
     cheats.reset();
@@ -6877,7 +7876,7 @@ async function main() {
       const b = blastOn(p, v.x, v.z);
       if (!b) continue;
       vehicles.launch(v, b.up * (v.type === 'bus' ? 0.45 : 1), (Math.random() - 0.5) * 2.4 * b.share);
-      vehicles.damage(v, v.spec.health * CITY.blast.hull * b.share);
+      vehicles.blast(v, v.spec.health * CITY.blast.hull * b.share, p.x, p.z);
       if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
       thrown++;
     }
@@ -7027,15 +8026,52 @@ async function main() {
       lured.splice(i, 1);
     }
     for (const row of cityBollards()) {
+      const was = row.up;
       if (row.left > 0 || row.up > 0) bollardStep(row, dt);
+      // Coming up under a car: the posts go into its floor and throw it,
+      // nose or tail first by which end they came up under, off the row the
+      // way it was nearer to going.
+      if (row.up > was && was < 0.9) {
+        for (const v of vehicles.active) {
+          if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground' || v.airborne) continue;
+          if (Math.abs(v.x - row.x) > 12 || Math.abs(v.z - row.z) > 12) continue;
+          const H = vehicles.hull(v);
+          if (!H) continue;
+          const under = postsUnder(row, v, H);
+          if (!under.length) continue;
+          const B = CITY.bollards;
+          const heavy = v.spec.mass > 2 ? 0.35 : 1;
+          const at = under.reduce((a, p) => a + p.z, 0) / under.length;
+          // Up under the nose turns the nose up, a rising pitch the way the
+          // body is drawn; under the tail, the other way, and either way it
+          // is pushed back off the row.
+          vehicles.launch(v, B.lift * heavy, (at < 0 ? 1 : -1) * B.tumble * heavy);
+          v.speed = (at < 0 ? -1 : 1) * B.shove * heavy;
+          const lx = under.reduce((a, p) => a + p.x, 0) / under.length;
+          // The floor takes it, and the end it came up under with it.
+          const c = Math.cos(v.yaw), sn = Math.sin(v.yaw);
+          vehicles.hit(v, v.spec.health * B.hull * heavy, v.x + c * lx + sn * at, v.y + 0.3, v.z - sn * lx + c * at);
+          if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
+          const g = world.groundHeight(v.x, v.z);
+          for (let k = 0; k < 18; k++) {
+            effects.spark(v.x + (Math.random() - 0.5) * 2, g + 0.3 + Math.random() * 0.6, v.z + (Math.random() - 0.5) * 2, 1.0, 0.75, 0.4);
+          }
+          audio.collapse && audio.collapse(Math.hypot(v.x - player.x, v.z - player.z) + 20, 2);
+          state.bollardLifts = (state.bollardLifts || 0) + 1;
+          feed(`<b>thrown by the blockers</b> ${v.spec.name.toLowerCase()}`);
+        }
+      }
       if (row.up < 0.6) continue;
       for (const v of vehicles.active) {
-        if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground') continue;
+        if (!v.alive || v.health <= 0 || v.spec.kind !== 'ground' || v.airborne) continue;
         if (Math.abs(v.x - row.x) > 12 || Math.abs(v.z - row.z) > 12) continue;
         if (!intoBollards(row, v)) continue;
         const hit = Math.abs(v.speed);
+        const nose = v.speed >= 0;
         v.speed = -Math.sign(v.speed) * Math.min(1, hit * 0.1);
         if (hit < 2) continue;
+        // The end that met them goes in, and a fast one cracks the screen.
+        vehicles.crash(v, hit, nose);
         vehicles.damage(v, hit * 22 * (v.spec.mass > 2 ? 0.5 : 1));
         if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
         const g = world.groundHeight(v.x, v.z);
@@ -7172,6 +8208,10 @@ async function main() {
         A.speed *= 0.15; B.speed *= 0.15;
         for (const V of [A, B]) {
           if (V.traffic) { V.traffic.crashed = true; V.traffic.wild = 0; }
+          // The end of each that met the other: its nose if the other was
+          // ahead of it, its tail if it was run into from behind.
+          const ox = (V === A ? dx : -dx), oz = (V === A ? dz : -dz);
+          vehicles.crash(V, closing, -Math.sin(V.yaw) * ox - Math.cos(V.yaw) * oz > 0);
           vehicles.damage(V, closing * 14 * (V.spec.mass > 2 ? 0.5 : 1));
         }
         const mx = (A.x + B.x) / 2, mz = (A.z + B.z) / 2;
@@ -7509,6 +8549,18 @@ async function main() {
       },
       onLand: (f, speed, what) => {
         const s = f.s;
+        // Thrown up by a tornado: he comes apart where he comes down.
+        if (whirled.has(s)) {
+          whirled.delete(s);
+          const was = soldiers.gore.gib;
+          soldiers.gore.gib = true;
+          weatherKill(s, { x: f.vx * 0.1, y: 0.5, z: f.vz * 0.1 });
+          soldiers.gore.gib = was;
+          effects.blood(s.x, s.y + 0.6, s.z, 0, 1, 0, Math.max(1, cheats.goreScale) * 1.6);
+          effects.shake = Math.min(1.2, effects.shake + Math.max(0, 0.3 - Math.hypot(s.x - player.x, s.z - player.z) / 100));
+          state.burst = (state.burst || 0) + 1;
+          return;
+        }
         const k = speed * 0.05;
         const hard = what === 'wall' ? 1.3 : 1;
         const killed = soldiers.damage(s, speed * GRAB.impact * hard * (f.impact ?? 1), { x: f.vx * k, y: 0.2, z: f.vz * k });
@@ -7897,7 +8949,7 @@ async function main() {
     } else if (kind === 'drone') killed = drones.damage(t, dmg);
     else if (kind === 'jet') killed = jets.damage(t, dmg);
     else if (kind === 'mech') killed = mechs.damage(t, dmg * 0.25, core);
-    else if (kind === 'vehicle') { vehicles.damage(t, dmg * 0.25); kind = null; }
+    else if (kind === 'vehicle') { vehicles.hit(t, dmg * 0.25, hit.x, hit.y, hit.z, true); kind = null; }
     if (!kind) return;
     audio.hitMarker(core);
     showHitmarker(killed ? 'kill' : (core ? 'core' : ''));
@@ -8588,7 +9640,7 @@ async function main() {
       if (d > spec.reach + 1.5 || (dx * fx + dz * fz) / (fl * d) < spec.arc) continue;
       const k = 1 - Math.min(1, d / (spec.reach + 1.5)) * (1 - Q.edge);
       vehicles.launch(v, Q.up * k * (v.type === 'bus' ? 0.45 : 1), (Math.random() - 0.5) * 2 * k);
-      vehicles.damage(v, v.spec.health * Q.hull * k);
+      vehicles.blast(v, v.spec.health * Q.hull * k, player.x, player.z);
       if (v.traffic) { v.traffic.crashed = true; v.traffic.wild = 0; }
       thrown++;
     }
@@ -9415,9 +10467,19 @@ async function main() {
     demolition.reset();
     fires.reset();
     cars.reset();
+    hurtCars.clear();
+    // The weather's worst starts over, and every shelter stands again.
+    extreme.clear();
+    whirled.clear();
+    for (const sh of shelterList) { sh.broken = false; sh.health = SHELTERS.health; }
+    el.wxAlert.classList.add('hidden');
+    el.wxCover.classList.add('hidden');
     renderer.clearCollapses();
     renderer.clearFires();
     effects.clear();
+    // Into the weather that was picked, already set in: random starts in
+    // one of the kinds, with the street as wet or as white as it would be.
+    weather.start(Math.random, renderer.dayOfYear);
     audio.start();
     el.btnSound.textContent = 'sound on';
     if (deepLink || direct) {
@@ -10063,6 +11125,8 @@ async function main() {
       runawayStep(worldDt);
       convoyStep(worldDt);
       wreckStep(worldDt);
+      damageStep(worldDt);
+      extremeStep(worldDt);
       onslaughtStep(worldDt);
       pingStep(worldDt);
       updateCarBlasts(worldDt);
@@ -10323,6 +11387,8 @@ async function main() {
     runawayStep(worldDt);
     convoyStep(worldDt);
     wreckStep(worldDt);
+    damageStep(worldDt);
+    extremeStep(worldDt);
     onslaughtStep(worldDt);
     pingStep(worldDt);
     updateCarBlasts(worldDt);
@@ -10564,6 +11630,9 @@ async function main() {
     // Screen shake from firing and from explosions, applied to the eye rather
     // than to the aim, so it never moves where your shots go.
     effects.update(elapsed);
+    // After the effects have aged, so a stroke of lightning struck this frame
+    // is drawn at least once however long the frame took.
+    stepWeather(wall);
     updateFountains(elapsed);
     // The beams are redrawn every frame rather than left to decay, because
     // unlike a spark a beam is a thing that is there until it is not.
@@ -10693,6 +11762,7 @@ async function main() {
       renderer.actors.updateBoxes(boxesNear());
       renderer.actors.updateAtms(atmsNear());
       renderer.actors.updateBollards(postsNear());
+      renderer.actors.updateShelters(sheltersNear());
       renderer.drawActors = true;
     } else {
       renderer.viewmodel = null;
@@ -10722,6 +11792,7 @@ async function main() {
       renderer.actors.updateBoxes(live ? boxesNear() : []);
       renderer.actors.updateAtms(live ? atmsNear() : []);
       renderer.actors.updateBollards(live ? postsNear() : []);
+      renderer.actors.updateShelters(live ? sheltersNear() : []);
       renderer.drawActors = live;
     }
 
@@ -10904,6 +11975,15 @@ async function main() {
 
   // Expose a small handle for the headless checks and for the curious.
   window.spreefall = {
+    weather,
+    weatherNow: () => weather.now(),
+    extreme, extremeStep: (dt) => extremeStep(dt), ionStrike: (x, z) => ionStrike(x, z),
+    shelters: () => cityShelters(), sheltersNear: (r) => sheltersNear(r),
+    sheltered: (x, y, z) => sheltered(x, y, z), youSheltered: () => youSheltered(),
+    roofShelters: () => roofShelters(),
+    whirledCount: () => whirled.size,
+    precipDrawn: () => renderer.precip.drawn,
+    showWeather,
     world, renderer, tiles, camera, player, loop, state, landmarks, audio, input, minimap,
     combat, drones, weapon, effects, projectiles, reflex, jets, pickups, cheats, gibs, cars,
     trains, trainSpec: TRAIN,
@@ -11013,6 +12093,7 @@ async function main() {
       return true;
     },
     cheatMenu(on) { toggleCheatMenu(on); },
+    cheatGuide(on) { showGuide(on); },
     setCheat(id, on) { const ok = cheats.set(id, on); applyCheats(); return ok; },
     cheatValue(id) { return cheats.value(id); },
     cheatAction(id) { runCheatAction(id); },
@@ -11078,8 +12159,26 @@ async function main() {
       return rec ? tileMesh(rec) : null;
     },
     drawnGround(x, z) {
-      const index = world.tileIndex(x, z);
-      if (index < 0) return null;
+      // A street or a square is baked whole into one tile and runs on over
+      // the edge into the next, so what is drawn at a point near an edge may
+      // be another tile's: the tile the point is in, and the eight round it.
+      const own = world.tileIndex(x, z);
+      if (own < 0 || !world.tiles[own]) return null;
+      let best = null;
+      const seen = new Set();
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const index = world.tileIndex(x + dx * world.tileSize, z + dz * world.tileSize);
+          if (index < 0 || seen.has(index) || !world.tiles[index]) continue;
+          seen.add(index);
+          const y = this.groundInTileForTest(index, x, z);
+          if (y !== null && (best === null || y > best)) best = y;
+        }
+      }
+      return best;
+    },
+    /** The topmost ground of one tile's own triangles at a point, or null. */
+    groundInTileForTest(index, x, z) {
       const rec = world.tiles[index];
       if (!rec) return null;
       const m = tileMesh(rec);

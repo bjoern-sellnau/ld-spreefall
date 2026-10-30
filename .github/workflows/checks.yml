@@ -107,6 +107,8 @@ jobs:
         run: node tools/test-hunt.mjs
       - name: Get into the city in .BACKDOOR
         run: node tools/test-backdoor.mjs
+      - name: Go out in every weather
+        run: node tools/test-weather.mjs
       - name: Keep the screenshots
         if: always()
         uses: actions/upload-artifact@v4

@@ -5656,6 +5656,509 @@ So there are two cities now, and a profile picks which:
   clear of traffic while it sprays. Here all four come; the suite passes
   48 of 48.
 
+## 141. Weather, picked on the title and turned in the cheat menu
+
+- The ask: a weather system, picked in the menu, with a random setting that
+  changes by itself, and the cheat menu able to change it further or turn
+  it off.
+- Six kinds, each a look (cloud, rain, snow, wind, lightning, how dark) and
+  a visibility: clear 20 km, cloudy 14, rain 4, storm 1.2, snow 0.9 and fog
+  180 m. Fog is under a kilometre by the WMO's definition and under 180 m
+  in the Met Office's forecasts for the public, which is the one used.
+- Visibility is drawn as haze by Koschmieder: a dark object goes to the 2 %
+  contrast an eye can just see at 3.912 over the extinction coefficient, so
+  the coefficient is the fog density. A blend from one kind to another goes
+  in extinction, not in metres, so half way from clear to fog is a few
+  hundred metres and not ten kilometres. Every change blends over 30 s.
+- Random: a chain over the kinds, mostly to the next one (clear goes to
+  cloudy before rain, a storm to rain before it clears), each kind held 4
+  minutes on average (half to one and a half times that, 0.5 to 20 in the
+  cheat menu). Snow only from November to the middle of March, in place of
+  rain; that window is ours, not taken from a climate table.
+- What it does to the city: cloud greys the sky, closes over the stars and
+  the sun disc, and takes the sun out of the light and the shadows with it.
+  The street gets wet over 50 s of rain and dries over 5 minutes: darker,
+  glossier, and puddles from noise on what faces up. Snow settles over two
+  minutes on everything facing up and melts over nearly seven, or faster in
+  rain.
+  The camera block carries a fourth vec4 for it (cloud, wet, flash, snow).
+- Rain and snow: one instanced draw of up to 9000 in a 40 by 25 by 40 m box
+  laid over the world round the eye and wrapped, so you walk through them;
+  how hard it comes down is how many are drawn. Rain is a streak as long as
+  a drop moves in a 25th of a second, at 6.5 to 9.2 m/s (Atlas, Srivastava
+  and Sekhon's fit to the Gunn and Kinzer measurements, 9.65 - 10.3 e^(-0.6
+  D), gives 6.55 for 2 mm and 9.14 for 5 mm); snow a flake that sways, at
+  0.4 to 1.2 m/s (Locatelli and Hobbs, for aggregates). The wind leans
+  both.
+- Lightning in a storm, one strike every 9 s on average, 250 m to 4 km off
+  and mostly nearer: the sky flashes at once, a jagged bolt of nine legs
+  with a fork or two stands 650 to 950 m tall where it came down, and the
+  thunder is sent off distance over 343 m/s later, low passed harder the
+  further it is, rolling for 2.5 to 6.5 s. A flash is a few strokes down
+  the same channel: high speed video of 432 flashes over Arizona and Sao
+  Paulo gave 3.9 strokes a flash, 61.5 ms apart, so a strike is one to
+  seven strokes, 3.9 on average, about that far apart, which is the flicker.
+- Two things found on the way. The bolt was never on the screen: the
+  weather was stepped before the effects aged in the frame, and on a slow
+  frame a stroke was over before it was drawn; the weather now steps after.
+  Then it was drawn and still not seen, against a sky the flash had washed
+  white; the flash on the sky is a third of what it was, and the channel
+  brighter.
+- Soldiers see as far as the weather lets them: their sight times 0.6 of the
+  visibility over 165, between 0.3 and 1, so 108 m in fog and all of it on a
+  clear day. Rain and wind are two noise beds in the sound.
+- The title: a row of chips under the time of day on every game's page, the
+  pick shown and remembered; behind the title it goes straight there. The
+  cheat menu: Off (a clear sky whatever was picked), any kind or Random,
+  strength 25 to 200 %, how often Random turns, and a lightning switch. It
+  is kept in its own storage and does not mark a run as cheated.
+- Sources:
+  [Wikipedia, Visibility](https://en.wikipedia.org/wiki/Visibility) and the
+  [WMO CIMO guide, visibility](https://old.wmo.int/extranet/pages/prog/www/IMOP/publications/CIMO-Guide/Prelim_2018_ed/8_I_9_en_MR_tc.pdf)
+  (Koschmieder, 3.912 for 2 %);
+  [WMO, fog](https://codes.wmo.int/wmdr/ObservedVariableAtmosphere/507)
+  (under 1 km) and
+  [UNDRR on the Met Office's fog](https://undrr.org/understanding-disaster-risk/terminology/hips/mh0016)
+  (under 180 m for the public);
+  [disdrodb, rain fall velocity](https://disdrodb.readthedocs.io/en/latest/_modules/disdrodb/fall_velocity/rain.html)
+  (the Atlas, Srivastava and Sekhon 1973 fit, citing Rev. Geophys. 11);
+  [Locatelli and Hobbs 1974](https://www.inscc.utah.edu/~garrett/ewExternalFiles/Fall%20speeds%20and%20masses%20of%20solid%20precipitation%20particles.pdf)
+  and [ACP 25, 16729 (2025)](https://acp.copernicus.org/articles/25/16729/2025/)
+  (aggregates at 0.4 to 1.2 m/s);
+  [Saraiva et al. 2010, JGR 115](https://bv.fapesp.br/en/publicacao/242630)
+  (doi 10.1029/2009JD012604: 3.9 strokes, 61.5 ms, 226.5 ms a flash);
+  [Wikipedia, Speed of sound](https://en.wikipedia.org/wiki/Speed_of_sound)
+  (343 m/s in dry air at 20 C). Checked through search excerpts; this
+  session cannot open the pages themselves.
+- Checks: nine unit checks (the blend in extinction, the chain and the
+  winter, the half minute blend, random holding and turning, wet and dry
+  and snow, a strike's thunder a distance late, the cheat menu's off,
+  strength and lightning, a random start, and the strokes 61.5 ms apart),
+  and a weather suite in the browser, 16 of 16: the title's chips and the
+  pick kept, rain drawn (3600) and the street wet, fog at 180 m with the
+  fog density its extinction and a soldier's sight at 0.65, snow drawn and
+  lying, a storm's bolt over 600 m tall on the skyline with the sky
+  flashing, the thunder sent 4.37 s after a strike 1.5 km off, its strokes,
+  and in the cheat menu off and on, the strength halving the rain, the
+  minutes, no strike with the lightning off, random's first turn, and no
+  cheat counted. Screenshots: `weather-01-rain.png`, `weather-02-fog.png`,
+  `weather-03-snow.png`, `weather-04-storm.png`. With it in, the unit
+  checks pass 180 of 180, verify passes, the interface 46 of 46 and the
+  cheat menu 137 of 137. The seven chips sit centred in one row under the
+  time of day.
+
+## 142. Vehicles that show what was done to them, and the blockers that throw them
+
+- The ask: vehicles should break when you shoot at them, a damage model,
+  and in .BACKDOOR they should react to the blockers you raise too.
+- What was there: a rifle round went straight through every vehicle. The
+  weapon's own trace asked the drones, the soldiers, the jets and the mechs
+  what was in the way and never the vehicles, so only a blast hurt one,
+  and nothing on it showed what it had been through until it caught fire.
+- Rounds now stop in the box a vehicle stands in (car 4.5 by 1.8 by 1.42,
+  jeep, bus 11.7 long, tank), turned with it, so a car is cover and a shot
+  over its roof misses. The rockets ask the same box; the bus used to be a
+  sphere 1.6 m round its middle with ten metres of it that could not be
+  hit.
+- The damage model (game/dents.js, arithmetic only): each side of the box,
+  nose, tail, left and right, keeps how far it is pushed in. A blow pushes
+  its side in by 2.2 times its share of the hull, a blast every side
+  facing it by how squarely, and a crash the end that hit by 0.045 a metre
+  a second. A round makes a hole and a quarter of that dent, and the holes
+  are counted to fifteen a side.
+- Glass above the waistline goes with what hits it, the way car glass
+  does: the windscreen is laminated, two sheets on a film, and crazes white
+  where it is hit and stays in its frame; the side and rear windows are
+  toughened, and go all at once into small pieces, leaving the frame empty.
+  A crash from 8 m/s up cracks the windscreen; a blast blows in the glass
+  on the sides facing it.
+- A nose pushed in past 0.3 loses its headlights and past 0.6 its bumper,
+  which falls into the road; a tail its lights and its bumper. Bullets on
+  their own do not take a bumper off.
+- The engine smokes grey below 55 % of the hull, black below 30 %, and
+  burns below 15 %, at 2 % of the hull a second, until it goes up the way
+  every vehicle already did. Smoke is a new kind in the effects pool, drawn
+  over what is behind it and not added to it, since smoke is darker than
+  the sky it goes up against. It came out as a puddle on the road first:
+  the shader read anything above three as a pool on the pavement.
+- How much a round does depends on what it goes into: a car or a jeep
+  takes most of a magazine from the rifle to set alight (18 rounds for a
+  car, 23 for a jeep), a bus three magazines, and a tank does not notice.
+  At the old one for one a car went up after seven.
+- Drawing it: vehicles carry two more vec4s each, the four dents, then what
+  has broken as bits, half the length and width, and the holes four bits a
+  side. The vertex shader pushes each side in, most at its edge, with a
+  wobble from the corner's own position and the nose and tail sagging; it
+  takes a pane by the way it faces, hides what is gone under the road, and
+  turns lights that are out dark. The fragment shader scrapes the paint to
+  bare metal in the folds and puts holes with a ring of bright metal where
+  the rounds went in. The car's and the jeep's bumpers are parts of their
+  own now so they can come off.
+- In .BACKDOOR: a car into raised blockers is stopped dead as before, and
+  now its nose shows it. Blockers coming up under a car standing over them
+  go into its floor: it is thrown up at 5.5 m/s, nose up if they came up
+  under the nose, pushed back off the row at 3.5 m/s, and a fifth of its
+  hull goes with it (a bus a third of all of that). A car in the air no
+  longer has the handbrake on. For there always to be a post under a car,
+  the posts stand 1.44 m apart centre to centre, a quarter of a metre
+  thick: 1.2 m of air, the most the UK guidance on stopping vehicles with
+  bollards allows. They were 2.13 m apart, and a car could stand between
+  two.
+- The parked cars are part of the street they are baked into and have no
+  body of their own to dent, so what shows of a round into one is glass
+  coming off above the waistline, and smoke, grey and then black, once it
+  is down past the same shares of what it can take.
+- One found on the way: the first browser run had low rounds breaking the
+  glass. A traced shot carries where it went in as its end, not as x, y
+  and z, so the damage model was handed nothing and read the middle of
+  nowhere as above the waistline. It is handed the end now, and a hit
+  with no point lands on the middle of the doors.
+- Sources:
+  [Science ABC on laminated and tempered car glass](https://www.scienceabc.com/eyeopeners/tempered-laminated-car-windshield-glass-why-break-such-small-pieces)
+  (laminated holds to its film, tempered goes into small blunt pieces),
+  [NBC DFW on laminated side windows](https://www.nbcdfw.com/news/local/type-of-glass-in-your-cars-windows-could-change-escape-plan-2/1944508/)
+  (side windows are increasingly laminated too; here they are the older,
+  commoner toughened kind), and the
+  [DfT's Traffic Advisory Leaflet 2/13](https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/650617/tal-2-13-bollards-pedestrian-movement.pdf)
+  (bollards against vehicles at most 1,200 mm of air apart). Checked through
+  search excerpts; this session cannot open the pages themselves.
+- Checks: nine unit checks of the damage model (the nose is minus z
+  whichever way it faces, the turned box and a shot over its roof, the
+  nose that loses its lights and then its bumper, glass above the
+  waistline on its own side only, a blast, a crash and its windscreen, the
+  engine's stages, the rounds it takes, holes and their packing) and one of
+  the posts (never more than 1.2 m of air, one under a car anywhere across
+  the row, none under one six metres back). In .BACKDOOR: the car into the
+  blockers has its nose in (0.56), its headlights out and its windscreen
+  crazed and the tail untouched; four low rounds make four holes and break
+  nothing, four through the windows take the glass on that side; eight
+  leave it at 62 % with a 0.21 dent and no smoke; shot on, it smokes grey
+  after 10, black after 15 and burns after 18, and burns down and goes up
+  7 s later; blockers under a parked car throw it 0.9 m up, nose up 1.09
+  rad, 3.3 m back off the row. Screenshots: `backdoor-09-shot-car.png`,
+  `backdoor-10-burning-car.png`, `backdoor-11-thrown-car.png`.
+- Two more found on the way. A burning car went white: the fire takes its
+  share of the hull through the same damage a round does, and every hit
+  flashed it; the fire no longer does. And the smoke check read the colour
+  in the step the stage changed, before the first puff of the new colour
+  was out, and passed or failed on the timing; it waits a fifth of a
+  second now and reads only the new puffs.
+- With it in: the unit checks 190 of 190, .BACKDOOR 54 of 54, combat 18 of
+  18, the arsenal 92 of 92, the machines 68 of 68 and the city 93 of 93.
+  Rounds stopping in vehicles changed none of the others.
+
+## 143. Thunder that sounds like thunder
+
+- The ask: the thunder did not sound right.
+- What it was: white noise through one lowpass, out of a four second
+  buffer that did not loop, started up to two seconds into it, so a roll
+  meant to go on for six cut off dead after two to four; and white noise
+  with its top taken off is hiss, not thunder.
+- What thunder is: the channel, kilometres long, heats the air along all
+  of it at once, and the sound of each part of it reaches you when its
+  distance says, the nearest first: a train of claps that rolls on as long
+  as the far end is further off than the near end. Measured, mostly ten to
+  fifteen seconds, from two to over thirty. Most of its energy is round
+  fifty cycles and under, and the air takes the top end out with distance:
+  the weather service's rule is that a sharp crack means the channel was
+  close and a rumble that it was some miles off.
+- So now (game/thunder.js, arithmetic only): under 1.2 km a crack, a run of
+  short bright tears in the first third of a second and a thump; then,
+  near or far, the roll, brown noise (all low end) low passed to 240
+  cycles at most, with a lift at 55, swelling with each clap: four or more,
+  the first the loudest, the rest bunched towards the start and dying
+  away, each up in a tenth of a second and down over one or two, on a bed
+  fading under them. It rolls 5 s plus a second for every 330 m, give or
+  take a quarter (about 12.5 at 2.5 km), at most 26; it is as loud as it
+  gets at 400 m and falls as the square root beyond; and everything goes
+  through the air, a lowpass from 9 kHz at the strike down by e every
+  1.3 km. The noise loops and fades at its ends, so nothing cuts off.
+- Sources: the
+  [National Weather Service on thunder](https://www.weather.gov/safety/lightning-science-thunder)
+  (crack close, rumble miles away, heard to about ten miles),
+  [The Earth's Electrical Environment, ch. 35](https://books.nap.edu/read/898/chapter/35)
+  (spectral peaks round or under 50 Hz), the measurements in
+  [Analysis of thunder generated by lightning cloud and ground flashes](https://archive.cmb.ac.lk/items/22e6cd73-3db8-4e61-b403-8cfa1417a90b)
+  (90 flashes: 2.2 to 33.7 s, most often 10 to 15) and
+  [Few's string of pearls, via DTIC](https://apps.dtic.mil/sti/pdfs/ADA051954.pdf)
+  (the channel as a line of sources, claps from its parts). Checked through
+  search excerpts; this session cannot open the pages themselves.
+- Checks: four unit checks of the shape (a crack only close to; longer the
+  further, 10 to 15 s at 2.5 km and never outside 2.2 to 34; the air and
+  the loudness falling with distance; claps that rise and fall and are gone
+  by the end), and one in the weather suite that makes thunder the way the
+  game does into an offline buffer: at 300 m it cracks, starts within half
+  a second of when sound would get there, rolls 6.5 s and is 2.7 times as
+  loud and five times as bright in its first fifth of a second as at
+  3.5 km, where it only rolls, for 11.5 s, starting ten seconds after the
+  flash. The suite passes 17 of 17.
+
+## 144. Extreme weather, announced, and shelters to get under
+
+- The ask: four kinds of weather past anything real, coming at random and
+  announced first ("Achtung Säureregen wird erwartet in 20 sekunden, suchen
+  sie sich schutz"): acid rain that melts the people and trees it lands on;
+  an ion storm whose bolts burn people up on the spot and can destroy
+  buildings, trees, shelters and vehicles; a tornado that throws people into
+  the air to burst when they come down, whirls the trees about and hurts
+  you; and a firestorm that burns whoever it reaches. Each can be switched
+  on in the options, all of them too, and more than one can come at once.
+  And small bus shelters and other places to get under, to be safe from
+  them. The message ended at "diese können", taken as: and these can be
+  destroyed, which they can.
+- Where they are switched on: on each game's page, under the weather, a row
+  Säureregen, Ionensturm, Wirbelsturm, Feuersturm, All; and the same
+  switches in the cheat menu's extreme weather group, with how often (on
+  average every 1 to 20 minutes, 5 to start with, between half and one and
+  a half times that each time) and a button for each to bring it now. One
+  set of switches, kept between visits; none of it counts as a cheat.
+- The warning (game/extreme.js, arithmetic only): twenty seconds ahead, a
+  red band across the top, word for word "Achtung: Säureregen wird
+  erwartet in 20 Sekunden. Suchen Sie sich Schutz!", counted down every
+  five seconds and each of the last three, then "Säureregen! Suchen Sie
+  sofort Schutz." when it comes and "Entwarnung: Säureregen ist vorüber."
+  when it is over. With it the siren the way the warning sirens in Germany
+  sound: a howl rising and falling for the warning, a steady tone for the
+  all clear, cut from the real minute to a few seconds. Each comes on and
+  goes over six seconds and covers a stretch round where it was announced,
+  a few hundred metres across, which you can get out of.
+- The shelters (game/shelters.js): a bus shelter, a glass back and ends
+  under a flat roof, a bench, and the stop's sign, the green H on a yellow
+  disc of the road traffic regulations (Zeichen 224); and a kiosk with its
+  awning out over the pavement. One every 130 m of the real streets, on
+  alternate sides, 2.6 m past the kerb, facing the road, none within 16 m
+  of a junction or 60 m of another, and only where the pavement is clear:
+  387 in the test city, 11 within 400 m of the square. Under the roof you
+  are out of all four, except the core of a tornado; so you are in a
+  vehicle or a mech. A bolt, the core of a tornado or a blast brings a
+  shelter down: the glass goes into the road, it is drawn broken, and it
+  shelters nobody after; whoever was under it when the bolt landed lives,
+  that once. The people who live here run for the nearest shelter within
+  90 m when the warning comes, three to a shelter, and go back to what they
+  were doing at the all clear.
+- Acid rain: green rain and a green cast; whoever is out in it is eaten
+  away (an eighth of what they can take a second) and goes down to the
+  bones in a green pool, smoking; trees melt; parked cars corrode; you lose
+  six a second in the open.
+- The ion storm: a white glare and a hum, and a bolt every 0.7 s or so on
+  somebody, a car, a shelter, a frontage near you or the ground. Within
+  4.5 m of where it lands everybody is burnt to a black skeleton where they
+  stood; within 7 m cars are wrecked, the building takes a blast, trees are
+  flattened and set alight; you lose 70 if it lands on you in the open.
+- The tornado: a funnel of dark cloud narrow at the street and wide in the
+  sky, turning, with dust at its foot. It comes from a quarter of a
+  kilometre off on a line that passes within 30 m of where you were, at
+  9 m/s (20 mph, the top of what the National Severe Storms Laboratory is
+  quoted as calling typical). In its core, 14 m across the middle, it picks people up,
+  shelter or not, and throws them up at 13 to 23 m/s and round with the
+  wind, and they burst when they come down; it whirls trees apart, throws
+  cars and brings shelters down. Out to 38 m it still costs you, up to ten
+  a second, and shakes the view. How hard the wind is, is not modelled as a
+  speed: on the Enhanced Fujita scale (65 to over 200 mph in gusts) a
+  tornado is rated by what it destroys, and this one does what an EF3 or
+  stronger does to trees and cars, and more to people than any real one.
+- The firestorm: an orange sky, embers falling like snow and glowing, fires
+  starting on the street; whoever is out in it catches and burns to a black
+  body (a sixth of what they can take a second), trees catch, cars burn; you
+  lose nine a second in the open. The Hamburg police president's report on
+  the firestorm of July 1943 is the picture: the wind it made itself was
+  such that going out into it was mostly impossible, and it swept over the
+  water with embers and sparks.
+- Acid rain that melts and an ion storm are invented; so are the numbers
+  of the tornado and how big each stretch is, set for the game.
+- Found on the way: the strength each event works with was measured at the
+  point where it was announced, which a tornado moves away from, so its
+  funnel and what it did faded out once it was 38 m past that point. Now
+  each uses its own strength, and the trees, the embers and the bolts near
+  you happen only while you are inside its stretch. The funnel was drawn
+  from puffs that rose for two to four seconds while it moved on at 9 m/s,
+  a smear; now each lives under a second, goes with the funnel and round
+  it, and is as big as the funnel is wide there. The warning siren never
+  sounded: audio.js had two methods named siren, the camp's further down,
+  and the second of a name in a class is the only one there is; it is
+  warnSiren now. And an event brought with no warning said "in 0
+  Sekunden"; it says it is here.
+- Sources: the
+  [warning signals, Hamburg's interior authority](https://www.hamburg.de/politik-und-verwaltung/behoerden/behoerde-fuer-inneres-und-sport/themen/katastrophenschutz/warnung-der-bevoelkerung/faq-sirenen-94190)
+  (a minute's rising and falling howl for a warning, a minute's steady
+  tone for the all clear), the road traffic regulations'
+  [Anlage 2](https://www.gesetze-im-internet.de/stvo_2013/anlage_2.html)
+  (Zeichen 224, the stop of a scheduled or school bus), the
+  [AMS Glossary on the Enhanced Fujita scale](https://glossary.ametsoc.org/wiki/Enhanced_Fujita_Scale)
+  (3 s gusts by category, rated from damage indicators, trees among them),
+  [a news article on how fast tornadoes move](https://www.yahoo.com/news/fast-tornadoes-move-depends-highway-163000083.html)
+  (quoting NSSL, typically 10 to 20 mph, and a weather service guide, an
+  average near 30; secondhand, not found on NSSL's own pages), and the
+  [Hamburg police president's report, 1943](https://germanhistorydocs.org/de/deutschland-nationalsozialismus-1933-1945/bericht-des-hamburger-polizeipraesidenten-ueber-den-hamburger-feuersturm-im-juli-august-1943)
+  (German History in Documents and Images). Checked through search
+  excerpts; this session cannot open the pages themselves.
+- Checks: six unit checks (the warning word for word and its count, the
+  event coming and going with the all clear, more than one at once and the
+  dice only for what is switched on, a tornado that passes close and
+  moves, shelters along the street facing it, and who is under a roof and
+  who is not, before and after it comes down); and the weather suite stages
+  each kind at a bus shelter near the square with somebody under it and
+  somebody in the street: the warning, its count and the siren; two of
+  three people in the street get under a roof before it comes; acid melts
+  the one outside and two trees or more and spares the one under the roof,
+  and you, under it, lose nothing; a bolt burns the one outside to a
+  skeleton, brings the shelter down with the one under it alive, and wrecks
+  a car; the tornado lifts the one outside 7 m and more, he bursts, trees
+  go, the shelter comes down and you are hurt 17 m from its line; the
+  firestorm burns the one outside, lights trees and rains embers; two at
+  once; the switches on the game's page and in the cheat menu, and one
+  coming by itself, none of it a cheat. The suite passes 32 of 32, and the
+  unit checks 200 of 200. Pictures:
+  [acid rain](screenshots/extreme-01-acid.png),
+  [ion storm](screenshots/extreme-02-ion.png),
+  [tornado](screenshots/extreme-03-tornado.png),
+  [firestorm](screenshots/extreme-04-fire.png).
+
+## 145. Any roof is shelter, the Brandenburg Gate included
+
+- The ask: the Brandenburg Gate cannot be used as shelter? It could not.
+  Only the bus shelters and kiosks of phase 144 counted, by their own
+  measured outline; the five passages under the Gate's attic were open sky
+  to the weather.
+- What is over a point: the world could not say. A ray straight up meets
+  nothing, because the collision is walls, and a wall is only met going
+  sideways; from the middle of the carriageway a ray up came back empty.
+  But anything held up off the ground is in the collision as its outline
+  at its own height: the attic over the passages is an outline from 15 to
+  23.6 m round the whole Gate, and so is a canopy, an arcade, a bridge
+  between two buildings. So world.roofOver(x, y, z) counts how many edges
+  of such outlines a line going east from the point crosses, odd being
+  inside, the outline told apart by the base and top its segments share
+  and every segment counted once, since one is stored in each tile it
+  crosses. Only segments that start more than two metres above the ground
+  under them are looked at, kept per segment array, which the demolition
+  replaces whole when it cuts a wall, so the list never points at the
+  wrong ones. It takes under a microsecond. Under every one of the five
+  passages and the portico it finds the attic 15 m up, and nothing a few
+  metres out in front, behind, past the end or on Pariser Platz.
+- Shelter is now a bus shelter, a kiosk, or any roof that finds: you and
+  everybody else under one are out of the acid, the embers and the bolts,
+  except in the core of a tornado, the same as under a bus shelter. A roof
+  like that has no glass for a bolt to bring down; it goes when its
+  building does.
+- The people who live here run under the Gate too when the warning comes:
+  its passages are a place to go, with a spot every metre and a half that
+  has a metre of attic round it every way and a clear line out of it nine
+  metres one way or another, which no spot inside a column or a cross wall
+  has; 210 of them. Each one goes to the nearest free spot they can walk
+  to in a straight line, so nobody is sent to the far side of a cross wall
+  to stand against it in the rain; the first try, with spots handed out in
+  turn, had them doing that.
+- And it shows. Under a roof the rain, the acid, the snow and the embers
+  stop falling round you, as far as the roof reaches the shortest way out
+  and below its underside (5.5 m round you in the Gate's carriageway). And
+  while extreme weather is on you a line under the warning says whether
+  where you stand keeps it off: Geschützt unter Dach, Geschützt im
+  Fahrzeug, or Ungeschützt: Suchen Sie Schutz.
+- Checks: a unit check of the roof query on the world bundle (the five
+  passages and the portico under a roof 15 m up, open sky round it and
+  none standing on the attic); and in the weather suite you in the
+  carriageway through a whole acid rain lose nothing and stay under the
+  roof, four people from round the Gate get in under it in time, the rain
+  stops 5.5 m round you under a roof 15 m up and the screen says you are
+  covered, and out in the acid it says you are not. The suite passes 35 of
+  35. Picture: [the carriageway in acid rain](screenshots/extreme-05-gate.png).
+
+## 146. The cheat menu says what each setting does, and a guide to all of them
+
+- The ask: info texts in the cheat menu on what the options do, and a guide
+  button at the bottom where every setting is described.
+- What was there: a short note under the one shot buttons, the switches
+  and the sliders, often a fragment ("pick the target on the map", "four,
+  overhead"); and nothing at all under a chip until it was clicked, the
+  weather and the extreme weather and the mechs among them.
+- Every entry in every list the menu is built from now carries a help
+  text as well as its note: what it does, in a sentence or two (58 in
+  cheats.js, the six kinds of weather and random in weather.js, the four
+  extreme kinds in extreme.js). The controls the game layer builds itself,
+  the weather's off, strength, how often and lightning, the extreme
+  weather's all, how often and one now, the time of day and the buttons at
+  the bottom, have theirs in guide.js, with a line about each of the twelve
+  groups that says what the group is for and whether it marks the run.
+  Which does was read off the code, not guessed: the one shot buttons, the
+  spawns, the vehicles, a switch away from how the game ships and a number
+  off its start do; the mechs, the bow, the time and the weather do not.
+- In the menu: under each group its line, and while the pointer is on one
+  of its settings, or the keyboard is, that setting's name and what it
+  does; the same text is the tooltip. The line sits under the group's
+  settings rather than over them, so that it growing never moves the
+  setting being pointed at. The one shot buttons, which had no group, are
+  one now, "right now".
+- The guide: a button at the bottom replaces the menu with every setting
+  written out in the menu's order, a section a group with its line, and an
+  entry a setting with what it does, the range a number goes over, where
+  it starts and where it is now, a row of links at the top to jump to a
+  group, and back to the menu. It is built each time it is opened, by
+  guide.js out of the same lists the menu is built from, so a setting added
+  to a list is in the guide with it, and a check fails if it comes without
+  a word about what it does. The menu always opens on the menu.
+- Found on the way: the extreme weather's "every so many minutes" slider
+  never had the slider rows' styles, its name, number and note run together
+  on one line with a short slider; it has them now.
+- Checks: five unit checks of the guide (every list has a help text for
+  each entry; every group, in order, with every setting of the menu in it;
+  the numbers with their range and start, "never to 120 s, starts 18 s";
+  what each is at now; and no dashes in any of it); and in the cheat
+  suite, all 98 settings in the menu carry a help text, all twelve groups
+  their line, pointing at God mode and at acid rain says what they do and
+  away from them the group again, and the guide has all twelve sections and
+  98 entries with a help text each, God mode "starts off, now on" with it
+  switched on, and goes back to the menu, which is what the menu opens on.
+  Pictures: [pointing at acid rain](screenshots/cheat-15-info.png),
+  [the guide](screenshots/cheat-16-guide.png).
+
+## CI: the power box check keeps its car at the kerb until the box goes
+
+- The live run after phase 146 was green but for one .BACKDOOR check: the
+  overloaded power box crackled, blew and floored the three people round
+  it, but the car parked four metres from it did not stall. It is a traffic
+  car, put down at the kerb with no speed, and the traffic drove it off up
+  the street in the second the box crackles (`CITY.box.fuse`), out of the
+  eight metres it reaches (`CITY.zap.cars`). The check now holds it where
+  it was put until the box goes.
+- And run locally, the check that two cars sent into a junction green both
+  ways crash failed once: the one car was marked crashed and the two never
+  came nearer than 9.7 m. The check cleared the street of other cars but
+  not of the people on foot the mode keeps topping up, and a car that
+  brakes for somebody crossing, or runs into them, is late and misses the
+  other. Nobody on foot is let into the road there now, in the runs alone
+  that find the two lines as in the run together. Both are the checks, not
+  the game.
+
+## CI: the flight's holes were streets drawn by the tile next door
+
+- Twice now (runs 243 and 247) the free travel check has found one frame
+  out of sixty over "nothing drawn": 442 m up over the core, a tile of
+  1160 vertices under it, loaded and fine. The test's measure of what is
+  drawn at a point looked only at the triangles of the tile the point is
+  in. But a street or a square is baked whole into one tile and runs on
+  over its edge into the next: Ebertstraße where it crosses a tile edge is
+  drawn, and seen from above, by the tile on the other side. Sampled every
+  7.3 m over the local core, 74 points of 73,628 had no ground of their own
+  tile over them, every one within a few metres of a tile edge, under a
+  street drawn as it should be. The measure now takes the topmost ground of
+  the tile and the eight round it: no point without ground in the same
+  sample. A frame of the flight landing on such a strip is chance, which is
+  why it was red one run in two.
+
+## CI: two of the vehicle checks against the live city
+
+- The first live run to get as far as .BACKDOOR since phase 142 failed two
+  of its checks. A car sent into the blockers at eleven metres a second met
+  them at under five, a dent of 0.21 and no glass broken: it is driven by
+  the traffic, which brakes for somebody standing in its lane, and on the
+  live street that is you, where you stand to point the phone. It is held
+  at eleven now until it meets them. And the car on fire had burnt out
+  before the check that times it began: the picture is taken between the
+  two with the world running, and on a slow machine that takes the five
+  seconds it had left. The world is held still for the picture. Both are
+  the checks, not the game; locally 54 of 54.
+
 ## CI: the EMP check clears the street in front of the launcher
 
 - The machines suite's EMP launcher check fired at a group of four at 54 m

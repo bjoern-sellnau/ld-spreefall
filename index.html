@@ -91,6 +91,14 @@
         <span>Time of day <b id="modetimelabel">20:12</b></span>
         <input id="modetime" type="range" min="0" max="23.9" step="0.1" value="20.2">
       </label>
+      <div class="weatherpick" id="weatherpick">
+        <span>Weather <b id="weatherlabel">Clear</b></span>
+        <div class="wxrow" id="weatherchips"></div>
+      </div>
+      <div class="weatherpick" id="extremepick">
+        <span>Extreme weather <b id="extremelabel">Off</b></span>
+        <div class="wxrow" id="extremechips"></div>
+      </div>
       <div id="diffblock">
         <div class="difficulty" role="radiogroup" aria-label="Difficulty">
           <button class="diff" data-diff="easy">Easy</button>
@@ -287,6 +295,9 @@
   <div id="compass"><span id="compasslabel">N</span></div>
   <div id="cardhost"></div>
   <div id="toast"></div>
+  <div id="wxtint" aria-hidden="true"></div>
+  <div id="wxalert" class="hidden" role="alert"><b id="wxalerttitle">Warnung</b><span id="wxalerttext"></span></div>
+  <div id="wxcover" class="hidden" aria-live="polite"></div>
   <div id="overkill" aria-hidden="true"></div>
   <div id="splatter" aria-hidden="true"></div>
   <canvas id="throwarc" class="hidden" aria-hidden="true"></canvas>
@@ -379,7 +390,12 @@
     <tr><td>Q</td><td>back to the last weapon; in The Hunt, the suit's armour</td></tr>
     <tr><td>T</td><td>blow the C4 and the rubber ducks you have put down, and any vehicle rigged with a remote bomb</td></tr>
     <tr><td>G</td><td>holster the weapon, for walking and for photographs; in The Hunt, a grenade off the belt</td></tr>
-    <tr><td>C</td><td>cheats</td></tr>
+    <tr><td>C</td><td>cheats; the weather is in there too: off, any kind, random, how
+      strong, how often it turns and whether a storm throws lightning; and the
+      extreme weather, also on the game's page: acid rain, an ion storm, a
+      tornado and a firestorm, at random and announced twenty seconds ahead.
+      Get under a bus shelter, a kiosk's awning, the Brandenburg Gate or any
+      other roof, or into a vehicle</td></tr>
     <tr><td>V</td><td>free travel: pick a place on the map and fly there</td></tr>
     <tr><td>Esc</td><td>release the mouse</td></tr>
   </table>
@@ -390,50 +406,88 @@
 </div>
 
 <div id="cheats" class="panel hidden">
+  <div id="cheatmenu">
   <h2>Cheats</h2>
   <p class="warn">A run with any of these on is marked as such, here and on the
   end screen. The memorial stays a weapons free zone whatever is switched on.</p>
-  <div class="row" id="cheatactions"></div>
-  <div class="group">
+  <p class="cheatintro">Point at anything for what it does. The guide at the bottom describes every setting.</p>
+  <div class="group" data-guide="actions">
+    <div class="grouplabel">right now</div>
+    <div class="row" id="cheatactions"></div>
+    <p class="groupinfo"></p>
+  </div>
+  <div class="group" data-guide="spawns">
     <div class="grouplabel">bring more of them out</div>
     <div class="row" id="cheatspawns"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="rides">
     <div class="grouplabel">something to get into</div>
     <div class="row" id="cheatrides"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="mine">
     <div class="grouplabel">your mech, for the next titanfall</div>
     <div class="row chips" id="cheatmine"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="foe">
     <div class="grouplabel">their mechs, when they come for you</div>
     <div class="row chips" id="cheatfoe"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="bow">
     <div class="grouplabel">the bow</div>
     <div class="row chips" id="cheatbow"></div>
     <div class="row chips" id="cheatbowhold"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="values">
     <div class="grouplabel">numbers you can turn</div>
     <div id="cheatvalues"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="tod">
     <div class="grouplabel">time of day</div>
     <label class="todrow"><input id="cheattod" type="range" min="0" max="23.9" step="0.1" value="17.4">
       <b id="cheattodlabel">17:24</b></label>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="weather">
+    <div class="grouplabel">weather</div>
+    <div class="row chips" id="cheatweather"></div>
+    <div id="cheatweathervalues"></div>
+    <p class="groupinfo"></p>
+  </div>
+  <div class="group" data-guide="extreme">
+    <div class="grouplabel">extreme weather</div>
+    <div class="row chips" id="cheatextreme"></div>
+    <div id="cheatextremevalues"></div>
+    <p class="groupinfo"></p>
+  </div>
+  <div class="group" data-guide="switches">
     <div class="grouplabel">switches</div>
     <div id="cheatswitches"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="gore">
     <div class="grouplabel">gore, all off unless you say otherwise</div>
     <div id="cheatgore"></div>
+    <p class="groupinfo"></p>
   </div>
   <button id="cheatsclose">close</button>
   <button id="cheatsreset" class="ghost">all off</button>
+  <button id="cheatsguide" class="ghost">guide</button>
+  </div>
+  <div id="cheatguide" class="hidden">
+    <h2>Guide</h2>
+    <p class="guidelead">Every setting in the cheat menu: what it does, how far it goes, where it
+    starts and where it is now. What marks a run is said with each group.</p>
+    <nav id="guidetoc"></nav>
+    <div id="guidebody"></div>
+    <button id="guideback">back to the cheats</button>
+    <button id="guideclose" class="ghost">close</button>
+  </div>
 </div>
 
 <div id="cinemahint" class="hidden">press space to go back</div>
