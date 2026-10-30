@@ -376,6 +376,16 @@ Press **C**. Everything here is off by default except the two destruction
 switches, which are the game as it ships, and all of it is remembered between
 visits.
 
+The menu says what each setting does. Under every group a line says what the
+group is for and whether it marks the run; point at a setting, or tab to it,
+and the line says what that one does. The **guide** button at the bottom
+replaces the menu with every setting written out, group by group: what it
+does, the range a number goes over, where it starts and where it is now, with
+a row of links to jump to a group and a way back to the menu.
+
+![Pointing at acid rain in the cheat menu](docs/screenshots/cheat-15-info.png)
+![The guide behind the button at the bottom](docs/screenshots/cheat-16-guide.png)
+
 | | |
 |---|---|
 | All weapons | every magazine and every reserve in the loadout, full |

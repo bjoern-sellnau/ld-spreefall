@@ -1044,20 +1044,20 @@ html, body {
 #hud.machines #district { color: #ff6a5a; }
 
 /* The cheat menu's sliders: a label, the number it is on, and the slider. */
-#cheatvalues .val, #cheatweathervalues .val {
+#cheatvalues .val, #cheatweathervalues .val, #cheatextremevalues .val {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 2px 10px;
   padding: 7px 2px 9px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-#cheatvalues .val b, #cheatweathervalues .val b { font-weight: 600; font-size: 12px; letter-spacing: 0.04em; }
-#cheatvalues .val .num, #cheatweathervalues .val .num { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; }
-#cheatvalues .val i, #cheatweathervalues .val i {
+#cheatvalues .val b, #cheatweathervalues .val b, #cheatextremevalues .val b { font-weight: 600; font-size: 12px; letter-spacing: 0.04em; }
+#cheatvalues .val .num, #cheatweathervalues .val .num, #cheatextremevalues .val .num { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; }
+#cheatvalues .val i, #cheatweathervalues .val i, #cheatextremevalues .val i {
   grid-column: 1 / -1;
   font-style: normal; color: var(--dim); font-size: 11px; margin: -2px 0 4px;
 }
-#cheatvalues .val input, #cheatweathervalues .val input {
+#cheatvalues .val input, #cheatweathervalues .val input, #cheatextremevalues .val input {
   grid-column: 1 / -1;
   width: 100%;
   accent-color: var(--accent);
@@ -1436,6 +1436,58 @@ html, body {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--edge);
 }
+/* What a group is for, under its settings, and what the one under the
+   pointer does while it is there. Under them rather than over them, so that
+   the line growing never moves the setting you are pointing at. */
+#cheats .cheatintro { margin: -4px 0 6px; font-size: 11.5px; }
+#cheats .groupinfo {
+  margin: 7px 0 0;
+  padding: 5px 9px;
+  min-height: 1.45em;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.025);
+  border-left: 2px solid var(--edge);
+}
+#cheats .groupinfo.item { color: #e6e1d6; border-left-color: var(--accent); }
+#cheats .groupinfo b { color: var(--accent); font-weight: 600; margin-right: 6px; }
+/* The guide: every setting, written out, in the menu's order. */
+#cheatguide .guidelead { margin: 0 0 10px; }
+#cheatguide nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+#cheatguide nav .chip {
+  margin: 0;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #cfcabf;
+  font: 600 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  cursor: pointer;
+}
+#cheatguide section { margin-top: 16px; scroll-margin-top: 8px; }
+#cheatguide h3 {
+  margin: 0 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+#cheatguide .about { margin: 0 0 6px; font-size: 12px; }
+#cheatguide dl { margin: 0; }
+#cheatguide dt { margin-top: 7px; font-size: 12.5px; font-weight: 600; color: #e6e1d6; }
+#cheatguide dt .tags {
+  margin-left: 8px;
+  font-weight: 400;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  opacity: 0.85;
+}
+#cheatguide dd { margin: 2px 0 0 0; font-size: 12px; line-height: 1.5; color: var(--dim); }
 
 /* The mark on a run. Sits with the threat readout, in red, and does not go
    away when the cheats are switched off again. */

@@ -6064,6 +6064,54 @@ So there are two cities now, and a profile picks which:
   covered, and out in the acid it says you are not. The suite passes 35 of
   35. Picture: [the carriageway in acid rain](screenshots/extreme-05-gate.png).
 
+## 146. The cheat menu says what each setting does, and a guide to all of them
+
+- The ask: info texts in the cheat menu on what the options do, and a guide
+  button at the bottom where every setting is described.
+- What was there: a short note under the one shot buttons, the switches
+  and the sliders, often a fragment ("pick the target on the map", "four,
+  overhead"); and nothing at all under a chip until it was clicked, the
+  weather and the extreme weather and the mechs among them.
+- Every entry in every list the menu is built from now carries a help
+  text as well as its note: what it does, in a sentence or two (58 in
+  cheats.js, the six kinds of weather and random in weather.js, the four
+  extreme kinds in extreme.js). The controls the game layer builds itself,
+  the weather's off, strength, how often and lightning, the extreme
+  weather's all, how often and one now, the time of day and the buttons at
+  the bottom, have theirs in guide.js, with a line about each of the twelve
+  groups that says what the group is for and whether it marks the run.
+  Which does was read off the code, not guessed: the one shot buttons, the
+  spawns, the vehicles, a switch away from how the game ships and a number
+  off its start do; the mechs, the bow, the time and the weather do not.
+- In the menu: under each group its line, and while the pointer is on one
+  of its settings, or the keyboard is, that setting's name and what it
+  does; the same text is the tooltip. The line sits under the group's
+  settings rather than over them, so that it growing never moves the
+  setting being pointed at. The one shot buttons, which had no group, are
+  one now, "right now".
+- The guide: a button at the bottom replaces the menu with every setting
+  written out in the menu's order, a section a group with its line, and an
+  entry a setting with what it does, the range a number goes over, where
+  it starts and where it is now, a row of links at the top to jump to a
+  group, and back to the menu. It is built each time it is opened, by
+  guide.js out of the same lists the menu is built from, so a setting added
+  to a list is in the guide with it, and a check fails if it comes without
+  a word about what it does. The menu always opens on the menu.
+- Found on the way: the extreme weather's "every so many minutes" slider
+  never had the slider rows' styles, its name, number and note run together
+  on one line with a short slider; it has them now.
+- Checks: five unit checks of the guide (every list has a help text for
+  each entry; every group, in order, with every setting of the menu in it;
+  the numbers with their range and start, "never to 120 s, starts 18 s";
+  what each is at now; and no dashes in any of it); and in the cheat
+  suite, all 98 settings in the menu carry a help text, all twelve groups
+  their line, pointing at God mode and at acid rain says what they do and
+  away from them the group again, and the guide has all twelve sections and
+  98 entries with a help text each, God mode "starts off, now on" with it
+  switched on, and goes back to the menu, which is what the menu opens on.
+  Pictures: [pointing at acid rain](screenshots/cheat-15-info.png),
+  [the guide](screenshots/cheat-16-guide.png).
+
 ## CI: the flight's holes were streets drawn by the tile next door
 
 - Twice now (runs 243 and 247) the free travel check has found one frame

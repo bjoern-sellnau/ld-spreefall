@@ -17,6 +17,7 @@ export const EXTREME = {
   kinds: {
     acid: {
       name: 'Säureregen', en: 'acid rain',
+      help: 'Green rain that eats whoever is out in it down to the bones and melts the trees; cars corrode, and you lose health in the open.',
       // How long it rains, the stretch it covers, how hard it eats at a
       // person in the open (a share of what he can take, a second) and how
       // many trees it melts a second while it is at its height.
@@ -24,12 +25,14 @@ export const EXTREME = {
     },
     ion: {
       name: 'Ionensturm', en: 'ion storm',
+      help: 'Violet bolts every second or so; whoever is within a few metres burns to a skeleton, and cars, trees, bus shelters and frontages are wrecked.',
       // A bolt this often, on anything in the stretch, and what it does
       // where it lands: everybody within the reach is burnt to nothing.
       last: [30, 50], radius: 180, every: 0.7, reach: 4.5, blast: 7, you: 70,
     },
     tornado: {
       name: 'Wirbelsturm', en: 'tornado',
+      help: 'A funnel that passes close: whoever it takes is thrown up and bursts on landing, trees are torn out and cars thrown. Its core reaches you even under a roof.',
       // How fast the funnel goes over the ground, how wide its core is and
       // how far round it the wind still takes things, and what it costs you
       // a second inside it. It comes from a quarter of a kilometre off on a
@@ -38,6 +41,7 @@ export const EXTREME = {
     },
     fire: {
       name: 'Feuersturm', en: 'firestorm',
+      help: 'An orange sky raining embers: people in the open burn, trees catch fire and cars burn.',
       // The stretch it burns, what it does to a person in the open, and how
       // often it sets a tree alight.
       last: [30, 50], radius: 200, harm: 0.16, trees: 0.8, you: 9,

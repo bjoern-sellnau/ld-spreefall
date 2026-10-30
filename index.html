@@ -406,60 +406,88 @@
 </div>
 
 <div id="cheats" class="panel hidden">
+  <div id="cheatmenu">
   <h2>Cheats</h2>
   <p class="warn">A run with any of these on is marked as such, here and on the
   end screen. The memorial stays a weapons free zone whatever is switched on.</p>
-  <div class="row" id="cheatactions"></div>
-  <div class="group">
+  <p class="cheatintro">Point at anything for what it does. The guide at the bottom describes every setting.</p>
+  <div class="group" data-guide="actions">
+    <div class="grouplabel">right now</div>
+    <div class="row" id="cheatactions"></div>
+    <p class="groupinfo"></p>
+  </div>
+  <div class="group" data-guide="spawns">
     <div class="grouplabel">bring more of them out</div>
     <div class="row" id="cheatspawns"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="rides">
     <div class="grouplabel">something to get into</div>
     <div class="row" id="cheatrides"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="mine">
     <div class="grouplabel">your mech, for the next titanfall</div>
     <div class="row chips" id="cheatmine"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="foe">
     <div class="grouplabel">their mechs, when they come for you</div>
     <div class="row chips" id="cheatfoe"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="bow">
     <div class="grouplabel">the bow</div>
     <div class="row chips" id="cheatbow"></div>
     <div class="row chips" id="cheatbowhold"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="values">
     <div class="grouplabel">numbers you can turn</div>
     <div id="cheatvalues"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="tod">
     <div class="grouplabel">time of day</div>
     <label class="todrow"><input id="cheattod" type="range" min="0" max="23.9" step="0.1" value="17.4">
       <b id="cheattodlabel">17:24</b></label>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="weather">
     <div class="grouplabel">weather</div>
     <div class="row chips" id="cheatweather"></div>
     <div id="cheatweathervalues"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="extreme">
     <div class="grouplabel">extreme weather</div>
     <div class="row chips" id="cheatextreme"></div>
     <div id="cheatextremevalues"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="switches">
     <div class="grouplabel">switches</div>
     <div id="cheatswitches"></div>
+    <p class="groupinfo"></p>
   </div>
-  <div class="group">
+  <div class="group" data-guide="gore">
     <div class="grouplabel">gore, all off unless you say otherwise</div>
     <div id="cheatgore"></div>
+    <p class="groupinfo"></p>
   </div>
   <button id="cheatsclose">close</button>
   <button id="cheatsreset" class="ghost">all off</button>
+  <button id="cheatsguide" class="ghost">guide</button>
+  </div>
+  <div id="cheatguide" class="hidden">
+    <h2>Guide</h2>
+    <p class="guidelead">Every setting in the cheat menu: what it does, how far it goes, where it
+    starts and where it is now. What marks a run is said with each group.</p>
+    <nav id="guidetoc"></nav>
+    <div id="guidebody"></div>
+    <button id="guideback">back to the cheats</button>
+    <button id="guideclose" class="ghost">close</button>
+  </div>
 </div>
 
 <div id="cinemahint" class="hidden">press space to go back</div>

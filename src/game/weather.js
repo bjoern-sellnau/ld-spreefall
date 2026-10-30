@@ -17,16 +17,16 @@ const KEY = 'spreefall.weather';
 
 /** The kinds, in the order the menus show them. */
 export const KINDS = [
-  { id: 'clear', label: 'Clear', note: 'a blue sky with a little high cloud' },
-  { id: 'cloudy', label: 'Cloudy', note: 'grey over, no shadows to speak of' },
-  { id: 'rain', label: 'Rain', note: 'steady rain, the streets wet and shining' },
-  { id: 'storm', label: 'Storm', note: 'heavy rain, wind, lightning and thunder' },
-  { id: 'fog', label: 'Fog', note: 'under two hundred metres to see, and they cannot see you either' },
-  { id: 'snow', label: 'Snow', note: 'falling snow that settles on the street and the roofs' },
+  { id: 'clear', label: 'Clear', note: 'a blue sky with a little high cloud', help: 'A blue sky with a little high cloud, the sun and its shadows, and the stars at night.' },
+  { id: 'cloudy', label: 'Cloudy', note: 'grey over, no shadows to speak of', help: 'Grey over: the sun and its shadows go, and so do the stars at night.' },
+  { id: 'rain', label: 'Rain', note: 'steady rain, the streets wet and shining', help: 'Steady rain round you; the street darkens, shines and stands in puddles, and dries over five minutes after.' },
+  { id: 'storm', label: 'Storm', note: 'heavy rain, wind, lightning and thunder', help: 'Heavy rain and wind, and lightning: the sky flashes, a bolt stands on the skyline and the thunder comes three seconds a kilometre later.' },
+  { id: 'fog', label: 'Fog', note: 'under two hundred metres to see, and they cannot see you either', help: 'The view closes to about 180 m, and soldiers see you no further than the fog lets them.' },
+  { id: 'snow', label: 'Snow', note: 'falling snow that settles on the street and the roofs', help: 'Flakes that sway as they fall and settle white on everything facing up; rain washes it away.' },
 ];
 
 /** And random, which is not a kind but a way of choosing one. */
-export const RANDOM = { id: 'random', label: 'Random', note: 'it changes by itself every few minutes' };
+export const RANDOM = { id: 'random', label: 'Random', note: 'it changes by itself every few minutes', help: 'Holds a kind for a few minutes and then turns, mostly to the one next to it; it snows only from November to the middle of March.' };
 
 export const WEATHER = {
   // What each kind is, as amounts from nought to one. Rain and snow are how

@@ -1785,6 +1785,81 @@ async function run() {
   await page.waitForTimeout(1200);
   await page.screenshot({ path: path.join(SHOTS, 'cheat-01-menu.png') });
 
+  // --- what the menu says about itself --------------------------------------
+  // Every setting carries a word about what it does; under each group a line
+  // says what the group is for, and what the setting under the pointer does
+  // while it is there.
+  const info = await page.evaluate(() => {
+    const menu = document.getElementById('cheats');
+    const options = [...menu.querySelectorAll('#cheatactions [data-action], #cheatspawns [data-spawn], #cheatrides [data-ride], '
+      + '[data-mech], [data-bow], [data-bowhold], #cheatvalues [data-setting], #cheatmenu [data-cheat], #cheatweather [data-wx], '
+      + '#cheatweathervalues [data-wx=lightning], #cheatextreme [data-xw], [data-xw-now], .todrow')];
+    const bare = options.filter((n) => !(n.dataset.help && n.dataset.help.length >= 15)).map((n) => n.outerHTML.slice(0, 70));
+    const groups = [...menu.querySelectorAll('.group[data-guide]')];
+    const empty = groups.filter((g) => g.querySelector('.groupinfo').textContent.length < 20).map((g) => g.dataset.guide);
+    const god = menu.querySelector('#cheatswitches [data-cheat=godmode]');
+    const line = god.closest('.group').querySelector('.groupinfo');
+    god.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    const pointed = { text: line.textContent, item: line.classList.contains('item') };
+    god.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+    const away = line.textContent;
+    // And a chip, which said nothing until it was clicked.
+    const acid = menu.querySelector('#cheatextreme [data-xw=acid]');
+    acid.scrollIntoView({ block: 'center' });
+    acid.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    const xline = acid.closest('.group').querySelector('.groupinfo').textContent;
+    return { options: options.length, bare, groups: groups.length, empty, pointed, away, xline };
+  });
+  check('every setting in the cheat menu carries a word about what it does',
+    info.options > 80 && info.bare.length === 0, JSON.stringify({ options: info.options, bare: info.bare }));
+  check('under each group a line says what it is for, and pointing at a setting says what that one does',
+    info.groups === 12 && info.empty.length === 0 && info.pointed.item && /^God mode\s*Nothing takes your health/.test(info.pointed.text)
+      && /^On until you switch them off/.test(info.away) && /^Säureregen\s*Green rain/.test(info.xline), JSON.stringify(info));
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-15-info.png') });
+
+  // The guide at the bottom: every setting written out, where it starts and
+  // where it is now, and back to the menu.
+  const guide = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setCheat('godmode', true);
+    document.getElementById('cheatsguide').click();
+    const g = document.getElementById('cheatguide');
+    const shown = !g.classList.contains('hidden') && document.getElementById('cheatmenu').classList.contains('hidden');
+    const entry = (sec, start) => [...g.querySelectorAll(`#guide-${sec} dt`)].find((d) => d.textContent.startsWith(start));
+    const out = {
+      shown,
+      sections: [...g.querySelectorAll('section')].map((x) => x.id.replace('guide-', '')),
+      entries: g.querySelectorAll('dt').length,
+      helps: [...g.querySelectorAll('dd')].filter((d) => d.textContent.length >= 15).length,
+      contents: g.querySelectorAll('nav button').length,
+      god: entry('switches', 'God mode').textContent,
+      radius: entry('values', 'Warhead radius').textContent,
+      bones: entry('values', 'Skeletons collapse after').textContent,
+      gate: /Brandenburg Gate/.test(g.querySelector('#guide-extreme .about').textContent),
+    };
+    return out;
+  });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SHOTS, 'cheat-16-guide.png') });
+  const back = await page.evaluate(() => {
+    const s = window.spreefall;
+    document.getElementById('guideback').click();
+    const menuBack = !document.getElementById('cheatmenu').classList.contains('hidden')
+      && document.getElementById('cheatguide').classList.contains('hidden');
+    document.getElementById('cheatsguide').click();
+    s.cheatMenu(false);
+    s.cheatMenu(true);
+    const opensOnMenu = !document.getElementById('cheatmenu').classList.contains('hidden');
+    s.setCheat('godmode', false);
+    return { menuBack, opensOnMenu };
+  });
+  check('the guide at the bottom describes every setting, with where it starts and where it is now',
+    guide.shown && guide.sections.length === 12 && guide.entries >= 90 && guide.helps === guide.entries && guide.contents === 12
+      && /starts off · now on/.test(guide.god) && /60 m to 900 m · starts 170 m · now 170 m/.test(guide.radius)
+      && /never to 120 s · starts 18 s/.test(guide.bones) && guide.gate, JSON.stringify(guide));
+  check('and goes back to the menu, which is what the menu opens on', back.menuBack && back.opensOnMenu, JSON.stringify(back));
+
   await page.evaluate(() => {
     const s = window.spreefall;
     s.cheatMenu(false);

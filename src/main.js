@@ -32,6 +32,7 @@ import { Reflex, REFLEX } from './game/reflex.js';
 import { Jets } from './game/jets.js';
 import { Pickups, PICKUP } from './game/pickups.js';
 import { Cheats, SWITCHES, GORE, ACTIONS, SPAWNS, RIDES, SETTINGS, BOWS, BOW_HOLDS } from './game/cheats.js';
+import { GUIDE_GROUPS, CONTROL_HELP, buildGuide } from './game/guide.js';
 import { CHASSIS, mechKey } from './game/chassis.js';
 import { Onslaught, ONSLAUGHT, pickStrike } from './game/onslaught.js';
 import { Ultra, ULTRA, ULTRA_STATE, VOID_STORM } from './game/ultra.js';
@@ -154,6 +155,8 @@ const el = {
   mechAmmo: $('mechammo'), mechPod: $('mechpod'), mechDash: $('mechdash'),
   mechWarn: $('mechwarn'),
   cheatGore: $('cheatgore'), cheatsClose: $('cheatsclose'), cheatsReset: $('cheatsreset'),
+  cheatMenuBody: $('cheatmenu'), cheatGuide: $('cheatguide'), guideToc: $('guidetoc'), guideBody: $('guidebody'),
+  cheatsGuide: $('cheatsguide'), guideBack: $('guideback'), guideClose: $('guideclose'),
   cheatMark: $('cheatmark'), nukeTarget: $('nuketarget'), targetMap: $('targetmap'),
   targetHint: $('targethint'), cinemaHint: $('cinemahint'),
   targetIn: $('targetin'), targetOut: $('targetout'),
@@ -4695,6 +4698,16 @@ async function main() {
   // started without rebuilding the whole thing.
   const settingShown = [];
 
+  // What a mech carries, said the way the menu talks: yours by its arms,
+  // theirs by its gun.
+  const FOE_GUN = { auto: 'a chaingun in bursts', shotgun: 'a shotgun', rail: 'a railgun',
+    shell: 'a cannon', swarm: 'a swarm of small rockets', thermite: 'thermite', laser: 'a beam' };
+  const armsLine = (row, which) => (which === 'mine'
+    ? `Carries ${row.loadout.map((id) => (ARMS.find((a) => a.id === id) || { name: id }).name).join(', ')}.`
+    : `Fires ${FOE_GUN[(row.gun && row.gun.kind) || 'auto']} and rockets.`);
+  const mechHelp = (row, which) => `${row.role.charAt(0).toUpperCase()}${row.role.slice(1)}. ${armsLine(row, which)}`;
+  const RANDOM_MECH = 'A different chassis every time they come.';
+
   function buildCheatMenu() {
     for (const a of ACTIONS) {
       const b = document.createElement('button');
@@ -4725,13 +4738,6 @@ async function main() {
       const say = document.createElement('div');
       say.className = 'mechsay';
       const chips = [];
-      // What it carries, said the way the menu talks: yours by its arms,
-      // theirs by its gun.
-      const FOE_GUN = { auto: 'a chaingun in bursts', shotgun: 'a shotgun', rail: 'a railgun',
-        shell: 'a cannon', swarm: 'a swarm of small rockets', thermite: 'thermite', laser: 'a beam' };
-      const armsLine = (row, which) => (which === 'mine'
-        ? `Carries ${row.loadout.map((id) => (ARMS.find((a) => a.id === id) || { name: id }).name).join(', ')}.`
-        : `Fires ${FOE_GUN[(row.gun && row.gun.kind) || 'auto']} and rockets.`);
       const show = () => {
         const id = cheats.mechs[side];
         for (const c of chips) c.el.classList.toggle('on', c.id === id);
@@ -5884,6 +5890,8 @@ async function main() {
     const on = show === undefined ? el.cheats.classList.contains('hidden') : show;
     el.cheats.classList.toggle('hidden', !on);
     if (on) {
+      // It opens on the menu, whatever it was showing when it was closed.
+      showGuide(false);
       // Remember whether the mouse was actually captured, so that closing the
       // menu gives it back only to somebody who had it. Asking for a lock
       // nobody asked for is both rude and, if one is already pending, an
@@ -5905,6 +5913,149 @@ async function main() {
     state.lockWanted = false;
     input.requestLock();
   }
+  // --- what the cheat menu does, said in it ---------------------------------
+  //
+  // Every setting in the menu carries a word about what it does: under each
+  // group a line says what the group is for, and while the pointer is on one
+  // of its settings, or the keyboard is, what that one does. The guide
+  // button at the bottom has all of it, setting by setting, with where each
+  // starts and where it is now, out of guide.js and the same lists the menu
+  // is built from.
+  const WEATHER_OFF = { id: 'off', label: 'Off', help: CONTROL_HELP.weatherOff };
+  function annotateCheatMenu() {
+    const mark = (node, label, help) => {
+      if (!node || !help) return;
+      node.dataset.hlabel = label;
+      node.dataset.help = help;
+      node.title = help;
+    };
+    const byId = (list, id) => list.find((x) => x.id === id) || {};
+    const each = (sel, fn) => { for (const n of el.cheats.querySelectorAll(sel)) fn(n); };
+    each('#cheatactions [data-action]', (n) => { const a = byId(ACTIONS, n.dataset.action); mark(n, a.label, a.help); });
+    each('#cheatspawns [data-spawn]', (n) => { const a = byId(SPAWNS, n.dataset.spawn); mark(n, a.label, a.help); });
+    each('#cheatrides [data-ride]', (n) => { const a = byId(RIDES, n.dataset.ride); mark(n, a.label, a.help); });
+    each('#cheatmine [data-mech], #cheatfoe [data-mech]', (n) => {
+      const [side, id] = n.dataset.mech.split(':');
+      const row = CHASSIS.find((c) => c.id === id);
+      mark(n, row ? row.name : 'Random', row ? mechHelp(row, side) : RANDOM_MECH);
+    });
+    each('#cheatbow [data-bow]', (n) => { const a = byId(BOWS, n.dataset.bow); mark(n, a.label, a.help); });
+    each('#cheatbowhold [data-bowhold]', (n) => { const a = byId(BOW_HOLDS, n.dataset.bowhold); mark(n, a.label, a.help); });
+    each('#cheatvalues [data-setting]', (n) => { const a = byId(SETTINGS, n.dataset.setting); mark(n, a.label, a.help); });
+    each('#cheatswitches [data-cheat]', (n) => { const a = byId(SWITCHES, n.dataset.cheat); mark(n, a.label, a.help); });
+    each('#cheatgore [data-cheat]', (n) => { const a = byId(GORE, n.dataset.cheat); mark(n, a.label, a.help); });
+    each('#cheatweather [data-wx]', (n) => { const a = byId([WEATHER_OFF, ...WEATHER_ALL], n.dataset.wx); mark(n, a.label, a.help); });
+    each('#cheatweathervalues input[data-wx=intensity]', (n) => mark(n.closest('label'), 'Weather strength', CONTROL_HELP.intensity));
+    each('#cheatweathervalues input[data-wx=minutes]', (n) => mark(n.closest('label'), 'Random weather turns every', CONTROL_HELP.minutes));
+    each('#cheatweathervalues [data-wx=lightning]', (n) => mark(n, 'Lightning', CONTROL_HELP.lightning));
+    each('#cheatextreme [data-xw]', (n) => {
+      const k = EXTREME.kinds[n.dataset.xw];
+      mark(n, k ? k.name : 'All', k ? k.help : CONTROL_HELP.extremeAll);
+    });
+    each('#cheatextremevalues input[data-xw=minutes]', (n) => mark(n.closest('label'), 'Extreme weather every', CONTROL_HELP.extremeMinutes));
+    each('#cheatextremevalues [data-xw-now]', (n) => mark(n, `${EXTREME.kinds[n.dataset.xwNow].name} now`,
+      `${CONTROL_HELP.extremeNow} ${EXTREME.kinds[n.dataset.xwNow].help}`));
+    each('.todrow', (n) => mark(n, 'Time of day', CONTROL_HELP.tod));
+    el.cheatsClose.title = CONTROL_HELP.close;
+    el.cheatsReset.title = CONTROL_HELP.reset;
+    el.cheatsGuide.title = CONTROL_HELP.guide;
+    // The same words on the game page's extreme weather switches.
+    for (const n of el.extremeChips.querySelectorAll('[data-xw]')) {
+      const k = EXTREME.kinds[n.dataset.xw];
+      n.title = k ? k.help : CONTROL_HELP.extremeAll;
+    }
+    for (const g of el.cheats.querySelectorAll('.group[data-guide]')) groupInfo(g, null);
+  }
+  /** A group's line: what the group is for, or what the setting at hand does. */
+  function groupInfo(g, item) {
+    const line = g.querySelector('.groupinfo');
+    if (!line) return;
+    const about = (GUIDE_GROUPS.find((x) => x.id === g.dataset.guide) || {}).about || '';
+    line.classList.toggle('item', !!item);
+    if (!item) { line.textContent = about; return; }
+    const b = document.createElement('b');
+    b.textContent = item.dataset.hlabel;
+    line.replaceChildren(b, document.createTextNode(item.dataset.help));
+  }
+  const pointAt = (t) => {
+    const g = t && t.closest && t.closest('.group[data-guide]');
+    if (!g) return;
+    const item = t.closest('[data-help]');
+    groupInfo(g, item && g.contains(item) ? item : null);
+  };
+  el.cheatMenuBody.addEventListener('mouseover', (e) => pointAt(e.target));
+  el.cheatMenuBody.addEventListener('focusin', (e) => pointAt(e.target));
+  el.cheatMenuBody.addEventListener('mouseout', (e) => {
+    const g = e.target.closest && e.target.closest('.group[data-guide]');
+    if (g && !g.contains(e.relatedTarget)) groupInfo(g, null);
+  });
+
+  /** The guide, as it stands now: every setting and where it is. */
+  function guideNow() {
+    const chassis = (side) => CHASSIS.map((c) => ({ id: c.id, label: c.name, help: mechHelp(c, side) }));
+    return buildGuide({
+      actions: ACTIONS, spawns: SPAWNS, rides: RIDES, settings: SETTINGS, switches: SWITCHES, gore: GORE,
+      bows: BOWS, bowHolds: BOW_HOLDS,
+      chassis: { mine: chassis('mine'), foe: [...chassis('foe'), { id: 'random', label: 'Random', help: RANDOM_MECH }] },
+      weatherKinds: WEATHER_ALL, weatherLimits: WEATHER,
+      extremeKinds: EXTREME.kinds, extremeLimits: EXTREME,
+      now: {
+        value: (id) => cheats.value(id), on: (id) => !!cheats[id],
+        mine: cheats.mechs.mine, foe: cheats.mechs.foe, bow: cheats.bow, bowHold: cheats.bowHold,
+        weather: weather.choice, weatherOff: weather.off, intensity: weather.intensity,
+        minutes: weather.minutes, lightning: weather.lightning,
+        extreme: extreme.enabled, extremeMinutes: extreme.minutes, tod: timeLabel(renderer.timeOfDay),
+      },
+    });
+  }
+  function renderGuide() {
+    const sections = guideNow();
+    el.guideToc.replaceChildren(...sections.map((s) => {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.textContent = s.title;
+      b.addEventListener('click', () => document.getElementById(`guide-${s.id}`).scrollIntoView({ block: 'start' }));
+      return b;
+    }));
+    el.guideBody.replaceChildren(...sections.map((s) => {
+      const sec = document.createElement('section');
+      sec.id = `guide-${s.id}`;
+      const h = document.createElement('h3');
+      h.textContent = s.title;
+      const p = document.createElement('p');
+      p.className = 'about';
+      p.textContent = s.about;
+      const dl = document.createElement('dl');
+      for (const it of s.items) {
+        const dt = document.createElement('dt');
+        dt.textContent = it.label;
+        const tags = [it.range && `${it.range}`, it.start && `starts ${it.start}`, it.now && `now ${it.now}`].filter(Boolean);
+        if (tags.length) {
+          const t = document.createElement('span');
+          t.className = 'tags';
+          t.textContent = tags.join(' · ');
+          dt.appendChild(t);
+        }
+        const dd = document.createElement('dd');
+        dd.textContent = it.help;
+        dl.append(dt, dd);
+      }
+      sec.append(h, p, dl);
+      return sec;
+    }));
+  }
+  /** The guide in place of the menu, or the menu back. */
+  function showGuide(on) {
+    if (on) renderGuide();
+    el.cheatMenuBody.classList.toggle('hidden', !!on);
+    el.cheatGuide.classList.toggle('hidden', !on);
+    el.cheats.scrollTop = 0;
+  }
+  annotateCheatMenu();
+  el.cheatsGuide.addEventListener('click', () => showGuide(true));
+  el.guideBack.addEventListener('click', () => showGuide(false));
+  el.guideClose.addEventListener('click', () => toggleCheatMenu(false));
+
   el.cheatsClose.addEventListener('click', () => toggleCheatMenu(false));
   el.cheatsReset.addEventListener('click', () => {
     cheats.reset();
@@ -11942,6 +12093,7 @@ async function main() {
       return true;
     },
     cheatMenu(on) { toggleCheatMenu(on); },
+    cheatGuide(on) { showGuide(on); },
     setCheat(id, on) { const ok = cheats.set(id, on); applyCheats(); return ok; },
     cheatValue(id) { return cheats.value(id); },
     cheatAction(id) { runCheatAction(id); },
