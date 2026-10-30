@@ -124,6 +124,7 @@ const el = {
   extremeChips: $('extremechips'), extremeLabel: $('extremelabel'),
   cheatExtreme: $('cheatextreme'), cheatExtremeValues: $('cheatextremevalues'),
   wxAlert: $('wxalert'), wxAlertTitle: $('wxalerttitle'), wxAlertText: $('wxalerttext'), wxTint: $('wxtint'),
+  wxCover: $('wxcover'),
   cheatWeather: $('cheatweather'), cheatWeatherValues: $('cheatweathervalues'),
   opsSetup: $('opssetup'), opsStart: $('opsstart'), opsCount: $('opscount'), opsCountNum: $('opscountnum'),
   opsCountLabel: $('opscountlabel'), opsQuiet: $('opsquiet'), opsBosses: $('opsbosses'),
@@ -4947,6 +4948,8 @@ async function main() {
     state.weatherAt = wall;
     if (!state.paused) weather.update(dt, Math.random, renderer.dayOfYear);
     const now = extremeLook(weather.now());
+    // Under a roof the rain stops round you, as far as the roof reaches.
+    now.dry = now.rain > 0.02 || now.snow > 0.02 || (now.embers || 0) > 0.02 ? dryRound() : null;
     renderer.weather = now;
     // How far they can see you: the weather's visibility, past which nobody
     // sees anybody, a little short of it to be fair to you, and never more
@@ -5113,22 +5116,98 @@ async function main() {
     }
     return out;
   }
+  // Any other roof keeps it off as well: the attic over the Gate's passages,
+  // a canopy, an arcade, a bridge between two buildings. None of them is
+  // glass on a frame for a bolt to bring down; a roof like that goes when
+  // the building it belongs to does.
+  const ROOF = { kind: 'roof', x: 0, z: 0, broken: false };
   /** Under a standing roof, at this point and height. */
   function sheltered(x, y, z) {
     for (const sh of cityShelters()) {
       if (Math.abs(sh.x - x) > 6 || Math.abs(sh.z - z) > 6) continue;
       if (covers(sh, x, y, z, world.groundHeight(sh.x, sh.z))) return sh;
     }
-    return null;
+    return world.roofOver(x, y, z) !== null ? ROOF : null;
   }
+  // And the roofs people know to run for when the warning comes: the Gate's
+  // five passages. Where to stand is worked out from the collision itself,
+  // a spot every metre and a half well under the attic and not in
+  // a column or a cross wall, which is any spot with a clear line out of it
+  // nine metres one way or another: from inside a wall eight metres long
+  // every line that long comes out through it.
+  const ROOF_PLACES = ['brandenburg_gate'];
+  let roofList = [], roofKey = '';
+  function roofShelters() {
+    const marks = (world.manifest.landmarks || []).filter((l) => ROOF_PLACES.includes(l.key));
+    const key = marks.map((l) => `${l.key}@${l.district}`).join();
+    if (key === roofKey) return roofList;
+    roofKey = key;
+    roofList = [];
+    for (const l of marks) {
+      const spots = [];
+      for (let dx = -40; dx <= 40; dx += 1.5) {
+        for (let dz = -40; dz <= 40; dz += 1.5) {
+          const x = l.x + dx, z = l.z + dz, g = world.groundHeight(x, z);
+          // A metre of roof round it every way, so whoever stands there a
+          // little off the spot is still under it and not at its edge.
+          if ([[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([ax, az]) =>
+            world.roofOver(x + ax, g + 1.2, z + az) === null)) continue;
+          const out = [[9, 0], [-9, 0], [0, 9], [0, -9]].some(([ax, az]) =>
+            world.lineOfSight(x, g + 1, z, x + ax, world.groundHeight(x + ax, z + az) + 1, z + az));
+          if (out) spots.push({ x, z });
+        }
+      }
+      if (spots.length) roofList.push({ kind: 'roof', name: l.name, x: l.x, z: l.z, spots, broken: false });
+    }
+    return roofList;
+  }
+  /**
+   * Where the k-th one to arrive stands. Under a roof with room for many,
+   * the nearest spot nobody has taken that can be walked to in a straight
+   * line from where they are: a spot in the next passage over is the other
+   * side of a cross wall, and they would stand against it in the rain.
+   */
+  function placeIn(sh, k, sd, taken) {
+    if (!sh.spots) return standIn(sh, k);
+    const g = world.groundHeight(sd.x, sd.z);
+    const free = sh.spots.filter((p) => !taken.has(p))
+      .map((p) => ({ p, d: Math.hypot(p.x - sd.x, p.z - sd.z) })).sort((a, b) => a.d - b.d);
+    const seen = free.slice(0, 40).find(({ p }) =>
+      world.lineOfSight(sd.x, g + 1, sd.z, p.x, world.groundHeight(p.x, p.z) + 1, p.z));
+    const p = (seen || free[0] || { p: sh.spots[0] }).p;
+    taken.add(p);
+    return p;
+  }
+  const roomIn = (sh) => (sh.spots ? Math.min(60, sh.spots.length) : 3);
   /** You: under a roof, or in something with one. */
   function youSheltered() {
     if (state.inVehicle || state.inMech) return true;
     return !!sheltered(player.x, player.y + 0.5, player.z);
   }
+  /**
+   * Under a roof on foot, the round about you where nothing falls: how far
+   * the roof reaches the shortest way out from where you stand, and how
+   * high its underside is, or null in the open.
+   */
+  function dryRound() {
+    if (state.mode !== 'walk' || state.inVehicle || state.inMech) return null;
+    const y = player.y + 0.5;
+    const sh = sheltered(player.x, y, player.z);
+    if (!sh) return null;
+    let r = 8;
+    for (let k = 0; k < 8 && r > 0.6; k++) {
+      const c = Math.cos(k * Math.PI / 4), sn = Math.sin(k * Math.PI / 4);
+      for (let d = 0.5; d < r; d += 0.5) {
+        if (!sheltered(player.x + c * d, y, player.z + sn * d)) { r = d; break; }
+      }
+    }
+    const top = sh === ROOF ? world.roofOver(player.x, y, player.z)
+      : world.groundHeight(sh.x, sh.z) + SHELTERS.kinds[sh.kind].h;
+    return [player.x, player.z, r, top];
+  }
   /** A shelter comes down: the glass in the road, a crash, and nobody under it. */
   function bringDown(sh) {
-    if (!hurtShelter(sh, 1e6)) return false;
+    if (!SHELTERS.kinds[sh.kind] || !hurtShelter(sh, 1e6)) return false;
     const g = world.groundHeight(sh.x, sh.z);
     for (let k = 0; k < 26; k++) {
       effects.spark(sh.x + (Math.random() - 0.5) * 4, g + 0.5 + Math.random() * 2, sh.z + (Math.random() - 0.5) * 2, 0.75, 0.85, 0.95);
@@ -5168,11 +5247,14 @@ async function main() {
 
   /**
    * Everybody who lives here and has a shelter near enough runs for it,
-   * three to a shelter; the rest run away from where they are. When it is
-   * all over they go back to what they were doing.
+   * three to a bus shelter or a kiosk and as many as fit under the Gate;
+   * the rest run away from where they are. When it is all over they go back
+   * to what they were doing.
    */
   function shelterCivilians(go) {
     const room = new Map();
+    const taken = new Set();
+    const places = go ? [...cityShelters(), ...roofShelters()] : [];
     for (const sd of soldiers.active) {
       if (!sd.civilian || sd.health <= 0 || !sd.alive) continue;
       if (!go) {
@@ -5181,11 +5263,11 @@ async function main() {
       }
       if (Math.hypot(sd.x - player.x, sd.z - player.z) > 160) continue;
       if (sd.directed && !sd.directed.shelter) continue;
-      const sh = nearestShelter(cityShelters(), sd.x, sd.z, 90);
-      if (!sh || (room.get(sh) || 0) >= 3) continue;
+      const sh = nearestShelter(places, sd.x, sd.z, 90);
+      if (!sh || (room.get(sh) || 0) >= roomIn(sh)) continue;
       const k = room.get(sh) || 0;
       room.set(sh, k + 1);
-      const p = standIn(sh, k);
+      const p = placeIn(sh, k, sd, taken);
       sd.directed = { x: p.x, z: p.z, speed: 3.6, bold: true, shelter: sh };
     }
   }
@@ -5347,6 +5429,8 @@ async function main() {
     if (!extreme.events.length) {
       if (state.shelterCall) { shelterCivilians(false); state.shelterCall = false; }
       el.wxTint.style.opacity = '0';
+      el.wxCover.classList.add('hidden');
+      state.coverShown = null;
       return;
     }
     state.shelterCall = true;
@@ -5422,6 +5506,16 @@ async function main() {
     }
     el.wxTint.style.background = tint || 'transparent';
     el.wxTint.style.opacity = tint ? String(Math.min(0.6, tintA)) : '0';
+    // And while it is on you, whether where you stand keeps it off: a roof
+    // does, except in the core of a tornado.
+    const on = Math.max(...EXTREME_KINDS.map((k) => extreme.at(k, player.x, player.z)));
+    const core = extreme.at('tornado', player.x, player.z) > 0.7;
+    const safe = youIn && !core;
+    el.wxCover.classList.toggle('hidden', !(on > 0));
+    el.wxCover.classList.toggle('safe', safe);
+    el.wxCover.textContent = !safe ? 'Ungeschützt: Suchen Sie Schutz'
+      : (state.inVehicle || state.inMech ? 'Geschützt im Fahrzeug' : 'Geschützt unter Dach');
+    state.coverShown = on > 0 ? (safe ? 'safe' : 'open') : null;
   }
 
   /** The funnel: drawn, and taking what is in it. */
@@ -10228,6 +10322,7 @@ async function main() {
     whirled.clear();
     for (const sh of shelterList) { sh.broken = false; sh.health = SHELTERS.health; }
     el.wxAlert.classList.add('hidden');
+    el.wxCover.classList.add('hidden');
     renderer.clearCollapses();
     renderer.clearFires();
     effects.clear();
@@ -11734,6 +11829,7 @@ async function main() {
     extreme, extremeStep: (dt) => extremeStep(dt), ionStrike: (x, z) => ionStrike(x, z),
     shelters: () => cityShelters(), sheltersNear: (r) => sheltersNear(r),
     sheltered: (x, y, z) => sheltered(x, y, z), youSheltered: () => youSheltered(),
+    roofShelters: () => roofShelters(),
     whirledCount: () => whirled.size,
     precipDrawn: () => renderer.precip.drawn,
     showWeather,

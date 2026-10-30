@@ -70,6 +70,10 @@ export class World {
     this.pending = new Map();          // id -> promise, so two asks are one fetch
     this.missing = new Set();          // ids the index promised and the server has not
     this.collisionCache = new Map();
+    // Which of a tile's segments are held up off the ground, by the array
+    // they are in: the demolition swaps a tile's array for a new one, and an
+    // index into the old one would point at the wrong walls.
+    this.overheadCache = new WeakMap();
     this.heightCache = new Map();
     // Craters, by the tiles they reach. The ground under a crater is the
     // bowl itself rather than the height field: the field is a sample every
@@ -807,6 +811,69 @@ export class World {
         if (segs.length) fn(segs, segs.length / 6, index);
       }
     }
+  }
+
+  /**
+   * What is over a point: the underside of the lowest roof whose outline
+   * the point is inside and which starts above the given height, within
+   * reach of it, or null under the open sky.
+   *
+   * A ray straight up cannot answer this, because the collision is walls and
+   * a wall is only met going sideways. But something held up off the ground
+   * is in the collision as its outline at its own height, the attic over
+   * the Gate's passages from fifteen metres up, a canopy, a bridge between
+   * two buildings, so the question is whether the point is inside an outline
+   * like that: counted the usual way, by how many of its edges a line from
+   * the point going east crosses, odd being inside. Every segment of one
+   * outline shares its base and top, so that is what tells outlines apart;
+   * and a segment is in every tile it crosses, so it is counted once.
+   *
+   * @param {number} reach how far above the height a roof still counts
+   * @param {number} far how far east the line is followed
+   * @returns {number|null} the height of the underside, or null
+   */
+  roofOver(x, y, z, reach = 40, far = 300) {
+    const counts = new Map();
+    const seen = new Set();
+    this.forEachSegmentTile(x, z, x + far, z, (segs) => {
+      for (const i of this.overheadOf(segs)) {
+        const o = i * 6;
+        const base = segs[o + 4];
+        if (base <= y + 0.3 || base > y + reach) continue;
+        const z1 = segs[o + 1], z2 = segs[o + 3];
+        if ((z1 > z) === (z2 > z)) continue;
+        const x1 = segs[o], x2 = segs[o + 2];
+        const xc = x1 + ((z - z1) / (z2 - z1)) * (x2 - x1);
+        if (xc <= x || xc > x + far) continue;
+        const key = `${x1},${z1},${x2},${z2},${base}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const outline = `${base},${segs[o + 5]}`;
+        counts.set(outline, (counts.get(outline) || 0) + 1);
+      }
+    });
+    let best = null;
+    for (const [outline, n] of counts) {
+      if (n % 2 === 0) continue;
+      const base = parseFloat(outline);
+      if (best === null || base < best) best = base;
+    }
+    return best;
+  }
+
+  /** The segments of a tile that start more than two metres off the ground. */
+  overheadOf(segs) {
+    let list = this.overheadCache.get(segs);
+    if (list) return list;
+    const out = [];
+    for (let i = 0, n = segs.length / 6; i < n; i++) {
+      const o = i * 6;
+      const g = this.groundHeight((segs[o] + segs[o + 2]) / 2, (segs[o + 1] + segs[o + 3]) / 2);
+      if (segs[o + 4] > g + 2) out.push(i);
+    }
+    list = Int32Array.from(out);
+    this.overheadCache.set(segs, list);
+    return list;
   }
 
   /**

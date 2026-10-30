@@ -36,6 +36,7 @@ uniform vec2 uSpeed;                  // slowest, fastest
 uniform vec3 uWind;                   // metres a second
 uniform float uSnow;                  // 0 rain, 1 snow
 uniform float uSmear;
+uniform vec4 uDry;                    // x, z, how far round, the roof's underside
 out vec2 vUv;
 out float vFade;
 void main() {
@@ -51,6 +52,9 @@ void main() {
   // Thinner towards the sides of the box, so its edge never shows.
   vec3 edge = abs(rel) / (uBox * 0.5);
   vFade = (1.0 - smoothstep(0.65, 1.0, max(edge.x, edge.z))) * (1.0 - smoothstep(0.7, 1.0, edge.y));
+  // Nothing falls under the roof you are standing under, as far round you
+  // as it reaches.
+  if (uDry.z > 0.0 && world.y < uDry.w) vFade *= smoothstep(uDry.z - 0.6, uDry.z, length(world.xz - uDry.xy));
   int corner = gl_VertexID % 6;
   vec2 q = vec2(corner == 1 || corner == 2 || corner == 4 ? 1.0 : 0.0,
                 corner == 2 || corner == 4 || corner == 5 ? 1.0 : 0.0);
@@ -122,7 +126,8 @@ export class Precip {
   }
 
   /**
-   * @param {{rain:number, snow:number, wind:number}} weather amounts now
+   * @param {{rain:number, snow:number, wind:number, dry?:number[]}} weather amounts now,
+   *   and where under a roof nothing falls: x, z, how far round, how high
    * @param {number} windYaw which way the wind blows, radians
    */
   draw(weather, windYaw = 0) {
@@ -137,6 +142,7 @@ export class Precip {
     const n = Math.min(PRECIP.count, Math.round(PRECIP.count * amount / 1.5));
     const wind = (snow ? 2.5 : 4) * weather.wind;
     const tint = weather.precipTint || [0, 0, 0, 0];
+    const dry = weather.dry || [0, 0, 0, 0];
     this.prog.use()
       .vec3('uBox', PRECIP.box[0], PRECIP.box[1], PRECIP.box[2])
       .vec2('uSpeed', ...(snow ? PRECIP.snowSpeed : PRECIP.rainSpeed))
@@ -145,6 +151,7 @@ export class Precip {
       .float('uSmear', PRECIP.smear)
       .float('uAlpha', snow ? 0.85 : 0.42)
       .vec4('uTint', tint[0], tint[1], tint[2], tint[3])
+      .vec4('uDry', dry[0], dry[1], dry[2], dry[3])
       .float('uEmber', embers ? 1 : 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

@@ -1051,12 +1051,16 @@ metres across round where it was announced.
 
 Shelter is a roof: a bus shelter (glass, a bench and the stop's green H on
 yellow) or a kiosk's awning, one every hundred and thirty metres or so of
-street, or the inside of a vehicle or a mech. Under it you are out of all
-four, except the very core of a tornado. The people who live here run for
-the nearest shelter when the warning comes. A bolt, a tornado or a blast
-brings a shelter down, and then it shelters nobody.
+street, the passages of the Brandenburg Gate, any other roof over the way
+(a canopy, an arcade), or the inside of a vehicle or a mech. Under it you are
+out of all four, except the very core of a tornado; the rain stops round you
+there, and a line under the warning says whether where you stand keeps it
+off. The people who live here run for the nearest shelter when the warning
+comes, the Gate included. A bolt, a tornado or a blast brings a bus shelter
+or a kiosk down, and then it shelters nobody.
 
 ![Acid rain at a bus shelter](docs/screenshots/extreme-01-acid.png)
+![Dry in the Brandenburg Gate's carriageway](docs/screenshots/extreme-05-gate.png)
 ![A tornado coming down the street](docs/screenshots/extreme-03-tornado.png)
 
 ## Destruction

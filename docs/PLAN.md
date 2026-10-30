@@ -6014,6 +6014,56 @@ So there are two cities now, and a profile picks which:
   [tornado](screenshots/extreme-03-tornado.png),
   [firestorm](screenshots/extreme-04-fire.png).
 
+## 145. Any roof is shelter, the Brandenburg Gate included
+
+- The ask: the Brandenburg Gate cannot be used as shelter? It could not.
+  Only the bus shelters and kiosks of phase 144 counted, by their own
+  measured outline; the five passages under the Gate's attic were open sky
+  to the weather.
+- What is over a point: the world could not say. A ray straight up meets
+  nothing, because the collision is walls, and a wall is only met going
+  sideways; from the middle of the carriageway a ray up came back empty.
+  But anything held up off the ground is in the collision as its outline
+  at its own height: the attic over the passages is an outline from 15 to
+  23.6 m round the whole Gate, and so is a canopy, an arcade, a bridge
+  between two buildings. So world.roofOver(x, y, z) counts how many edges
+  of such outlines a line going east from the point crosses, odd being
+  inside, the outline told apart by the base and top its segments share
+  and every segment counted once, since one is stored in each tile it
+  crosses. Only segments that start more than two metres above the ground
+  under them are looked at, kept per segment array, which the demolition
+  replaces whole when it cuts a wall, so the list never points at the
+  wrong ones. It takes under a microsecond. Under every one of the five
+  passages and the portico it finds the attic 15 m up, and nothing a few
+  metres out in front, behind, past the end or on Pariser Platz.
+- Shelter is now a bus shelter, a kiosk, or any roof that finds: you and
+  everybody else under one are out of the acid, the embers and the bolts,
+  except in the core of a tornado, the same as under a bus shelter. A roof
+  like that has no glass for a bolt to bring down; it goes when its
+  building does.
+- The people who live here run under the Gate too when the warning comes:
+  its passages are a place to go, with a spot every metre and a half that
+  has a metre of attic round it every way and a clear line out of it nine
+  metres one way or another, which no spot inside a column or a cross wall
+  has; 210 of them. Each one goes to the nearest free spot they can walk
+  to in a straight line, so nobody is sent to the far side of a cross wall
+  to stand against it in the rain; the first try, with spots handed out in
+  turn, had them doing that.
+- And it shows. Under a roof the rain, the acid, the snow and the embers
+  stop falling round you, as far as the roof reaches the shortest way out
+  and below its underside (5.5 m round you in the Gate's carriageway). And
+  while extreme weather is on you a line under the warning says whether
+  where you stand keeps it off: Geschützt unter Dach, Geschützt im
+  Fahrzeug, or Ungeschützt: Suchen Sie Schutz.
+- Checks: a unit check of the roof query on the world bundle (the five
+  passages and the portico under a roof 15 m up, open sky round it and
+  none standing on the attic); and in the weather suite you in the
+  carriageway through a whole acid rain lose nothing and stay under the
+  roof, four people from round the Gate get in under it in time, the rain
+  stops 5.5 m round you under a roof 15 m up and the screen says you are
+  covered, and out in the acid it says you are not. The suite passes 35 of
+  35. Picture: [the carriageway in acid rain](screenshots/extreme-05-gate.png).
+
 ## CI: the flight's holes were streets drawn by the tile next door
 
 - Twice now (runs 243 and 247) the free travel check has found one frame

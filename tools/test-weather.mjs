@@ -355,14 +355,15 @@ async function run() {
     const trees = s.state.treesMelted || 0;
     for (let t = 0; t < 14; t += 1 / 30) s.fixedForTest(1 / 30);
     return { inside: inside.alive && inside.health > 0, outside: outside.alive && outside.health > 0,
-      melted: s.state.melted || 0, trees: (s.state.treesMelted || 0) - trees, lost: +(hp - s.combat.health - s.combat.shield).toFixed(1) };
+      melted: s.state.melted || 0, trees: (s.state.treesMelted || 0) - trees, lost: +(hp - s.combat.health - s.combat.shield).toFixed(1),
+      cover: s.state.coverShown, coverText: document.getElementById('wxcover').textContent };
   });
   await lookAtShelter();
   await page.screenshot({ path: path.join(SHOTS, 'extreme-01-acid.png') });
   check('acid rain eats whoever is out in it down to the bones, and spares whoever is under the roof',
     acid.inside && !acid.outside && acid.melted >= 1, JSON.stringify(acid));
-  check('and melts the trees, and burns you while you stand in it',
-    acid.trees >= 1 && acid.lost > 20, JSON.stringify(acid));
+  check('and melts the trees, and burns you while you stand in it, and the screen says so',
+    acid.trees >= 1 && acid.lost > 20 && acid.cover === 'open' && /Ungeschützt/.test(acid.coverText), JSON.stringify(acid));
   const dry = await page.evaluate(() => {
     const s = window.spreefall, { sh } = window.wx;
     const p = s.shelters().includes(sh) ? sh : null;
@@ -464,6 +465,67 @@ async function run() {
   await page.screenshot({ path: path.join(SHOTS, 'extreme-04-fire.png') });
   check('a firestorm burns whoever is out in it, sets the trees alight, and rains embers',
     !fire.outside && fire.charred === 1 && fire.inside && fire.lit >= 1 && fire.drawn > 500 && fire.lost > 20, JSON.stringify(fire));
+
+  // The Brandenburg Gate: the attic over its five passages is a roof like
+  // any other, for you and for the people round it, who run in under it
+  // when the warning comes.
+  const gate = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.weather.choose('clear'); s.weather.snap();
+    s.soldiers.reset(); s.vehicles.reset(); s.extreme.clear(); s.effects.clear();
+    s.drones.enabled = false; s.drones.reset(); s.projectiles.clear();
+    s.soldiers.enabled = true; s.soldiers.budget = 0; s.soldiers.civilianBudget = 0;
+    s.combat.godmode = false; s.combat.revive();
+    s.state.mode = 'walk';
+    const roof = s.roofShelters().find((r) => /Brandenburg/.test(r.name));
+    if (!roof) return { found: false };
+    // In the middle passage, the carriageway.
+    s.teleport(roof.x, roof.z);
+    s.fixedForTest(1 / 30);
+    const underYou = s.youSheltered();
+    const runners = [];
+    for (let k = 0; k < 4; k++) {
+      const sd = s.soldiers.spawnCivilianNear(roof.x, roof.z, 22, 45);
+      if (sd) { sd.directed = null; runners.push(sd); }
+    }
+    const open = runners.filter((sd) => !s.sheltered(sd.x, sd.y + 0.5, sd.z)).length;
+    const hp = s.combat.health + s.combat.shield;
+    s.extreme.announce('acid', roof.x, roof.z);
+    for (let t = 0; t < 21; t += 1 / 30) s.fixedForTest(1 / 30);
+    let low = hp, out = 0;
+    for (let t = 0; t < 8; t += 1 / 30) {
+      s.fixedForTest(1 / 30);
+      low = Math.min(low, s.combat.health + s.combat.shield);
+      if (!s.youSheltered()) out++;
+    }
+    const under = runners.filter((sd) => sd.alive && sd.health > 0 && s.sheltered(sd.x, sd.y + 0.5, sd.z)).length;
+    // Where each one ended up, for when it fails: how far from the middle
+    // of the Gate, and how far short of where they were sent.
+    const where = runners.map((sd) => [Math.round(sd.x - roof.x), Math.round(sd.z - roof.z),
+      sd.directed ? +Math.hypot(sd.directed.x - sd.x, sd.directed.z - sd.z).toFixed(1) : null]);
+    return { found: true, name: roof.name, spots: roof.spots.length, underYou, out, runners: runners.length, open, under, where,
+      lost: +(hp - low).toFixed(1), acid: s.extreme.now().acid };
+  });
+  // From the carriageway out east to Pariser Platz, in the acid rain, with
+  // the cross wall and the attic over you in the picture.
+  const gateDry = await page.evaluate(async () => {
+    const s = window.spreefall;
+    s.look(-62, 24);
+    for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+    const dry = s.renderer.weather && s.renderer.weather.dry;
+    const tag = document.getElementById('wxcover');
+    return { dry: dry ? dry.map((v) => +v.toFixed(1)) : null, ground: +s.world.groundHeight(s.player.x, s.player.z).toFixed(1),
+      cover: s.state.coverShown, shown: !tag.classList.contains('hidden'), text: tag.textContent };
+  });
+  await page.screenshot({ path: path.join(SHOTS, 'extreme-05-gate.png') });
+  check('and under it the rain stops round you, and the screen says you are covered',
+    gateDry.dry && gateDry.dry[2] >= 3 && gateDry.dry[3] - gateDry.ground > 12 && gateDry.cover === 'safe' && gateDry.shown
+      && /Geschützt/.test(gateDry.text), JSON.stringify(gateDry));
+  check('the Brandenburg Gate is a roof: in a passage you are out of the acid rain',
+    gate.found && gate.underYou && gate.out === 0 && gate.lost <= 0 && gate.acid === 1, JSON.stringify(gate));
+  check('and the people round it run in under it when the warning comes',
+    gate.found && gate.spots > 20 && gate.runners >= 3 && gate.under >= Math.min(3, gate.runners - 1), JSON.stringify(gate));
+  await page.evaluate(() => window.spreefall.extreme.clear());
 
   const together = await page.evaluate(() => {
     const s = window.spreefall;
