@@ -6112,6 +6112,24 @@ So there are two cities now, and a profile picks which:
   Pictures: [pointing at acid rain](screenshots/cheat-15-info.png),
   [the guide](screenshots/cheat-16-guide.png).
 
+## CI: the power box check keeps its car at the kerb until the box goes
+
+- The live run after phase 146 was green but for one .BACKDOOR check: the
+  overloaded power box crackled, blew and floored the three people round
+  it, but the car parked four metres from it did not stall. It is a traffic
+  car, put down at the kerb with no speed, and the traffic drove it off up
+  the street in the second the box crackles (`CITY.box.fuse`), out of the
+  eight metres it reaches (`CITY.zap.cars`). The check now holds it where
+  it was put until the box goes.
+- And run locally, the check that two cars sent into a junction green both
+  ways crash failed once: the one car was marked crashed and the two never
+  came nearer than 9.7 m. The check cleared the street of other cars but
+  not of the people on foot the mode keeps topping up, and a car that
+  brakes for somebody crossing, or runs into them, is late and misses the
+  other. Nobody on foot is let into the road there now, in the runs alone
+  that find the two lines as in the run together. Both are the checks, not
+  the game.
+
 ## CI: the flight's holes were streets drawn by the tile next door
 
 - Twice now (runs 243 and 247) the free travel check has found one frame

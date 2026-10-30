@@ -663,7 +663,11 @@ async function run() {
   const pile = await page.evaluate(async () => {
     const s = window.spreefall;
     const j = window.junction;
-    s.vehicles.reset();
+    s.vehicles.reset(); s.soldiers.reset();
+    // And nobody on foot in the road: the mode keeps the street topped up,
+    // and a car that brakes for somebody crossing, or runs into them, is a
+    // second late or stopped and misses the other.
+    const nobody = () => { for (const c of [...s.soldiers.active]) if (c.civilian) s.soldiers._retire(c); };
     const a = j.legs.find((k) => k.phase === 0), b = j.legs.find((k) => k.phase === 1);
     for (const k of j.group || [j]) k.hack = { kind: 'green', left: 60 };
     // Each driven through on its own first, from 30 m out, straight on, and
@@ -679,7 +683,7 @@ async function run() {
       for (let i = 0; i < 60 * 6; i++) {
         path.push({ x: V.x, z: V.z, yaw: V.yaw, speed: V.speed });
         s.fixedForTest(1 / 60);
-        window.keepClear([V]);
+        window.keepClear([V]); nobody();
       }
       s.vehicles.remove(V);
       return path;
@@ -705,7 +709,7 @@ async function run() {
     let closest = Infinity;
     for (let i = 0; i < 60 * 6 && s.crashes === crashes; i++) {
       s.fixedForTest(1 / 60);
-      window.keepClear([A, B]);
+      window.keepClear([A, B]); nobody();
       closest = Math.min(closest, Math.hypot(A.x - B.x, A.z - B.z));
     }
     for (const k of j.group || [j]) k.hack = null;
@@ -1033,7 +1037,11 @@ async function run() {
     const ok = s.hackKey(0);
     const crackling = s.boxesNear(250).some((k) => k.f === b && k.light === 1);
     let floored = 0;
+    const kerb = car ? { x: car.x, z: car.z } : null;
     for (let i = 0; i < 60 * 1.6; i++) {
+      // Waiting at the kerb until it goes: on an open street the traffic
+      // drives a car off while the box crackles, out of its reach.
+      if (car && (s.state.boxesBlown || 0) === blown) { car.x = kerb.x; car.z = kerb.z; car.speed = 0; }
       s.fixedForTest(1 / 60);
       if (i === 70) floored = people.filter((c) => c.state === 4 || c.health <= 0).length;
     }
