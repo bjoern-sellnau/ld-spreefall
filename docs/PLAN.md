@@ -6529,6 +6529,26 @@ tools/build-world.mjs before the district is cut out of its extract):
   how many trees were planted. That says, on the live build, what the map
   actually holds in the Tiergarten.
 
+Live, on the build of 7 November (Pages run 319, after the fix in the CI
+note on the gigabyte):
+
+- **The map has the woods.** c2r1 holds 103 wood areas. The Grosser
+  Tiergarten is mapped as several `leisure=park` polygons of that name, and
+  their parts in c2r1 are 61, 66 and 82 per cent mapped wood. Two smaller
+  parts are 21 and 0 per cent wood and 62 and 88 per cent open. The east
+  edge, in core, is 53 to 65 per cent wood.
+- **So it was the reading.** The Tiergarten was bare because the build
+  ignored the woods the map has, not because the map lacks them.
+- **Planted.** c2r1 got 2,798 trees in woods and 61 in groves; core got
+  1,633 and 40; c1r1, the Zoo end, 356 in woods. The city as a whole got
+  19,550 in 24 districts, the most in Charlottenburg-Nord (4,943). The groves
+  barely come into it here: where the map has the woods, they only fill what
+  it leaves unsaid.
+- **Size.** The site was 936.16 MB before promotion and 946.88 MB after,
+  with core and c2r1 at tier 0, under the 950 MB ceiling.
+- **Checks.** The browser checks (run 261) passed every step, the phone 31
+  of 31 among them.
+
 Measured locally, on the synthetic Tiergarten:
 
 - The synthetic data scatters its own trees through the park, 8,069 of the
