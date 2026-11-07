@@ -6249,6 +6249,21 @@ So there are two cities now, and a profile picks which:
   [.BACKDOOR](screenshots/mobile-10-backdoor.png),
   [upright](screenshots/mobile-11-upright.png).
 
+## CI: the reactor check has the street to itself
+
+- The first live run after phase 147 (run 253) failed one check of the
+  machines suite, 67 of 68: a dead mech's reactor is pending, and half way
+  through its fuse the second mech twenty metres off is meant to be
+  untouched. It was not, and the check said only "1 pending". Phase 147
+  changes nothing a mech does on a desktop (every part of it waits on a
+  touch screen), the same check passed in run 251 and passes locally, and
+  set up the same way at eight places in the city, three times each, nothing
+  touched the second mech. The check cleared the mechs, the soldiers, the
+  rounds in the air and the burning ground, and left the vehicles, the
+  drones, the jets and any wall of fire the run before it had put about. It
+  clears those too now, and if anything still reaches the second mech it
+  says what and from where in the game, so the next red run names it.
+
 ## CI: the power box check keeps its car at the kerb until the box goes
 
 - The live run after phase 146 was green but for one .BACKDOOR check: the

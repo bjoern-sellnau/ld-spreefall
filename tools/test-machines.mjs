@@ -1550,8 +1550,15 @@ async function run() {
     const s = window.spreefall;
     const modeWas = s.machines.active;
     s.machines.active = false;
+    // Nothing else in the street: the run so far leaves vehicles, drones,
+    // jets and walls of fire about, and any of them can reach the second
+    // mech while the first one's fuse burns.
     s.mechs.reset();
     s.soldiers.reset();
+    s.vehicles.reset();
+    s.drones.reset();
+    s.jets.reset();
+    s.fireWalls.walls.length = 0;
     s.projectiles.clear();
     s.burningGround.length = 0;
     s.reactors.length = 0;
@@ -1567,9 +1574,20 @@ async function run() {
     if (near.shield !== undefined) near.shield = 0;
     s.mechs.damage(theirs, 1e6);
     const pending = s.reactors.length;
-    // Half the fuse: still pending, nothing next to it touched.
+    // Half the fuse: still pending, nothing next to it touched. Anything that
+    // does touch it is written down, with where in the game it came from.
+    const hits = [];
+    const take = s.mechs.damage;
+    s.mechs.damage = function (m, amount, core) {
+      if (m === near && hits.length < 3) {
+        hits.push({ amount: Math.round(amount), from: new Error().stack.split('\n').slice(2, 4).map((l) => l.trim().replace(/^at /, '').replace(/\(?https?:\/\/[^/]+\//, '(')).join(' < ') });
+      }
+      return take.call(this, m, amount, core);
+    };
     for (let i = 0; i < Math.round(60 * s.fusionSpec.fuse * 0.5); i++) s.fixedForTest(1 / 60);
-    const early = { left: s.reactors.length, near: near.health === near.maxHealth };
+    s.mechs.damage = take;
+    const early = { left: s.reactors.length, near: near.health === near.maxHealth,
+      health: Math.round(near.health), alive: near.alive, gap: Math.round(Math.hypot(near.x - theirs.x, near.z - theirs.z)), hits };
     let tint = null, flash = 0;
     for (let i = 0; i < 60 * 2.5; i++) {
       s.fixedForTest(1 / 60);
@@ -1587,7 +1605,7 @@ async function run() {
   });
   check('a dead mech\'s reactor goes critical rather than going off at once',
     !fusion.skip && fusion.pending === 1 && fusion.early.left === 1 && fusion.early.near,
-    fusion.skip ? '' : `${fusion.pending} pending`);
+    fusion.skip ? '' : `${fusion.pending} pending, half way ${JSON.stringify(fusion.early)}`);
   check('and then goes up in blue and green, not in white',
     !fusion.skip && fusion.tint && fusion.tint[1] > fusion.tint[0] + 0.3 && fusion.flash > 0.1,
     fusion.skip ? '' : `tint ${fusion.tint}, flash ${fusion.flash}`);
