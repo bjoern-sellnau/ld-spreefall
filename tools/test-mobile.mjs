@@ -327,7 +327,10 @@ async function run() {
   // --- pause, and back ---------------------------------------------------------------
   const pauseB = await topButton(page, 'pause');
   await thumbs.tap(pauseB.x, pauseB.y);
-  await page.waitForTimeout(400);
+  // On a runner a frame can take seconds; wait for the pad, not a fixed while.
+  await page.waitForFunction(() => window.spreefall.state.paused
+    && !document.querySelector('#tpad .tb:not(.hidden)') && document.getElementById('ttop').classList.contains('hidden'),
+  null, { timeout: 20000 }).catch(() => {});
   const paused = await page.evaluate(() => ({
     paused: window.spreefall.state.paused,
     pad: document.querySelectorAll('#tpad .tb:not(.hidden)').length,
@@ -336,7 +339,7 @@ async function run() {
   await page.screenshot({ path: path.join(SHOTS, 'mobile-05-pause.png') });
   const resume = await box(page, '#pauseresume');
   await thumbs.tap(resume.x, resume.y);
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => !window.spreefall.state.paused, null, { timeout: 20000 }).catch(() => {});
   const resumed = await page.evaluate(() => !window.spreefall.state.paused);
   check('pause stops the world and puts the buttons away, and Weiter brings both back',
     paused.paused && paused.pad === 0 && !paused.top && resumed && resume.inside, JSON.stringify({ ...paused, resumed }));
@@ -403,7 +406,8 @@ async function run() {
   await thumbs.tap(btn('aim').x, btn('aim').y);
   const hint = await box(page, '#ridehint');
   await thumbs.tap(hint.x, hint.y);
-  await page.waitForTimeout(600);
+  await page.waitForFunction(() => !!window.spreefall.state.inVehicle && !!document.querySelector('#tpad .tb-out:not(.hidden)'),
+    null, { timeout: 20000 }).catch(() => {});
   const car = await page.evaluate(() => {
     const s = window.spreefall;
     return { inIt: !!s.state.inVehicle, aim: s.input.secondary, ids: [...document.querySelectorAll('#tpad .tb:not(.hidden)')].map((b) => b.dataset.id),

@@ -6249,6 +6249,29 @@ So there are two cities now, and a profile picks which:
   [.BACKDOOR](screenshots/mobile-10-backdoor.png),
   [upright](screenshots/mobile-11-upright.png).
 
+## CI: the buttons change with the tap, not a frame later
+
+- Run 255 passed every suite up to the phone, and the phone step ran live
+  for the first time: 29 of 31. Two checks read the buttons 400 and 600 ms
+  after a tap, pause and the hint over the jeep, and both found the buttons
+  for walking still up: nine of them and the top bar under the pause menu,
+  and in the jeep the walking set with the sight still raised. The game had
+  done what was asked (paused, and in the jeep), but the pad is laid out
+  once a frame, and on the runner, drawing in software, a frame took longer
+  than the wait (pausing and its screenshot took 33 s there).
+- Reproduced here by holding every frame back four seconds round those two
+  checks: the old code fails both with the same numbers as the run (pad 9,
+  top bar up; aim up and the walking set), and a third besides, the stick
+  at the rim still running in the jeep, which brakes it. A slower CPU alone
+  (twenty times, through the browser's own throttle) did not reproduce it.
+- The game now lays the pad out at once whenever a tap presses a key, the
+  hint gets you in, or the pause opens or closes, so a slow phone shows the
+  right buttons before its next frame, and the stick knows it is driving.
+  The check waits for the pad as well instead of a fixed while. With frames
+  held back four seconds the old check passes 31 of 31 on the new code;
+  locally, unheld, the phone 31 of 31, the interface 46 of 46 and the unit
+  checks 214 of 214.
+
 ## CI: people who run for a shelter get there
 
 - The next live run (254) passed the reactor check, and failed one in the

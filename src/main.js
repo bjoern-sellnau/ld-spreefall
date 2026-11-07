@@ -633,7 +633,7 @@ async function main() {
       + 'and drag on the <b>right</b> to look. Fire is the big button bottom right: '
       + 'slide off it to turn while you shoot. <b>&#8943;</b> at the top has every other key.';
     touchpad = new TouchPad(el.touchui, input, {
-      press: (code) => { if (input.onKeyPress) input.onKeyPress(code); },
+      press: (code) => { if (input.onKeyPress) input.onKeyPress(code); refreshPad(); },
       wheel: (dir) => { if (input.onWheel) input.onWheel(dir); },
       fullscreen: () => goFullscreen(true),
     });
@@ -664,6 +664,17 @@ async function main() {
       hacks: acts.length,
       labels: { hack1: acts[0] && acts[0].label, hack2: acts[1] && acts[1].label },
     };
+  }
+
+  /**
+   * The buttons for where you are now, not a frame from now: a tap that
+   * pauses or gets you into a car changes them at once, however long a slow
+   * phone takes over its next frame.
+   */
+  function refreshPad() {
+    if (!touchpad) return;
+    input.stickRuns = !state.inVehicle && !state.inMech;
+    touchpad.update(touchContext());
   }
 
   /**
@@ -10521,6 +10532,7 @@ async function main() {
     input.fire = false;
     if (input.keys) input.keys.clear();
     if (input.pointerLocked) input.exitLock();
+    refreshPad();
     return true;
   }
   function closePause(lock = true) {
@@ -10528,6 +10540,7 @@ async function main() {
     state.paused = false;
     el.pause.classList.add('hidden');
     if (lock && !isTouch) input.requestLock();
+    refreshPad();
   }
   /** Another game, straight away and from where you stand: no title, no flight in. */
   function switchGame(mode) {
@@ -10827,7 +10840,7 @@ async function main() {
     zoom: (cx, cy, f) => { minimap.zoomAt(cx, cy, f); mapTools(); },
   });
   // On a phone the hint over a vehicle or a guard is the button for it.
-  el.rideHint.addEventListener('click', () => { if (isTouch && input.onKeyPress) input.onKeyPress('KeyF'); });
+  el.rideHint.addEventListener('click', () => { if (isTouch && input.onKeyPress) { input.onKeyPress('KeyF'); refreshPad(); } });
 
   /** The compass across the top, with the sites of an operation and your mark on it. */
   function placeCompass(heading) {
@@ -12058,8 +12071,7 @@ async function main() {
     }
 
     if (touchpad) {
-      input.stickRuns = !state.inVehicle && !state.inMech;
-      touchpad.update(touchContext());
+      refreshPad();
       document.body.classList.toggle('ingame', state.mode === 'walk' || state.mode === 'cinema');
     }
 
