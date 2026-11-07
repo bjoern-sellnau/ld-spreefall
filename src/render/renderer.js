@@ -26,9 +26,12 @@ const OFF = {
 };
 
 export const QUALITY = {
-  low: { shadow0: 1024, shadow1: 1024, bloom: false, fxaa: false, scale: 0.72, shadows: true, treeDist: 240 },
-  medium: { shadow0: 1536, shadow1: 1024, bloom: true, fxaa: true, scale: 0.9, shadows: true, treeDist: 420 },
-  high: { shadow0: 2048, shadow1: 1536, bloom: true, fxaa: true, scale: 1.0, shadows: true, treeDist: 700 },
+  // Trees are drawn whole out to treeDist and as their crown alone, one
+  // billboard and two triangles, out to farTreeDist, so a wood past the
+  // first does not turn into a lawn.
+  low: { shadow0: 1024, shadow1: 1024, bloom: false, fxaa: false, scale: 0.72, shadows: true, treeDist: 240, farTreeDist: 700 },
+  medium: { shadow0: 1536, shadow1: 1024, bloom: true, fxaa: true, scale: 0.9, shadows: true, treeDist: 420, farTreeDist: 1100 },
+  high: { shadow0: 2048, shadow1: 1536, bloom: true, fxaa: true, scale: 1.0, shadows: true, treeDist: 700, farTreeDist: 1600 },
 };
 
 export class Renderer {
@@ -761,12 +764,23 @@ export class Renderer {
     this.progTree.use();
     this._uploadFires(this.progTree);
     const td = this.q.treeDist;
+    const far = this.q.farTreeDist || td;
     for (const tile of visible) {
-      if (!tile.treeVao || tile.dist > td) continue;
+      if (!tile.treeVao || tile.dist > far) continue;
       gl.bindVertexArray(tile.treeVao);
-      gl.drawArraysInstanced(gl.TRIANGLES, 0, 30, tile.treeCount);
+      if (tile.dist <= td) {
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 30, tile.treeCount);
+        tris += tile.treeCount * 10;
+      } else {
+        // The middle one of the crown's three billboards, which is quad three
+        // of the five the vertex shader makes out of gl_VertexID: starting the
+        // draw at vertex eighteen hands the shader exactly those six. Past
+        // the whole trees, a wood was a lawn, and the Tiergarten seen from
+        // across it or from the air was bare.
+        gl.drawArraysInstanced(gl.TRIANGLES, 18, 6, tile.treeCount);
+        tris += tile.treeCount * 2;
+      }
       draws++;
-      tris += tile.treeCount * 10;
     }
     gl.enable(gl.CULL_FACE);
 

@@ -713,6 +713,29 @@ Surface grass() {
   return s;
 }
 
+Surface woodland() {
+  Surface s;
+  s.metallic = 0.0;
+  s.emissive = vec3(0.0);
+  // Under a closed canopy there is no lawn: leaf litter and moss in the
+  // shade. And trees are drawn only so far out (240 to 700 m by the quality
+  // tier), past which a wood on lawn coloured ground was a lawn. So with
+  // distance the floor turns into the dark, mottled green of the crowns
+  // that stand on it, and a wood still reads as a wood from the air.
+  float n = fbm(vWorld.xz * 0.9);
+  float crowns = fbm(vWorld.xz * 0.12 + 3.7);
+  Grain g = grainAt(${SL.grass}, vWorld.xz, ${SS.grass.toFixed(2)}, 0.8);
+  vec3 litter = vec3(0.082, 0.072, 0.046);
+  vec3 moss = vec3(0.058, 0.094, 0.038);
+  vec3 near = mix(litter, moss, n) * g.albedo;
+  vec3 canopy = mix(vec3(0.040, 0.074, 0.030), vec3(0.082, 0.128, 0.052), crowns);
+  float far = smoothstep(160.0, 420.0, vViewDist);
+  s.normal = bend(vNormal, g.slope * (1.0 - far));
+  s.albedo = mix(near * (0.78 + 0.22 * g.ao), canopy, far);
+  s.roughness = 0.95;
+  return s;
+}
+
 Surface gravel() {
   Surface s;
   s.metallic = 0.0;
@@ -928,6 +951,7 @@ void main() {
   else if (m == ${MAT.COBBLE}u) s = cobble();
   else if (m == ${MAT.PAVEMENT}u) s = pavement();
   else if (m == ${MAT.GRASS}u) s = grass();
+  else if (m == ${MAT.WOODLAND}u) s = woodland();
   else if (m == ${MAT.WATER}u) s = water();
   else if (m == ${MAT.CONCRETE}u) s = concrete();
   else if (m == ${MAT.STELE}u) s = stele();
@@ -1126,7 +1150,7 @@ void main() {
   if (m != ${MAT.WATER}u) {
     float faceUp = clamp(n.y, 0.0, 1.0);
     if (uWeather.y > 0.001) {
-      bool soft = m == ${MAT.GRASS}u;
+      bool soft = m == ${MAT.GRASS}u || m == ${MAT.WOODLAND}u;
       float wet = uWeather.y * mix(0.35, 1.0, smoothstep(0.5, 0.9, faceUp));
       s.albedo *= mix(1.0, soft ? 0.78 : 0.62, wet);
       s.roughness = mix(s.roughness, soft ? 0.6 : 0.18, wet * 0.85);

@@ -6288,6 +6288,273 @@ Asked for: "ich habe keine waffen im kampfjet".
   still for the picture, because a software renderer is slower than the
   streaks last) and [rockets](screenshots/jet-02-rockets.png) going in.
 
+## Plan: destruction that follows the structure (proposed, not built yet)
+
+Asked for: "plane eine noch dynamischere Zerstörungsfunktion es soll
+realistischer sein".
+
+### Where it stands
+
+- The city is baked into per tile vertex buffers. A collapse is the vertex
+  shader bending the city around up to 16 sites (`maxSites` in
+  src/game/demolition.js); the collision follows partway through the fall.
+- Damage adds up on a 22 m grid in quarters. A building is cut back from
+  the top by the share that is gone.
+- Before a site moves, its walls are cut into storey sized pieces along 4 m
+  column lines (`fineWalls`, `columnCut` in src/game/remesh.js). Each column
+  falls or stands by a hash (`columnHash`, `columnShare` in
+  src/game/bake.js). What falls lands as a stack of slabs under gravity.
+- Rubble lumps, a dust cloud, craters, soot and holes in walls
+  (`holeInWall`, a `discard`) are there already.
+
+### What reads as unreal
+
+- **Load paths.** Whether a column comes down is a hash and a distance from
+  the middle of the blast, not whether anything still holds it up. A hole
+  at the foot of a building leaves the storeys above it standing on
+  nothing. A blast at the top can bring down columns whose base is whole.
+- **Steps.** Damage is quarters of a 22 m block, so a building loses its
+  top in steps. A corner does not break away, a floor does not sag, and
+  nothing hangs and then lets go.
+- **What falls is not a body.** What falls is the wall itself pulled down
+  in the shader. Nothing tips over, nothing lands on something else, and
+  nothing that falls does any damage where it lands.
+- **Materials.** An Altbau of brick, a Plattenbau of panels and a glass
+  office come down the same way.
+
+### How others do it (sources: search excerpts, as in phases 147 and 149)
+
+- **Red Faction Guerrilla, Geo-Mod 2.0.** Pre-broken meshes linked into a
+  stress based collapse model, with weak points, so the same charge ends
+  differently each time and structures answer torsion, stress and strain.
+  Sources: the Red Faction wiki (GeoMod 2.0); polycount. Volition's GDC
+  talk on it was not found.
+- **The Finals (Embark).** Destruction is simulated on the server. A part of
+  a building is either standing and whole or loose and falling; a "Strain"
+  measure of integrity decides which. Once strain breaks a part, a weak
+  link is left between the pieces, so they bend, sway and turn before they
+  go. Sources: ixbt.games, quoting Roman Smirnov, October 2026; PC Gamer.
+  Embark's GDC talk "Engineering Mayhem" exists but was not read.
+- **Teardown (Tuxedo Labs).** Voxels throughout. The released game had no
+  structural check, so a house could stand on one voxel (PC Gamer). A
+  prototype structural integrity solver, after Erin Catto's Box3D, has been
+  shown (80.lv).
+- **Battlefield.** Destruction 2.0 (Bad Company 2) brought whole buildings
+  down. Destruction 3.0 (Battlefield 3) added "micro destruction": rifles
+  chip walls, furniture and posts (Battlefield wiki, Giant Bomb).
+- **Pre-fractured versus runtime fracture.** Pre-fractured swaps the whole
+  asset for its pieces and lets rigid bodies move them (NVIDIA, APEX in
+  HAWKEN). Pieces can also be glued into one body that breaks past a
+  threshold, with union find naming the parts that come loose (Game
+  Developer).
+- **Fracture at runtime.** Müller, Chentanez and Kim (SIGGRAPH 2013) fit a
+  convex decomposition once and lay any fracture pattern over it at
+  runtime, at over 30 fps with the rigid bodies.
+- **How real buildings come down.** Starossek's taxonomy (Structural
+  Engineering International, 2006; TUHH): pancake, zipper, domino, section,
+  instability and mixed. Pancake is storey on storey, the floors gathering
+  into a stack. Domino is one element overturning onto the next. Pancake
+  and domino turn height into impact; zipper and section are loads moving
+  onto neighbours until those fail. The full text was not read; the
+  definitions here are from secondaries.
+
+### The plan, in stages, each one playable and measured on its own
+
+**A. A building that knows what holds it up.** This is the change that
+does the most for "realistic".
+
+- **The lattice.** When a site first touches a building, give it a cell per
+  column (the existing 4 m lines) and storey (from `building:levels`, or the
+  height over 3.2 m). That is about 40 to 400 cells per building, on the
+  CPU, for the buildings in reach only.
+- **Damage.** A blast takes strength out of every cell in reach, by
+  distance and by what is between the cell and the blast. The quarter
+  steps go.
+- **Load path.** After every hit, a cell stands only if a path of standing
+  cells reaches the ground: down, or sideways for no more than a span that
+  depends on the material (stage D), the cantilever a slab can carry. One
+  flood fill from the ground cells, a few hundred cells, well under a
+  millisecond.
+- **Falling.** A cell with no path falls (pancake). A cell on a short path
+  sags for a moment first and then goes: the weak link of The Finals.
+- **Drawing.** The shader reads a bit per cell from a small data texture,
+  a row per active site, instead of `columnHash`. The pieces the remesh
+  already makes are a storey by a column, so a vertex knows its cell. The
+  collision reads the same bits.
+- **Acceptance.**
+  - A rocket into the ground floor of a corner house takes the corner from
+    there up, and leaves the rest of the frontage standing.
+  - A hole in the third storey of a long block leaves the storeys above it
+    hanging over the gap up to the span, and past it they come down.
+  - Nothing ever floats; the check for hanging slabs (phase 96) stays green.
+  - Unit tests on the lattice: the foot taken out, the middle taken out, a
+    corner, a span just short and just past.
+
+**B. Holes you can see into.**
+
+- A cell that is broken but still held up is a hole in the wall, not a gap
+  in a shell. Behind it, the floor and ceiling of that storey, as a dark
+  box at the cell's depth: two quads and a floor colour.
+- Small arms chip the wall where they hit (micro destruction): a decal
+  that deepens, and after enough hits the cell breaks.
+- **Acceptance.** Shooting a cell out shows a room's floor, ceiling and
+  darkness, not the sky through the building.
+
+**C. What falls is a body.**
+
+- A section that loses its path (a corner, a top, a tower cut on one side)
+  breaks into pieces along a Voronoi pattern laid over its cells at that
+  moment (2D on the facade, then given depth), after Müller et al. The
+  pieces are rigid bodies on the debris physics there is: weight, rolling,
+  rest.
+- A tall narrow thing cut at its foot on one side goes over towards the
+  cut (domino). What it lands on takes the hit: a car is crushed, a man is
+  killed, and the building next door takes damage in its lattice, which
+  can start its own collapse.
+- **Budget.** At most 64 bodies awake at once; asleep, they are baked into
+  the heap the shader already draws. Half that on a phone.
+- **Acceptance.**
+  - A tower cut on its west side falls west, and the house it lands on
+    loses cells where it lands.
+  - 64 pieces cost under 2 ms of a frame on the desktop software renderer
+    the checks run on.
+
+**D. Brick, panels and glass.**
+
+- From OpenStreetMap: `building:material`, `building:levels`, `start_date`
+  and `building` where given, with height and roof shape where they are
+  not.
+- **Altbau (brick, before 1918).** Walls carry, so no cantilever. It
+  crumbles into a low brick pile.
+- **Plattenbau (precast concrete, about 1960 to 1990).** It goes panel by
+  panel, in large flat pieces, and a panel can hang on its joint.
+- **Steel and glass.** The glass bursts across the street, the frame stands
+  longest, and the floors pancake inside it.
+- The tags and the eras need sources before this stage starts: the OSM wiki
+  on `building:material` and how many Berlin buildings carry it, and the
+  building eras in Berlin.
+
+**E. Afterwards.**
+
+- The dust is sized by the mass that fell, and the ground shakes by mass
+  and distance. The rumble lasts as long as the fall.
+- A ruin smoulders for a while and smokes out of its windows.
+- What came down stays down across districts, as the devastation already
+  does.
+
+**Order and cost.** A first, because without load paths every other stage
+is decoration on the wrong collapse. Then C, which is the most visible: a
+corner breaking off and tipping. Then B, D and E. Each stage gets its own
+phase entry, its own checks in tools/test-city.mjs and tools/test-arsenal.mjs,
+and before and after screenshots of the same three standard blasts:
+
+- a 30 m blast against a frontage on Unter den Linden;
+- a rocket into a corner house;
+- a tank shell into a ground floor.
+
+## 149. The Tiergarten is a wood
+
+Asked for: "der tiergarten sieht etwas kahl aus".
+
+What was there:
+
+- Trees came from `natural=tree` nodes and from nowhere else
+  (tools/build-world.mjs). `natural=wood` was not read at all;
+  `landuse=forest` was read as a lawn, and only as a plain way, never as the
+  multipolygon a wood usually is.
+- In Berlin the tree nodes are mostly street trees. A thread on the OSM
+  forum counts about 111,320 tree nodes in Berlin against the Senate's
+  roughly 438,000 street trees alone. The Senate's register holds the street
+  trees and only part of the park trees, and the OSM wiki's page on city
+  tree registers lists a Berlin import as "tba". A Senate answer to the
+  House (Drucksache 19/11445) says the trees in public green spaces are not
+  yet recorded one by one.
+- So the live Tiergarten was a lawn with whatever trees had been mapped one
+  by one. The live build of 7 November shows 6,499 tree nodes in the c2r1
+  extract and 4,725 in its share, over 3.2 km2 that are mostly not the park.
+- And trees are drawn whole only out to 240, 420 or 700 m by the quality
+  tier (`treeDist` in src/render/renderer.js), and not at all past that. The
+  automatic tier drops to low under software rendering within seconds. Past
+  that distance any wood was lawn, across a park and from the air.
+
+What the sources say the Tiergarten is:
+
+- Rohner (2008), Verh. Bot. Ver. Berlin Brandenburg 141, pp. 5 to 29: about
+  200 ha, of which about 70 ha, some 35 per cent, is open land, mostly mown
+  lawn. About 390 woody stands and 550 lawns and meadows were mapped.
+  Berlin and the district give 207 to 210 ha.
+- The OSM wiki (Tag:natural=wood) says nearly every data consumer reads
+  `natural=wood` and `landuse=forest` as the same thing, a wooded area.
+- A thread on the German OSM forum ("Berliner Tiergarten: Wald oder Park?")
+  says parts of the Tiergarten are mapped `natural=wood` inside the park.
+- None of these pages could be opened from the build machine (the hosts are
+  not reachable from it). What is quoted here is from search excerpts, as in
+  phase 147.
+
+What the build does now (tools/woods.mjs, planted in
+tools/build-world.mjs before the district is cut out of its extract):
+
+- **Mapped woods.** Every `natural=wood` and `landuse=forest`, way or
+  multipolygon with its holes, is planted on a grid laid over the whole
+  city. The grid is 13 m, 59 trees a hectare, the density
+  tools/synth-osm.mjs measured as a wood at a third of a frame more than a
+  lawn. Each tree is moved off the middle of its cell by a hash of the
+  cell, so the rows do not show.
+- **Where trees go.** The grid and the hash are the city's, so two districts
+  that share a wood plant the same trees each side of the cut and none
+  twice. Trees stay clear of every path and road (`roadIndex` and a metre),
+  of water, buildings and pedestrian areas. A tree within 7 m of one
+  somebody mapped is left out in favour of the mapped one.
+- **Size.** Planted trees are 13 to 22 m tall. The crown is 0.34 to 0.44 of
+  the height across its radius (src/shaders/trees.js), so at 13 m spacing
+  the canopy closes.
+- **Mapped woods get a floor.** They are laid in a material of their own,
+  `WOODLAND`: leaf litter and moss underfoot, turning with distance into the
+  mottled dark green of the crowns. It sits 14 cm over the park it stands in,
+  which the 24 bit depth buffer still separates at 400 m.
+- **The Grosser Tiergarten.** In `WOODED_PARKS` with a share of 0.65, it
+  gets groves on the ground the map leaves unsaid: not a mapped wood, lawn,
+  water or building. There are as many as make the park 65 per cent woody
+  together with its mapped woods. They are placed by a noise 110 m across,
+  so they come as groves with clearings, not as a sprinkle. A park mapped
+  wooded past its share gets none. Other parks get nothing, because a park
+  can be an open field: the Tempelhofer Feld is one.
+- **Trees past the whole tree distance** are drawn as the crown's middle
+  billboard alone, out to 700, 1,100 or 1,600 m by tier. That is two
+  triangles a tree instead of ten. Starting the instanced draw at vertex 18
+  hands the existing vertex shader exactly that quad, so the shader is
+  unchanged.
+- **Log line.** The build prints a line per district: how many woods,
+  which wooded parks, how much of each is mapped wood and mapped open, and
+  how many trees were planted. That says, on the live build, what the map
+  actually holds in the Tiergarten.
+
+Measured locally, on the synthetic Tiergarten:
+
+- The synthetic data scatters its own trees through the park, 8,069 of the
+  8,373 tree nodes in the c2r1 extract. To see the live case they were
+  taken out of a copy of the extract. The old code then shows
+  [a lawn](screenshots/tiergarten-01-before-ground.png) and
+  [from the air a lawn](screenshots/tiergarten-03-before-air.png). The new
+  one planted 4,254 trees in groves:
+  [a wood](screenshots/tiergarten-02-after-ground.png), and from the air
+  [groves to the far side](screenshots/tiergarten-04-after-air.png).
+- Planting c2r1 takes well under a second of the build. The trees add 8
+  bytes each to the download.
+- With its own scatter left in, the synthetic park gets 1,812 more trees,
+  in the gaps more than 7 m from any of them.
+- A floor under the groves was tried as a hexagon per tree and cost 1.8 MB
+  of vertices in c2r1. It was dropped for the far crowns, which cost no
+  download at all.
+- Checks: tools/test/woods.test.mjs covers:
+  - a wood at 59 a hectare, in its outline and out of its holes, the same
+    trees every time;
+  - paths kept clear, and mapped trees in place of planted ones;
+  - a wood cut by a district edge planted once, the same trees either side;
+  - a wooded park at 65 per cent with no grove on its lawn or in its
+    mapped wood;
+  - groves that are groves.
+
 ## 150. The warhead can be seen in flight
 
 Asked for: "WARHEAD wenn ich schiesse sehe ich die rakete/projektil nicht".

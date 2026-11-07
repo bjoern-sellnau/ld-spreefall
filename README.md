@@ -1502,6 +1502,19 @@ or a tree is dropped, which is 178 of them across Mitte. It costs 75,000
 triangles there, against 188,000 for the city it stands in, and it is on in
 the middle tier only, like the relief.
 
+**Woods are planted.** A tree in OpenStreetMap is a node, and in Berlin the
+nodes are mostly street trees; a wood is an area (`natural=wood` or
+`landuse=forest`), and the build used to read none. What the map says is
+wooded is now planted on a grid laid over the whole city, 59 trees a hectare,
+13 to 22 metres tall so the crowns close, clear of the paths, the water and the
+buildings, and around any tree somebody has mapped. The Grosser Tiergarten,
+which is about two thirds woody ground (Rohner 2008), gets groves where the map
+leaves its ground unsaid, until it is that wooded. Past the distance trees are
+drawn whole, they are drawn as their crown alone out to 0.7, 1.1 or 1.6 km by
+the quality tier, so a wood stays a wood across a park and from the air. See
+[before](docs/screenshots/tiergarten-03-before-air.png) and
+[after](docs/screenshots/tiergarten-04-after-air.png).
+
 **The shape of a building is what OpenStreetMap says it is.** Height or
 levels, `building:part` pieces instead of the envelope around them,
 `min_height` for a volume that starts above the street, and the roof: its

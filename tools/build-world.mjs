@@ -31,12 +31,14 @@ import {
 } from './geometry.mjs';
 import { LANDMARK_BUILDERS } from './landmarks.mjs';
 import { ROAD_WIDTH } from './synth-osm.mjs';
+import { isWood, isOpen, woodedShare, plantWoods, areaIndex, area as woodArea, WOODS } from './woods.mjs';
 import {
   TILE_SIZE, VERTEX_STRIDE, POS_SCALE, UV_SCALE, HEIGHT_SCALE,
   COLLISION_GRID, GROUND_SCALE, MAT, SURFACE, FACADE_FLAG, MATERIAL_NAMES,
 } from '../src/shared/constants.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
+const WOODS_HEIGHT = WOODS.height;
 const RAW_DIR = path.join(ROOT, 'data', 'raw');
 const OUT_DIR = path.join(ROOT, 'public');
 const INDEX_FILE = path.join(OUT_DIR, 'world.json');
@@ -304,6 +306,11 @@ function buildDistrict(district, overflight = false) {
   let greens = [];
   let rails = [];
   let trees = [];
+  // What the map says is wooded, which parks are mostly trees, and the open
+  // ground inside them: for planting the woods (tools/woods.mjs).
+  const woodAreas = [];
+  const parkAreas = [];
+  const openAreas = [];
   let memorials = [];
   let attractions = [];
   let stations = [];
@@ -347,8 +354,17 @@ function buildDistrict(district, overflight = false) {
       }
     } else if (t.natural === 'water' || t.waterway === 'riverbank') {
       for (const o of outers) waterPolys.push({ ring: o, holes: inners, tags: t });
-    } else if (t.leisure === 'park' || t.landuse === 'grass' || t.leisure === 'garden') {
+    } else if (t.leisure === 'park' || t.landuse === 'grass' || t.leisure === 'garden' || isWood(t)) {
       for (const o of outers) greens.push({ ring: o, holes: inners, tags: t });
+    }
+    // A wood is very often a multipolygon, with the clearings and the paths
+    // cut out of it as its holes.
+    if (!t.building) {
+      const holesOf = (o) => inners.filter((h) => ringInside(h, o));
+      if (isWood(t)) for (const o of outers) woodAreas.push({ ring: o, holes: holesOf(o) });
+      const share = woodedShare(t);
+      if (share) for (const o of outers) parkAreas.push({ ring: o, holes: holesOf(o), wooded: share, name: t.name });
+      if (isOpen(t)) for (const o of outers) openAreas.push({ ring: o, holes: holesOf(o) });
     }
   }
 
@@ -384,8 +400,15 @@ function buildDistrict(district, overflight = false) {
       }
       continue;
     }
+    if (closed) {
+      const r = ring.slice(0, -1);
+      if (isWood(t)) woodAreas.push({ ring: r, holes: [] });
+      const share = woodedShare(t);
+      if (share) parkAreas.push({ ring: r, holes: [], wooded: share, name: t.name });
+      if (isOpen(t)) openAreas.push({ ring: r, holes: [] });
+    }
     if (t.leisure === 'park' || t.leisure === 'garden' || t.landuse === 'grass'
-        || t.landuse === 'forest' || t.landuse === 'meadow' || t.landuse === 'village_green') {
+        || t.landuse === 'forest' || t.natural === 'wood' || t.landuse === 'meadow' || t.landuse === 'village_green') {
       if (closed) greens.push({ ring: ring.slice(0, -1), holes: [], tags: t });
       continue;
     }
@@ -427,6 +450,30 @@ function buildDistrict(district, overflight = false) {
   if (ribbons.length) console.log(`water from centrelines: ${ribbons.length} stretches`);
 
   console.log(`features: buildings ${buildings.length}  roads ${roads.length}  areas ${areas.length}  water ${waterPolys.length}  green ${greens.length}  rails ${rails.length}  trees ${trees.length}`);
+
+  // --- woods ----------------------------------------------------------------
+  // The trees are nodes, and in Berlin the nodes are mostly street trees; a
+  // wood is an area, and the build read none of them, so the Tiergarten was a
+  // lawn with a fringe. What the map says is wooded is planted here, on the
+  // whole extract's roads, water and buildings so a tree at the edge of the
+  // district does not stand in a street the next district owns. Only where
+  // this tier draws trees at all.
+  if (tier.trees > 0 && (woodAreas.length || parkAreas.length)) {
+    const water = areaIndex(waterPolys.map((w) => woodArea(w.ring, w.holes || [])));
+    const built = areaIndex(buildings.map((b) => woodArea(b.outer, b.holes || [])), 40);
+    const paved = areaIndex(areas.map((a) => woodArea(a.ring, [])));
+    const sown = plantWoods({
+      woods: woodAreas, parks: parkAreas, open: openAreas,
+      box: { minX: world.minX, minZ: world.minZ, maxX: world.maxX, maxZ: world.maxZ },
+      blocked: (x, z) => water(x, z) || built(x, z) || paved(x, z),
+      nearRoad: roadIndex(roads),
+      trees: trees.map((t) => t.p),
+    });
+    for (const t of sown.planted) trees.push(t);
+    const parkLine = sown.parks.map((pk) => `${pk.name} mapped wood ${Math.round(pk.mapped * 100)}%, open ${Math.round(pk.open * 100)}%, groves on ${Math.round(pk.groves * 100)}% of the rest`).join('; ');
+    console.log(`woods: ${woodAreas.length} areas, ${parkAreas.length} wooded parks; planted ${sown.wood} in woods and ${sown.grove} in groves`
+      + (parkLine ? ` (${parkLine})` : ''));
+  }
 
   // --- the district's own share of it -------------------------------------
   // The extract covers the district plus a margin, so that a wall standing on
@@ -533,8 +580,12 @@ function buildDistrict(district, overflight = false) {
 
   // --- green -------------------------------------------------------------
   for (const g of greens) {
-    groundPolygon(mesh, g.ring, g.holes, MAT.GRASS, yAt, { lift: 0.05, seed: 5 });
+    // A wood has a floor of its own, laid over the park it stands in by more
+    // than the depth buffer can lose at a few hundred metres.
+    if (isWood(g.tags)) groundPolygon(mesh, g.ring, g.holes, MAT.WOODLAND, yAt, { lift: 0.14, seed: 5 });
+    else groundPolygon(mesh, g.ring, g.holes, MAT.GRASS, yAt, { lift: 0.05, seed: 5 });
   }
+
 
   since('parks');
   // --- where a street crosses water ---------------------------------------
@@ -1266,7 +1317,11 @@ function buildDistrict(district, overflight = false) {
     if (x < world.minX || x > world.maxX || z < world.minZ || z > world.maxZ) continue;
     const h = hashInt(Math.round(x * 8), Math.round(z * 8));
     const isLinden = t.tags['spreefall:row'] === 'linden';
-    const height = isLinden ? 13 + (h & 31) / 31 * 4 : 7 + (h & 63) / 63 * 9;
+    // A planted wood is grown trees, tall enough that their crowns meet.
+    const planted = !!t.tags['spreefall:fill'];
+    const height = isLinden ? 13 + (h & 31) / 31 * 4
+      : planted ? WOODS_HEIGHT[0] + (h & 63) / 63 * (WOODS_HEIGHT[1] - WOODS_HEIGHT[0])
+        : 7 + (h & 63) / 63 * 9;
     treeList.push({
       x: Math.round(x * 16) / 16,
       y: Math.round(yAt(x, z) * 16) / 16,
