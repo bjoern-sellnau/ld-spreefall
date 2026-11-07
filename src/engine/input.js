@@ -1,6 +1,8 @@
 // Keyboard, mouse with pointer lock, touch look plus a virtual stick, and the
 // Gamepad API. One object holds the current intent, the game reads it.
 
+import { stickVector, lookGain } from '../game/touch.js';
+
 export class Input {
   constructor(canvas, ui) {
     this.canvas = canvas;
@@ -15,7 +17,16 @@ export class Input {
     this.jumpHeld = false;   // held, for anything that climbs rather than hops
     this.pointerLocked = false;
     this.sensitivity = 0.0022;
-    this.touchSensitivity = 0.0042;
+    // Radians a pixel of drag turns you, asked each time so that it follows
+    // the field of view; the game sets it to the camera's.
+    this.touchGain = () => lookGain(68 * Math.PI / 180);
+    // Held by a button on a phone: run, the way Shift is held. Kept apart
+    // from run, which the stick and the keys set afresh every frame.
+    this.touchRun = false;
+    // Whether the stick pushed to its rim runs. On foot it does; in a car the
+    // same input is the brake and in a helicopter the climb, so there the
+    // game turns it off and the rim is only full throttle.
+    this.stickRuns = true;
     this.gamepadIndex = null;
     this.onKeyPress = null;   // fn(code) for one shot bindings
     this.enabled = true;
@@ -91,41 +102,40 @@ export class Input {
           this._touchLook = { id: t.identifier, x: t.clientX, y: t.clientY };
         }
       }
-      e.preventDefault();
+      // Only a touch the browser lets us keep; one it has already given to
+      // a scroll is left to it.
+      if (e.cancelable) e.preventDefault();
     }, opts);
     this.canvas.addEventListener('touchmove', (e) => {
       if (!this.enabled) return;
       for (const t of e.changedTouches) {
         if (this._touchStick === t.identifier) {
-          const dx = t.clientX - this._stickCentre[0];
-          const dy = t.clientY - this._stickCentre[1];
-          const max = 56;
-          const l = Math.hypot(dx, dy) || 1;
-          const k = Math.min(1, l / max);
-          this.moveX = (dx / l) * k;
-          this.moveZ = -(dy / l) * k;
-          this.run = k > 0.85;
-          if (this.onStick) this.onStick(true, this._stickCentre[0], this._stickCentre[1], (dx / l) * k * max, (dy / l) * k * max);
+          const v = stickVector(t.clientX - this._stickCentre[0], t.clientY - this._stickCentre[1]);
+          this.moveX = v.x;
+          this.moveZ = v.z;
+          this.run = (v.run && this.stickRuns) || this.touchRun;
+          if (this.onStick) this.onStick(true, this._stickCentre[0], this._stickCentre[1], v.kx, v.ky);
         } else if (this._touchLook && this._touchLook.id === t.identifier) {
-          this.lookX += (t.clientX - this._touchLook.x) * this.touchSensitivity;
-          this.lookY += (t.clientY - this._touchLook.y) * this.touchSensitivity;
+          const g = this.touchGain();
+          this.lookX += (t.clientX - this._touchLook.x) * g;
+          this.lookY += (t.clientY - this._touchLook.y) * g;
           this._touchLook.x = t.clientX;
           this._touchLook.y = t.clientY;
         }
       }
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
     }, opts);
     const end = (e) => {
       for (const t of e.changedTouches) {
         if (this._touchStick === t.identifier) {
           this._touchStick = null;
-          this.moveX = 0; this.moveZ = 0; this.run = false;
+          this.moveX = 0; this.moveZ = 0; this.run = this.touchRun;
           if (this.onStick) this.onStick(false, 0, 0, 0, 0);
         } else if (this._touchLook && this._touchLook.id === t.identifier) {
           this._touchLook = null;
         }
       }
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
     };
     this.canvas.addEventListener('touchend', end, opts);
     this.canvas.addEventListener('touchcancel', end, opts);
@@ -155,7 +165,7 @@ export class Input {
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) kz -= 1;
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) kx -= 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) kx += 1;
-    let run = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    let run = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchRun;
 
     if (this.gamepadIndex !== null && navigator.getGamepads) {
       const gp = navigator.getGamepads()[this.gamepadIndex];
@@ -192,7 +202,9 @@ export class Input {
       this.moveZ = kz / Math.max(1, l);
       this.run = run;
     } else if (this._touchStick === null) {
-      this.moveX = 0; this.moveZ = 0; this.run = false;
+      this.moveX = 0; this.moveZ = 0; this.run = run;
+    } else if (this.touchRun) {
+      this.run = true;
     }
   }
 

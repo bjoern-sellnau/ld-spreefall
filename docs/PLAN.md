@@ -6112,6 +6112,143 @@ So there are two cities now, and a profile picks which:
   Pictures: [pointing at acid rain](screenshots/cheat-15-info.png),
   [the guide](screenshots/cheat-16-guide.png).
 
+## 147. The game on a phone
+
+- The ask: mobile support.
+- What was there: a phone was taken for one (a screen that is touched and not
+  hovered over), and on it the left half of the canvas was a stick and the
+  right half looked, with a jump and a run button. Nothing else: no way to
+  fire, aim, reload, change weapon, get into a vehicle, hack, pause or open a
+  menu. On a phone on its side (844 by 390) the title's Neues Spiel was below
+  the bottom of the screen where no scrolling reached it, because the title
+  was centred in a grid and its top went off the screen with its bottom; the
+  game's page hid Spielen the same way; the run button did nothing, the stick
+  setting run afresh every frame over it; the row of desktop buttons sat on
+  the ammunition and jump on the district's name.
+- The buttons (game/touch.js, arithmetic only, and ui/touchpad.js on the
+  page). Every button does one of three things the keyboard and the mouse
+  already do: presses a key the game's key handler listens for, holds down
+  one of the inputs (fire, aim, run, jump), or turns the wheel. So a button
+  does what its key does wherever you are, in a mech, in the suit or in
+  .BACKDOOR, and cannot drift from it. Fire sits in the bottom right corner,
+  where the right thumb rests, and a thumb sliding off it turns you while you
+  keep shooting. Round it, on a ring 104 px out, aim, reload and jump; on one
+  176 px out, use, the weapon either way and hit; on a third 246 px out, what
+  belongs to where you are: slow motion; the phone's two hacks, named as the
+  card names them, and the blackout in .BACKDOOR; armour, cloak, grenade,
+  visor and heat in The Hunt, and the draw weight with the bow; and blow while
+  charges are down. In a car fire, brake and out; in a helicopter fire, down,
+  up and out; in a mech fire, the pod, reload, jump, dash, the arms either
+  way, view and out. Aim is a switch (on until tapped again), since a thumb
+  cannot hold it and look; one left up on foot is put down on getting into
+  something, where the same input is the helicopter going down.
+- Along the top: pause, the map, the cheats, and three dots with every other
+  key: the number row, the last weapon, the weapons with keys of their own,
+  holster, the kick, reflexes, blow, the mech view, travel, photo, the
+  journal, sound, help, full screen, the three quality tiers, the three
+  difficulties and the debug view. A check reads the game's key handler out
+  of main.js and fails if any key it listens for has no button: of the 42 it
+  hears, only Enter and the keypad's Enter (the target map and the title have
+  buttons for them) and right Shift (a second key for E) are not on one.
+- How big, and where: a button is at least 48 CSS pixels across. Apple asks
+  for controls of at least 44 by 44 points, and Google for touch targets of
+  48 by 48 dp, about 9 mm, 8 dp apart; 48 meets both. The rings are scaled to
+  the height of a phone on its side (390 px is one to one, never under 0.82)
+  and held in by the width when it is upright. Checked on six screens from
+  667 by 375 to 1024 by 600 and in eight situations each: every button on the
+  screen, none over another, none reaching into the left 45 % where the stick
+  is, none under 48. The layer sits inside the notch and the home bar
+  (env(safe-area-inset-*), which Safari has had since iOS 11.3).
+- The stick: a dead zone of 12 % of its 56 px reach, from which the speed
+  starts at nought rather than jumping, and the rim runs, but only on foot:
+  in a car the same input is the brake and in a helicopter the climb, so
+  there the rim is full throttle. The first run of the phone checks found
+  that, a jeep with the stick full forward standing still. The look turns a
+  pixel of drag into 0.0042 rad at the unzoomed 68 degrees, and in proportion
+  less as the sight zooms in, so the sight stays where the thumb puts it.
+- Everything else a key or the mouse did: the hint over a vehicle or a guard
+  is a button; the flight in and a warhead's flight are skipped by a tap on
+  the city, which keeps its touches for the stick and the look; both maps drag
+  with one finger and pinch with two, a tap still sets the mark or the
+  target, and each has a close button, Esc and M being keys a phone has not
+  got; the target map's words say tap and two fingers; the messages that name
+  F or T name the button instead; the help has a table for the thumbs.
+- Fitting it on: anything taller than the screen starts at its top and
+  scrolls (an auto margin in place of the grid's centring); on a screen under
+  520 px high the title, the game's page, the panels and the pause are drawn
+  tighter, and Spielen stays stuck to the bottom of the game's page. The HUD
+  moves out of the thumbs' way: the map and its lines to the top left under
+  the buttons, the weapons list away (the arrows change weapon and the name
+  is over the ammunition), the panels from the bottom right to the left, and
+  the map's credit on one line under it all. Held upright it asks to be
+  turned and lets you play upright.
+- The whole screen: Spielen asks for it and for the phone on its side. MDN's
+  compatibility data: Chrome on Android has requestFullscreen from 71 and
+  ScreenOrientation.lock from 38 (which wants the page full screen first);
+  Safari has element full screen only on an iPad (prefixed from 12, plain
+  from 16.4), with a button over it that cannot be hidden and a swipe down
+  that leaves it, and no orientation lock at all. So it is asked for and never relied on, and on a
+  phone that cannot give it the title says to add the game to the home
+  screen. The manifest asks for display fullscreen and landscape: Chrome on
+  Android has both; Safari has standalone (from 11.3), which is what
+  fullscreen falls back to, and no orientation member. The home screen icons
+  are the favicon's gate, drawn at 180, 192 and 512.
+- A phone draws at no more than 1.5 device pixels to the CSS pixel (a phone
+  has three), starts on the medium tier (the first seconds of frames take it
+  lower if they are slow, as anywhere) and holds at most 512 MB of districts
+  rather than the desktop's 1.5 GB. No browser publishes what a phone gives a
+  tab, and a tab that asks for too much is closed without a word, so that is
+  a guess on the safe side. WebGL2 is there from iOS 15 and Chrome 58 on
+  Android.
+- A touch the browser has already given to a scroll is not cancelled any
+  more (cancelable is asked first), which Chrome logged as an error.
+- Sources: Apple's
+  [UI design dos and don'ts](https://developer.apple.com/design/tips/)
+  (read: "at least 44 points x 44 points"); Google's
+  [touch target size](https://support.google.com/accessibility/android/answer/7101858)
+  (48 by 48 dp, 8 dp apart, about 9 mm; through search excerpts, the page
+  could not be opened from this session); MDN's compatibility data,
+  [@mdn/browser-compat-data 8.1.8](https://www.npmjs.com/package/@mdn/browser-compat-data)
+  read from the package itself (Element.requestFullscreen,
+  ScreenOrientation.lock, WebGL2RenderingContext, env(), the manifest's
+  display and orientation, Navigator.deviceMemory, which only Chrome has and
+  so is not used); and the manifest's
+  [display member on MDN](https://developer.mozilla.org/en-US/docs/Web/Manifest/display)
+  and the [WICG display override explainer](https://github.com/WICG/display-override/blob/main/explainer.md)
+  (fullscreen, standalone, minimal-ui, browser, each falling back to the
+  next; through search excerpts).
+- Checks: eight unit checks (the stick, the look against the field of view,
+  which buttons where, the layout on six screens on their side and three
+  upright, every key in the handler on a button, every button doing one
+  thing and no dashes, and the manifest), and a phone suite in the browser,
+  tools/test-mobile.mjs, on a screen 844 by 390 told it is a phone, every
+  check done with real touches through the browser's own input, one thumb or
+  two, each with its identifier: the title and Spielen on the screen; Spielen
+  asking for the whole screen and the side; a tap skipping the flight in; the
+  buttons on foot, their sizes, places and the stick's half kept clear; the
+  stick walking at half way and running at the rim, and stopping when
+  lifted; a drag turning 0.42 rad for 100 px and 0.26 with the sight up; aim
+  staying up; fire held firing, and turning with the thumb sliding off it;
+  reload, jump and the arrows; the three dots with every key and 3 giving
+  the launcher; pause and Weiter; the cheats fitting and scrolling under a
+  thumb; the map dragged, pinched in, marked and closed; a jeep got into by
+  its hint, driven by the stick at full throttle and left, the bomb question
+  answered by a tap; the suit on the buttons in The Hunt and the cloak on;
+  the blackout in .BACKDOOR; and upright, the request to turn and every
+  button on the screen. 31 of 31, and a step of its own in CI ("Play it on a
+  phone"), whose time limit goes from 75 minutes to 90 (run 251 took 66).
+  Pictures: [the title](screenshots/mobile-01-title.png),
+  [the game's page](screenshots/mobile-02-mode.png),
+  [on foot](screenshots/mobile-03-play.png),
+  [the three dots](screenshots/mobile-04-drawer.png),
+  [the pause](screenshots/mobile-05-pause.png),
+  [the cheats](screenshots/mobile-06-cheats.png),
+  [the map](screenshots/mobile-07-map.png),
+  [in the jeep](screenshots/mobile-08-jeep.png),
+  [The Hunt](screenshots/mobile-09-hunt.png),
+  [.BACKDOOR](screenshots/mobile-10-backdoor.png),
+  [upright](screenshots/mobile-11-upright.png).
+
 ## CI: the power box check keeps its car at the kerb until the box goes
 
 - The live run after phase 146 was green but for one .BACKDOOR check: the

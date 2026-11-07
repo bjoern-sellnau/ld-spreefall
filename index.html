@@ -7,6 +7,8 @@
 <title>SPREE|FALL</title>
 <meta name="description" content="Central Berlin rebuilt from OpenStreetMap data and rendered in raw WebGL2. Walk from the Brandenburg Gate to the Fernsehturm in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='11' fill='%230b0d10'/%3E%3Cpath transform='translate(0 10)' fill='%23e2c98d' d='M27.3 .4h1.7v2.2h-1.7zM29.9 .4h1.7v2.2h-1.7zM32.5 .4h1.7v2.2h-1.7zM35.1 .4h1.7v2.2h-1.7zM26 2.6h12v2.4h-12zM11 5h42v6h-42zM2 11h60v6h-60zM6.3 17h7.4v2.2h-7.4zM15.1 17h7.4v2.2h-7.4zM23.9 17h7.4v2.2h-7.4zM32.7 17h7.4v2.2h-7.4zM41.5 17h7.4v2.2h-7.4zM50.3 17h7.4v2.2h-7.4zM7.5 19.2h5v19.8h-5zM16.3 19.2h5v19.8h-5zM25.1 19.2h5v19.8h-5zM33.9 19.2h5v19.8h-5zM42.7 19.2h5v19.8h-5zM51.5 19.2h5v19.8h-5zM4 39h56v2.6h-56zM1 41.6h62v2.4h-62z'/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="stylesheet" href="src/ui/style.css">
 </head>
 <body>
@@ -41,6 +43,8 @@
       <div class="playbuttons">
         <button id="newgame" class="play">Neues Spiel</button>
       </div>
+      <p class="hint hidden" id="homehint">On an iPhone the page cannot have the whole screen:
+      Share, then <b>Add to Home Screen</b>, and it opens from there with no browser round it.</p>
       <p class="buildline" id="buildline">build</p>
     </section>
 
@@ -289,8 +293,9 @@
     <button id="mapfit" title="The whole of Berlin">all of it</button>
     <button id="maphere" title="Back to where you are standing">me</button>
     <button id="mapunmark" title="Take your mark off the map" class="hidden">clear mark</button>
+    <button id="mapclose" title="Close the map">close</button>
     <span id="mapzoom">1.0x</span>
-    <span id="maphint">click to set a mark</span>
+    <span id="maphint"><span class="desktoponly">click</span><span class="touchonly">tap</span> to set a mark</span>
   </div>
   <div id="compass"><span id="compasslabel">N</span></div>
   <div id="cardhost"></div>
@@ -309,8 +314,6 @@
   <div id="debug" class="hidden"></div>
   <div id="touchui" class="hidden">
     <div id="stick"><i id="stickknob"></i></div>
-    <button id="btnjump" class="tbtn">jump</button>
-    <button id="btnrun" class="tbtn">run</button>
   </div>
   <div id="controls">
     <button id="btnmap" title="Map (M)">map</button>
@@ -335,7 +338,23 @@
 
 <div id="helppanel" class="panel hidden">
   <h2>How to walk around</h2>
-  <table>
+  <table class="touchonly">
+    <tr><td>left half</td><td>a stick wherever your thumb comes down; to the rim of it and you run</td></tr>
+    <tr><td>right half</td><td>drag to look</td></tr>
+    <tr><td>fire</td><td>the big button bottom right; slide your thumb off it and you turn while you shoot</td></tr>
+    <tr><td>round it</td><td>aim (on until you tap it again), reload, jump, the weapon before and after,
+      use (a vehicle, a takedown, a grab) and hit</td></tr>
+    <tr><td>further out</td><td>what belongs to the game you are in: slow motion; the phone's two hacks and
+      the blackout in .BACKDOOR; armour, cloak, grenade, visor and heat in The Hunt; and blow, while charges
+      are down</td></tr>
+    <tr><td>driving, flying, a mech</td><td>the stick steers, fire fires, brake, up and down, the rocket pod,
+      dash and jump, and out</td></tr>
+    <tr><td>along the top</td><td>pause, the map, the cheats, and &#8943; with every other key: the number row,
+      the weapons of their own, the kick, travel, photo, the journal, sound, help, full screen, quality and
+      difficulty</td></tr>
+    <tr><td>maps</td><td>one finger drags, two pinch, a tap sets the mark or the target</td></tr>
+  </table>
+  <table class="desktoponly">
     <tr><td>W A S D, arrows</td><td>walk</td></tr>
     <tr><td>Shift</td><td>run</td></tr>
     <tr><td>Space</td><td>jump onto kerbs and low walls, or leap while reflexes are on</td></tr>
@@ -410,7 +429,7 @@
   <h2>Cheats</h2>
   <p class="warn">A run with any of these on is marked as such, here and on the
   end screen. The memorial stays a weapons free zone whatever is switched on.</p>
-  <p class="cheatintro">Point at anything for what it does. The guide at the bottom describes every setting.</p>
+  <p class="cheatintro"><span class="desktoponly">Point at</span><span class="touchonly">Tap</span> anything for what it does. The guide at the bottom describes every setting.</p>
   <div class="group" data-guide="actions">
     <div class="grouplabel">right now</div>
     <div class="row" id="cheatactions"></div>
@@ -490,7 +509,16 @@
   </div>
 </div>
 
-<div id="cinemahint" class="hidden">press space to go back</div>
+<div id="cinemahint" class="hidden"><span class="desktoponly">press space</span><span class="touchonly">tap</span> to go back</div>
+
+<!-- A phone held upright: a shooter wants it on its side. -->
+<div id="rotate" aria-live="polite">
+  <div class="rotatebox">
+    <div class="rotatephone" aria-hidden="true"></div>
+    <p>Turn the phone on its side</p>
+    <button id="rotatego" class="play quiet">play upright</button>
+  </div>
+</div>
 
 <div id="nuketarget" class="hidden">
   <canvas id="targetmap"></canvas>
@@ -498,6 +526,7 @@
     <button id="targetin" title="Zoom in">+</button>
     <button id="targetout" title="Zoom out">&minus;</button>
     <button id="targetfit" title="The whole city">fit</button>
+    <button id="targetclose" title="Close the map">close</button>
     <span id="targetzoom">1.0x</span>
   </div>
   <div id="ultrapanel" class="hidden"></div>
