@@ -2090,6 +2090,8 @@ export class Actors {
       rocket: this._uploadMesh(buildProjectileMesh('rocket'), MAX_PROPS, 2),
       grenade: this._uploadMesh(buildProjectileMesh('grenade'), MAX_PROPS, 2),
       shell: this._uploadMesh(buildProjectileMesh('grenade'), MAX_PROPS, 2),
+      // The incendiary grenade is a grenade to look at until it goes off.
+      incendiary: this._uploadMesh(buildProjectileMesh('grenade'), MAX_PROPS, 2),
       c4: this._uploadMesh(buildProjectileMesh('c4'), MAX_PROPS, 2),
       plasma: this._uploadMesh(buildProjectileMesh('plasma'), MAX_PROPS, 2),
       flak: this._uploadMesh(buildProjectileMesh('flak'), MAX_PROPS, 2),
@@ -2227,23 +2229,24 @@ export class Actors {
   /** Sorts what is in the air into its per kind instance buffers. */
   updateProjectiles(list) {
     const gl = this.gl;
-    const counts = { rocket: 0, grenade: 0, c4: 0, banana: 0, plasma: 0, flak: 0,
-      splinter: 0, nuke: 0, void: 0, ultra: 0, blast: 0, ultraBlast: 0, voidStorm: 0, voidMaw: 0, arrow: 0, fireball: 0, shieldsaw: 0,
-      bolt: 0, cling: 0, disc: 0, flare: 0 };
+    // One count for every kind that has a mesh. This was a list written out
+    // by hand, and the kinds added after it (the warhead, the dart, the
+    // throwing knife, the duck, the beacon, the sludge and the core) had a
+    // mesh built for them and were never drawn: a warhead flew the whole way
+    // to its target as a trail of smoke with nothing at the front of it.
+    const counts = {};
+    for (const kind in this.props) counts[kind] = 0;
     for (const b of list) {
       const mesh = this.props[b.kind];
-      if (!mesh || counts[b.kind] === undefined) continue;
-      const cap = b.kind === 'nuke' || b.kind === 'void' || b.kind === 'voidMaw' ? 8
-        : b.kind === 'ultra' || b.kind === 'ultraBlast' ? MAX_ULTRA
-          : b.kind === 'voidStorm' ? MAX_STORM : b.kind === 'fireball' ? MAX_PROPS * 2
-            : b.kind === 'shieldsaw' ? 4 : MAX_PROPS;
-      if (counts[b.kind] >= cap) continue;
+      if (!mesh) continue;
+      if (counts[b.kind] >= mesh.maxInstances) continue;
       const o = counts[b.kind] * 8;
       const d = mesh.instData;
       // A rocket points where it is going; everything else tumbles.
       const flying = b.kind === 'rocket' || b.kind === 'splinter' || b.kind === 'nuke'
         || b.kind === 'ultra' || b.kind === 'blast' || b.kind === 'ultraBlast' || b.kind === 'arrow'
-        || b.kind === 'fireball' || b.kind === 'bolt' || b.kind === 'flare';
+        || b.kind === 'fireball' || b.kind === 'bolt' || b.kind === 'flare'
+        || b.kind === 'warhead' || b.kind === 'dart';
       // An arrow that has gone in keeps pointing the way it was going.
       const vx = b.stuck && b.fx !== undefined ? b.fx : b.vx;
       const vy = b.stuck && b.fx !== undefined ? b.fy : b.vy;

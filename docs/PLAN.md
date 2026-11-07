@@ -6288,6 +6288,32 @@ Asked for: "ich habe keine waffen im kampfjet".
   still for the picture, because a software renderer is slower than the
   streaks last) and [rockets](screenshots/jet-02-rockets.png) going in.
 
+## 150. The warhead can be seen in flight
+
+Asked for: "WARHEAD wenn ich schiesse sehe ich die rakete/projektil nicht".
+
+- The renderer keeps one instanced mesh per kind of projectile (`this.props`
+  in src/render/actors.js), and `updateProjectiles` counted them into a list
+  of kinds written out by hand. A kind not on the list was skipped and its
+  instance count left undefined, which draws nothing. Nine kinds had a mesh
+  built and were never on the list: the warhead, the dart, the throwing
+  knife, the duck, the translocator's beacon, both kinds of sludge, the core
+  and the shell. And the incendiary grenade (B) had no mesh at all. So a
+  warhead flew the whole way as a trail of smoke with nothing at its head,
+  and so did eight other things.
+- Now the counts are made from the meshes themselves, each kind stops at
+  what its buffer was made for (`maxInstances`, which the per kind caps
+  repeated by hand), the incendiary is drawn as a grenade, and the warhead
+  and the dart point where they are going.
+- A unit check (tools/test/drawn.test.mjs) reads every `projectile:` in the
+  arsenal and every `projectiles.launch('...')` in the game and fails if the
+  renderer has no mesh for one, and fails if the counts go back to a list of
+  their own. Against the old renderer it fails on both.
+- Screenshots: [before](screenshots/warhead-00-before.png), a quarter of a
+  second after firing with nothing in the air, and
+  [after](screenshots/warhead-01-in-flight.png), the warhead seven metres
+  out. Locally: the arsenal 92 of 92, units 216 of 216.
+
 ## CI: the buttons change with the tap, not a frame later
 
 - Run 255 passed every suite up to the phone, and the phone step ran live
