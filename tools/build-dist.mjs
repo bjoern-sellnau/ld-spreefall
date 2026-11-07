@@ -15,6 +15,11 @@ const COPY = [
   'index.html',
   'src',
   'public/world.json',
+  // What a phone puts on its home screen, and opens with no browser round it.
+  'manifest.webmanifest',
+  'icon-180.png',
+  'icon-192.png',
+  'icon-512.png',
 ];
 
 /**

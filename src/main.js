@@ -23,7 +23,7 @@ import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
 import { Weather, WEATHER, KINDS as WEATHER_KINDS, RANDOM as WEATHER_RANDOM } from './game/weather.js';
 import { Extreme, EXTREME, EXTREME_KINDS, warningText, strength as extremeStrength } from './game/extreme.js';
-import { SHELTERS, sheltersOf, covers, nearestShelter, standIn, hurtShelter } from './game/shelters.js';
+import { SHELTERS, sheltersOf, covers, sheltersNearest, standIn, hurtShelter } from './game/shelters.js';
 import { Projectiles, PROJECTILE } from './game/projectiles.js';
 import { throwArc, THROW as THROW_SPEC } from './game/throwarc.js';
 import { ArcView } from './ui/arcview.js';
@@ -76,6 +76,8 @@ import { CEPH, makeGrunt } from './game/demons.js';
 import { DEMON, GAZER, DEMON_LEVEL, makeDemon, makeGazer } from './game/demons.js';
 import { Slayer, SLAYER } from './game/slayer.js';
 import { PLAYER, SPAWN, SURFACE, VERTEX_STRIDE, POS_SCALE, FACADE_FLAG } from './shared/constants.js';
+import { TOUCH, lookGain } from './game/touch.js';
+import { TouchPad, touchMap } from './ui/touchpad.js';
 
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -167,7 +169,7 @@ const el = {
   ultraPanel: $('ultrapanel'),
   down: $('down'), downText: $('downtext'), downBtn: $('downbtn'),
   touchui: $('touchui'), stick: $('stick'), knob: $('stickknob'),
-  btnJump: $('btnjump'), btnRun: $('btnrun'), source: $('datasource'),
+  rotate: $('rotate'), rotateGo: $('rotatego'), homeHint: $('homehint'), source: $('datasource'),
   attribution: $('attribution'), controlhint: $('controlhint'),
 };
 
@@ -209,7 +211,14 @@ function fatal(message, detail) {
   console.error(message, detail);
 }
 
+// On a phone a key is a button, so the words that name a key name the button.
+const TOUCH_WORDS = [
+  [/\bF to get in\b/, 'tap use to get in'], [/\bF to get out\b/, 'tap out to get out'],
+  [/\bT to blow it\b/, 'tap blow to set it off'], [/\bF to let go\b/, 'tap use to let go'],
+];
+
 function toast(text, ms = 2200) {
+  if (isTouch) for (const [k, w] of TOUCH_WORDS) text = text.replace(k, w);
   el.toast.textContent = text;
   el.toast.classList.add('show');
   clearTimeout(toast._t);
@@ -262,6 +271,11 @@ async function main() {
   const camera = new Camera();
   const player = new CharacterController(world);
   const input = new Input(el.canvas);
+  // A drag turns you less the further the sight is zoomed in.
+  input.touchGain = () => lookGain(camera.fov);
+  // A phone starts a tier down; the first seconds of frames take it lower
+  // still if they are slow, as they do anywhere.
+  if (isTouch) renderer.setQuality(TOUCH.phone.quality);
   const landmarks = new Landmarks(m, el.cards, showCompletion);
   const minimap = new Minimap(el.minimap, world, landmarks);
   const audio = new Audio(world);
@@ -596,7 +610,10 @@ async function main() {
   };
 
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, isTouch ? 2 : 2);
+    // A phone's three device pixels to the CSS pixel are drawn at one and a
+    // half: the difference is hard to see at arm's length and costs four
+    // times the pixels.
+    const dpr = Math.min(window.devicePixelRatio || 1, isTouch ? TOUCH.phone.dpr : 2);
     const w = el.canvas.clientWidth || window.innerWidth;
     const h = el.canvas.clientHeight || window.innerHeight;
     el.canvas.width = Math.round(w * dpr);
@@ -607,10 +624,82 @@ async function main() {
   resize();
 
   // --- interface wiring ----------------------------------------------------
+  // On a phone: the buttons, and the hint on the game's page says how it goes.
+  let touchpad = null;
   if (isTouch) {
+    document.body.classList.add('touch');
     el.touchui.classList.remove('hidden');
-    el.controlhint.innerHTML = 'Drag on the <b>left</b> to walk, on the <b>right</b> to look. '
-      + 'Buttons for jump and run are bottom right.';
+    el.controlhint.innerHTML = 'Drag on the <b>left</b> to walk, push it to the rim to run, '
+      + 'and drag on the <b>right</b> to look. Fire is the big button bottom right: '
+      + 'slide off it to turn while you shoot. <b>&#8943;</b> at the top has every other key.';
+    touchpad = new TouchPad(el.touchui, input, {
+      press: (code) => { if (input.onKeyPress) input.onKeyPress(code); refreshPad(); },
+      wheel: (dir) => { if (input.onWheel) input.onWheel(dir); },
+      fullscreen: () => goFullscreen(true),
+    });
+    el.rotateGo.addEventListener('click', () => document.body.classList.add('upright'));
+    // Where the page cannot have the whole screen, as on an iPhone, the
+    // title says how to get it: from the home screen it opens with no
+    // browser round it.
+    const standalone = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches
+      || navigator.standalone === true;
+    if (!(document.fullscreenEnabled || document.webkitFullscreenEnabled) && !standalone) {
+      el.homeHint.classList.remove('hidden');
+    }
+  }
+
+  /** What the buttons on a phone need to know: where you are and what is in reach. */
+  function touchContext() {
+    const playing = state.mode === 'walk' && !state.paused && !panelUp()
+      && el.help.classList.contains('hidden');
+    const v = state.inVehicle, m = state.inMech;
+    const bd = backdoorOn() && !v && !m;
+    const acts = bd && state.hackTarget ? hacksFor(state.hackTarget) : [];
+    return {
+      playing, intro: state.mode === 'intro', cinema: state.mode === 'cinema',
+      vehicle: v ? (v.spec.kind === 'air' ? 'air' : 'ground') : null,
+      mech: !!m, suit: suited(), backdoor: bd, bow: !!weapon.spec.heads,
+      charges: projectiles.active.some((b) => b.kind === 'c4' || b.kind === 'duck')
+        || vehicles.active.some((x) => x.bomb && x.bomb.kind === 'remote'),
+      hacks: acts.length,
+      labels: { hack1: acts[0] && acts[0].label, hack2: acts[1] && acts[1].label },
+    };
+  }
+
+  /**
+   * The buttons for where you are now, not a frame from now: a tap that
+   * pauses or gets you into a car changes them at once, however long a slow
+   * phone takes over its next frame.
+   */
+  function refreshPad() {
+    if (!touchpad) return;
+    input.stickRuns = !state.inVehicle && !state.inMech;
+    touchpad.update(touchContext());
+  }
+
+  /**
+   * The whole screen on a phone, turned on its side where the browser lets
+   * the page do that: Chrome on Android does both, Safari on an iPhone
+   * neither (MDN's compatibility data), so it is asked for and never relied on.
+   */
+  function goFullscreen(toggle = false) {
+    const d = document, root = d.documentElement;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      if (toggle) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+      return;
+    }
+    const ask = root.requestFullscreen || root.webkitRequestFullscreen;
+    if (!ask) {
+      if (toggle) toast('this browser keeps its bars: Share, then Add to Home Screen');
+      return;
+    }
+    let p;
+    try { p = ask.call(root, { navigationUI: 'hide' }); } catch (err) { return; }
+    const turn = () => {
+      const o = screen.orientation;
+      if (o && o.lock) o.lock('landscape').catch(() => {});
+    };
+    if (p && p.then) p.then(turn, () => {}); else turn();
   }
 
   input.onStick = (on, cx, cy, kx, ky) => {
@@ -621,8 +710,6 @@ async function main() {
       el.knob.style.transform = `translate(${kx}px, ${ky}px)`;
     }
   };
-  el.btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); input.jumpQueued = true; });
-  el.btnRun.addEventListener('touchstart', (e) => { e.preventDefault(); input.run = !input.run; el.btnRun.textContent = input.run ? 'walk' : 'run'; });
 
   // --- combat glue --------------------------------------------------------
 
@@ -5257,6 +5344,19 @@ async function main() {
    * the rest run away from where they are. When it is all over they go back
    * to what they were doing.
    */
+  /**
+   * Whether somebody can walk to a shelter in a straight line from where he
+   * is: the same ray at chest height that stops him when he walks, so what
+   * this lets through is what his feet will.
+   */
+  function walkable(sd, sh) {
+    if (sh.spots) return true;
+    const p = standIn(sh, 1);
+    const dx = p.x - sd.x, dz = p.z - sd.z;
+    const l = Math.hypot(dx, dz);
+    if (l < 0.5) return true;
+    return !world.raycast(sd.x, sd.y + 1.1, sd.z, dx / l, 0, dz / l, l);
+  }
   function shelterCivilians(go) {
     const room = new Map();
     const taken = new Set();
@@ -5269,8 +5369,12 @@ async function main() {
       }
       if (Math.hypot(sd.x - player.x, sd.z - player.z) > 160) continue;
       if (sd.directed && !sd.directed.shelter) continue;
-      const sh = nearestShelter(places, sd.x, sd.z, 90);
-      if (!sh || (room.get(sh) || 0) >= roomIn(sh)) continue;
+      // The nearest with room that he can walk to in a straight line, since
+      // that is how he walks; a full one sends him on to the next, and with
+      // nothing in a clear line he tries the nearest anyway.
+      const open = sheltersNearest(places, sd.x, sd.z, 90).filter((o) => (room.get(o) || 0) < roomIn(o));
+      const sh = open.find((o) => walkable(sd, o)) || open[0];
+      if (!sh) continue;
       const k = room.get(sh) || 0;
       room.set(sh, k + 1);
       const p = placeIn(sh, k, sd, taken);
@@ -6115,6 +6219,16 @@ async function main() {
     },
   };
 
+  // On a phone the words say what a thumb does, and the buttons under the
+  // map are how you leave it, Esc and Enter being keys a phone has not got.
+  if (isTouch) {
+    for (const m of Object.values(MAP_MODE)) {
+      m.hint = m.hint.replace(/^Click/, 'Tap').replace(', then click', ', then tap')
+        .replace('Wheel zooms, drag moves.', 'Two fingers zoom, one drags.').replace('Esc to ', 'Close to ');
+      m.armed = `${m.button}, or pick again.`;
+    }
+  }
+
   function openMap(mode) {
     if (state.mode !== 'walk') return;
     // Hide the menu without going through the toggle, which would ask for the
@@ -6516,7 +6630,9 @@ async function main() {
   // the one you are walking towards and the one behind you. Never past a
   // gigabyte and a half, which is what a desktop browser will give a tab
   // without complaint.
-  const holdBytes = (plan) => Math.min(1.5e9, Math.max(plan.bytes, 3 * world.heaviest));
+  // On a phone, half a gigabyte: no browser publishes what it gives a tab
+  // there, and a tab that asks for too much is closed without a word.
+  const holdBytes = (plan) => Math.min(isTouch ? TOUCH.phone.hold : 1.5e9, Math.max(plan.bytes, 3 * world.heaviest));
 
   /**
    * The district streamer. Keeps the one you are in, the ones you are near,
@@ -6788,6 +6904,12 @@ async function main() {
     drawTargetMap();
   });
 
+  // A thumb drags the target map and two pinch it; a tap is still a click.
+  touchMap(el.targetMap, {
+    on: () => !!state.targeting,
+    pan: (dx, dy) => { drag.moved += Math.abs(dx) + Math.abs(dy); targetMap.panBy(dx, dy); drawTargetMap(); },
+    zoom: (cx, cy, f) => { drag.moved += 5; targetMap.zoomAt(cx, cy, f); drawTargetMap(); },
+  });
   el.targetMap.addEventListener('click', (ev) => {
     if (!state.targeting) return;
     // A click that moved the map is a drag, not a target.
@@ -7342,6 +7464,7 @@ async function main() {
     }
   }
   el.playNew.addEventListener('click', () => {
+    if (isTouch) goFullscreen();
     campaign.wipe();
     tactics.clear();
     slayer.clear();
@@ -10409,6 +10532,7 @@ async function main() {
     input.fire = false;
     if (input.keys) input.keys.clear();
     if (input.pointerLocked) input.exitLock();
+    refreshPad();
     return true;
   }
   function closePause(lock = true) {
@@ -10416,6 +10540,7 @@ async function main() {
     state.paused = false;
     el.pause.classList.add('hidden');
     if (lock && !isTouch) input.requestLock();
+    refreshPad();
   }
   /** Another game, straight away and from where you stand: no title, no flight in. */
   function switchGame(mode) {
@@ -10492,7 +10617,7 @@ async function main() {
     }
     if (!isTouch) input.requestLock();
   }
-  el.play.addEventListener('click', () => beginWalk());
+  el.play.addEventListener('click', () => { if (isTouch) goFullscreen(); beginWalk(); });
 
   // The difficulty buttons on the title screen.
   // Which game this is. Berlin is the city as it stands; Rise of the Machines
@@ -10706,6 +10831,16 @@ async function main() {
     setMark(null);
   });
   el.mapUnmark.addEventListener('click', () => setMark(null));
+  $('mapclose').addEventListener('click', () => { if (minimap.big && input.onKeyPress) input.onKeyPress('KeyM'); });
+  $('targetclose').addEventListener('click', () => { if (state.targeting) closeTargeting(true); });
+  // And the big map under a thumb the same way.
+  touchMap(el.minimap, {
+    on: () => minimap.big,
+    pan: (dx, dy) => { minimap.panBy(dx, dy); mapTools(); },
+    zoom: (cx, cy, f) => { minimap.zoomAt(cx, cy, f); mapTools(); },
+  });
+  // On a phone the hint over a vehicle or a guard is the button for it.
+  el.rideHint.addEventListener('click', () => { if (isTouch && input.onKeyPress) { input.onKeyPress('KeyF'); refreshPad(); } });
 
   /** The compass across the top, with the sites of an operation and your mark on it. */
   function placeCompass(heading) {
@@ -10819,6 +10954,12 @@ async function main() {
     }
   });
 
+  // On a phone the canvas keeps its touches for the stick and the look, so
+  // the tap that skips the flight in, or a warhead's flight, is heard here.
+  el.canvas.addEventListener('touchend', () => {
+    if (state.mode === 'intro') skipIntro();
+    else if (state.mode === 'cinema') endCinema();
+  });
   el.canvas.addEventListener('click', () => {
     if (state.mode === 'intro') { skipIntro(); return; }
     if (state.mode === 'walk' && !photo.active && !isTouch && !input.pointerLocked) input.requestLock();
@@ -11929,6 +12070,11 @@ async function main() {
       compassBar.hide();
     }
 
+    if (touchpad) {
+      refreshPad();
+      document.body.classList.toggle('ingame', state.mode === 'walk' || state.mode === 'cinema');
+    }
+
     // Automatic quality tier from the first three seconds of real frames.
     if (!state.autoQualityDone && state.mode !== 'title') {
       state.frameSamples.push(elapsed);
@@ -12020,6 +12166,7 @@ async function main() {
     crimes, crimeSpec: CRIME, crimeBegin: (kind) => crimeBegin(kind), subdue: (sd) => subdue(sd),
     straightNear: (x, z, minLen) => straightNear(trafficRoads(), x, z, minLen),
     get hackTarget() { return state.hackTarget; }, profileOf: (sd) => profileOf(sd),
+    get touchpad() { return touchpad; }, touchContext: () => touchContext(), isTouch,
     demonSpec: DEMON, gazerSpec: GAZER,
     spawnDemon(kind, dx, dz, level = 0) {
       // Put down exactly where it was asked for, for a test that needs it there.

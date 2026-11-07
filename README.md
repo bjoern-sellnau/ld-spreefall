@@ -94,7 +94,7 @@ with no title and no flight in) and **Hauptmenü**. Esc again carries on.
 | Shift | run, at 5.6 m/s |
 | Space | jump onto kerbs and low walls |
 | Mouse | look, with pointer lock |
-| Touch | drag left to walk, drag right to look |
+| Touch | a stick on the left, look on the right, and buttons for the rest: see On a phone below |
 | Gamepad | left stick walks, right stick looks, A jumps, L3 runs |
 | P | photo mode: hides the interface, unlocks the clock, saves a PNG |
 | M | enlarge the map, on the streets around you; click it to set a mark the compass points to, click the mark again (or right click) to take it off |
@@ -128,6 +128,42 @@ with no title and no flight in) and **Hauptmenü**. Esc again carries on.
 
 | `spreefall.debugMode(n)` in the console | 1 material, 2 normals, 3 uv, 4 world position, 5 material id, 6 detail fade, 7 view distance |
 | F1 F2 F3 | quality tier: low, medium, high |
+
+### On a phone
+
+On a screen that is touched and not hovered over the game puts the keyboard
+and the mouse on the glass. Your left thumb comes down anywhere on the left
+half and that is a stick: half way out walks, the rim runs (in a vehicle the
+rim is full throttle, not the brake Shift is there). The right half looks, and
+a drag turns you less the further the sight is zoomed in. Fire is the big
+button in the bottom right corner, and a thumb that slides off it turns you
+while you keep shooting. Round it, on two rings: aim (it stays up until you
+tap it again), reload, jump, use, the weapon before and after, and hit. Further
+out, what belongs to where you are: slow motion; the phone's two hacks (named
+as the card names them) and the blackout in .BACKDOOR; armour, cloak, grenade,
+visor and heat in The Hunt, and the draw weight with the bow; brake in a car,
+up and down in a helicopter, the rocket pod, dash and view in a mech, and out;
+and blow, while there are charges down. Along the top: pause, the map, the
+cheats, and three dots with every other key: the number row, the weapons of
+their own, the kick, travel, photo, the journal, sound, help, full screen,
+quality and difficulty. Every button sends the key it stands for, so it does
+what the key does wherever you are, and a check reads the game's key handler
+and fails if any key has no button.
+
+The hint over a vehicle or a guard is a button too. Both maps drag with one
+finger and pinch with two, a tap sets the mark or the target, and each has a
+close button. The title, the game's page (Spielen stays on the screen however
+far its settings run), the pause, the cheats and the help fit a phone on its
+side and scroll. Held upright it asks to be turned, and lets you play upright.
+Spielen asks for the whole screen and turns it on its side where the browser
+allows that, which Chrome on Android does and Safari on an iPhone does not; on
+an iPhone the title says to add it to the home screen, where it opens with no
+browser round it. A phone draws at no more than one and a half device pixels,
+starts a quality tier down and holds at most half a gigabyte of districts.
+
+![On a phone: the stick, the fire button and the rings round it](docs/screenshots/mobile-03-play.png)
+![The three dots: every other key](docs/screenshots/mobile-04-drawer.png)
+![The Hunt on a phone: the suit on the buttons](docs/screenshots/mobile-09-hunt.png)
 
 Getting within 40 m of one of the eleven landmarks slides in a card with its
 name and a sentence of history. Find all eleven and you get a completion screen
