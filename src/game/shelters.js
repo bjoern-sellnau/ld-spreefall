@@ -103,6 +103,12 @@ export function nearestShelter(list, x, z, reach = 80) {
   return best;
 }
 
+/** Every standing shelter within reach of a point, the nearest first. */
+export function sheltersNearest(list, x, z, reach = 80) {
+  return list.filter((sh) => !sh.broken && Math.hypot(sh.x - x, sh.z - z) < reach)
+    .sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
+}
+
 /** Where to stand to be under it: the middle of the stretch under its roof. */
 export function standIn(sh, k = 0) {
   const K = SHELTERS.kinds[sh.kind];

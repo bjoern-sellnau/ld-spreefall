@@ -980,18 +980,35 @@ export class Soldiers {
     dx /= l; dz /= l;
 
     // A probe at chest height, because a kerb is not a wall and should not
-    // stop them.
-    const probe = 2.2;
+    // stop them. No further than where he is going: a wall behind the bus
+    // shelter he is walking into is not in his way, and probing past the
+    // spot turned him along it two metres short of the roof.
+    const probe = Math.min(2.2, l);
     const hit = w.raycast(s.x, s.y + 1.1, s.z, dx, 0, dz, probe);
+    const step = speed * dt;
     if (hit) {
-      // Something in the way: turn along it, towards whichever side is open.
-      const leftBlocked = !!w.raycast(s.x, s.y + 1.1, s.z, -dz, 0, dx, probe);
-      const ndx = leftBlocked ? dz : -dz;
-      const ndz = leftBlocked ? -dx : dx;
-      dx = ndx; dz = ndz;
+      // Something in the way: turn along it, towards whichever side is open,
+      // and keep to that side for a while, so a wall is followed to its end
+      // rather than tried left and right in turn. Picked afresh each step,
+      // a corner with both sides shut held him there for good.
+      const reach = step + SPEC.radius;
+      const open = (side) => !w.raycast(s.x, s.y + 1.1, s.z, side > 0 ? -dz : dz, 0, side > 0 ? dx : -dx, reach);
+      let side = s.slideLeft > 0 ? s.slideSide : 0;
+      if (!side) side = w.raycast(s.x, s.y + 1.1, s.z, -dz, 0, dx, probe) ? -1 : 1;
+      if (!open(side) && open(-side)) side = -side;
+      s.slideSide = side;
+      s.slideLeft = 1.5;
+      if (open(side)) {
+        const ndx = side > 0 ? -dz : dz, ndz = side > 0 ? dx : -dx;
+        dx = ndx; dz = ndz;
+      } else {
+        // Shut in on three sides: back out the way he came.
+        dx = -dx; dz = -dz;
+      }
+    } else if (s.slideLeft > 0) {
+      s.slideLeft -= dt;
     }
 
-    const step = speed * dt;
     const nx = s.x + dx * step;
     const nz = s.z + dz * step;
     // Do not walk into the weapons free zone, and do not walk through a wall.

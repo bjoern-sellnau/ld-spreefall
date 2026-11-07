@@ -23,7 +23,7 @@ import { Combat, COMBAT, DIFFICULTY } from './game/combat.js';
 import { Effects } from './game/effects.js';
 import { Weather, WEATHER, KINDS as WEATHER_KINDS, RANDOM as WEATHER_RANDOM } from './game/weather.js';
 import { Extreme, EXTREME, EXTREME_KINDS, warningText, strength as extremeStrength } from './game/extreme.js';
-import { SHELTERS, sheltersOf, covers, nearestShelter, standIn, hurtShelter } from './game/shelters.js';
+import { SHELTERS, sheltersOf, covers, sheltersNearest, standIn, hurtShelter } from './game/shelters.js';
 import { Projectiles, PROJECTILE } from './game/projectiles.js';
 import { throwArc, THROW as THROW_SPEC } from './game/throwarc.js';
 import { ArcView } from './ui/arcview.js';
@@ -5333,6 +5333,19 @@ async function main() {
    * the rest run away from where they are. When it is all over they go back
    * to what they were doing.
    */
+  /**
+   * Whether somebody can walk to a shelter in a straight line from where he
+   * is: the same ray at chest height that stops him when he walks, so what
+   * this lets through is what his feet will.
+   */
+  function walkable(sd, sh) {
+    if (sh.spots) return true;
+    const p = standIn(sh, 1);
+    const dx = p.x - sd.x, dz = p.z - sd.z;
+    const l = Math.hypot(dx, dz);
+    if (l < 0.5) return true;
+    return !world.raycast(sd.x, sd.y + 1.1, sd.z, dx / l, 0, dz / l, l);
+  }
   function shelterCivilians(go) {
     const room = new Map();
     const taken = new Set();
@@ -5345,8 +5358,12 @@ async function main() {
       }
       if (Math.hypot(sd.x - player.x, sd.z - player.z) > 160) continue;
       if (sd.directed && !sd.directed.shelter) continue;
-      const sh = nearestShelter(places, sd.x, sd.z, 90);
-      if (!sh || (room.get(sh) || 0) >= roomIn(sh)) continue;
+      // The nearest with room that he can walk to in a straight line, since
+      // that is how he walks; a full one sends him on to the next, and with
+      // nothing in a clear line he tries the nearest anyway.
+      const open = sheltersNearest(places, sd.x, sd.z, 90).filter((o) => (room.get(o) || 0) < roomIn(o));
+      const sh = open.find((o) => walkable(sd, o)) || open[0];
+      if (!sh) continue;
       const k = room.get(sh) || 0;
       room.set(sh, k + 1);
       const p = placeIn(sh, k, sd, taken);

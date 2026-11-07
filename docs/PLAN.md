@@ -6249,6 +6249,38 @@ So there are two cities now, and a profile picks which:
   [.BACKDOOR](screenshots/mobile-10-backdoor.png),
   [upright](screenshots/mobile-11-upright.png).
 
+## CI: people who run for a shelter get there
+
+- The next live run (254) passed the reactor check, and failed one in the
+  weather suite: three people sent for a bus shelter while the acid rain is
+  announced, and only one of them under its roof when it came. Set up the
+  same way at the eight stops nearest the square, three times each, fewer
+  than two got under in 11 of 24. Two things, both in the game:
+  - Somebody walking feels ahead of him for a wall 2.2 m out, and turns
+    along it if there is one. He did that all the way to where he was going,
+    so a facade behind the shelter turned him along it two metres short of
+    the roof, every time. He feels ahead only as far as he is going now.
+  - Turned along a wall, he picked the side afresh every step, and in a
+    corner with both sides shut he never moved again. He keeps to the side
+    he picked for a second and a half, takes the other when his is shut, and
+    backs out when both are.
+  - And a shelter is picked better: the nearest with room he can walk to in
+    a straight line, by the same ray that stops his feet; a full one sends
+    him to the next rather than nowhere.
+  With those, 4 of the 24 are short, every one of them a runner put down in
+  a courtyard or on the far side of a block, which nobody walking straight
+  at where he is going finds his way out of in twenty seconds. So the check
+  puts its three runners where there is a way to the shelter, as there is on
+  the street it stands in.
+- People who get out of corners walk into the road more, and the .BACKDOOR
+  check that a car stops short of a steam vent found one: it braked for
+  somebody crossing, pulled away, and was still rolling at 3 m/s when its
+  five seconds were up. It keeps people off the road there now, as the
+  junction check already does. With all of it, locally: weather 35 of 35,
+  the phone 31 of 31, combat 18 of 18, Tactics and Slayer 95 of 95, The Hunt
+  38 of 38, .BACKDOOR 54 of 54, the machines 68 of 68, and the unit checks
+  214 of 214.
+
 ## CI: the reactor check has the street to itself
 
 - The first live run after phase 147 (run 253) failed one check of the

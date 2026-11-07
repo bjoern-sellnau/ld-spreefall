@@ -322,8 +322,20 @@ async function run() {
   const warned = await page.evaluate(() => {
     const s = window.spreefall, sh = window.wx.sh;
     const runners = [];
+    // Three in the street round it with a way to it: people walk straight
+    // at where they are going and round what is in the way, but nobody
+    // finds the way out of a courtyard or round a block in twenty seconds,
+    // and the first live runs put a runner behind a building as often as not.
+    const spot = window.wx.at(0, -0.15);
     for (let k = 0; k < 3; k++) {
-      const sd = s.soldiers.spawnCivilianNear(sh.x, sh.z, 25, 45);
+      let sd = null;
+      for (let tries = 0; tries < 30 && !sd; tries++) {
+        const c = s.soldiers.spawnCivilianNear(sh.x, sh.z, 25, 45);
+        if (!c) continue;
+        const dx = spot.x - c.x, dz = spot.z - c.z, l = Math.hypot(dx, dz) || 1;
+        if (s.world.raycast(c.x, c.y + 1.1, c.z, dx / l, 0, dz / l, l)) { s.soldiers._retire(c); continue; }
+        sd = c;
+      }
       if (sd) { sd.directed = null; runners.push(sd); }
     }
     const said = [];

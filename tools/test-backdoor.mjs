@@ -784,10 +784,14 @@ async function run() {
     const v = s.spawnTraffic('car', { x: p.x - fx * 45, z: p.z - fz * 45, yaw: p.yaw });
     v.speed = 10;
     v.traffic.through = true;
+    // Nobody on foot in the road either: a car that brakes for somebody
+    // crossing and pulls away again is still rolling when the five seconds
+    // are up, whatever the steam did.
+    const nobody = () => { for (const c of [...s.soldiers.active]) if (c.civilian) s.soldiers._retire(c); };
     let steam = 0;
     for (let i = 0; i < 60 * 5; i++) {
       s.fixedForTest(1 / 60);
-      window.keepClear([v]);
+      window.keepClear([v]); nobody();
       if (i === 60) steam = s.effects.list.filter((e) => e.alive && Math.hypot(e.ax - p.x, e.az - p.z) < 6 && e.r > 0.8).length;
     }
     const gap = Math.hypot(v.x - p.x, v.z - p.z);
@@ -799,7 +803,7 @@ async function run() {
     let moved = 0;
     for (let i = 0; i < 60 * 5; i++) {
       const x0 = v.x, z0 = v.z;
-      s.fixedForTest(1 / 60); window.keepClear([v]);
+      s.fixedForTest(1 / 60); window.keepClear([v]); nobody();
       moved += Math.hypot(v.x - x0, v.z - z0);
     }
     out.moved = +moved.toFixed(1);
