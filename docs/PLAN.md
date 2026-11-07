@@ -6249,6 +6249,45 @@ So there are two cities now, and a profile picks which:
   [.BACKDOOR](screenshots/mobile-10-backdoor.png),
   [upright](screenshots/mobile-11-upright.png).
 
+## 148. The fighter and the helicopter are armed
+
+Asked for: "ich habe keine waffen im kampfjet".
+
+- What was there. Both aircraft carry a gun and rockets in their rows of
+  `VEHICLE` (src/game/vehicles.js), and the panel says "ready" for both. The
+  rockets never fired: the controls main.js hands a vehicle have carried
+  `secondary: false` since vehicles were added (af0ff19), and `_shoot` fires
+  a rocket only on `secondary`. The right mouse was the helicopter's way
+  down instead, and a fighter ignores lift altogether, so in a fighter it did
+  nothing. Measured in the game: 15 rounds of cannon in a second, 0 rockets.
+- And the cannon could not be seen. It is a ray from the nose to 420 m with
+  a tracer 2.8 cm wide that lasts 75 ms, drawn brightest at its far end. From
+  the chase camera 26 m back that is under a pixel, and from 150 m up looking
+  twelve degrees down the ground is 700 m off, so nothing landed either.
+- Now: the right mouse fires rockets in both aircraft, as it empties the pod
+  in a mech. The helicopter climbs on Space and comes down on Shift (Shift
+  was a second way up). A rocket leaves with the speed of the aircraft as
+  well as its own, 267 m/s from a fighter at 83, and is 96 to 119 m ahead of
+  it half a second later; before, a fighter at full throttle (180 m/s) flew
+  beside its own 190 m/s rockets. An aircraft's gun reaches 1.5 km and is
+  drawn as short bright streaks, one leaving the nose and one further out,
+  with a flash at the nose and one where it lands (`AIR_GUN` in main.js).
+- On a phone the fighter's buttons are fire, rockets and out; the
+  helicopter's fire, rockets, down and up, and out. Down holds Shift and
+  rockets the second trigger, the same as the keys (`padFor` in
+  src/game/touch.js, which now tells a helicopter from a fighter).
+- The key hint in the panel, the help and the README say so; the README
+  claimed the right mouse "holds the rockets" in a helicopter, which it never
+  did.
+- Checks: tools/test-city.mjs, "a fighter fires its cannon on the left mouse
+  and rockets on the right, and they leave it behind" (15 rounds, 1 rocket,
+  119 m ahead) and "a helicopter comes down on Shift and fires rockets on the
+  right mouse" (9 m down in 1.5 s, 3 rockets in 70 frames); unit checks for
+  the pads. Locally: the city 95 of 95, the phone 31 of 31, units 214 of 214.
+  Screenshots: [the cannon](screenshots/jet-01-cannon.png) (the world held
+  still for the picture, because a software renderer is slower than the
+  streaks last) and [rockets](screenshots/jet-02-rockets.png) going in.
+
 ## CI: the buttons change with the tap, not a frame later
 
 - Run 255 passed every suite up to the phone, and the phone step ran live

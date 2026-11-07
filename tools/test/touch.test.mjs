@@ -54,7 +54,11 @@ test('which buttons, for where you are', () => {
   assert.ok(padFor({ playing: true, suit: true, bow: true }).side.includes('draw'));
   // In something: no aim, no use, and a way out.
   assert.deepEqual(ids({ playing: true, vehicle: 'ground' }), ['fire', 'brake', 'out']);
-  assert.deepEqual(ids({ playing: true, vehicle: 'air' }), ['fire', 'down', 'up', 'out']);
+  assert.deepEqual(ids({ playing: true, vehicle: 'heli' }), ['fire', 'rockets', 'down', 'up', 'out']);
+  assert.deepEqual(ids({ playing: true, vehicle: 'jet' }), ['fire', 'rockets', 'out']);
+  // Rockets are the second trigger, as in a mech; down is Shift, as on the keys.
+  assert.equal(BUTTONS.rockets.hold, 'aim');
+  assert.equal(BUTTONS.down.hold, 'run');
   const mech = ids({ playing: true, mech: true });
   for (const id of ['fire', 'pod', 'jump', 'dash', 'reload', 'prev', 'next', 'view', 'out']) assert.ok(mech.includes(id), id);
   // Charges down: a button to blow them, wherever you are.
@@ -67,7 +71,8 @@ test('the buttons fit every phone on its side: none over another, all on the scr
   const where = [
     { playing: true }, { playing: true, charges: true }, { playing: true, suit: true, bow: true, charges: true },
     { playing: true, mech: true, charges: true }, { playing: true, backdoor: true, hacks: 2, charges: true },
-    { playing: true, vehicle: 'air', charges: true }, { playing: true, vehicle: 'ground' }, { intro: true },
+    { playing: true, vehicle: 'heli', charges: true }, { playing: true, vehicle: 'jet', charges: true },
+    { playing: true, vehicle: 'ground' }, { intro: true },
   ];
   for (const [w, h] of screens) {
     for (const c of where) {

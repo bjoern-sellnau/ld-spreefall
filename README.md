@@ -115,7 +115,7 @@ with no title and no flight in) and **Hauptmenü**. Esc again carries on.
 | R | reload; with the bow in hand, the head on the next arrow: plain, fire, poison or explosive |
 | J | in Tactics and Slayer, the journal: every district, and the camps or nests given back, or given back harder |
 | driving | W forward, S back, A D steer, Shift brake, left mouse fires; drive into a wall fast enough and you go through it |
-| flying | it flies where you look; W S throttle (a fighter holds it), A D turn, Space climbs, right mouse drops |
+| flying | it flies where you look; W S throttle (a fighter holds it), A D turn, left mouse the gun, right mouse rockets; a helicopter climbs on Space and comes down on Shift |
 | F4 | debug overlay |
 | V | free travel: pick a place on the map and fly there |
 | Q | back to the weapon you had before; in The Hunt, the suit's armour |
@@ -142,7 +142,8 @@ tap it again), reload, jump, use, the weapon before and after, and hit. Further
 out, what belongs to where you are: slow motion; the phone's two hacks (named
 as the card names them) and the blackout in .BACKDOOR; armour, cloak, grenade,
 visor and heat in The Hunt, and the draw weight with the bow; brake in a car,
-up and down in a helicopter, the rocket pod, dash and view in a mech, and out;
+rockets, up and down in a helicopter, rockets in a fighter, the rocket pod,
+dash and view in a mech, and out;
 and blow, while there are charges down. Along the top: pause, the map, the
 cheats, and three dots with every other key: the number row, the weapons of
 their own, the kick, travel, photo, the journal, sound, help, full screen,
@@ -959,8 +960,8 @@ saw was a tank reversing.
 |---|---|
 | Jeep | 24 m/s, light, a mounted gun on the back |
 | Tank | 12 m/s, two and a half thousand health, one shell every two and a half seconds |
-| Helicopter | hovers; space climbs, right mouse holds the rockets |
-| Fighter | 180 m/s, and it stops flying below 38 |
+| Helicopter | hovers; Space climbs, Shift comes down, a gun and a rocket every half second |
+| Fighter | 180 m/s, and it stops flying below 38; a cannon out to 1.5 km and a rocket every 0.9 s that leaves with the fighter's own speed |
 
 Destroyed, none of them goes up at once. It catches, burns for three
 seconds with the fire climbing higher, and then the tank goes: a fireball

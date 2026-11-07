@@ -87,7 +87,8 @@ export const BUTTONS = {
   // out again.
   brake: { label: 'brake', hold: 'run' },
   up: { label: 'up', hold: 'jump' },
-  down: { label: 'down', hold: 'aim' },
+  down: { label: 'down', hold: 'run' },
+  rockets: { label: 'rockets', hold: 'aim' },
   pod: { label: 'pod', hold: 'aim' },
   dash: { label: 'dash', hold: 'run' },
   view: { label: 'view', key: 'KeyY' },
@@ -153,7 +154,8 @@ export function padLayout(pad, w, h, R = RING) {
  * fire button and the column of what belongs to the mode, in order.
  *
  * @param {object} c what the game says is going on:
- *   playing, intro, cinema (booleans); vehicle ('ground', 'air' or null);
+ *   playing, intro, cinema (booleans); vehicle ('ground', 'heli', 'jet' or
+ *   null);
  *   mech, suit, backdoor, bow, charges, hacks (how many the phone offers)
  * @returns {{ring:string[], side:string[]}}
  */
@@ -165,8 +167,12 @@ export function padFor(c) {
   if (c.mech) {
     ring = ['fire', 'pod', 'reload', 'jump', 'dash', 'prev', 'next'];
     side.push('view', 'out');
-  } else if (c.vehicle === 'air') {
-    ring = ['fire', 'down', 'up'];
+  } else if (c.vehicle === 'heli') {
+    ring = ['fire', 'rockets', 'down', 'up'];
+    side.push('out');
+  } else if (c.vehicle === 'jet') {
+    // A fighter goes where its nose is: nothing to climb or come down with.
+    ring = ['fire', 'rockets'];
     side.push('out');
   } else if (c.vehicle) {
     ring = ['fire', 'brake'];

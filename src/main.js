@@ -657,7 +657,7 @@ async function main() {
     const acts = bd && state.hackTarget ? hacksFor(state.hackTarget) : [];
     return {
       playing, intro: state.mode === 'intro', cinema: state.mode === 'cinema',
-      vehicle: v ? (v.spec.kind === 'air' ? 'air' : 'ground') : null,
+      vehicle: v ? (v.spec.kind !== 'air' ? 'ground' : (v.spec.stall !== undefined ? 'jet' : 'heli')) : null,
       mech: !!m, suit: suited(), backdoor: bd, bow: !!weapon.spec.heads,
       charges: projectiles.active.some((b) => b.kind === 'c4' || b.kind === 'duck')
         || vehicles.active.some((x) => x.bomb && x.bomb.kind === 'remote'),
@@ -2951,6 +2951,12 @@ async function main() {
   // the same projectiles everything else uses; the only thing a vehicle gun
   // has that a rifle does not is a muzzle that is four metres in front of
   // your face.
+  /** How an aircraft's gun reads: how far it reaches and how it is drawn. */
+  const AIR_GUN = {
+    reach: 1500,
+    streak: 60, width: 0.2, life: 0.09, colour: [3.2, 2.1, 0.9],
+    muzzle: 1.3, burst: 2.4,
+  };
   vehicles.onFire = (v, gun) => {
     const m = vehicles.muzzle(v);
     if (tactics.enabled) soldiers.hear(m.x, m.z, TACTICS.noise.explosion);
@@ -2978,12 +2984,37 @@ async function main() {
     };
     const l = Math.hypot(d.x, d.y, d.z) || 1;
     d.x /= l; d.y /= l; d.z /= l;
-    const wall = world.raycast(m.x, m.y, m.z, d.x, d.y, d.z, 420);
+    // From the air the ground is further off than a street is long: a
+    // fighter at 150 m looking twelve degrees down sees it 700 m ahead, and
+    // a cannon that stopped at 420 hit nothing and showed nothing.
+    const air = v.spec.kind === 'air';
+    const reach = air ? AIR_GUN.reach : 420;
+    const wall = world.raycast(m.x, m.y, m.z, d.x, d.y, d.z, reach);
     const actor = projectiles.hitActors(m.x, m.y, m.z, d.x, d.y, d.z,
-      wall ? wall.t : 420);
-    const t = actor ? actor.t : (wall ? wall.t : 420);
+      wall ? wall.t : reach);
+    const t = actor ? actor.t : (wall ? wall.t : reach);
     const end = { x: m.x + d.x * t, y: m.y + d.y * t, z: m.z + d.z * t };
-    effects.tracer(m.x, m.y, m.z, end.x, end.y, end.z, true);
+    if (air) {
+      // Seen from the chase camera, tens of metres back. A tracer is drawn
+      // brightest at its far end, which here is a kilometre off and under a
+      // pixel, so the whole of what showed was its dim tail. The rounds are
+      // drawn as what they are: short bright streaks, one leaving the nose
+      // and one further out along the way, with a flash at the nose and one
+      // where they land big enough to see from where you are flying.
+      const A = AIR_GUN;
+      const streak = (from) => {
+        const a = Math.min(t, from), b = Math.min(t, from + A.streak);
+        if (b - a < 1) return;
+        effects.bolt(m.x + d.x * a, m.y + d.y * a, m.z + d.z * a, m.x + d.x * b, m.y + d.y * b, m.z + d.z * b,
+          A.width, A.life, A.colour[0], A.colour[1], A.colour[2]);
+      };
+      streak(4);
+      streak(t * (0.3 + Math.random() * 0.4));
+      effects.flash(m.x, m.y, m.z, A.muzzle, 1.0, 0.78, 0.4, 0.05);
+      if (actor || wall) effects.flash(end.x, end.y, end.z, A.burst, 1.0, 0.7, 0.32, 0.12);
+    } else {
+      effects.tracer(m.x, m.y, m.z, end.x, end.y, end.z, true);
+    }
     if (actor) {
       const target = actor.target;
       if (actor.kind === 'soldier') {
@@ -3011,11 +3042,18 @@ async function main() {
   vehicles.onLaunch = (v, rocket) => {
     const m = vehicles.muzzle(v);
     const dir = { x: camera.forward[0], y: camera.forward[1], z: camera.forward[2] };
+    // A rocket leaves with the speed of what it is fired from as well as its
+    // own. Without it a fighter at full throttle, 180 m/s, flew along beside
+    // its own 190 m/s rockets.
+    const c = Math.cos(v.pitch || 0) * v.speed;
+    const carry = v.spec.kind === 'air'
+      ? { x: -Math.sin(v.yaw) * c, y: v.vy || 0, z: -Math.cos(v.yaw) * c } : { x: 0, y: 0, z: 0 };
     projectiles.launch('rocket', {
       x: m.x, y: m.y - 0.6, z: m.z,
-      vx: dir.x * rocket.speed, vy: dir.y * rocket.speed, vz: dir.z * rocket.speed,
+      vx: carry.x + dir.x * rocket.speed, vy: carry.y + dir.y * rocket.speed, vz: carry.z + dir.z * rocket.speed,
       splash: rocket.splash, weapon: v.type,
     });
+    effects.flash(m.x, m.y - 0.6, m.z, 1.6, 1.0, 0.7, 0.35, 0.08);
     audio.gunshot('launcher');
     effects.shake = Math.min(1.2, effects.shake + 0.2);
   };
@@ -3365,7 +3403,7 @@ async function main() {
     el.vehiclePanel.classList.remove('hidden');
     el.vehicleName.textContent = near.spec.name;
     el.vehicleKeys.textContent = near.spec.kind === 'air'
-      ? 'it flies where you look; W S throttle, A D turn, Space up, right mouse down, left mouse fires'
+      ? flightKeys(near.spec)
       : (near.spec.turret
         ? 'W forward, S back, A D steer, mouse lays the turret, Shift brake, left mouse fires'
         : 'W forward, S back, A D steer, Shift brake, left mouse fires');
@@ -3389,6 +3427,17 @@ async function main() {
    * Everything here is read off the entity rather than tracked separately, so
    * the numbers on the screen are the numbers the simulation is using.
    */
+  /**
+   * The keys in something that flies. Both carry rockets on the right mouse,
+   * as a mech carries its pod; the helicopter climbs on Space and comes down
+   * on Shift, and a fighter has neither, because it goes where its nose is.
+   */
+  function flightKeys(spec) {
+    return spec.stall !== undefined
+      ? 'it flies where you look; W S throttle, A D turn, left mouse the cannon, right mouse rockets'
+      : 'it flies where you look; W S throttle, A D turn, Space up, Shift down, left mouse the gun, right mouse rockets';
+  }
+
   function rideHud() {
     const ride = state.inMech || state.inVehicle;
     if (!ride) return;
@@ -4027,8 +4076,7 @@ async function main() {
         el.hud.classList.add('driving');
         el.vehiclePanel.classList.remove('hidden');
         el.vehicleName.textContent = v.spec.name;
-        el.vehicleKeys.textContent =
-          'it flies where you look; W S throttle, A D turn, Space up, right mouse down, left mouse fires';
+        el.vehicleKeys.textContent = flightKeys(v.spec);
         camera.yaw = v.yaw;
         audio.swap();
       }
@@ -11347,10 +11395,13 @@ async function main() {
         aimPitch: air && !photo.active ? camera.pitch : undefined,
         pitch: 0,
         roll: 0,
-        lift: air && !photo.active ? (input.run ? 1 : (input.jumpHeld ? 1 : (input.secondary ? -1 : 0))) : 0,
+        // Space climbs and Shift comes down. The right mouse was the way down
+        // and nothing ever fired the rockets both aircraft carry, so a fighter,
+        // which ignores lift altogether, had a cannon and nothing else.
+        lift: air && !photo.active ? (input.jumpHeld ? 1 : (input.run ? -1 : 0)) : 0,
         brake: !air && input.run,
         fire: input.fire && !photo.active,
-        secondary: false,
+        secondary: input.secondary && !photo.active,
       };
       // The view turns with the hull. Steering a vehicle turns the thing you
       // are sitting in, and a camera that ignored that would leave you

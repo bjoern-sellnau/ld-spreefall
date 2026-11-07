@@ -1367,6 +1367,64 @@ async function run() {
   check('and the right key turns it right', steer.keyTurn < -0.3,
     `${(steer.keyTurn || 0).toFixed(2)} rad`);
 
+  // --- and it is armed ----------------------------------------------------------
+  // Both aircraft carry rockets, and for as long as there were vehicles the
+  // controls handed the vehicle no second trigger, so neither ever fired one:
+  // the fighter had a cannon nobody could see and nothing else.
+  const armed = await page.evaluate(() => {
+    const s = window.spreefall;
+    s.setCheat('godmode', true);
+    s.vehicles.reset();
+    const j = s.dropRide('jet');
+    if (!j) return { error: 'no fighter' };
+    const n = { gun: 0, rockets: 0 };
+    const f0 = s.vehicles.onFire, l0 = s.vehicles.onLaunch;
+    s.vehicles.onFire = (a, b) => { n.gun++; f0(a, b); };
+    s.vehicles.onLaunch = (a, b) => { n.rockets++; l0(a, b); };
+    s.input.fire = true;
+    for (let i = 0; i < 60; i++) s.fixedForTest(1 / 60);
+    s.input.fire = false;
+    const was = new Set(s.projectiles.active);
+    s.input.secondary = true;
+    for (let i = 0; i < 6; i++) s.fixedForTest(1 / 60);
+    s.input.secondary = false;
+    const r = s.projectiles.active.find((b) => !was.has(b) && b.weapon === 'jet');
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const ahead = r && r.alive ? Math.hypot(r.x - j.x, r.z - j.z) : 0;
+    const jet = { gun: n.gun, rockets: n.rockets, ahead: Math.round(ahead) };
+    if (s.state.inVehicle) s.toggleVehicle();
+    s.vehicles.reset();
+    // The helicopter: Space up, Shift down, the right mouse its rockets.
+    s.teleport(81, 0);
+    for (let i = 0; i < 30; i++) s.fixedForTest(1 / 60);
+    const h = s.vehicles.spawn('heli', s.player.x + 4, s.player.z, 0, 0);
+    s.teleport(h.x + 2, h.z);
+    s.toggleVehicle();
+    const inHeli = s.state.inVehicle === h;
+    s.input.jumpHeld = true;
+    for (let i = 0; i < 150; i++) s.fixedForTest(1 / 60);
+    s.input.jumpHeld = false;
+    const top = h.y;
+    s.input.keys.add('ShiftLeft');
+    for (let i = 0; i < 90; i++) s.fixedForTest(1 / 60);
+    s.input.keys.delete('ShiftLeft');
+    const down = top - h.y;
+    n.rockets = 0;
+    s.input.secondary = true;
+    for (let i = 0; i < 70; i++) s.fixedForTest(1 / 60);
+    s.input.secondary = false;
+    const heli = { inHeli, down: Math.round(down), rockets: n.rockets };
+    s.vehicles.onFire = f0; s.vehicles.onLaunch = l0;
+    if (s.state.inVehicle) s.toggleVehicle();
+    return { jet, heli };
+  });
+  check('a fighter fires its cannon on the left mouse and rockets on the right, and they leave it behind',
+    !armed.error && armed.jet.gun > 10 && armed.jet.rockets >= 1 && armed.jet.ahead > 40,
+    armed.error || JSON.stringify(armed.jet));
+  check('a helicopter comes down on Shift and fires rockets on the right mouse',
+    !armed.error && armed.heli.inHeli && armed.heli.down > 3 && armed.heli.rockets >= 2,
+    armed.error || JSON.stringify(armed.heli));
+
   check('forward drives where you are looking, however it was parked',
     facing.every((f) => f.towardsView > 0.97),
     facing.map((f) => f.towardsView).join(', ')
