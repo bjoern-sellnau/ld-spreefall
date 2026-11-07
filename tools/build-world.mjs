@@ -311,6 +311,12 @@ function buildDistrict(district, overflight = false) {
   const woodAreas = [];
   const parkAreas = [];
   const openAreas = [];
+  // A wood's own floor only where this tier draws trees. The woods the build
+  // never read before (natural=wood, and woods mapped as multipolygons) are
+  // most of the forest round the edge of Berlin, and laid as ground in every
+  // tier they put 71 MB on the city (44.5 in the outline tier, 22.2 in the
+  // block tier), which took the site past the gigabyte Pages publishes.
+  const woodFloor = tier.trees > 0;
   let memorials = [];
   let attractions = [];
   let stations = [];
@@ -354,7 +360,8 @@ function buildDistrict(district, overflight = false) {
       }
     } else if (t.natural === 'water' || t.waterway === 'riverbank') {
       for (const o of outers) waterPolys.push({ ring: o, holes: inners, tags: t });
-    } else if (t.leisure === 'park' || t.landuse === 'grass' || t.leisure === 'garden' || isWood(t)) {
+    } else if (t.leisure === 'park' || t.landuse === 'grass' || t.leisure === 'garden'
+        || (isWood(t) && woodFloor)) {
       for (const o of outers) greens.push({ ring: o, holes: inners, tags: t });
     }
     // A wood is very often a multipolygon, with the clearings and the paths
@@ -408,7 +415,8 @@ function buildDistrict(district, overflight = false) {
       if (isOpen(t)) openAreas.push({ ring: r, holes: [] });
     }
     if (t.leisure === 'park' || t.leisure === 'garden' || t.landuse === 'grass'
-        || t.landuse === 'forest' || t.natural === 'wood' || t.landuse === 'meadow' || t.landuse === 'village_green') {
+        || t.landuse === 'forest' || (t.natural === 'wood' && woodFloor)
+        || t.landuse === 'meadow' || t.landuse === 'village_green') {
       if (closed) greens.push({ ring: ring.slice(0, -1), holes: [], tags: t });
       continue;
     }

@@ -6581,6 +6581,25 @@ Asked for: "WARHEAD wenn ich schiesse sehe ich die rakete/projektil nicht".
   [after](screenshots/warhead-01-in-flight.png), the warhead seven metres
   out. Locally: the arsenal 92 of 92, units 216 of 216.
 
+## CI: the woods put the site over a gigabyte
+
+- The Pages build of 45ce5b0 (run 318) failed in `tools/fit-pages.mjs`:
+  "site 1006.58 MB, ceiling 950 MB ... over the gigabyte Pages will
+  publish", where the build before it had 931.89 MB. The city had gone from
+  812.86 to 883.82 MB deployed and from 15.17 to 16.66 million triangles,
+  while the trees went only from 47,990 to 58,218.
+- District by district against run 313: 44.53 MB of the 70.92 was in the
+  outline tier and 22.15 MB in the block tier, neither of which draws a tree.
+  The largest: Wernsdorf +8.59 MB, Stern +5.93, Kladow +4.29,
+  Schmöckwitz +3.95, Grunewald +2.16. So it was the floor and not the trees.
+  `natural=wood` and woods mapped as multipolygons, which the build had
+  never drawn, are most of the forest round the edge of Berlin, and they
+  were now laid as ground in every tier.
+- A wood's floor is now laid only where the tier draws trees
+  (`woodFloor = tier.trees > 0` in tools/build-world.mjs), as the planting
+  already was. Out there the forest is the plain ground it was before.
+  Tiers 0 to 2 keep it, for 4.2 MB between them.
+
 ## CI: the buttons change with the tap, not a frame later
 
 - Run 255 passed every suite up to the phone, and the phone step ran live
